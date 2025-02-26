@@ -9,7 +9,7 @@ class BaseModel(SQLModel):
     modified_date:Optional[datetime] = Field(
         default_factory=lambda:datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate":datetime.now(timezone.utc)})
-    is_active: Optional[bool] = Field(default=True,nullable=True)
+    is_active: Optional[bool] = Field(nullable=True)
 
 
 class Organization(BaseModel,table=True):
@@ -20,26 +20,26 @@ class Organization(BaseModel,table=True):
 
 class Country(BaseModel,table=True):
     name: str = Field(nullable=False)
-    states: List['State']=Relationship(back_populates="country")
+    states: Optional[List['State']]=Relationship(back_populates="country")
 
 
 class State(BaseModel,table=True):
     name: str = Field(nullable=False)
     country_id:int =Field(foreign_key="country.id")
-    country: Country = Relationship(back_populates="states")
-    districts: List['District'] = Relationship(back_populates="state")
+    country: Optional[Country] = Relationship(back_populates="states")
+    districts: Optional[List['District']] = Relationship(back_populates="state")
 
 
 class District(BaseModel,table=True):
     name: str = Field(nullable=False)
     state_id: int = Field(foreign_key="state.id")
-    state: State = Relationship(back_populates="districts")
-    blocks: List['Block'] = Relationship(back_populates="district")
+    state: Optional[State] = Relationship(back_populates="districts")
+    blocks: Optional[List['Block']] = Relationship(back_populates="district")
 
 
-class Block(BaseModel,Table=True):
+class Block(BaseModel,table=True):
     name: str = Field(nullable=False)
     district_id: int = Field(foreign_key="district.id")
-    district: District = Relationship(back_populates="blocks")
+    district: Optional[District] = Relationship(back_populates="blocks")
 
 
