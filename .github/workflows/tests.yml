@@ -29,3 +29,9 @@ jobs:
       - name: Run coverage
         run: uv run coverage run --source=app -m pytest
         run: uv run coverage report --show-missing
+        run: uv run pytest --cov-branch --cov-report=xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
