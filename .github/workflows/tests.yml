@@ -28,7 +28,11 @@ jobs:
 
       - name: Run coverage
         run: uv run coverage run --source=app -m pytest
+
+      - name: Coverage details
         run: uv run coverage report --show-missing
+
+      - name: Generate xml for codecov
         run: uv run pytest --cov-branch --cov-report=xml
 
       - name: Upload coverage reports to Codecov
