@@ -14,3 +14,4 @@ wheels/
 .DS_Store
 .coverage
 htmlcov/
+coverage.xml
