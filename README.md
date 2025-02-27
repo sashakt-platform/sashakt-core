@@ -1,5 +1,7 @@
 # Sashakt Platform
 
+[![Run tests](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/tests.yml/badge.svg)](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/tests.yml)
+
 ## Pre-requisites
 
 - [uv](https://docs.astral.sh/uv/) for Python package and environment management.
