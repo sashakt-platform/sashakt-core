@@ -33,7 +33,7 @@ jobs:
         run: uv run coverage report --show-missing
 
       - name: Generate xml for codecov
-        run: uv run pytest --cov-branch --cov-report=xml
+        run: uv run pytest --cov=app --cov-branch --cov-report=xml
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
