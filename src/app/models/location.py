@@ -38,4 +38,3 @@ class Block(BaseModel, table=True):
     name: str = Field(nullable=False)
     district_id: int = Field(foreign_key="district.id")
     district: Optional[District] = Relationship(back_populates="blocks")
-
