@@ -1,4 +1,4 @@
-from location import BaseModel
+from app.models.location import BaseModel
 from typing import Optional
 from sqlmodel import Field
 
