@@ -12,3 +12,5 @@ wheels/
 # Other files
 .env
 .DS_Store
+.coverage
+htmlcov/
