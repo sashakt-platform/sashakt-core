@@ -32,3 +32,15 @@ uv run fastapi dev src/app/main.py
 ```bash
 uv run pytest
 ```
+
+## Code formatting
+
+We are using ruff for formatting and linting, please ensure your editor is configured for the same.
+
+We have also added pre-commit hook to check the same and also CI job for the same.
+
+In order to setup pre-commit hook locally run following command:
+
+```bash
+uv run pre-commit install
+```
