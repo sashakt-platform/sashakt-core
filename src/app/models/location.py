@@ -1,4 +1,4 @@
-from sqlmodel import Field, Relationship, SQLModel, Session, create_engine
+from sqlmodel import Field, Relationship, SQLModel
 from typing import List, Optional
 from datetime import datetime, timezone
 
