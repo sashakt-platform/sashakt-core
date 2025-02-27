@@ -24,5 +24,8 @@ jobs:
         run: uv sync --all-extras --dev --preview
 
       - name: Run tests
-        # For example, using `pytest`
         run: uv run pytest tests
+
+      - name: Run coverage
+        run: uv run coverage run --source=app -m pytest
+        run: uv run coverage report --show-missing
