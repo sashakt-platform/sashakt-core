@@ -1,4 +1,4 @@
-from sqlmodel import create_engine, Session
+from sqlmodel import Session, create_engine
 
 DATABASE_URL = "sqlite:///sashakt.db"
 engine = create_engine(DATABASE_URL, echo=True)

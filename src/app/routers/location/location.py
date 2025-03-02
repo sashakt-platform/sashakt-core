@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from app.routers.location import country, state, district, block
 
+from app.routers.location import block, country, district, state
 
 router = APIRouter(prefix="/location", tags=["Location"])
 
