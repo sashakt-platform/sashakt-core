@@ -34,6 +34,9 @@ def test_get_country_by_id(client: TestClient, session: Session):
     assert response.status_code == 200
     assert data["name"] == "Srilanka"
     assert data["id"] == 1
+    response = client.get("/location/country/2")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Country not found"}
 
 
 def test_update_country(client: TestClient, session: Session):
@@ -46,3 +49,6 @@ def test_update_country(client: TestClient, session: Session):
     assert data["name"] == "Australia"
     assert data["id"] == 1
     assert data["name"] != "Australiaaa"
+    response = client.put("/location/country/2", json={"name": "Australia"})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Country not found"}
