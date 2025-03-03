@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
+
 from app.database import get_session
 from app.models.organization import Organization
-
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
 
@@ -52,3 +52,16 @@ def update_organization(
     session.commit()
     session.refresh(organization)
     return organization
+
+
+# Delete a Organization
+@router.delete("/{organization_id}")
+def delete_organization(organization_id: int, session: Session = Depends(get_session)):
+    organization = session.get(Organization, organization_id)
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    organization.is_deleted = True
+    session.add(organization)
+    session.commit()
+    session.refresh(organization)
+    return {"message": "Organization deleted successfully"}
