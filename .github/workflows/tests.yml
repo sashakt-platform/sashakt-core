@@ -10,7 +10,7 @@ on:
   workflow_dispatch: # allows manual runs
 
 jobs:
-  uv-example:
+  run-tests:
     name: python
     runs-on: ubuntu-latest
 
