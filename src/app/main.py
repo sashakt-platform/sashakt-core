@@ -1,6 +1,7 @@
-from fastapi import FastAPI, APIRouter
-from app.routers.location import location
+from fastapi import FastAPI
+
 from app.routers import organization
+from app.routers.location import location
 
 app = FastAPI()
 
