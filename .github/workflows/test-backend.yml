@@ -33,9 +33,11 @@ jobs:
         working-directory: backend
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+        # the generated xml is push to codecov
+      - run: uv run pytest --cov=app --cov-branch --cov-report=xml
         working-directory: backend
-      - run: docker compose down -v --remove-orphans
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+      - run: docker compose down -v --remove-orphans

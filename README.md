@@ -53,15 +53,15 @@ This is a dockerized setup, hence start the project using below command
 docker compose up -d
 ```
 
-This should start all necessary services need to run the project.
+This should start all necessary services for the project.
 
 You verify backend running by doing health-check
 
 ```bash
-curl http://localhost:8000/api/v1/utils/health-check/
+curl http://[your-domain]:8000/api/v1/utils/health-check/
 ```
 
-or by visiting: http://localhost:8000/api/v1/utils/health-check/ in the browser
+or by visiting: http://[your-domain]:8000/api/v1/utils/health-check/ in the browser
 
 ## Backend Development
 
