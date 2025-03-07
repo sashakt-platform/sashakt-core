@@ -1,17 +1,10 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+.vscode
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
-# Virtual environments
-.venv
-
-# Other files
 .env
 .DS_Store
-.coverage
-htmlcov/
-coverage.xml
+

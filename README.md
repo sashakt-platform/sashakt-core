@@ -4,45 +4,61 @@
 
 ## Pre-requisites
 
+- [docker](https://docs.docker.com/get-started/get-docker/)
 - [uv](https://docs.astral.sh/uv/) for Python package and environment management.
 
-## Setup project
+## Project Setup
 
-- Clone the repo
-- Set `UV_PREVIEW=1` in your environment variable so that you don't need to pass extra argument
+You can **just fork or clone** this repository and use it as is.
 
-```bash
-uv sync
-```
+✨ It just works. ✨
 
-or
+### Configure
 
-```bash
-uv sync --preview
-```
-
-## Run project
-
-Dev server
+Create env file using example file
 
 ```bash
-uv run fastapi dev src/app/main.py
+cp .env.example .env
 ```
 
-## Tests
+You can then update configs in the `.env` files to customize your configurations.
+
+Before deploying it, make sure you change at least the values for:
+
+- `SECRET_KEY`
+- `FIRST_SUPERUSER_PASSWORD`
+- `POSTGRES_PASSWORD`
+
+You can (and should) pass these as environment variables from secrets.
+
+Read the [deployment.md](./deployment.md) docs for more details.
+
+### Generate Secret Keys
+
+Some environment variables in the `.env` file have a default value of `changethis`.
+
+You have to change them with a secret key, to generate secret keys you can run the following command:
 
 ```bash
-uv run pytest
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-## Code formatting
+Copy the content and use that as password / secret key. And run that again to generate another secure key.
 
-We are using ruff for formatting and linting, please ensure your editor is configured for the same.
+## Backend Development
 
-We have also added pre-commit hook to check the same and also CI job for the same.
+Backend docs: [backend/README.md](./backend/README.md).
 
-In order to setup pre-commit hook locally run following command:
+## Deployment
 
-```bash
-uv run pre-commit install
-```
+Deployment docs: [deployment.md](./deployment.md).
+
+## Development
+
+General development docs: [development.md](./development.md).
+
+This includes using Docker Compose, custom local domains, `.env` configurations, etc.
+
+## Credits
+
+This project was created using [full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template). A big thank you to the team for creating and maintaining the template!!!
