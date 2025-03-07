@@ -1,10 +1,10 @@
 # Sashakt Platform
 
-[![codecov](https://codecov.io/gh/sashakt-platform/sashakt-backend/graph/badge.svg?token=4GXQFZHIJT)](https://codecov.io/gh/sashakt-platform/sashakt-backend) [![Run tests](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/tests.yml/badge.svg)](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/sashakt-platform/sashakt-backend/graph/badge.svg?token=4GXQFZHIJT)](https://codecov.io/gh/sashakt-platform/sashakt-backend) [![Run tests](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/tests.yml/badge.svg)](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/test-backend.yml)
 
 ## Pre-requisites
 
-- [docker](https://docs.docker.com/get-started/get-docker/)
+- [docker](https://docs.docker.com/get-started/get-docker/) Docker
 - [uv](https://docs.astral.sh/uv/) for Python package and environment management.
 
 ## Project Setup
