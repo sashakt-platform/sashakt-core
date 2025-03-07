@@ -1,6 +1,6 @@
 # Sashakt Platform
 
-[![codecov](https://codecov.io/gh/sashakt-platform/sashakt-backend/graph/badge.svg?token=4GXQFZHIJT)](https://codecov.io/gh/sashakt-platform/sashakt-backend) [![Run tests](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/tests.yml/badge.svg)](https://github.com/sashakt-platform/sashakt-backend/actions/workflows/test-backend.yml)
+[![codecov](https://codecov.io/gh/sashakt-platform/sashakt-core/graph/badge.svg?token=4GXQFZHIJT)](https://codecov.io/gh/sashakt-platform/sashakt-core) [![Run tests](https://github.com/sashakt-platform/sashakt-core/actions/workflows/test-backend.yml/badge.svg)](https://github.com/sashakt-platform/sashakt-core/actions/workflows/test-backend.yml)
 
 ## Pre-requisites
 
