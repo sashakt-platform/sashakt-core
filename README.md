@@ -45,19 +45,37 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 Copy the content and use that as password / secret key. And run that again to generate another secure key.
 
+## Boostrap
+
+This is a dockerized setup, hence start the project using below command
+
+```bash
+docker compose up -d
+```
+
+This should start all necessary services need to run the project.
+
+You verify backend running by doing health-check
+
+```bash
+curl http://localhost:8000/api/v1/utils/health-check/
+```
+
+or by visiting: http://localhost:8000/api/v1/utils/health-check/ in the browser
+
 ## Backend Development
 
 Backend docs: [backend/README.md](./backend/README.md).
-
-## Deployment
-
-Deployment docs: [deployment.md](./deployment.md).
 
 ## Development
 
 General development docs: [development.md](./development.md).
 
 This includes using Docker Compose, custom local domains, `.env` configurations, etc.
+
+## Deployment
+
+Deployment docs: [deployment.md](./deployment.md).
 
 ## Credits
 
