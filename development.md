@@ -205,4 +205,3 @@ Adminer: http://localhost.tiangolo.com:8080
 Traefik UI: http://localhost.tiangolo.com:8090
 
 MailCatcher: http://localhost.tiangolo.com:1080
-
