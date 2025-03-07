@@ -33,7 +33,8 @@ jobs:
         working-directory: backend
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-        # the generated xml is push to codecov
+        working-directory: backend
+        # the generated xml is pushed to codecov
       - run: uv run pytest --cov=app --cov-branch --cov-report=xml
         working-directory: backend
       - name: Upload coverage reports to Codecov
