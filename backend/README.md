@@ -141,27 +141,30 @@ $ docker compose exec backend bash
 $ alembic revision --autogenerate -m "Add column last_name to User model"
 ```
 
-- Commit to the git repository the files generated in the alembic directory.
-
 - After creating the revision, run the migration in the database (this is what will actually change the database):
 
 ```console
 $ alembic upgrade head
 ```
 
-If you don't want to use migrations at all, uncomment the lines in the file at `./backend/app/core/db.py` that end in:
-
-```python
-SQLModel.metadata.create_all(engine)
-```
-
-and comment the line in the file `scripts/prestart.sh` that contains:
+As we using docker setup files generated inside the container are not sync to host machine. You can do so by running following script from root of host.
 
 ```console
-$ alembic upgrade head
+$ bash scripts/sync-migrations.sh
 ```
 
-If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision, you can remove the revision files (`.py` Python files) under `./backend/app/alembic/versions/`. And then create a first migration as described above.
+- Commit to the git repository the files generated in the alembic directory.
+
+If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision.
+
+- Drop all tables from the db.
+- Run below script that we delete all previous revisions and create first revision.
+
+```console
+$ bash scripts/reset-migrations.sh
+```
+
+Runs this above script from host machine.
 
 ## Email Templates
 

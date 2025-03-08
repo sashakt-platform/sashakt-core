@@ -1,4 +1,8 @@
-#!/bin/bash
+#! /usr/bin/env bash
+
+# Exit in case of error
+set -e
+
 
 CONTAINER_NAME=sashakt-core-backend-1
 CONTAINER_PATH=app/app/alembic/versions
