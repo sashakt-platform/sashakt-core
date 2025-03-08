@@ -65,7 +65,16 @@ And then you can run the local development server for the backend:
 
 ```bash
 cd backend
+source .venv/bin/activate
 fastapi dev app/main.py
+```
+
+Make sure to run `uv sync` before activating the virtual environment
+
+Alternatively you can also run directly using
+
+```bash
+uv run fastapi dev app/main.py
 ```
 
 ## Docker Compose in `localhost.tiangolo.com`
@@ -133,6 +142,14 @@ You can find a file `.pre-commit-config.yaml` with configurations at the root of
 `pre-commit` is already part of the dependencies of the project, but you could also install it globally if you prefer to, following [the official pre-commit docs](https://pre-commit.com/).
 
 After having the `pre-commit` tool installed and available, you need to "install" it in the local repository, so that it runs automatically before each commit.
+
+If pre-commit is not installed globally, make sure to activate the virtual environment so that uv finds the pre-commit package.
+
+```bash
+cd backend
+source .venv/bin/activate
+cd ../
+```
 
 Using `uv`, you could do it with:
 
