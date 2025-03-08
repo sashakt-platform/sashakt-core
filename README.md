@@ -45,15 +45,15 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 Copy the content and use that as password / secret key. And run that again to generate another secure key.
 
-## Boostrap
+## Boostrap & development mode
 
 This is a dockerized setup, hence start the project using below command
 
 ```bash
-docker compose up -d
+docker compose watch
 ```
 
-This should start all necessary services for the project.
+This should start all necessary services for the project and will also mount file system as volume for easy development.
 
 You verify backend running by doing health-check
 
