@@ -1,8 +1,9 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app.models.question import Question
 from app.models.tag import Tag
-from app.models.test import TestTagLink
+from app.models.test import TestQuestionStaticLink, TestTagLink
 from app.models.user import User
 
 
@@ -13,11 +14,16 @@ def test_create_test(client: TestClient, session: Session):
     session.add(tag_marathi)
     session.commit()
 
+    question_one = Question(question="What is the size of Sun")
+    question_two = Question(question="What is the speed of light")
+    session.add(question_one)
+    session.add(question_two)
+    session.commit()
+
     arvind = User(name="Arvind S")
     session.add(arvind)
     session.commit()
 
-    print("tag_hindi-->", tag_hindi.id)
     response = client.post(
         "/test/",
         json={
@@ -39,10 +45,10 @@ def test_create_test(client: TestClient, session: Session):
                 "created_by_id": arvind.id,
             },
             "tag_ids": [tag_hindi.id, tag_marathi.id],
+            "question_ids": [question_one.id, question_two.id],
         },
     )
     data = response.json()
-    print("Data is --->", data)
     assert response.status_code == 200
     assert data["name"] == "ABCC"
     assert data["description"] == "fdfdfdf"
@@ -67,9 +73,18 @@ def test_create_test(client: TestClient, session: Session):
     assert data["tags"][0] == tag_hindi.id
     assert data["tags"][1] == tag_marathi.id
 
-    test_ABCC = session.exec(
+    test_tag_link = session.exec(
         select(TestTagLink).where(TestTagLink.test_id == data["id"])
     ).all()
 
-    assert test_ABCC[0].tag_id == tag_hindi.id
-    assert test_ABCC[1].tag_id == tag_marathi.id
+    assert test_tag_link[0].tag_id == tag_hindi.id
+    assert test_tag_link[1].tag_id == tag_marathi.id
+
+    test_question_link = session.exec(
+        select(TestQuestionStaticLink).where(
+            TestQuestionStaticLink.test_id == data["id"]
+        )
+    ).all()
+
+    assert test_question_link[0].question_id == question_one.id
+    assert test_question_link[1].question_id == question_two.id
