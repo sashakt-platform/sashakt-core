@@ -1,5 +1,5 @@
 from .auth import NewPassword, Token, TokenPayload
-from .role import Role, RoleCreate, RolePublic, RoleUpdate
+from .role import Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
 from .user import (
     UpdatePassword,
     User,
@@ -19,6 +19,7 @@ __all__ = [
     "Role",
     "RoleCreate",
     "RolePublic",
+    "RolesPublic",
     "RoleUpdate",
     "User",
     "UserCreate",

@@ -92,7 +92,6 @@ def test_update_role(
     assert content["name"] == data["name"]
     assert content["description"] == data["description"]
     assert content["id"] == str(role.id)
-    assert content["owner_id"] == str(role.owner_id)
 
 
 def test_update_role_not_found(

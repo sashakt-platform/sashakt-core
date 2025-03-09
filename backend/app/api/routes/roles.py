@@ -84,7 +84,8 @@ def update_role(
     # if not current_user.is_superuser and (role.owner_id != current_user.id):
     #     raise HTTPException(status_code=400, detail="Not enough permissions")
     update_dict = role_in.model_dump(exclude_unset=True)
-    role.sqlmodel_update(update_dict)
+    if role:
+        role.sqlmodel_update(update_dict)
     session.add(role)
     session.commit()
     session.refresh(role)

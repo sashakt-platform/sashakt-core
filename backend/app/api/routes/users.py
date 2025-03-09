@@ -129,10 +129,10 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     Delete own user.
     """
-    if current_user.is_superuser:
-        raise HTTPException(
-            status_code=403, detail="Super users are not allowed to delete themselves"
-        )
+    # if current_user.is_superuser:
+    #     raise HTTPException(
+    #         status_code=403, detail="Super users are not allowed to delete themselves"
+    #     )
     session.delete(current_user)
     session.commit()
     return Message(message="User deleted successfully")
@@ -164,11 +164,11 @@ def read_user_by_id(
     user = session.get(User, user_id)
     if user == current_user:
         return user
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=403,
-            detail="The user doesn't have enough privileges",
-        )
+    # if not current_user.is_superuser:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail="The user doesn't have enough privileges",
+    #     )
     return user
 
 
