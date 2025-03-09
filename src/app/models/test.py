@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -16,12 +16,29 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class TestTagLink(SQLModel, table=True):
+class TestTagLinkBase(SQLModel):
+    test_id: int | None = Field(default=None, foreign_key="test.id", primary_key=True)
+    tag_id: int | None = Field(default=None, foreign_key="tag.id", primary_key=True)
+
+
+class TestTagLink(TestTagLinkBase, table=True):
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    test_id: int | None = Field(default=None, foreign_key="test.id", primary_key=True)
-    tag_id: int | None = Field(default=None, foreign_key="tag.id", primary_key=True)
+
+
+class TestTagLinkCreate(TestTagLinkBase):
+    pass
+
+
+class TestTagLinkPublic(TestTagLinkBase):
+    created_date: datetime
+    test_id: int
+    tag_id: int
+
+
+class TestTagLinkUpdate(TestTagLinkBase):
+    tag_id: int | None
 
 
 class TestQuestionStaticLink(SQLModel, table=True):
@@ -34,7 +51,28 @@ class TestQuestionStaticLink(SQLModel, table=True):
     )
 
 
-class Test(SQLModel, table=True):
+class TestBase(SQLModel):
+    name: str = Field(nullable=False)
+    description: str | None = Field(default=None, nullable=True)
+    start_time: datetime | None = Field(default=None, nullable=True)
+    end_time: datetime | None = Field(default=None, nullable=True)
+    time_limit: int | None = Field(default=None, nullable=True)
+    marks_level: MarksLevelEnum | None = Field(default=None, nullable=True)
+    marks: int | None = Field(default=None, nullable=True)
+    completion_message: str | None = Field(default=None, nullable=True)
+    start_instructions: str | None = Field(default=None, nullable=True)
+    link: str | None = Field(nullable=False)
+    no_of_attempts: int | None = Field(nullable=False, default=1)
+    shuffle: bool | None = Field(nullable=False, default=False)
+    random_questions: bool | None = Field(nullable=False, default=False)
+    no_of_questions: int | None = Field(default=None, nullable=False)
+    question_pagination: int = Field(default=1, nullable=False)
+    is_template: bool | None = Field(default=False, nullable=False)
+    template_id: int | None = Field(default=None, foreign_key="test.id", nullable=True)
+    created_by_id: int = Field(foreign_key="user.id", nullable=False)
+
+
+class Test(TestBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -43,32 +81,51 @@ class Test(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(nullable=True)
-    name: str = Field(nullable=False)
-    description: str | None = Field(default=None, nullable=True)
-    start_time: datetime | None = Field(nullable=True)
-    end_time: datetime | None = Field(nullable=True)
-    time_limit: int | None = Field(nullable=True)
-    marks_level: MarksLevelEnum | None = Field(sa_column=Column(JSON), default=None)
-    marks: int | None = Field(nullable=True)
-    completion_message: str | None = Field(nullable=True)
-    start_instructions: str | None = Field(nullable=True)
-    link: str | None = Field(nullable=False)
-    no_of_attempts: int | None = Field(nullable=False, default=1)
-    shuffle: bool | None = Field(nullable=False, default=False)
-    random_questions: bool | None = Field(nullable=False, default=False)
-    no_of_questions: int | None = Field(nullable=False)
-    question_pagination: int | None = Field(default=1, nullable=False)
-    is_template: bool | None = Field(default=False, nullable=False)
-    template_id: int | None = Field(foreign_key="test.id", nullable=True)
+    is_active: bool | None = Field(default=None, nullable=True)
+    is_deleted: bool = Field(default=False, nullable=False)
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
     )
-    tests: list["Test"] = Relationship(back_populates="template")
-    tags: list["Tag"] = Relationship(back_populates="tests", link_model=TestTagLink)
+    tests: list["Test"] | None = Relationship(back_populates="template")
+    tags: list["Tag"] | None = Relationship(
+        back_populates="tests", link_model=TestTagLink
+    )
     test_question_static: list["Question"] = Relationship(
         back_populates="tests", link_model=TestQuestionStaticLink
     )
-    created_by_id: int = Field(foreign_key="user.id")
     created_by: Optional["User"] = Relationship(back_populates="tests")
-    is_deleted: bool = Field(default=False, nullable=False)
+
+
+class TestCreate(TestBase):
+    pass
+
+
+class TestPublic(TestBase):
+    id: int
+    created_date: datetime
+    modified_date: datetime
+    is_active: bool | None
+    is_deleted: bool
+    tags: list[int]
+
+
+class TestUpdate(TestBase):
+    name: str | None
+    description: str | None
+    start_time: datetime | None
+    end_time: datetime | None
+    time_limit: int | None
+    marks_level: MarksLevelEnum | None
+    marks: int | None
+    completion_message: str | None
+    start_instructions: str | None
+    link: str | None
+    no_of_attempts: int | None
+    shuffle: bool | None
+    random_questions: bool | None
+    no_of_questions: int | None
+    question_pagination: int | None
+    is_template: bool | None
+    template_id: int | None
+    created_by_id: int | None
+    is_active: bool | None
