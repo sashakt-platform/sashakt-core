@@ -107,6 +107,7 @@ class TestPublic(TestBase):
     is_active: bool | None
     is_deleted: bool
     tags: list[int]
+    test_question_static: list[int]
 
 
 class TestUpdate(TestBase):
