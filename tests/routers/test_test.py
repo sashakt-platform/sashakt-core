@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.models.tag import Tag
+from app.models.test import TestTagLink
 from app.models.user import User
 
 
@@ -65,3 +66,10 @@ def test_create_test(client: TestClient, session: Session):
     assert len(data["tags"]) == 2
     assert data["tags"][0] == tag_hindi.id
     assert data["tags"][1] == tag_marathi.id
+
+    test_ABCC = session.exec(
+        select(TestTagLink).where(TestTagLink.test_id == data["id"])
+    ).all()
+
+    assert test_ABCC[0].tag_id == tag_hindi.id
+    assert test_ABCC[1].tag_id == tag_marathi.id
