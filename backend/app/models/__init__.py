@@ -1,4 +1,10 @@
 from .auth import NewPassword, Token, TokenPayload
+from .organization import (
+    Organization,
+    OrganizationCreate,
+    OrganizationPublic,
+    OrganizationUpdate,
+)
 from .role import Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
 from .user import (
     UpdatePassword,
@@ -30,4 +36,8 @@ __all__ = [
     "UserUpdateMe",
     "UpdatePassword",
     "Message",
+    "Organization",
+    "OrganizationCreate",
+    "OrganizationPublic",
+    "OrganizationUpdate",
 ]
