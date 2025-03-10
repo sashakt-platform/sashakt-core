@@ -90,14 +90,15 @@ class Test(TestBase, table=True):
     tags: list["Tag"] | None = Relationship(
         back_populates="tests", link_model=TestTagLink
     )
-    test_question_static: list["Question"] = Relationship(
+    test_question_static: list["Question"] | None = Relationship(
         back_populates="tests", link_model=TestQuestionStaticLink
     )
     created_by: Optional["User"] = Relationship(back_populates="tests")
 
 
 class TestCreate(TestBase):
-    pass
+    tags: list[int] = []
+    test_question_static: list[int] = []
 
 
 class TestPublic(TestBase):
