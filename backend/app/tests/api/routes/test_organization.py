@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.models.organization import Organization
 
 
-def test_create_organization(client: TestClient):
+def test_create_organization(client: TestClient) -> None:
     name = "Jay Sangh"
     description = "It is a non profit organization"
     response = client.post(
@@ -23,7 +23,7 @@ def test_create_organization(client: TestClient):
     assert data["is_active"] is None
 
 
-def test_read_organization(client: TestClient, db: SessionDep):
+def test_read_organization(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/organization/")
     data = response.json()
     assert response.status_code == 200
@@ -49,7 +49,7 @@ def test_read_organization(client: TestClient, db: SessionDep):
     assert data[1]["id"] == maha_vikas.id
 
 
-def test_read_organization_by_id(client: TestClient, db: SessionDep):
+def test_read_organization_by_id(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/organization/1")
     assert response.status_code == 404
     assert response.json() == {"detail": "Organization not found"}
@@ -76,7 +76,7 @@ def test_read_organization_by_id(client: TestClient, db: SessionDep):
     assert data["is_active"] is None
 
 
-def test_update_organization(client: TestClient, db: Session):
+def test_update_organization(client: TestClient, db: Session) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/organization/1",
         json={"name": "Jal Vikas", "description": None},
@@ -116,7 +116,7 @@ def test_update_organization(client: TestClient, db: Session):
     assert response.json() == {"detail": "Organization not found"}
 
 
-def test_visibility_organization(client: TestClient, db: Session):
+def test_visibility_organization(client: TestClient, db: Session) -> None:
     jal_vikas = Organization(name="Jal Vikas")
     db.add(jal_vikas)
     db.commit()
@@ -140,7 +140,7 @@ def test_visibility_organization(client: TestClient, db: Session):
     assert data["is_active"] is not True and not None
 
 
-def test_delete_organization(client: TestClient, db: Session):
+def test_delete_organization(client: TestClient, db: Session) -> None:
     response = client.delete(f"{settings.API_V1_STR}/organization/1")
     assert response.status_code == 404
     assert response.json() == {"detail": "Organization not found"}
