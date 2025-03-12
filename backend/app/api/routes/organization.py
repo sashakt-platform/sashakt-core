@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import select
 
@@ -14,7 +16,9 @@ router = APIRouter(prefix="/organization", tags=["Organization"])
 
 # Create a Organization
 @router.post("/", response_model=OrganizationPublic)
-def create_organization(organization_create: OrganizationCreate, session: SessionDep):
+def create_organization(
+    organization_create: OrganizationCreate, session: SessionDep
+) -> Organization:
     organization = Organization.model_validate(organization_create)
     session.add(organization)
     session.commit()
@@ -24,14 +28,14 @@ def create_organization(organization_create: OrganizationCreate, session: Sessio
 
 # Get all Organizations
 @router.get("/", response_model=list[OrganizationPublic])
-def get_organization(session: SessionDep):
+def get_organization(session: SessionDep) -> Sequence[Organization]:
     organization = session.exec(select(Organization)).all()
     return organization
 
 
 # Get Organization by ID
 @router.get("/{organization_id}", response_model=OrganizationPublic)
-def get_organization_by_id(organization_id: int, session: SessionDep):
+def get_organization_by_id(organization_id: int, session: SessionDep) -> Organization:
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -44,7 +48,7 @@ def update_organization(
     organization_id: int,
     updated_data: OrganizationUpdate,
     session: SessionDep,
-):
+) -> Organization:
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -62,7 +66,7 @@ def visibility_organization(
     organization_id: int,
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of organization"),
-):
+) -> Organization:
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -75,7 +79,7 @@ def visibility_organization(
 
 # Delete a Organization
 @router.delete("/{organization_id}", response_model=OrganizationPublic)
-def delete_organization(organization_id: int, session: SessionDep):
+def delete_organization(organization_id: int, session: SessionDep) -> Organization:
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
