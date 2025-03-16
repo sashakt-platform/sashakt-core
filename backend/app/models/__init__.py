@@ -23,7 +23,17 @@ from .organization import (
     OrganizationPublic,
     OrganizationUpdate,
 )
+from .question import Question
 from .role import Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
+from .tag import Tag
+from .test import (
+    Test,
+    TestCreate,
+    TestPublic,
+    TestQuestionStaticLink,
+    TestTagLink,
+    TestUpdate,
+)
 from .user import (
     UpdatePassword,
     User,
@@ -62,7 +72,6 @@ __all__ = [
     "CountryPublic",
     "CountryCreate",
     "CountryUpdate",
-    "CountryCreate",
     "State",
     "StatePublic",
     "StateCreate",
@@ -75,4 +84,12 @@ __all__ = [
     "BlockPublic",
     "BlockCreate",
     "BlockUpdate",
+    "Test",
+    "TestCreate",
+    "TestPublic",
+    "TestUpdate",
+    "TestQuestionStaticLink",
+    "TestTagLink",
+    "Question",
+    "Tag",
 ]
