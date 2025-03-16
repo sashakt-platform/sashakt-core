@@ -19,7 +19,7 @@ fileConfig(config.config_file_name)
 # target_metadata = None
 
 from sqlmodel import SQLModel
-from app.models import User, Role # noqa
+from app.models import User, Role, Organization,Country,State,District,Block,Tag,Test,Question # noqa
 from app.core.config import settings # noqa
 
 target_metadata = SQLModel.metadata
