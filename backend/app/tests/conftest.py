@@ -18,6 +18,7 @@ from app.models import (
     Tag,
     Test,
     TestQuestionStaticLink,
+    TestStateLocationLink,
     TestTagLink,
     User,
 )
@@ -30,6 +31,8 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
+        statement = delete(TestStateLocationLink)
+        session.execute(statement)
         statement = delete(TestTagLink)
         session.execute(statement)
         statement = delete(TestQuestionStaticLink)
