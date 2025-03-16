@@ -117,24 +117,6 @@ class TestPublic(TestBase):
 
 
 class TestUpdate(TestBase):
-    name: str | None
-    description: str | None
-    start_time: datetime | None
-    end_time: datetime | None
-    time_limit: int | None
-    marks_level: MarksLevelEnum | None
-    marks: int | None
-    completion_message: str | None
-    start_instructions: str | None
-    link: str | None
-    no_of_attempts: int | None
-    shuffle: bool | None
-    random_questions: bool | None
-    no_of_questions: int | None
-    question_pagination: int | None
-    is_template: bool | None
-    template_id: int | None
-    created_by_id: int | None
     tags: list[int] = []
     test_question_static: list[int] = []
     states: list[int] = []
