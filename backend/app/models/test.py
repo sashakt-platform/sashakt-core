@@ -121,29 +121,3 @@ class TestUpdate(TestBase):
     tags: list[int] = []
     test_question_static: list[int] = []
     states: list[int] = []
-
-
-# Sample payload for TestUpdate
-sample_payload = {
-    "name": "Sample Test",
-    "description": "This is a sample test description.",
-    "start_time": None,
-    "end_time": None,
-    "time_limit": 120,
-    "marks_level": "test",
-    "marks": 100,
-    "completion_message": "Congratulations! You have completed the test.",
-    "start_instructions": "Please read all questions carefully before answering.",
-    "link": "http://example.com/test-link",
-    "no_of_attempts": 3,
-    "shuffle": True,
-    "random_questions": True,
-    "no_of_questions": 50,
-    "question_pagination": 1,
-    "is_template": False,
-    "template_id": None,
-    "created_by_id": 1,
-    "tags": [1, 2, 3],
-    "test_question_static": [101, 102, 103],
-    "states": [1, 2, 3],
-}
