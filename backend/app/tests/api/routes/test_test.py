@@ -3,14 +3,29 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
+from app.models.location import Country, State
 from app.models.question import Question
 from app.models.tag import Tag
-from app.models.test import Test, TestQuestionStaticLink, TestTagLink
+from app.models.test import (
+    Test,
+    TestQuestionStaticLink,
+    TestStateLocationLink,
+    TestTagLink,
+)
 from app.models.user import User
 from app.tests.utils.utils import random_email, random_lower_string
 
 
 def test_create_test(client: TestClient, db: SessionDep):
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    goa = State(name="Goa", country_id=india.id)
+    db.add(goa)
+    db.commit()
+
     tag_hindi = Tag(name="Hindi")
     tag_marathi = Tag(name="Marathi")
     db.add(tag_hindi)
@@ -51,6 +66,7 @@ def test_create_test(client: TestClient, db: SessionDep):
             "created_by_id": arvind.id,
             "tags": [tag_hindi.id, tag_marathi.id],
             "test_question_static": [question_one.id, question_two.id],
+            "states": [punjab.id],
         },
     )
     data = response.json()
@@ -77,6 +93,7 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert len(data["tags"]) == 2
     assert data["tags"][0] == tag_hindi.id
     assert data["tags"][1] == tag_marathi.id
+    assert data["states"][0] == punjab.id
 
     test_tag_link = db.exec(
         select(TestTagLink).where(TestTagLink.test_id == data["id"])
@@ -137,6 +154,7 @@ def test_create_test(client: TestClient, db: SessionDep):
             "created_by_id": arvind.id,
             "tags": [tag_hindi.id, tag_marathi.id],
             "test_question_static": [question_one.id, question_two.id],
+            "states": [punjab.id, goa.id],
         },
     )
     data = response.json()
@@ -161,9 +179,12 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert "created_date" in data
     assert "modified_date" in data
     assert "tags" in data
+    assert "states" in data
     assert len(data["tags"]) == 2
+    assert len(data["states"]) == 2
     assert data["tags"][0] == tag_hindi.id
     assert data["tags"][1] == tag_marathi.id
+    assert data["states"][1] == goa.id
 
     test_tag_link = db.exec(
         select(TestTagLink).where(TestTagLink.test_id == data["id"])
@@ -225,8 +246,10 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert "created_date" in data
     assert "modified_date" in data
     assert "tags" in data
+    assert "test_question_static" in data
     assert len(data["tags"]) == 0
     assert len(data["test_question_static"]) == 0
+    assert len(data["states"]) == 0
 
     test_tag_link = db.exec(
         select(TestTagLink).where(TestTagLink.test_id == data["id"])
@@ -244,6 +267,15 @@ def test_create_test(client: TestClient, db: SessionDep):
 
 
 def test_get_tests(client: TestClient, db: SessionDep):
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    goa = State(name="Goa", country_id=india.id)
+    db.add(goa)
+    db.commit()
+
     tag_english = Tag(name="English")
     db.add(tag_english)
     db.commit()
@@ -282,12 +314,15 @@ def test_get_tests(client: TestClient, db: SessionDep):
 
     test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_english.id)
     db.add(test_tag_link)
-    db.commit()
 
     test_question_link = TestQuestionStaticLink(
         test_id=test.id, question_id=question_three.id
     )
     db.add(test_question_link)
+
+    test_state_link = TestStateLocationLink(test_id=test.id, state_id=punjab.id)
+    db.add(test_state_link)
+
     db.commit()
 
     response = client.get(f"{settings.API_V1_STR}/test/")
@@ -316,11 +351,20 @@ def test_get_tests(client: TestClient, db: SessionDep):
     assert "created_date" in test_data
     assert "modified_date" in test_data
     assert "tags" in test_data
+    assert "states" in test_data
     assert len(test_data["tags"]) == 1
+    assert len(test_data["states"]) == 1
     assert test_data["tags"][0] == tag_english.id
 
 
 def test_get_test_by_id(client: TestClient, db: SessionDep):
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+
     tag_english = Tag(name="English")
     db.add(tag_english)
     db.commit()
@@ -367,6 +411,9 @@ def test_get_test_by_id(client: TestClient, db: SessionDep):
     db.add(test_question_link)
     db.commit()
 
+    test_state_link = TestStateLocationLink(test_id=test.id, state_id=punjab.id)
+    db.add(test_state_link)
+    db.commit()
     response = client.get(f"{settings.API_V1_STR}/test/{test.id}")
     data = response.json()
 
@@ -390,15 +437,26 @@ def test_get_test_by_id(client: TestClient, db: SessionDep):
     assert "created_date" in data
     assert "modified_date" in data
     assert "tags" in data
+    assert "states" in data
     assert len(data["tags"]) == 1
+    assert len(data["states"]) == 1
     assert data["tags"][0] == tag_english.id
+    assert data["states"][0] == punjab.id
 
 
 def test_update_test(client: TestClient, db: SessionDep):
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    maharashtra = State(name="Maharashtra", country_id=india.id)
+    db.add(maharashtra)
+    db.commit()
+
     tag_english = Tag(name="English")
     db.add(tag_english)
     db.commit()
-    print("Tag--->1")
     tag_hindi = Tag(name="Hindi")
     db.add(tag_hindi)
     db.commit()
@@ -419,7 +477,6 @@ def test_update_test(client: TestClient, db: SessionDep):
     )
     db.add(user)
     db.commit()
-    print("Tag--->2")
     test = Test(
         name="English Test",
         description="Test description",
@@ -441,23 +498,25 @@ def test_update_test(client: TestClient, db: SessionDep):
     db.commit()
     modified_date_original = test.modified_date
     created_date_original = test.created_date
-    print("Modified date-->", modified_date_original)
-    print("Tag--->3")
+
     test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_english.id)
     db.add(test_tag_link)
     db.commit()
+
     test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_marathi.id)
     db.add(test_tag_link)
     db.commit()
-    tag_of_marathi = test_tag_link.tag_id
-    print("tag_of_marathi->", tag_of_marathi)
-    print("Tag--->4")
+
     test_question_link = TestQuestionStaticLink(
         test_id=test.id, question_id=question_three.id
     )
     db.add(test_question_link)
     db.commit()
-    print("Tag--->5")
+
+    test_state_link = TestStateLocationLink(test_id=test.id, state_id=punjab.id)
+    db.add(test_state_link)
+    db.commit()
+
     response = client.put(
         f"{settings.API_V1_STR}/test/{test.id}",
         json={
@@ -481,11 +540,10 @@ def test_update_test(client: TestClient, db: SessionDep):
             "created_by_id": user.id,
             "tags": [tag_hindi.id, tag_gujarati.id],
             "test_question_static": [question_three.id],
+            "states": [punjab.id, maharashtra.id],
         },
     )
-    print("Tag--->6")
     data = response.json()
-    print("Tag--->6.5")
     assert response.status_code == 200
     assert data["id"] == test.id
     assert data["name"] == "Updated English Test"
@@ -516,10 +574,15 @@ def test_update_test(client: TestClient, db: SessionDep):
     modified_date = datetime.fromisoformat(data["modified_date"])
     assert modified_date != modified_date_original
     assert "modified_date" in data
+
     assert "tags" in data
     assert len(data["tags"]) == 2
-    print("Stored Tags", data["tags"])
     assert data["tags"] == [tag_hindi.id, tag_gujarati.id]
+
     assert "test_question_static" in data
     assert len(data["test_question_static"]) == 1
     assert data["test_question_static"][0] == question_three.id
+
+    assert "states" in data
+    assert len(data["states"]) == 2
+    assert data["states"] == [punjab.id, maharashtra.id]
