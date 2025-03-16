@@ -1,5 +1,7 @@
 from pydantic import EmailStr
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
+
+from ..models import Test
 
 
 # Shared properties
@@ -42,6 +44,7 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     hashed_password: str
+    tests: list["Test"] = Relationship(back_populates="created_by")
     # token: str
     # refresh_token: str
     # created_date: datetime | None = Field(
