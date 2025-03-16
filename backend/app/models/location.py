@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.test import Test, TestStateLocationLink
+from app.models.test import Test, TestState
 
 
 # -----Models for Country-----
@@ -62,7 +62,7 @@ class State(StateBase, table=True):
     country: Country | None = Relationship(back_populates="states")
     districts: list["District"] | None = Relationship(back_populates="state")
     tests: list["Test"] | None = Relationship(
-        back_populates="states", link_model=TestStateLocationLink
+        back_populates="states", link_model=TestState
     )
 
 

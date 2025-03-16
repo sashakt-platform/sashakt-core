@@ -17,7 +17,8 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class TestTagLink(SQLModel, table=True):
+class TestTag(SQLModel, table=True):
+    __tablename__ = "test_tag"  # type: ignore
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "tag_id"),)
@@ -28,7 +29,8 @@ class TestTagLink(SQLModel, table=True):
     tag_id: int = Field(foreign_key="tag.id", ondelete="CASCADE")
 
 
-class TestQuestionStaticLink(SQLModel, table=True):
+class TestQuestion(SQLModel, table=True):
+    __tablename__ = "test_question"  # type: ignore
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "question_id"),)
@@ -39,7 +41,8 @@ class TestQuestionStaticLink(SQLModel, table=True):
     question_id: int | None = Field(default=None, foreign_key="question.id")
 
 
-class TestStateLocationLink(SQLModel, table=True):
+class TestState(SQLModel, table=True):
+    __tablename__ = "test_state"  # type: ignore
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "state_id"),)
@@ -87,14 +90,12 @@ class Test(TestBase, table=True):
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
     )
     tests: list["Test"] | None = Relationship(back_populates="template")
-    tags: list["Tag"] | None = Relationship(
-        back_populates="tests", link_model=TestTagLink
-    )
+    tags: list["Tag"] | None = Relationship(back_populates="tests", link_model=TestTag)
     test_question_static: list["Question"] | None = Relationship(
-        back_populates="tests", link_model=TestQuestionStaticLink
+        back_populates="tests", link_model=TestQuestion
     )
     states: list["State"] | None = Relationship(
-        back_populates="tests", link_model=TestStateLocationLink
+        back_populates="tests", link_model=TestState
     )
     created_by: Optional["User"] = Relationship(back_populates="tests")
 
