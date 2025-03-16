@@ -11,14 +11,15 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
+    from app.models.location import State
     from app.models.question import Question
     from app.models.tag import Tag
     from app.models.user import User
 
 
 class TestTagLink(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
     __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "tag_id"),)
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -29,13 +30,24 @@ class TestTagLink(SQLModel, table=True):
 
 class TestQuestionStaticLink(SQLModel, table=True):
     __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
+    __table_args__ = (UniqueConstraint("test_id", "question_id"),)
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    test_id: int | None = Field(default=None, foreign_key="test.id", primary_key=True)
-    question_id: int | None = Field(
-        default=None, foreign_key="question.id", primary_key=True
+    test_id: int | None = Field(default=None, foreign_key="test.id")
+    question_id: int | None = Field(default=None, foreign_key="question.id")
+
+
+class TestStateLocationLink(SQLModel, table=True):
+    __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
+    __table_args__ = (UniqueConstraint("test_id", "state_id"),)
+    created_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
     )
+    test_id: int | None = Field(default=None, foreign_key="test.id")
+    state_id: int | None = Field(default=None, foreign_key="state.id")
 
 
 class TestBase(SQLModel):
@@ -81,12 +93,16 @@ class Test(TestBase, table=True):
     test_question_static: list["Question"] | None = Relationship(
         back_populates="tests", link_model=TestQuestionStaticLink
     )
+    states: list["State"] | None = Relationship(
+        back_populates="tests", link_model=TestStateLocationLink
+    )
     created_by: Optional["User"] = Relationship(back_populates="tests")
 
 
 class TestCreate(TestBase):
     tags: list[int] = []
     test_question_static: list[int] = []
+    states: list[int] = []
 
 
 class TestPublic(TestBase):
@@ -97,6 +113,7 @@ class TestPublic(TestBase):
     is_deleted: bool
     tags: list[int]
     test_question_static: list[int]
+    states: list[int]
 
 
 class TestUpdate(TestBase):
@@ -120,6 +137,7 @@ class TestUpdate(TestBase):
     created_by_id: int | None
     tags: list[int] = []
     test_question_static: list[int] = []
+    states: list[int] = []
 
 
 # Sample payload for TestUpdate
@@ -144,4 +162,5 @@ sample_payload = {
     "created_by_id": 1,
     "tags": [1, 2, 3],
     "test_question_static": [101, 102, 103],
+    "states": [1, 2, 3],
 }
