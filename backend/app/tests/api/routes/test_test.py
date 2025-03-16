@@ -8,9 +8,9 @@ from app.models.question import Question
 from app.models.tag import Tag
 from app.models.test import (
     Test,
-    TestQuestionStaticLink,
-    TestStateLocationLink,
-    TestTagLink,
+    TestQuestion,
+    TestState,
+    TestTag,
 )
 from app.models.user import User
 from app.tests.utils.utils import random_email, random_lower_string
@@ -95,17 +95,13 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert data["tags"][1] == tag_marathi.id
     assert data["states"][0] == punjab.id
 
-    test_tag_link = db.exec(
-        select(TestTagLink).where(TestTagLink.test_id == data["id"])
-    ).all()
+    test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
 
     assert test_tag_link[0].tag_id == tag_hindi.id
     assert test_tag_link[1].tag_id == tag_marathi.id
 
     test_question_link = db.exec(
-        select(TestQuestionStaticLink).where(
-            TestQuestionStaticLink.test_id == data["id"]
-        )
+        select(TestQuestion).where(TestQuestion.test_id == data["id"])
     ).all()
 
     assert test_question_link[0].question_id == question_one.id
@@ -186,17 +182,13 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert data["tags"][1] == tag_marathi.id
     assert data["states"][1] == goa.id
 
-    test_tag_link = db.exec(
-        select(TestTagLink).where(TestTagLink.test_id == data["id"])
-    ).all()
+    test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
 
     assert test_tag_link[0].tag_id == tag_hindi.id
     assert test_tag_link[1].tag_id == tag_marathi.id
 
     test_question_link = db.exec(
-        select(TestQuestionStaticLink).where(
-            TestQuestionStaticLink.test_id == data["id"]
-        )
+        select(TestQuestion).where(TestQuestion.test_id == data["id"])
     ).all()
 
     assert test_question_link[0].question_id == question_one.id
@@ -251,16 +243,12 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert len(data["test_question_static"]) == 0
     assert len(data["states"]) == 0
 
-    test_tag_link = db.exec(
-        select(TestTagLink).where(TestTagLink.test_id == data["id"])
-    ).all()
+    test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
 
     assert test_tag_link == []
 
     test_question_link = db.exec(
-        select(TestQuestionStaticLink).where(
-            TestQuestionStaticLink.test_id == data["id"]
-        )
+        select(TestQuestion).where(TestQuestion.test_id == data["id"])
     ).all()
 
     assert test_question_link == []
@@ -312,15 +300,13 @@ def test_get_tests(client: TestClient, db: SessionDep):
     db.add(test)
     db.commit()
 
-    test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_english.id)
+    test_tag_link = TestTag(test_id=test.id, tag_id=tag_english.id)
     db.add(test_tag_link)
 
-    test_question_link = TestQuestionStaticLink(
-        test_id=test.id, question_id=question_three.id
-    )
+    test_question_link = TestQuestion(test_id=test.id, question_id=question_three.id)
     db.add(test_question_link)
 
-    test_state_link = TestStateLocationLink(test_id=test.id, state_id=punjab.id)
+    test_state_link = TestState(test_id=test.id, state_id=punjab.id)
     db.add(test_state_link)
 
     db.commit()
@@ -401,17 +387,15 @@ def test_get_test_by_id(client: TestClient, db: SessionDep):
     db.add(test)
     db.commit()
 
-    test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_english.id)
+    test_tag_link = TestTag(test_id=test.id, tag_id=tag_english.id)
     db.add(test_tag_link)
     db.commit()
 
-    test_question_link = TestQuestionStaticLink(
-        test_id=test.id, question_id=question_three.id
-    )
+    test_question_link = TestQuestion(test_id=test.id, question_id=question_three.id)
     db.add(test_question_link)
     db.commit()
 
-    test_state_link = TestStateLocationLink(test_id=test.id, state_id=punjab.id)
+    test_state_link = TestState(test_id=test.id, state_id=punjab.id)
     db.add(test_state_link)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/test/{test.id}")
@@ -499,21 +483,19 @@ def test_update_test(client: TestClient, db: SessionDep):
     modified_date_original = test.modified_date
     created_date_original = test.created_date
 
-    test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_english.id)
+    test_tag_link = TestTag(test_id=test.id, tag_id=tag_english.id)
     db.add(test_tag_link)
     db.commit()
 
-    test_tag_link = TestTagLink(test_id=test.id, tag_id=tag_marathi.id)
+    test_tag_link = TestTag(test_id=test.id, tag_id=tag_marathi.id)
     db.add(test_tag_link)
     db.commit()
 
-    test_question_link = TestQuestionStaticLink(
-        test_id=test.id, question_id=question_three.id
-    )
+    test_question_link = TestQuestion(test_id=test.id, question_id=question_three.id)
     db.add(test_question_link)
     db.commit()
 
-    test_state_link = TestStateLocationLink(test_id=test.id, state_id=punjab.id)
+    test_state_link = TestState(test_id=test.id, state_id=punjab.id)
     db.add(test_state_link)
     db.commit()
 
