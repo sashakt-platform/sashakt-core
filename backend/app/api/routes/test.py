@@ -7,6 +7,7 @@ from app.models.test import (
     TestCreate,
     TestPublic,
     TestQuestionStaticLink,
+    TestStateLocationLink,
     TestTagLink,
     TestUpdate,
 )
@@ -20,7 +21,9 @@ def create_test(
     test_create: TestCreate,
     session: SessionDep,
 ):
-    test_data = test_create.model_dump(exclude={"tags", "test_question_static"})
+    test_data = test_create.model_dump(
+        exclude={"tags", "test_question_static", "states"}
+    )
     test = Test.model_validate(test_data)
     session.add(test)
     session.commit()
@@ -41,6 +44,15 @@ def create_test(
         session.add_all(question_links)
         session.commit()
 
+    if test_create.states:
+        state_ids = test_create.states
+        state_links = [
+            TestStateLocationLink(test_id=test.id, state_id=state_id)
+            for state_id in state_ids
+        ]
+        session.add_all(state_links)
+        session.commit()
+
     stored_question_ids = session.exec(
         select(TestQuestionStaticLink.question_id).where(
             TestQuestionStaticLink.test_id == test.id
@@ -51,10 +63,17 @@ def create_test(
         select(TestTagLink.tag_id).where(TestTagLink.test_id == test.id)
     )
 
+    stored_state_ids = session.exec(
+        select(TestStateLocationLink.state_id).where(
+            TestStateLocationLink.test_id == test.id
+        )
+    )
+
     return TestPublic(
         **test.model_dump(),
         tags=stored_tag_ids,
         test_question_static=stored_question_ids,
+        states=stored_state_ids,
     )
 
 
@@ -77,11 +96,17 @@ def get_test(session: SessionDep):
                 TestQuestionStaticLink.test_id == test.id
             )
         )
+        stored_state_ids = session.exec(
+            select(TestStateLocationLink.state_id).where(
+                TestStateLocationLink.test_id == test.id
+            )
+        )
         test_public.append(
             TestPublic(
                 **test.model_dump(),
                 tags=stored_tag_ids,
                 test_question_static=stored_question_ids,
+                states=stored_state_ids,
             )
         )
 
@@ -102,10 +127,16 @@ def get_test_by_id(test_id: int, session: SessionDep):
             TestQuestionStaticLink.test_id == test_id
         )
     )
+    stored_state_ids = session.exec(
+        select(TestStateLocationLink.state_id).where(
+            TestStateLocationLink.test_id == test_id
+        )
+    )
     return TestPublic(
         **test.model_dump(),
         tags=stored_tag_ids,
         test_question_static=stored_question_ids,
+        states=stored_state_ids,
     )
 
 
@@ -116,14 +147,10 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
 
     if not test or test.is_active is False or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
-    print("test with tags-->", test.tags)
-    # test.tags=[1,2,3]
-    # testUpdate.tags=[1,2,4]
+
+    # Updating Tags
     tags_remove = [tag.id for tag in test.tags if tag.id not in test_update.tags]
     tags_add = [tag for tag in test_update.tags if tag not in [t.id for t in test.tags]]
-
-    print("tags_remove-->", tags_remove)
-    print("tags_add-->", tags_add)
 
     if tags_remove:
         for tag in tags_remove:
@@ -145,9 +172,7 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         select(TestTagLink.tag_id).where(TestTagLink.test_id == test.id)
     )
 
-    # test.tags=[1,2,3]
-    # testUpdate.tags=[1,2,4]
-    print("test with Questions-->", test.test_question_static)
+    # Updating Questions
     question_remove = [
         question.id
         for question in test.test_question_static
@@ -158,9 +183,6 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         for question in test_update.test_question_static
         if question not in [q.id for q in test.test_question_static]
     ]
-
-    print("question_remove-->", question_remove)
-    print("question_add-->", question_add)
 
     if question_remove:
         for question in question_remove:
@@ -185,6 +207,39 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         )
     )
 
+    # Updating States
+    states_remove = [
+        state.id for state in test.states if state.id not in test_update.states
+    ]
+    states_add = [
+        state
+        for state in test_update.states
+        if state not in [s.id for s in test.states]
+    ]
+
+    if states_remove:
+        for state in states_remove:
+            session.delete(
+                session.exec(
+                    select(TestStateLocationLink).where(
+                        TestStateLocationLink.test_id == test.id,
+                        TestStateLocationLink.state_id == state,
+                    )
+                ).one()
+            )
+        session.commit()
+
+    if states_add:
+        for state in states_add:
+            session.add(TestStateLocationLink(test_id=test.id, state_id=state))
+        session.commit()
+
+    stored_state_ids = session.exec(
+        select(TestStateLocationLink.state_id).where(
+            TestStateLocationLink.test_id == test.id
+        )
+    )
+
     test_data = test_update.model_dump(exclude_unset=True)
     test.sqlmodel_update(test_data)
     session.add(test)
@@ -195,4 +250,5 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         **test.model_dump(),
         tags=stored_tag_ids,
         test_question_static=stored_question_ids,
+        states=stored_state_ids,
     )
