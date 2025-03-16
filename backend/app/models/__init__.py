@@ -31,6 +31,7 @@ from .test import (
     TestCreate,
     TestPublic,
     TestQuestionStaticLink,
+    TestStateLocationLink,
     TestTagLink,
     TestUpdate,
 )
@@ -90,6 +91,7 @@ __all__ = [
     "TestUpdate",
     "TestQuestionStaticLink",
     "TestTagLink",
+    "TestStateLocationLink",
     "Question",
     "Tag",
 ]
