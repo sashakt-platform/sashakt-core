@@ -99,8 +99,12 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 200
     assert data["user_id"] == user_a.id
     assert data["id"] == candidate_aa.id
-    assert data["created_date"] == candidate_aa.created_date.isoformat()
-    assert data["modified_date"] == candidate_aa.modified_date.isoformat()
+    assert data["created_date"] == (
+        candidate_aa.created_date.isoformat() if candidate_aa.created_date else None
+    )
+    assert data["modified_date"] == (
+        candidate_aa.modified_date.isoformat() if candidate_aa.modified_date else None
+    )
     assert data["is_active"] is None
     assert data["is_deleted"] is False
 
@@ -110,8 +114,12 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 200
     assert data["user_id"] == user_b.id
     assert data["id"] == candidate_b.id
-    assert data["created_date"] == candidate_b.created_date.isoformat()
-    assert data["modified_date"] == candidate_b.modified_date.isoformat()
+    assert data["created_date"] == (
+        candidate_b.created_date.isoformat() if candidate_b.created_date else None
+    )
+    assert data["modified_date"] == (
+        candidate_b.modified_date.isoformat() if candidate_b.modified_date else None
+    )
     assert data["is_active"] is None
     assert data["is_deleted"] is False
 
@@ -121,8 +129,12 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 200
     assert data["user_id"] is None
     assert data["id"] == candidate_c.id
-    assert data["created_date"] == candidate_c.created_date.isoformat()
-    assert data["modified_date"] == candidate_c.modified_date.isoformat()
+    assert data["created_date"] == (
+        candidate_c.created_date.isoformat() if candidate_c.created_date else None
+    )
+    assert data["modified_date"] == (
+        candidate_c.modified_date.isoformat() if candidate_c.modified_date else None
+    )
     assert data["is_active"] is None
     assert data["is_deleted"] is False
 
