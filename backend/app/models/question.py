@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 class Question(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    question: str
+    question: str = Field(nullable=False, index=True)
     tests: list["Test"] = Relationship(
         back_populates="test_question_static", link_model=TestQuestion
     )

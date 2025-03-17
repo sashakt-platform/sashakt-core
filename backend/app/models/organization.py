@@ -4,7 +4,7 @@ from sqlmodel import Field, SQLModel
 
 
 class OrganizationBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     description: str | None = Field(default=None, nullable=True)
 
 
@@ -29,7 +29,8 @@ class OrganizationPublic(OrganizationBase):
     id: int | None
     created_date: datetime | None
     modified_date: datetime | None
-    is_deleted: bool | None
+    is_active: bool | None
+    is_deleted: bool
 
 
 class OrganizationUpdate(OrganizationBase):
