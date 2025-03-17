@@ -1,4 +1,5 @@
 from .auth import NewPassword, Token, TokenPayload
+from .candidate import Candidate, CandidateCreate, CandidatePublic, CandidateUpdate
 from .location import (
     Block,
     BlockCreate,
@@ -94,4 +95,8 @@ __all__ = [
     "TestState",
     "Question",
     "Tag",
+    "Candidate",
+    "CandidateCreate",
+    "CandidatePublic",
+    "CandidateUpdate",
 ]
