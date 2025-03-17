@@ -54,7 +54,7 @@ class TestState(SQLModel, table=True):
 
 
 class TestBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     description: str | None = Field(default=None, nullable=True)
     start_time: datetime | None = Field(default=None, nullable=True)
     end_time: datetime | None = Field(default=None, nullable=True)
