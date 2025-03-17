@@ -29,12 +29,8 @@ class OrganizationPublic(OrganizationBase):
     id: int | None
     created_date: datetime | None
     modified_date: datetime | None
-    name: str
-    description: str | None
-    is_active: bool | None
     is_deleted: bool | None
 
 
 class OrganizationUpdate(OrganizationBase):
-    name: str
-    description: str | None
+    pass

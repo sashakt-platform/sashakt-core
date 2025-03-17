@@ -6,9 +6,9 @@ from app.models.test import (
     Test,
     TestCreate,
     TestPublic,
-    TestQuestionStaticLink,
-    TestStateLocationLink,
-    TestTagLink,
+    TestQuestion,
+    TestState,
+    TestTag,
     TestUpdate,
 )
 
@@ -31,14 +31,14 @@ def create_test(
 
     if test_create.tags:
         tag_ids = test_create.tags
-        tag_links = [TestTagLink(test_id=test.id, tag_id=tag_id) for tag_id in tag_ids]
+        tag_links = [TestTag(test_id=test.id, tag_id=tag_id) for tag_id in tag_ids]
         session.add_all(tag_links)
         session.commit()
 
     if test_create.test_question_static:
         question_ids = test_create.test_question_static
         question_links = [
-            TestQuestionStaticLink(test_id=test.id, question_id=question_id)
+            TestQuestion(test_id=test.id, question_id=question_id)
             for question_id in question_ids
         ]
         session.add_all(question_links)
@@ -47,26 +47,21 @@ def create_test(
     if test_create.states:
         state_ids = test_create.states
         state_links = [
-            TestStateLocationLink(test_id=test.id, state_id=state_id)
-            for state_id in state_ids
+            TestState(test_id=test.id, state_id=state_id) for state_id in state_ids
         ]
         session.add_all(state_links)
         session.commit()
 
     stored_question_ids = session.exec(
-        select(TestQuestionStaticLink.question_id).where(
-            TestQuestionStaticLink.test_id == test.id
-        )
+        select(TestQuestion.question_id).where(TestQuestion.test_id == test.id)
     )
 
     stored_tag_ids = session.exec(
-        select(TestTagLink.tag_id).where(TestTagLink.test_id == test.id)
+        select(TestTag.tag_id).where(TestTag.test_id == test.id)
     )
 
     stored_state_ids = session.exec(
-        select(TestStateLocationLink.state_id).where(
-            TestStateLocationLink.test_id == test.id
-        )
+        select(TestState.state_id).where(TestState.test_id == test.id)
     )
 
     return TestPublic(
@@ -89,17 +84,13 @@ def get_test(session: SessionDep):
     test_public = []
     for test in tests:
         stored_tag_ids = session.exec(
-            select(TestTagLink.tag_id).where(TestTagLink.test_id == test.id)
+            select(TestTag.tag_id).where(TestTag.test_id == test.id)
         )
         stored_question_ids = session.exec(
-            select(TestQuestionStaticLink.question_id).where(
-                TestQuestionStaticLink.test_id == test.id
-            )
+            select(TestQuestion.question_id).where(TestQuestion.test_id == test.id)
         )
         stored_state_ids = session.exec(
-            select(TestStateLocationLink.state_id).where(
-                TestStateLocationLink.test_id == test.id
-            )
+            select(TestState.state_id).where(TestState.test_id == test.id)
         )
         test_public.append(
             TestPublic(
@@ -120,17 +111,13 @@ def get_test_by_id(test_id: int, session: SessionDep):
         raise HTTPException(status_code=404, detail="Test is not available")
 
     stored_tag_ids = session.exec(
-        select(TestTagLink.tag_id).where(TestTagLink.test_id == test_id)
+        select(TestTag.tag_id).where(TestTag.test_id == test_id)
     )
     stored_question_ids = session.exec(
-        select(TestQuestionStaticLink.question_id).where(
-            TestQuestionStaticLink.test_id == test_id
-        )
+        select(TestQuestion.question_id).where(TestQuestion.test_id == test_id)
     )
     stored_state_ids = session.exec(
-        select(TestStateLocationLink.state_id).where(
-            TestStateLocationLink.test_id == test_id
-        )
+        select(TestState.state_id).where(TestState.test_id == test_id)
     )
     return TestPublic(
         **test.model_dump(),
@@ -156,8 +143,8 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         for tag in tags_remove:
             session.delete(
                 session.exec(
-                    select(TestTagLink).where(
-                        TestTagLink.test_id == test.id, TestTagLink.tag_id == tag
+                    select(TestTag).where(
+                        TestTag.test_id == test.id, TestTag.tag_id == tag
                     )
                 ).one()
             )
@@ -165,11 +152,11 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
 
     if tags_add:
         for tag in tags_add:
-            session.add(TestTagLink(test_id=test.id, tag_id=tag))
+            session.add(TestTag(test_id=test.id, tag_id=tag))
         session.commit()
 
     stored_tag_ids = session.exec(
-        select(TestTagLink.tag_id).where(TestTagLink.test_id == test.id)
+        select(TestTag.tag_id).where(TestTag.test_id == test.id)
     )
 
     # Updating Questions
@@ -188,9 +175,9 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         for question in question_remove:
             session.delete(
                 session.exec(
-                    select(TestQuestionStaticLink).where(
-                        TestQuestionStaticLink.test_id == test.id,
-                        TestQuestionStaticLink.question_id == question,
+                    select(TestQuestion).where(
+                        TestQuestion.test_id == test.id,
+                        TestQuestion.question_id == question,
                     )
                 ).one()
             )
@@ -198,13 +185,11 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
 
     if question_add:
         for question in question_add:
-            session.add(TestQuestionStaticLink(test_id=test.id, question_id=question))
+            session.add(TestQuestion(test_id=test.id, question_id=question))
         session.commit()
 
     stored_question_ids = session.exec(
-        select(TestQuestionStaticLink.question_id).where(
-            TestQuestionStaticLink.test_id == test.id
-        )
+        select(TestQuestion.question_id).where(TestQuestion.test_id == test.id)
     )
 
     # Updating States
@@ -221,9 +206,9 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         for state in states_remove:
             session.delete(
                 session.exec(
-                    select(TestStateLocationLink).where(
-                        TestStateLocationLink.test_id == test.id,
-                        TestStateLocationLink.state_id == state,
+                    select(TestState).where(
+                        TestState.test_id == test.id,
+                        TestState.state_id == state,
                     )
                 ).one()
             )
@@ -231,13 +216,11 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
 
     if states_add:
         for state in states_add:
-            session.add(TestStateLocationLink(test_id=test.id, state_id=state))
+            session.add(TestState(test_id=test.id, state_id=state))
         session.commit()
 
     stored_state_ids = session.exec(
-        select(TestStateLocationLink.state_id).where(
-            TestStateLocationLink.test_id == test.id
-        )
+        select(TestState.state_id).where(TestState.test_id == test.id)
     )
 
     test_data = test_update.model_dump(exclude_unset=True)

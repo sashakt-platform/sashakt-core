@@ -30,9 +30,9 @@ from .test import (
     Test,
     TestCreate,
     TestPublic,
-    TestQuestionStaticLink,
-    TestStateLocationLink,
-    TestTagLink,
+    TestQuestion,
+    TestState,
+    TestTag,
     TestUpdate,
 )
 from .user import (
@@ -89,9 +89,9 @@ __all__ = [
     "TestCreate",
     "TestPublic",
     "TestUpdate",
-    "TestQuestionStaticLink",
-    "TestTagLink",
-    "TestStateLocationLink",
+    "TestQuestion",
+    "TestTag",
+    "TestState",
     "Question",
     "Tag",
 ]

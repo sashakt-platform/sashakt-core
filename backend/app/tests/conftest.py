@@ -17,9 +17,9 @@ from app.models import (
     State,
     Tag,
     Test,
-    TestQuestionStaticLink,
-    TestStateLocationLink,
-    TestTagLink,
+    TestQuestion,
+    TestState,
+    TestTag,
     User,
 )
 from app.tests.utils.user import authentication_token_from_email
@@ -31,11 +31,11 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
-        statement = delete(TestStateLocationLink)
+        statement = delete(TestState)
         session.execute(statement)
-        statement = delete(TestTagLink)
+        statement = delete(TestTag)
         session.execute(statement)
-        statement = delete(TestQuestionStaticLink)
+        statement = delete(TestQuestion)
         session.execute(statement)
         statement = delete(Test)
         session.execute(statement)

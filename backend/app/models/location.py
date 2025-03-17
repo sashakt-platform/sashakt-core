@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.test import Test, TestStateLocationLink
+from app.models.test import Test, TestState
 
 
 # -----Models for Country-----
@@ -35,7 +35,7 @@ class CountryCreate(CountryBase):
 
 
 class CountryUpdate(CountryBase):
-    name: str | None
+    pass
 
 
 # -----Models for Country-----
@@ -62,7 +62,7 @@ class State(StateBase, table=True):
     country: Country | None = Relationship(back_populates="states")
     districts: list["District"] | None = Relationship(back_populates="state")
     tests: list["Test"] | None = Relationship(
-        back_populates="states", link_model=TestStateLocationLink
+        back_populates="states", link_model=TestState
     )
 
 
@@ -78,8 +78,7 @@ class StateCreate(StateBase):
 
 
 class StateUpdate(StateBase):
-    name: str | None
-    country_id: int | None
+    pass
 
 
 # -----Models for State-----
@@ -119,8 +118,7 @@ class DistrictCreate(DistrictBase):
 
 
 class DistrictUpdate(DistrictBase):
-    name: str | None
-    state_id: int | None
+    pass
 
 
 # -----Models for District-----
@@ -161,8 +159,7 @@ class BlockCreate(BlockBase):
 
 
 class BlockUpdate(BlockBase):
-    name: str | None
-    district_id: int | None
+    pass
 
 
 # -----Models for Block-----
