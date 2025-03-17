@@ -29,7 +29,8 @@ class OrganizationPublic(OrganizationBase):
     id: int | None
     created_date: datetime | None
     modified_date: datetime | None
-    is_deleted: bool | None
+    is_active: bool | None
+    is_deleted: bool
 
 
 class OrganizationUpdate(OrganizationBase):
