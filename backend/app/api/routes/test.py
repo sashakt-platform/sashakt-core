@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/test", tags=["Test"])
 def create_test(
     test_create: TestCreate,
     session: SessionDep,
-):
+) -> TestPublic:
     test_data = test_create.model_dump(
         exclude={"tags", "test_question_static", "states"}
     )
@@ -74,7 +76,7 @@ def create_test(
 
 # Get All Tests
 @router.get("/", response_model=list[TestPublic])
-def get_test(session: SessionDep):
+def get_test(session: SessionDep) -> Sequence[TestPublic]:
     tests = session.exec(
         select(Test)
         .where(Test.is_active is not False)
@@ -101,11 +103,11 @@ def get_test(session: SessionDep):
             )
         )
 
-        return test_public
+    return test_public
 
 
 @router.get("/{test_id}", response_model=TestPublic)
-def get_test_by_id(test_id: int, session: SessionDep):
+def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     test = session.get(Test, test_id)
     if not test or test.is_active is False or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
@@ -128,7 +130,9 @@ def get_test_by_id(test_id: int, session: SessionDep):
 
 
 @router.put("/{test_id}", response_model=TestPublic)
-def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
+def update_test(
+    test_id: int, test_update: TestUpdate, session: SessionDep
+) -> TestPublic:
     test = session.get(Test, test_id)
     print("test-->", test)
 
@@ -136,8 +140,14 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
         raise HTTPException(status_code=404, detail="Test is not available")
 
     # Updating Tags
-    tags_remove = [tag.id for tag in test.tags if tag.id not in test_update.tags]
-    tags_add = [tag for tag in test_update.tags if tag not in [t.id for t in test.tags]]
+    tags_remove = [
+        tag.id for tag in (test.tags or []) if tag.id not in (test_update.tags or [])
+    ]
+    tags_add = [
+        tag
+        for tag in (test_update.tags or [])
+        if tag not in [t.id for t in (test.tags or [])]
+    ]
 
     if tags_remove:
         for tag in tags_remove:
@@ -162,13 +172,13 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
     # Updating Questions
     question_remove = [
         question.id
-        for question in test.test_question_static
-        if question.id not in test_update.test_question_static
+        for question in (test.test_question_static or [])
+        if question.id not in (test_update.test_question_static or [])
     ]
     question_add = [
         question
-        for question in test_update.test_question_static
-        if question not in [q.id for q in test.test_question_static]
+        for question in (test_update.test_question_static or [])
+        if question not in [q.id for q in (test.test_question_static or [])]
     ]
 
     if question_remove:
@@ -194,12 +204,14 @@ def update_test(test_id: int, test_update: TestUpdate, session: SessionDep):
 
     # Updating States
     states_remove = [
-        state.id for state in test.states if state.id not in test_update.states
+        state.id
+        for state in (test.states or [])
+        if state.id not in (test_update.states or [])
     ]
     states_add = [
         state
-        for state in test_update.states
-        if state not in [s.id for s in test.states]
+        for state in (test_update.states or [])
+        if state not in [s.id for s in (test.states or [])]
     ]
 
     if states_remove:

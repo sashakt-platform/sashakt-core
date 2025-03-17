@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -33,7 +34,7 @@ block_router = APIRouter()
 
 # Create a Country
 @country_router.post("/", response_model=CountryPublic)
-def create_country(country: CountryCreate, session: SessionDep):
+def create_country(country: CountryCreate, session: SessionDep) -> Country:
     db_country = Country.model_validate(country)
     session.add(db_country)
     session.commit()
@@ -43,14 +44,14 @@ def create_country(country: CountryCreate, session: SessionDep):
 
 # Get all Countries
 @country_router.get("/", response_model=list[CountryPublic])
-def get_countries(session: SessionDep):
+def get_countries(session: SessionDep) -> Sequence[Country]:
     countries = session.exec(select(Country)).all()
     return countries
 
 
 # Get Country by ID
 @country_router.get("/{country_id}", response_model=CountryPublic)
-def get_country_by_id(country_id: int, session: SessionDep):
+def get_country_by_id(country_id: int, session: SessionDep) -> Country:
     country = session.get(Country, country_id)
     if not country:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -59,7 +60,9 @@ def get_country_by_id(country_id: int, session: SessionDep):
 
 # Update a Country
 @country_router.put("/{country_id}", response_model=CountryPublic)
-def update_country(country_id: int, country: CountryUpdate, session: SessionDep):
+def update_country(
+    country_id: int, country: CountryUpdate, session: SessionDep
+) -> Country:
     country_db = session.get(Country, country_id)
     if not country_db:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -90,14 +93,14 @@ def create_state(
 
 # Get all States
 @state_router.get("/", response_model=list[StatePublic])
-def get_state(session: SessionDep):
+def get_state(session: SessionDep) -> Sequence[State]:
     states = session.exec(select(State)).all()
     return states
 
 
 # Get State by ID
 @state_router.get("/{state_id}", response_model=StatePublic)
-def get_state_by_id(state_id: int, session: SessionDep):
+def get_state_by_id(state_id: int, session: SessionDep) -> State:
     state = session.get(State, state_id)
     if not state:
         raise HTTPException(status_code=404, detail="State not found")
@@ -142,14 +145,14 @@ def create_district(
 
 # Get all Districts
 @district_router.get("/", response_model=list[DistrictPublic])
-def get_district(session: SessionDep):
+def get_district(session: SessionDep) -> Sequence[District]:
     districts = session.exec(select(District)).all()
     return districts
 
 
 # Get District by ID
 @district_router.get("/{district_id}", response_model=DistrictPublic)
-def get_district_by_id(district_id: int, session: SessionDep):
+def get_district_by_id(district_id: int, session: SessionDep) -> District:
     district = session.get(District, district_id)
     if not district:
         raise HTTPException(status_code=404, detail="District not found")
@@ -163,7 +166,7 @@ def update_district(
     district_id: int,
     district_update: DistrictUpdate,
     session: SessionDep,
-) -> Any:
+) -> District:
     district_db = session.get(District, district_id)
     if not district_db:
         raise HTTPException(status_code=404, detail="District not found")
@@ -194,14 +197,14 @@ def create_block(
 
 # Get all Blocks
 @block_router.get("/", response_model=list[BlockPublic])
-def get_block(session: SessionDep):
+def get_block(session: SessionDep) -> Sequence[Block]:
     blocks = session.exec(select(Block)).all()
     return blocks
 
 
 # Get Block by ID
 @block_router.get("/{block_id}", response_model=BlockPublic)
-def get_block_by_id(block_id: int, session: SessionDep):
+def get_block_by_id(block_id: int, session: SessionDep) -> Block:
     block = session.get(Block, block_id)
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
@@ -215,7 +218,7 @@ def update_block(
     block_id: int,
     block_update: BlockUpdate,
     session: SessionDep,
-) -> Any:
+) -> Block:
     block_db = session.get(Block, block_id)
     if not block_db:
         raise HTTPException(status_code=404, detail="Block not found")

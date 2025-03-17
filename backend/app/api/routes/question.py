@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
@@ -9,7 +11,7 @@ router = APIRouter(prefix="/question", tags=["Question"])
 
 # Create a Question
 @router.post("/", response_model=Question)
-def create_question(question: Question, session: SessionDep):
+def create_question(question: Question, session: SessionDep) -> Question:
     session.add(question)
     session.commit()
     session.refresh(question)
@@ -18,14 +20,14 @@ def create_question(question: Question, session: SessionDep):
 
 # Get all Questions
 @router.get("/", response_model=list[Question])
-def get_question(session: SessionDep):
+def get_question(session: SessionDep) -> Sequence[Question]:
     question = session.exec(select(Question)).all()
     return question
 
 
 # Get Question by ID
 @router.get("/{question_id}", response_model=Question)
-def get_question_by_id(question_id: int, session: SessionDep):
+def get_question_by_id(question_id: int, session: SessionDep) -> Question:
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -38,12 +40,11 @@ def update_question(
     question_id: int,
     updated_data: Question,
     session: SessionDep,
-):
+) -> Question:
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    question.name = updated_data.name
-    question.description = updated_data.description
+    question.question = updated_data.question
     session.add(question)
     session.commit()
     session.refresh(question)
@@ -52,7 +53,7 @@ def update_question(
 
 # Delete a Question
 @router.delete("/{question_id}")
-def delete_question(question_id: int, session: SessionDep):
+def delete_question(question_id: int, session: SessionDep) -> Question:
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -60,4 +61,4 @@ def delete_question(question_id: int, session: SessionDep):
     session.add(question)
     session.commit()
     session.refresh(question)
-    return {"message": "Question deleted successfully"}
+    return question

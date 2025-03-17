@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
@@ -9,7 +11,7 @@ router = APIRouter(prefix="/tag", tags=["Tag"])
 
 # Create a Tag
 @router.post("/", response_model=Tag)
-def create_tag(tag: Tag, session: SessionDep):
+def create_tag(tag: Tag, session: SessionDep) -> Tag:
     session.add(tag)
     session.commit()
     session.refresh(tag)
@@ -18,14 +20,14 @@ def create_tag(tag: Tag, session: SessionDep):
 
 # Get all Tags
 @router.get("/", response_model=list[Tag])
-def get_tag(session: SessionDep):
+def get_tag(session: SessionDep) -> Sequence[Tag]:
     tag = session.exec(select(Tag)).all()
     return tag
 
 
 # Get Tag by ID
 @router.get("/{tag_id}", response_model=Tag)
-def get_tag_by_id(tag_id: int, session: SessionDep):
+def get_tag_by_id(tag_id: int, session: SessionDep) -> Tag:
     tag = session.get(Tag, tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -38,12 +40,11 @@ def update_tag(
     tag_id: int,
     updated_data: Tag,
     session: SessionDep,
-):
+) -> Tag:
     tag = session.get(Tag, tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
     tag.name = updated_data.name
-    tag.description = updated_data.description
     session.add(tag)
     session.commit()
     session.refresh(tag)
@@ -52,7 +53,7 @@ def update_tag(
 
 # Delete a Tag
 @router.delete("/{tag_id}")
-def delete_tag(tag_id: int, session: SessionDep):
+def delete_tag(tag_id: int, session: SessionDep) -> Tag:
     tag = session.get(Tag, tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -60,4 +61,4 @@ def delete_tag(tag_id: int, session: SessionDep):
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    return {"message": "Tag deleted successfully"}
+    return tag
