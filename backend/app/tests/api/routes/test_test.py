@@ -16,7 +16,7 @@ from app.models.user import User
 from app.tests.utils.utils import random_email, random_lower_string
 
 
-def test_create_test(client: TestClient, db: SessionDep):
+def test_create_test(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -254,7 +254,7 @@ def test_create_test(client: TestClient, db: SessionDep):
     assert test_question_link == []
 
 
-def test_get_tests(client: TestClient, db: SessionDep):
+def test_get_tests(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -343,7 +343,7 @@ def test_get_tests(client: TestClient, db: SessionDep):
     assert test_data["tags"][0] == tag_english.id
 
 
-def test_get_test_by_id(client: TestClient, db: SessionDep):
+def test_get_test_by_id(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -428,7 +428,7 @@ def test_get_test_by_id(client: TestClient, db: SessionDep):
     assert data["states"][0] == punjab.id
 
 
-def test_update_test(client: TestClient, db: SessionDep):
+def test_update_test(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
