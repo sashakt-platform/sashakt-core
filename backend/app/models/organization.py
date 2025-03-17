@@ -4,7 +4,7 @@ from sqlmodel import Field, SQLModel
 
 
 class OrganizationBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     description: str | None = Field(default=None, nullable=True)
 
 

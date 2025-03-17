@@ -10,5 +10,5 @@ if TYPE_CHECKING:
 
 class Tag(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     tests: list["Test"] = Relationship(back_populates="tags", link_model=TestTag)

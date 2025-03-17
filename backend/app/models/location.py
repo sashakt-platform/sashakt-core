@@ -7,7 +7,7 @@ from app.models.test import Test, TestState
 
 # -----Models for Country-----
 class CountryBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
 
 
 class Country(CountryBase, table=True):
@@ -43,7 +43,7 @@ class CountryUpdate(CountryBase):
 
 # -----Models for State-----
 class StateBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     country_id: int = Field(
         foreign_key="country.id", nullable=False, ondelete="CASCADE"
     )
@@ -88,7 +88,7 @@ class StateUpdate(StateBase):
 
 
 class DistrictBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
 
 
@@ -128,7 +128,7 @@ class DistrictUpdate(DistrictBase):
 
 
 class BlockBase(SQLModel):
-    name: str = Field(nullable=False)
+    name: str = Field(nullable=False, index=True)
     district_id: int = Field(
         foreign_key="district.id", nullable=False, ondelete="CASCADE"
     )
