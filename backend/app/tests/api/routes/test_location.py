@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.models.location import Block, Country, District, State
 
 
-def test_create_country(client: TestClient):
+def test_create_country(client: TestClient) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/location/country/", json={"name": "China"}
     )
@@ -14,7 +14,7 @@ def test_create_country(client: TestClient):
     assert data["name"] == "China"
 
 
-def test_get_country(client: TestClient, db: SessionDep):
+def test_get_country(client: TestClient, db: SessionDep) -> None:
     dubai = Country(name="Dubai")
     austria = Country(name="Austria")
     db.add(dubai)
@@ -28,7 +28,7 @@ def test_get_country(client: TestClient, db: SessionDep):
     assert data[1]["name"] == austria.name
 
 
-def test_get_country_by_id(client: TestClient, db: SessionDep):
+def test_get_country_by_id(client: TestClient, db: SessionDep) -> None:
     srilanka = Country(name="Srilanka")
     db.add(srilanka)
     db.commit()
@@ -42,7 +42,7 @@ def test_get_country_by_id(client: TestClient, db: SessionDep):
     assert response.json() == {"detail": "Country not found"}
 
 
-def test_update_country(client: TestClient, db: SessionDep):
+def test_update_country(client: TestClient, db: SessionDep) -> None:
     australia = Country(name="Australiaaa")
     db.add(australia)
     db.commit()
@@ -67,7 +67,7 @@ def test_update_country(client: TestClient, db: SessionDep):
 # ---- State Routers ----
 
 
-def test_create_state(client: TestClient, db: SessionDep):
+def test_create_state(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -82,7 +82,7 @@ def test_create_state(client: TestClient, db: SessionDep):
     assert data["country_id"] == india.id
 
 
-def test_get_state(client: TestClient, db: SessionDep):
+def test_get_state(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -103,7 +103,7 @@ def test_get_state(client: TestClient, db: SessionDep):
     assert data[1]["country_id"] == india.id
 
 
-def test_get_state_by_id(client: TestClient, db: SessionDep):
+def test_get_state_by_id(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -121,7 +121,7 @@ def test_get_state_by_id(client: TestClient, db: SessionDep):
     assert response.json() == {"detail": "State not found"}
 
 
-def test_update_state(client: TestClient, db: SessionDep):
+def test_update_state(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -167,7 +167,7 @@ def test_update_state(client: TestClient, db: SessionDep):
 #  ---- District Routes ----
 
 
-def test_create_district(client: TestClient, db: SessionDep):
+def test_create_district(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -184,7 +184,7 @@ def test_create_district(client: TestClient, db: SessionDep):
     assert data["state_id"] == kerala.id
 
 
-def test_get_district(client: TestClient, db: SessionDep):
+def test_get_district(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -206,7 +206,7 @@ def test_get_district(client: TestClient, db: SessionDep):
     assert data[1]["state_id"] == kerala.id
 
 
-def test_get_district_by_id(client: TestClient, db: SessionDep):
+def test_get_district_by_id(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -229,7 +229,7 @@ def test_get_district_by_id(client: TestClient, db: SessionDep):
     assert response.json() == {"detail": "District not found"}
 
 
-def test_update_district(client: TestClient, db: SessionDep):
+def test_update_district(client: TestClient, db: SessionDep) -> None:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -273,7 +273,7 @@ def test_update_district(client: TestClient, db: SessionDep):
 #  ------- Block Routes -----
 
 
-def setup_district(db: SessionDep):
+def setup_district(db: SessionDep) -> tuple[District, District]:
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -291,7 +291,7 @@ def setup_district(db: SessionDep):
     return ernakulam, thrissur
 
 
-def test_create_block(client: TestClient, db: SessionDep):
+def test_create_block(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
     response = client.post(
         f"{settings.API_V1_STR}/location/block/",
@@ -303,7 +303,7 @@ def test_create_block(client: TestClient, db: SessionDep):
     assert data["district_id"] == ernakulam.id
 
 
-def test_get_block(client: TestClient, db: SessionDep):
+def test_get_block(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
     kovil = Block(name="Kovil", district_id=ernakulam.id)
     mayani = Block(name="Mayani", district_id=ernakulam.id)
@@ -332,7 +332,7 @@ def test_get_block(client: TestClient, db: SessionDep):
             assert block["district_id"] == thrissur.id
 
 
-def test_get_block_by_id(client: TestClient, db: SessionDep):
+def test_get_block_by_id(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
     kovil = Block(name="Kovil", district_id=ernakulam.id)
     mayani = Block(name="Mayani", district_id=ernakulam.id)
@@ -368,7 +368,7 @@ def test_get_block_by_id(client: TestClient, db: SessionDep):
     assert response.json() == {"detail": "Block not found"}
 
 
-def test_update_block(client: TestClient, db: SessionDep):
+def test_update_block(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
     kovil = Block(name="Kovil", district_id=ernakulam.id)
     db.add(kovil)
