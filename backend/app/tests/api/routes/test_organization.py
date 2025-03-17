@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-from sqlmodel import Session
 
 from app.api.deps import SessionDep
 from app.core.config import settings
@@ -76,7 +75,7 @@ def test_read_organization_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["is_active"] is None
 
 
-def test_update_organization(client: TestClient, db: Session) -> None:
+def test_update_organization(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/organization/1",
         json={"name": "Jal Vikas", "description": None},
@@ -116,7 +115,7 @@ def test_update_organization(client: TestClient, db: Session) -> None:
     assert response.json() == {"detail": "Organization not found"}
 
 
-def test_visibility_organization(client: TestClient, db: Session) -> None:
+def test_visibility_organization(client: TestClient, db: SessionDep) -> None:
     jal_vikas = Organization(name="Jal Vikas")
     db.add(jal_vikas)
     db.commit()
@@ -140,7 +139,7 @@ def test_visibility_organization(client: TestClient, db: Session) -> None:
     assert data["is_active"] is not True and not None
 
 
-def test_delete_organization(client: TestClient, db: Session) -> None:
+def test_delete_organization(client: TestClient, db: SessionDep) -> None:
     response = client.delete(f"{settings.API_V1_STR}/organization/1")
     assert response.status_code == 404
     assert response.json() == {"detail": "Organization not found"}
