@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.models.tag import Tag
+from app.models import Message, Tag
 
 router = APIRouter(prefix="/tag", tags=["Tag"])
 
@@ -53,7 +53,7 @@ def update_tag(
 
 # Delete a Tag
 @router.delete("/{tag_id}")
-def delete_tag(tag_id: int, session: SessionDep) -> Tag:
+def delete_tag(tag_id: int, session: SessionDep) -> Message:
     tag = session.get(Tag, tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -61,4 +61,4 @@ def delete_tag(tag_id: int, session: SessionDep) -> Tag:
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    return tag
+    return Message(message="Tag deleted successfully")

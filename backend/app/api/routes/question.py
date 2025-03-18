@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.models.question import Question
+from app.models import Message, Question
 
 router = APIRouter(prefix="/question", tags=["Question"])
 
@@ -53,7 +53,7 @@ def update_question(
 
 # Delete a Question
 @router.delete("/{question_id}")
-def delete_question(question_id: int, session: SessionDep) -> Question:
+def delete_question(question_id: int, session: SessionDep) -> Message:
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -61,4 +61,4 @@ def delete_question(question_id: int, session: SessionDep) -> Question:
     session.add(question)
     session.commit()
     session.refresh(question)
-    return question
+    return Message(message="Question deleted successfully")

@@ -4,11 +4,12 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.models.candidate import (
+from app.models import (
     Candidate,
     CandidateCreate,
     CandidatePublic,
     CandidateUpdate,
+    Message,
 )
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -80,8 +81,8 @@ def visibility_candidate(
 
 
 # Delete a Candidate
-@router.delete("/{candidate_id}", response_model=CandidatePublic)
-def delete_candidate(candidate_id: int, session: SessionDep) -> Candidate:
+@router.delete("/{candidate_id}")
+def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
     candidate = session.get(Candidate, candidate_id)
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -89,4 +90,4 @@ def delete_candidate(candidate_id: int, session: SessionDep) -> Candidate:
     session.add(candidate)
     session.commit()
     session.refresh(candidate)
-    return candidate
+    return Message(message="Candidate deleted successfully")
