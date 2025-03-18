@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.models.organization import (
+from app.models import (
+    Message,
     Organization,
     OrganizationCreate,
     OrganizationPublic,
@@ -78,7 +79,7 @@ def visibility_organization(
 
 
 # Delete a Organization
-@router.delete("/{organization_id}", response_model=OrganizationPublic)
+@router.delete("/{organization_id}", response_model=Message)
 def delete_organization(organization_id: int, session: SessionDep) -> Organization:
     organization = session.get(Organization, organization_id)
     if not organization:
@@ -87,4 +88,5 @@ def delete_organization(organization_id: int, session: SessionDep) -> Organizati
     session.add(organization)
     session.commit()
     session.refresh(organization)
-    return organization
+
+    return Message(message="Organization deleted successfully")
