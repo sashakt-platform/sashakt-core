@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class TestTag(SQLModel, table=True):
-    __tablename__ = "test_tag"  # type: ignore
+    __tablename__ = "test_tag"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "tag_id"),)
@@ -30,27 +30,27 @@ class TestTag(SQLModel, table=True):
 
 
 class TestQuestion(SQLModel, table=True):
-    __tablename__ = "test_question"  # type: ignore
+    __tablename__ = "test_question"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "question_id"),)
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    test_id: int | None = Field(default=None, foreign_key="test.id")
-    question_id: int | None = Field(default=None, foreign_key="question.id")
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    question_id: int = Field(foreign_key="question.id", ondelete="CASCADE")
 
 
 class TestState(SQLModel, table=True):
-    __tablename__ = "test_state"  # type: ignore
+    __tablename__ = "test_state"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "state_id"),)
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    test_id: int | None = Field(default=None, foreign_key="test.id")
-    state_id: int | None = Field(default=None, foreign_key="state.id")
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    state_id: int = Field(foreign_key="state.id", ondelete="CASCADE")
 
 
 class TestBase(SQLModel):

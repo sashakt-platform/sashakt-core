@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    candidate,
     location,
     login,
     organization,
@@ -24,6 +25,7 @@ api_router.include_router(location.router)
 api_router.include_router(test.router)
 api_router.include_router(tag.router)
 api_router.include_router(question.router)
+api_router.include_router(candidate.router)
 
 
 if settings.ENVIRONMENT == "local":

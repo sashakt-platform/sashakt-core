@@ -1,7 +1,11 @@
+from typing import TYPE_CHECKING
+
 from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
-from ..models import Test
+if TYPE_CHECKING:
+    from .candidate import Candidate
+    from .test import Test
 
 
 # Shared properties
@@ -45,6 +49,7 @@ class User(UserBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     hashed_password: str
     tests: list["Test"] = Relationship(back_populates="created_by")
+    candidates: list["Candidate"] = Relationship(back_populates="user")
     # token: str
     # refresh_token: str
     # created_date: datetime | None = Field(

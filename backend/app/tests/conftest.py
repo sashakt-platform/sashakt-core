@@ -9,6 +9,7 @@ from app.core.db import engine, init_db
 from app.main import app
 from app.models import (
     Block,
+    Candidate,
     Country,
     District,
     Organization,
@@ -31,6 +32,8 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
+        statement = delete(Candidate)
+        session.execute(statement)
         statement = delete(TestState)
         session.execute(statement)
         statement = delete(TestTag)
