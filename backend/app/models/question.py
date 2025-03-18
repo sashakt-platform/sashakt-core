@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from models.location import Block, District, State
-from models.organization import Organization
 from sqlmodel import JSON, Field, Relationship, SQLModel
+
+from .location import Block, District, State
+from .organization import Organization
 
 
 class QuestionType(str, Enum):
