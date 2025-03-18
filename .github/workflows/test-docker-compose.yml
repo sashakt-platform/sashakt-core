@@ -10,12 +10,12 @@ on:
       - synchronize
 
 jobs:
-
   test-docker-compose:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - run: cp .env.example .env
       - run: docker compose build
       - run: docker compose down -v --remove-orphans
       - run: docker compose up -d --wait backend frontend adminer
