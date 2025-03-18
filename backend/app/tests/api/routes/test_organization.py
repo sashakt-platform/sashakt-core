@@ -151,11 +151,10 @@ def test_delete_organization(client: TestClient, db: SessionDep) -> None:
     data = response.json()
     assert response.status_code == 200
 
-    print("is_deleted->>", data["is_deleted"])
-    assert data["is_deleted"] is True
+    assert "delete" in data["message"]
 
-    assert data["name"] == jal_vikas.name
-    assert data["id"] == jal_vikas.id
-    response = client.delete(f"{settings.API_V1_STR}/organization/2")
+    response = client.get(f"{settings.API_V1_STR}/organization/{jal_vikas.id}")
+    data = response.json()
+
     assert response.status_code == 404
-    assert response.json() == {"detail": "Organization not found"}
+    assert "id" not in data

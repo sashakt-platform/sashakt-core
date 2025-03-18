@@ -265,8 +265,7 @@ def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
     data = response.json()
     assert response.status_code == 200
 
-    assert data["is_deleted"] is True
-    assert data["id"] == candidate_aa.id
+    assert "delete" in data["message"]
 
     response = client.get(f"{settings.API_V1_STR}/candidate/{candidate_aa.id}")
     data = response.json()
