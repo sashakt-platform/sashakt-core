@@ -38,7 +38,7 @@ def get_organization(session: SessionDep) -> Sequence[Organization]:
 @router.get("/{organization_id}", response_model=OrganizationPublic)
 def get_organization_by_id(organization_id: int, session: SessionDep) -> Organization:
     organization = session.get(Organization, organization_id)
-    if not organization:
+    if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
     return organization
 
