@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
+from app.models import CandidateTest
+
 
 class MarksLevelEnum(str, enum.Enum):
     QUESTION = "question"
@@ -11,10 +13,7 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models.location import State
-    from app.models.question import Question
-    from app.models.tag import Tag
-    from app.models.user import User
+    from app.models import Candidate, Question, State, Tag, User
 
 
 class TestTag(SQLModel, table=True):
@@ -30,7 +29,7 @@ class TestTag(SQLModel, table=True):
 
 
 class TestQuestion(SQLModel, table=True):
-    __tablename__ = "test_question"
+    __tablename__ = "test_question"  # type: ignore
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "question_id"),)
@@ -98,6 +97,9 @@ class Test(TestBase, table=True):
         back_populates="tests", link_model=TestState
     )
     created_by: Optional["User"] = Relationship(back_populates="tests")
+    candidates: list["Candidate"] | None = Relationship(
+        back_populates="tests", link_model=CandidateTest
+    )
 
 
 class TestCreate(TestBase):

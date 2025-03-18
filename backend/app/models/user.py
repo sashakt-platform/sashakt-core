@@ -4,7 +4,7 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from .candidate import Candidate
+    from ..models import Candidate
     from .test import Test
 
 
