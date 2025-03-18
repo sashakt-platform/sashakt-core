@@ -79,8 +79,8 @@ def visibility_organization(
 
 
 # Delete a Organization
-@router.delete("/{organization_id}", response_model=Message)
-def delete_organization(organization_id: int, session: SessionDep) -> Organization:
+@router.delete("/{organization_id}")
+def delete_organization(organization_id: int, session: SessionDep) -> Message:
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
