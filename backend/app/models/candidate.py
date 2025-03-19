@@ -7,7 +7,19 @@ if TYPE_CHECKING:
     from app.models import Test, User
 
 
-class CandidateTest(SQLModel, table=True):
+# Linking Tables between Candidate and Test
+class CandidateTestBase(SQLModel):
+    __test__ = False
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    candidate_id: int = Field(foreign_key="candidate.id", ondelete="CASCADE")
+    device: str = Field(nullable=False)
+    consent: bool = Field(default=False, nullable=False)
+    start_time: datetime = Field(nullable=False)
+    end_time: datetime | None = Field(nullable=False, default=None)
+    is_submitted: bool = Field(default=False, nullable=False)
+
+
+class CandidateTest(CandidateTestBase, table=True):
     __tablename__ = "candidate_test"
     __test__ = False
     __table_args__ = (UniqueConstraint("test_id", "candidate_id"),)
@@ -19,13 +31,27 @@ class CandidateTest(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
-    candidate_id: int = Field(foreign_key="candidate.id", ondelete="CASCADE")
-    device: str = Field(nullable=False)
-    consent: bool = Field(default=False, nullable=False)
-    start_time: datetime = Field(nullable=False)
-    end_time: datetime | None = Field(nullable=False, default=None)
-    is_submitted: bool = Field(default=False, nullable=False)
+
+
+class CandidateTestCreate(CandidateTestBase):
+    __test__ = False
+
+
+class CandidateTestPublic(CandidateTestBase):
+    __test__ = False
+    id: int
+    created_date: datetime
+    modified_date: datetime
+
+
+class CandidateTestUpdate(SQLModel):
+    device: str
+    consent: bool
+    end_time: datetime | None
+    is_submitted: bool
+
+
+# Models for Candidates
 
 
 class CandidateBase(SQLModel):
@@ -35,7 +61,7 @@ class CandidateBase(SQLModel):
 
 
 class CandidateCreate(CandidateBase):
-    tests: list[int] = []
+    pass
 
 
 class Candidate(CandidateBase, table=True):
@@ -51,7 +77,7 @@ class Candidate(CandidateBase, table=True):
     is_deleted: bool = Field(default=False, nullable=False)
     user: "User" = Relationship(back_populates="candidates")
     tests: list["Test"] | None = Relationship(
-        back_populates="tests", link_model=CandidateTest
+        back_populates="candidates", link_model=CandidateTest
     )
 
 
@@ -61,8 +87,7 @@ class CandidatePublic(CandidateBase):
     modified_date: datetime
     is_active: bool | None
     is_deleted: bool
-    tests: list[int] = []
 
 
 class CandidateUpdate(CandidateBase):
-    tests: list[int] = []
+    pass
