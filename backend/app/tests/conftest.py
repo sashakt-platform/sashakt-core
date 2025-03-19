@@ -10,6 +10,7 @@ from app.main import app
 from app.models import (
     Block,
     Candidate,
+    CandidateTest,
     Country,
     District,
     Organization,
@@ -60,6 +61,8 @@ def db() -> Generator[Session, None, None]:
         statement = delete(State)
         session.execute(statement)
         statement = delete(Country)
+        session.execute(statement)
+        statement = delete(CandidateTest)
         session.execute(statement)
         session.commit()
 

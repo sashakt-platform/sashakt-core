@@ -8,11 +8,16 @@ from app.models import (
     Candidate,
     CandidateCreate,
     CandidatePublic,
+    CandidateTest,
+    CandidateTestCreate,
+    CandidateTestPublic,
+    CandidateTestUpdate,
     CandidateUpdate,
     Message,
 )
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
+router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
 
 
 # Create a Candidate
@@ -91,3 +96,59 @@ def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
     session.commit()
     session.refresh(candidate)
     return Message(message="Candidate deleted successfully")
+
+
+# Create Link between Candidate and Test
+
+
+# Create a Candidate-Test Link
+@router_candidate_test.post("/", response_model=CandidateTestPublic)
+def create_candidate_test(
+    candidate_test_create: CandidateTestCreate, session: SessionDep
+) -> Candidate:
+    candidate_test = CandidateTest.model_validate(candidate_test_create)
+    session.add(candidate_test)
+    session.commit()
+    session.refresh(candidate_test)
+    return candidate_test
+
+
+# Get all Candidate-Test Link
+@router_candidate_test.get("/", response_model=list[CandidateTestPublic])
+def get_candidate_test(session: SessionDep) -> Sequence[CandidateTest]:
+    candidate_test = session.exec(select(CandidateTest)).all()
+    return candidate_test
+
+
+# Get Candidate-Test Link by ID
+@router_candidate_test.get("/{candidate_test_id}", response_model=CandidateTestPublic)
+def get_organization_by_id(
+    candidate_test_id: int, session: SessionDep
+) -> CandidateTest:
+    candidate_test = session.get(CandidateTest, candidate_test_id)
+    if not candidate_test:
+        raise HTTPException(
+            status_code=404, detail="No combination of candidate and test found"
+        )
+    return candidate_test
+
+
+# Update Candidate-Test Link
+@router_candidate_test.put("/{candidate_test_id}", response_model=CandidateTestPublic)
+def update_candidate_test(
+    candidate_test_id: int,
+    updated_data: CandidateTestUpdate,
+    session: SessionDep,
+) -> CandidateTest:
+    candidate_test = session.get(CandidateTest, candidate_test_id)
+    if not candidate_test:
+        raise HTTPException(
+            status_code=404, detail="No combination of candidate and test found"
+        )
+
+    candidate_test_data = updated_data.model_dump(exclude_unset=True)
+    candidate_test.sqlmodel_update(candidate_test_data)
+    session.add(candidate_test)
+    session.commit()
+    session.refresh(candidate_test)
+    return candidate_test

@@ -26,6 +26,7 @@ api_router.include_router(test.router)
 api_router.include_router(tag.router)
 api_router.include_router(question.router)
 api_router.include_router(candidate.router)
+api_router.include_router(candidate.router_candidate_test)
 
 
 if settings.ENVIRONMENT == "local":
