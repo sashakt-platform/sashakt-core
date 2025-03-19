@@ -2,8 +2,14 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models import Candidate, CandidateTest, Test
-from app.models.user import User
+from app.models import (
+    Candidate,
+    CandidateTest,
+    CandidateTestQuestion,
+    Question,
+    Test,
+    User,
+)
 
 from ...utils.utils import random_email, random_lower_string
 
@@ -637,3 +643,368 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
     assert data["end_time"] != end_time_a.rstrip("Z")
     assert data["is_submitted"] is True
     assert data["is_submitted"] != is_submitted
+
+
+# Test cases for Candidate-Tests & Questions
+
+
+def test_create_candidate_test_question(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate = Candidate(user_id=user.id)
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-02-10T10:00:00Z"
+    end_time = "2025-03-14T12:00:00Z"
+    consent = True
+    is_submitted = False
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=device,
+        consent=consent,
+        start_time=start_time,
+        end_time=end_time,
+        is_submitted=is_submitted,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+
+    question_a = Question(question=random_lower_string())
+    question_b = Question(question=random_lower_string())
+    db.add_all([question_a, question_b])
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate_test_question/",
+        json={
+            "candidate_test_id": candidate_test.id,
+            "question_revision_id": question_a.id,
+            "response": random_lower_string(),
+            "visited": False,
+            "time_spent": 4,
+        },
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["candidate_test_id"] == candidate_test.id
+    assert data["question_revision_id"] == question_a.id
+    assert data["response"] is not None
+    assert data["visited"] is False
+    assert data["time_spent"] == 4
+
+
+def test_read_candidate_test_question(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate = Candidate(user_id=user.id)
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-02-10T10:00:00Z"
+    end_time = "2025-03-14T12:00:00Z"
+    consent = True
+    is_submitted = False
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=device,
+        consent=consent,
+        start_time=start_time,
+        end_time=end_time,
+        is_submitted=is_submitted,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+
+    question_a = Question(question=random_lower_string())
+    question_b = Question(question=random_lower_string())
+    db.add_all([question_a, question_b])
+    db.commit()
+
+    response_a = random_lower_string()
+    response_b = random_lower_string()
+
+    candidate_test_question_a = CandidateTestQuestion(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_a.id,
+        response=response_a,
+        visited=False,
+        time_spent=4,
+    )
+
+    candidate_test_question_b = CandidateTestQuestion(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_b.id,
+        response=response_b,
+        visited=True,
+        time_spent=56,
+    )
+
+    db.add_all([candidate_test_question_a, candidate_test_question_b])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/candidate_test_question/")
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
+    assert data[0]["candidate_test_id"] == candidate_test.id
+    assert data[0]["question_revision_id"] == question_a.id
+    assert data[0]["response"] == response_a
+    assert data[0]["visited"] is False
+    assert data[0]["time_spent"] == 4
+    assert data[1]["candidate_test_id"] == candidate_test.id
+    assert data[1]["question_revision_id"] == question_b.id
+    assert data[1]["response"] == response_b
+    assert data[1]["visited"] is True
+    assert data[1]["time_spent"] == 56
+
+
+def test_read_candidate_test_question_by_id(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate = Candidate(user_id=user.id)
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-02-10T10:00:00Z"
+    end_time = "2025-03-14T12:00:00Z"
+    consent = True
+    is_submitted = False
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=device,
+        consent=consent,
+        start_time=start_time,
+        end_time=end_time,
+        is_submitted=is_submitted,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+
+    question_a = Question(question=random_lower_string())
+    question_b = Question(question=random_lower_string())
+    db.add_all([question_a, question_b])
+    db.commit()
+
+    response_a = random_lower_string()
+    response_b = random_lower_string()
+
+    candidate_test_question_a = CandidateTestQuestion(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_a.id,
+        response=response_a,
+        visited=False,
+        time_spent=4,
+    )
+
+    candidate_test_question_b = CandidateTestQuestion(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_b.id,
+        response=response_b,
+        visited=True,
+        time_spent=56,
+    )
+
+    db.add_all([candidate_test_question_a, candidate_test_question_b])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate_test_question/{candidate_test_question_a.id}"
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == candidate_test_question_a.id
+    assert data["candidate_test_id"] == candidate_test.id
+    assert data["question_revision_id"] == question_a.id
+    assert data["response"] == response_a
+    assert data["visited"] is False
+    assert data["time_spent"] == 4
+
+
+def test_update_candidate_test_question(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate = Candidate()
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-02-10T10:00:00Z"
+    end_time = "2025-03-14T12:00:00Z"
+    consent = True
+    is_submitted = False
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=device,
+        consent=consent,
+        start_time=start_time,
+        end_time=end_time,
+        is_submitted=is_submitted,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+
+    question_a = Question(question=random_lower_string())
+    question_b = Question(question=random_lower_string())
+    db.add_all([question_a, question_b])
+    db.commit()
+
+    response_a = random_lower_string()
+    response_b = random_lower_string()
+
+    candidate_test_question_a = CandidateTestQuestion(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_a.id,
+        response=response_a,
+        visited=False,
+        time_spent=4,
+    )
+
+    candidate_test_question_b = CandidateTestQuestion(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_b.id,
+        response=response_b,
+        visited=True,
+        time_spent=56,
+    )
+
+    db.add_all([candidate_test_question_a, candidate_test_question_b])
+    db.commit()
+
+    response = client.put(
+        f"{settings.API_V1_STR}/candidate_test_question/{candidate_test_question_a.id}",
+        json={
+            "response": response_b,
+            "visited": True,
+            "time_spent": 56,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["response"] == response_b
+    assert data["visited"] is True
+    assert data["time_spent"] == 56
