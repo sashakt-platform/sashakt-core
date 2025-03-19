@@ -11,7 +11,7 @@ from app.models import (
     Block,
     Candidate,
     CandidateTest,
-    CandidateTestQuestion,
+    CandidateTestAnswer,
     Country,
     District,
     Organization,
@@ -65,7 +65,7 @@ def db() -> Generator[Session, None, None]:
         session.execute(statement)
         statement = delete(CandidateTest)
         session.execute(statement)
-        statement = delete(CandidateTestQuestion)
+        statement = delete(CandidateTestAnswer)
         session.execute(statement)
         session.commit()
 

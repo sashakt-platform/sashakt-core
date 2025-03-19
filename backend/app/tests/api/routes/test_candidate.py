@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.models import (
     Candidate,
     CandidateTest,
-    CandidateTestQuestion,
+    CandidateTestAnswer,
     Question,
     Test,
     User,
@@ -645,10 +645,10 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
     assert data["is_submitted"] != is_submitted
 
 
-# Test cases for Candidate-Tests & Questions
+# Test cases for Candidate-Tests & Answers
 
 
-def test_create_candidate_test_question(client: TestClient, db: SessionDep) -> None:
+def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> None:
     user = User(
         full_name=random_lower_string(),
         email=random_email(),
@@ -707,7 +707,7 @@ def test_create_candidate_test_question(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     response = client.post(
-        f"{settings.API_V1_STR}/candidate_test_question/",
+        f"{settings.API_V1_STR}/candidate_test_answer/",
         json={
             "candidate_test_id": candidate_test.id,
             "question_revision_id": question_a.id,
@@ -726,7 +726,7 @@ def test_create_candidate_test_question(client: TestClient, db: SessionDep) -> N
     assert data["time_spent"] == 4
 
 
-def test_read_candidate_test_question(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
     user = User(
         full_name=random_lower_string(),
         email=random_email(),
@@ -787,7 +787,7 @@ def test_read_candidate_test_question(client: TestClient, db: SessionDep) -> Non
     response_a = random_lower_string()
     response_b = random_lower_string()
 
-    candidate_test_question_a = CandidateTestQuestion(
+    candidate_test_answer_a = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=question_a.id,
         response=response_a,
@@ -795,7 +795,7 @@ def test_read_candidate_test_question(client: TestClient, db: SessionDep) -> Non
         time_spent=4,
     )
 
-    candidate_test_question_b = CandidateTestQuestion(
+    candidate_test_answer_b = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=question_b.id,
         response=response_b,
@@ -803,10 +803,10 @@ def test_read_candidate_test_question(client: TestClient, db: SessionDep) -> Non
         time_spent=56,
     )
 
-    db.add_all([candidate_test_question_a, candidate_test_question_b])
+    db.add_all([candidate_test_answer_a, candidate_test_answer_b])
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/candidate_test_question/")
+    response = client.get(f"{settings.API_V1_STR}/candidate_test_answer/")
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 2
@@ -822,7 +822,7 @@ def test_read_candidate_test_question(client: TestClient, db: SessionDep) -> Non
     assert data[1]["time_spent"] == 56
 
 
-def test_read_candidate_test_question_by_id(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) -> None:
     user = User(
         full_name=random_lower_string(),
         email=random_email(),
@@ -883,7 +883,7 @@ def test_read_candidate_test_question_by_id(client: TestClient, db: SessionDep) 
     response_a = random_lower_string()
     response_b = random_lower_string()
 
-    candidate_test_question_a = CandidateTestQuestion(
+    candidate_test_answer_a = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=question_a.id,
         response=response_a,
@@ -891,7 +891,7 @@ def test_read_candidate_test_question_by_id(client: TestClient, db: SessionDep) 
         time_spent=4,
     )
 
-    candidate_test_question_b = CandidateTestQuestion(
+    candidate_test_answer_b = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=question_b.id,
         response=response_b,
@@ -899,15 +899,15 @@ def test_read_candidate_test_question_by_id(client: TestClient, db: SessionDep) 
         time_spent=56,
     )
 
-    db.add_all([candidate_test_question_a, candidate_test_question_b])
+    db.add_all([candidate_test_answer_a, candidate_test_answer_b])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate_test_question/{candidate_test_question_a.id}"
+        f"{settings.API_V1_STR}/candidate_test_answer/{candidate_test_answer_a.id}"
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["id"] == candidate_test_question_a.id
+    assert data["id"] == candidate_test_answer_a.id
     assert data["candidate_test_id"] == candidate_test.id
     assert data["question_revision_id"] == question_a.id
     assert data["response"] == response_a
@@ -915,7 +915,7 @@ def test_read_candidate_test_question_by_id(client: TestClient, db: SessionDep) 
     assert data["time_spent"] == 4
 
 
-def test_update_candidate_test_question(client: TestClient, db: SessionDep) -> None:
+def test_update_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
     user = User(
         full_name=random_lower_string(),
         email=random_email(),
@@ -976,7 +976,7 @@ def test_update_candidate_test_question(client: TestClient, db: SessionDep) -> N
     response_a = random_lower_string()
     response_b = random_lower_string()
 
-    candidate_test_question_a = CandidateTestQuestion(
+    candidate_test_answer_a = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=question_a.id,
         response=response_a,
@@ -984,7 +984,7 @@ def test_update_candidate_test_question(client: TestClient, db: SessionDep) -> N
         time_spent=4,
     )
 
-    candidate_test_question_b = CandidateTestQuestion(
+    candidate_test_answer_b = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=question_b.id,
         response=response_b,
@@ -992,11 +992,11 @@ def test_update_candidate_test_question(client: TestClient, db: SessionDep) -> N
         time_spent=56,
     )
 
-    db.add_all([candidate_test_question_a, candidate_test_question_b])
+    db.add_all([candidate_test_answer_a, candidate_test_answer_b])
     db.commit()
 
     response = client.put(
-        f"{settings.API_V1_STR}/candidate_test_question/{candidate_test_question_a.id}",
+        f"{settings.API_V1_STR}/candidate_test_answer/{candidate_test_answer_a.id}",
         json={
             "response": response_b,
             "visited": True,

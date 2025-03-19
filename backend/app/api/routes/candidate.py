@@ -9,12 +9,12 @@ from app.models import (
     CandidateCreate,
     CandidatePublic,
     CandidateTest,
+    CandidateTestAnswer,
+    CandidateTestAnswerCreate,
+    CandidateTestAnswerPublic,
+    CandidateTestAnswerUpdate,
     CandidateTestCreate,
     CandidateTestPublic,
-    CandidateTestQuestion,
-    CandidateTestQuestionCreate,
-    CandidateTestQuestionPublic,
-    CandidateTestQuestionUpdate,
     CandidateTestUpdate,
     CandidateUpdate,
     Message,
@@ -22,8 +22,8 @@ from app.models import (
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
-router_candidate_test_question = APIRouter(
-    prefix="/candidate_test_question", tags=["Candidate-Test Question"]
+router_candidate_test_answer = APIRouter(
+    prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
 
 
@@ -161,70 +161,62 @@ def update_candidate_test(
     return candidate_test
 
 
-# Create Link between Candidate-Test and Question
+# Route for Answering a Question for a test by a candidate
 
 
-# Create a Candidate-Test & Question Link
-@router_candidate_test_question.post("/", response_model=CandidateTestQuestionPublic)
-def create_candidate_test_question(
-    candidate_test_question_create: CandidateTestQuestionCreate, session: SessionDep
-) -> CandidateTestQuestion:
-    candidate_test_question = CandidateTestQuestion.model_validate(
-        candidate_test_question_create
+# Create a Candidate-Test & Answers Link
+@router_candidate_test_answer.post("/", response_model=CandidateTestAnswerPublic)
+def create_candidate_test_answer(
+    candidate_test_answer_create: CandidateTestAnswerCreate, session: SessionDep
+) -> CandidateTestAnswer:
+    candidate_test_answer = CandidateTestAnswer.model_validate(
+        candidate_test_answer_create
     )
-    session.add(candidate_test_question)
+    session.add(candidate_test_answer)
     session.commit()
-    session.refresh(candidate_test_question)
-    return candidate_test_question
+    session.refresh(candidate_test_answer)
+    return candidate_test_answer
 
 
-# Get all Candidate-Test  & Question Link
-@router_candidate_test_question.get(
-    "/", response_model=list[CandidateTestQuestionPublic]
+# Get all Candidate-Test  & Answer Link
+@router_candidate_test_answer.get("/", response_model=list[CandidateTestAnswerPublic])
+def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnswer]:
+    candidate_test_answer = session.exec(select(CandidateTestAnswer)).all()
+    return candidate_test_answer
+
+
+# Get Candidate-Test  & Answer Link by ID
+@router_candidate_test_answer.get(
+    "/{candidate_test_answer_id}", response_model=CandidateTestAnswerPublic
 )
-def get_candidate_test_question(session: SessionDep) -> Sequence[CandidateTestQuestion]:
-    candidate_test_question = session.exec(select(CandidateTestQuestion)).all()
-    return candidate_test_question
-
-
-# Get Candidate-Test  & Question Link by ID
-@router_candidate_test_question.get(
-    "/{candidate_test_question_id}", response_model=CandidateTestQuestionPublic
-)
-def get_candidate_test_question_by_id(
-    candidate_test_question_id: int, session: SessionDep
-) -> CandidateTestQuestion:
-    candidate_test_question = session.get(
-        CandidateTestQuestion, candidate_test_question_id
-    )
-    if not candidate_test_question:
+def get_candidate_test_answer_by_id(
+    candidate_test_answer_id: int, session: SessionDep
+) -> CandidateTestAnswer:
+    candidate_test_answer = session.get(CandidateTestAnswer, candidate_test_answer_id)
+    if not candidate_test_answer:
         raise HTTPException(
             status_code=404,
-            detail="No combination of candidate-test and question found",
+            detail="No Answer found",
         )
-    return candidate_test_question
+    return candidate_test_answer
 
 
-# Update Candidate-Test & Question Link
-@router_candidate_test_question.put(
-    "/{candidate_test_question_id}", response_model=CandidateTestQuestionPublic
+# Update Candidate-Test & Answer Link
+@router_candidate_test_answer.put(
+    "/{candidate_test_answer_id}", response_model=CandidateTestAnswerPublic
 )
-def update_candidate_question_test(
-    candidate_test_question_id: int,
-    updated_data: CandidateTestQuestionUpdate,
+def update_candidate_answer_test(
+    candidate_test_answer_id: int,
+    updated_data: CandidateTestAnswerUpdate,
     session: SessionDep,
-) -> CandidateTestQuestion:
-    candidate_test_question = session.get(
-        CandidateTestQuestion, candidate_test_question_id
-    )
-    if not candidate_test_question:
-        raise HTTPException(
-            status_code=404, detail="No combination of candidate-test & Question found"
-        )
+) -> CandidateTestAnswer:
+    candidate_test_answer = session.get(CandidateTestAnswer, candidate_test_answer_id)
+    if not candidate_test_answer:
+        raise HTTPException(status_code=404, detail="No Answer found")
 
-    candidate_test_question_data = updated_data.model_dump(exclude_unset=True)
-    candidate_test_question.sqlmodel_update(candidate_test_question_data)
-    session.add(candidate_test_question)
+    candidate_test_answer_data = updated_data.model_dump(exclude_unset=True)
+    candidate_test_answer.sqlmodel_update(candidate_test_answer_data)
+    session.add(candidate_test_answer)
     session.commit()
-    session.refresh(candidate_test_question)
-    return candidate_test_question
+    session.refresh(candidate_test_answer)
+    return candidate_test_answer

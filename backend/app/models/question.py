@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models import CandidateTest, CandidateTestQuestion
+from app.models import CandidateTest, CandidateTestAnswer
 from app.models.test import TestQuestion
 
 if TYPE_CHECKING:
@@ -18,5 +18,5 @@ class Question(SQLModel, table=True):
         back_populates="test_question_static", link_model=TestQuestion
     )
     candidate_test: list["CandidateTest"] = Relationship(
-        back_populates="quesion_revision", link_model=CandidateTestQuestion
+        back_populates="quesion_revision", link_model=CandidateTestAnswer
     )

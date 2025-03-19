@@ -7,10 +7,10 @@ if TYPE_CHECKING:
     from app.models import Question, Test, User
 
 
-# Linking Table between Candidate - Test and QuestionRevision
+# Storing Answers for a question in a test by a candidate
 
 
-class CandidateTestQuestionBase(SQLModel):
+class CandidateTestAnswerBase(SQLModel):
     __test__ = False
     candidate_test_id: int = Field(foreign_key="candidate_test.id", ondelete="CASCADE")
     question_revision_id: int = Field(
@@ -21,8 +21,8 @@ class CandidateTestQuestionBase(SQLModel):
     time_spent: int = Field(nullable=True, default=0)
 
 
-class CandidateTestQuestion(CandidateTestQuestionBase, table=True):
-    __tablename__ = "candidate_test_question"
+class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
+    __tablename__ = "candidate_test_answer"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(
@@ -34,18 +34,18 @@ class CandidateTestQuestion(CandidateTestQuestionBase, table=True):
     )
 
 
-class CandidateTestQuestionCreate(CandidateTestQuestionBase):
+class CandidateTestAnswerCreate(CandidateTestAnswerBase):
     __test__ = False
 
 
-class CandidateTestQuestionPublic(CandidateTestQuestionBase):
+class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     __test__ = False
     id: int
     created_date: datetime
     modified_date: datetime
 
 
-class CandidateTestQuestionUpdate(SQLModel):
+class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
     time_spent: int
@@ -78,7 +78,7 @@ class CandidateTest(CandidateTestBase, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
     quesion_revision: list["Question"] = Relationship(
-        back_populates="candidate_test", link_model=CandidateTestQuestion
+        back_populates="candidate_test", link_model=CandidateTestAnswer
     )
 
 
