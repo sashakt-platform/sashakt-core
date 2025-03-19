@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import JSON, Field, Relationship, SQLModel
 
-from .location import Block, District, State
-from .organization import Organization
+if TYPE_CHECKING:
+    from app.models.location import Block, District, State
+    from app.models.organization import Organization
 
 
 class QuestionType(str, Enum):
@@ -74,7 +76,7 @@ class Question(SQLModel, table=True):
     # Relationships
     revisions: list["QuestionRevision"] = Relationship(back_populates="question")
     locations: list["QuestionLocation"] = Relationship(back_populates="question")
-    organization: Organization = Relationship(back_populates="question")
+    organization: "Organization" = Relationship(back_populates="question")
 
 
 class QuestionRevision(QuestionBase, table=True):
@@ -115,9 +117,9 @@ class QuestionLocation(QuestionLocationBase, table=True):
 
     # Relationships
     question: Question = Relationship(back_populates="locations")
-    state: State | None = Relationship()
-    district: District | None = Relationship()
-    block: Block | None = Relationship()
+    state: Optional["State"] = Relationship()
+    district: Optional["District"] = Relationship()
+    block: Optional["Block"] = Relationship()
 
 
 # Operation models

@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: 1e86265e426c
-Revises:
-Create Date: 2025-03-16 23:26:42.170060
+Revision ID: c1f496f79ee5
+Revises: 
+Create Date: 2025-03-19 07:00:54.514664
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '1e86265e426c'
+revision = 'c1f496f79ee5'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -27,6 +27,7 @@ def upgrade():
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_country_name'), 'country', ['name'], unique=False)
     op.create_table('organization',
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
@@ -37,11 +38,7 @@ def upgrade():
     sa.Column('is_deleted', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('question',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('question', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
+    op.create_index(op.f('ix_organization_name'), 'organization', ['name'], unique=False)
     op.create_table('role',
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
     sa.Column('id', sa.Integer(), nullable=False),
@@ -53,6 +50,7 @@ def upgrade():
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_tag_name'), 'tag', ['name'], unique=False)
     op.create_table('user',
     sa.Column('full_name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
@@ -62,6 +60,27 @@ def upgrade():
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_user_email'), 'user', ['email'], unique=True)
+    op.create_table('candidate',
+    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('created_date', sa.DateTime(), nullable=True),
+    sa.Column('modified_date', sa.DateTime(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('question',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('organization_id', sa.Integer(), nullable=False),
+    sa.Column('last_revision_id', sa.Integer(), nullable=True),
+    sa.Column('created_date', sa.DateTime(), nullable=True),
+    sa.Column('modified_date', sa.DateTime(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['organization_id'], ['organization.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('state',
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('country_id', sa.Integer(), nullable=False),
@@ -72,6 +91,7 @@ def upgrade():
     sa.ForeignKeyConstraint(['country_id'], ['country.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_state_name'), 'state', ['name'], unique=False)
     op.create_table('test',
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
@@ -100,6 +120,7 @@ def upgrade():
     sa.ForeignKeyConstraint(['template_id'], ['test.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_test_name'), 'test', ['name'], unique=False)
     op.create_table('district',
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('state_id', sa.Integer(), nullable=False),
@@ -110,23 +131,44 @@ def upgrade():
     sa.ForeignKeyConstraint(['state_id'], ['state.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_district_name'), 'district', ['name'], unique=False)
+    op.create_table('questionrevision',
+    sa.Column('question_text', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('instructions', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('question_type', sa.Enum('single_choice', 'multi_choice', 'subjective', 'numerical_integer', name='questiontype'), nullable=False),
+    sa.Column('options', sa.JSON(), nullable=True),
+    sa.Column('correct_answer', sa.JSON(), nullable=True),
+    sa.Column('subjective_answer_limit', sa.Integer(), nullable=True),
+    sa.Column('is_mandatory', sa.Boolean(), nullable=False),
+    sa.Column('marking_scheme', sa.JSON(), nullable=True),
+    sa.Column('solution', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('media', sa.JSON(), nullable=True),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('question_id', sa.Integer(), nullable=False),
+    sa.Column('created_date', sa.DateTime(), nullable=True),
+    sa.Column('modified_date', sa.DateTime(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('test_question',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_date', sa.DateTime(), nullable=True),
-    sa.Column('test_id', sa.Integer(), nullable=True),
-    sa.Column('question_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
-    sa.ForeignKeyConstraint(['test_id'], ['test.id'], ),
+    sa.Column('test_id', sa.Integer(), nullable=False),
+    sa.Column('question_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['question_id'], ['question.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['test_id'], ['test.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('test_id', 'question_id')
     )
     op.create_table('test_state',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_date', sa.DateTime(), nullable=True),
-    sa.Column('test_id', sa.Integer(), nullable=True),
-    sa.Column('state_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['state_id'], ['state.id'], ),
-    sa.ForeignKeyConstraint(['test_id'], ['test.id'], ),
+    sa.Column('test_id', sa.Integer(), nullable=False),
+    sa.Column('state_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['state_id'], ['state.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['test_id'], ['test.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('test_id', 'state_id')
     )
@@ -150,23 +192,50 @@ def upgrade():
     sa.ForeignKeyConstraint(['district_id'], ['district.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_block_name'), 'block', ['name'], unique=False)
+    op.create_table('questionlocation',
+    sa.Column('state_id', sa.Integer(), nullable=True),
+    sa.Column('district_id', sa.Integer(), nullable=True),
+    sa.Column('block_id', sa.Integer(), nullable=True),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('question_id', sa.Integer(), nullable=False),
+    sa.Column('created_date', sa.DateTime(), nullable=True),
+    sa.Column('modified_date', sa.DateTime(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('is_deleted', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['block_id'], ['block.id'], ),
+    sa.ForeignKeyConstraint(['district_id'], ['district.id'], ),
+    sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
+    sa.ForeignKeyConstraint(['state_id'], ['state.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('questionlocation')
+    op.drop_index(op.f('ix_block_name'), table_name='block')
     op.drop_table('block')
     op.drop_table('test_tag')
     op.drop_table('test_state')
     op.drop_table('test_question')
+    op.drop_table('questionrevision')
+    op.drop_index(op.f('ix_district_name'), table_name='district')
     op.drop_table('district')
+    op.drop_index(op.f('ix_test_name'), table_name='test')
     op.drop_table('test')
+    op.drop_index(op.f('ix_state_name'), table_name='state')
     op.drop_table('state')
+    op.drop_table('question')
+    op.drop_table('candidate')
     op.drop_index(op.f('ix_user_email'), table_name='user')
     op.drop_table('user')
+    op.drop_index(op.f('ix_tag_name'), table_name='tag')
     op.drop_table('tag')
     op.drop_table('role')
-    op.drop_table('question')
+    op.drop_index(op.f('ix_organization_name'), table_name='organization')
     op.drop_table('organization')
+    op.drop_index(op.f('ix_country_name'), table_name='country')
     op.drop_table('country')
     # ### end Alembic commands ###
