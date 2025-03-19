@@ -7,6 +7,10 @@ from .candidate import (
     CandidateTestBase,
     CandidateTestCreate,
     CandidateTestPublic,
+    CandidateTestQuestion,
+    CandidateTestQuestionCreate,
+    CandidateTestQuestionPublic,
+    CandidateTestQuestionUpdate,
     CandidateTestUpdate,
     CandidateUpdate,
 )
@@ -115,4 +119,8 @@ __all__ = [
     "CandidateTestPublic",
     "CandidateTestUpdate",
     "CandidateUpdate",
+    "CandidateTestQuestion",
+    "CandidateTestQuestionPublic",
+    "CandidateTestQuestionUpdate",
+    "CandidateTestQuestionCreate",
 ]

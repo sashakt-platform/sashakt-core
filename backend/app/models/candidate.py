@@ -4,10 +4,56 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
-    from app.models import Test, User
+    from app.models import Question, Test, User
+
+
+# Linking Table between Candidate - Test and QuestionRevision
+
+
+class CandidateTestQuestionBase(SQLModel):
+    __test__ = False
+    candidate_test_id: int = Field(foreign_key="candidate_test.id", ondelete="CASCADE")
+    question_revision_id: int = Field(
+        foreign_key="question.id", ondelete="CASCADE"
+    )  # Will Update to question_revision.id once the latter model is ready
+    response: str | None = Field(nullable=False, default=None)
+    visited: bool = Field(nullable=False, default=False)
+    time_spent: int = Field(nullable=True, default=0)
+
+
+class CandidateTestQuestion(CandidateTestQuestionBase, table=True):
+    __tablename__ = "candidate_test_question"
+    __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
+    created_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    modified_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )
+
+
+class CandidateTestQuestionCreate(CandidateTestQuestionBase):
+    __test__ = False
+
+
+class CandidateTestQuestionPublic(CandidateTestQuestionBase):
+    __test__ = False
+    id: int
+    created_date: datetime
+    modified_date: datetime
+
+
+class CandidateTestQuestionUpdate(SQLModel):
+    response: str | None
+    visited: bool
+    time_spent: int
 
 
 # Linking Tables between Candidate and Test
+
+
 class CandidateTestBase(SQLModel):
     __test__ = False
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
@@ -31,6 +77,9 @@ class CandidateTest(CandidateTestBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
+    quesion_revision: list["Question"] = Relationship(
+        back_populates="candidate_test", link_model=CandidateTestQuestion
+    )
 
 
 class CandidateTestCreate(CandidateTestBase):
@@ -45,6 +94,7 @@ class CandidateTestPublic(CandidateTestBase):
 
 
 class CandidateTestUpdate(SQLModel):
+    __test__ = False
     device: str
     consent: bool
     end_time: datetime | None
