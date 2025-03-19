@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models.candidate import Candidate
+from app.models import Candidate, CandidateTest, Test
 from app.models.user import User
 
 from ...utils.utils import random_email, random_lower_string
@@ -272,3 +272,368 @@ def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
 
     assert response.status_code == 404
     assert "id" not in data
+
+
+# Test cases for Candidate and Tests
+
+
+def test_create_candidate_test(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate = Candidate(user_id=user.id)
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-03-19T10:00:00Z"
+    end_time = "2025-03-19T12:00:00Z"
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate_test/",
+        json={
+            "test_id": test.id,
+            "candidate_id": candidate.id,
+            "device": device,
+            "consent": True,
+            "start_time": start_time,
+            "end_time": end_time,
+            "is_submitted": False,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "id" in data
+    assert data["test_id"] == test.id
+    assert data["candidate_id"] == candidate.id
+    assert data["device"] == device
+    assert data["is_submitted"] is False
+    assert data["start_time"] == start_time.rstrip("Z")
+    assert data["end_time"] == end_time.rstrip("Z")
+    assert data["is_submitted"] is False
+
+
+def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate = Candidate(user_id=user.id)
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-03-19T10:00:00Z"
+    end_time = "2025-03-19T12:00:00Z"
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=device,
+        consent=True,
+        start_time=start_time,
+        end_time=end_time,
+        is_submitted=False,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+    response = client.get(f"{settings.API_V1_STR}/candidate_test/")
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 1
+    assert "id" in data[0]
+    assert data[0]["test_id"] == test.id
+    assert data[0]["candidate_id"] == candidate.id
+    assert data[0]["device"] == device
+    assert data[0]["is_submitted"] is False
+    assert data[0]["start_time"] == start_time.rstrip("Z")
+    assert data[0]["end_time"] == end_time.rstrip("Z")
+    assert data[0]["is_submitted"] is False
+
+
+def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate_a = Candidate(user_id=user.id)
+    candidate_b = Candidate()
+
+    db.add_all([candidate_a, candidate_b])
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device_a = random_lower_string()
+    start_time_a = "2025-02-19T10:00:00Z"
+    end_time_a = "2025-03-16T12:00:00Z"
+
+    candidate_a_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate_a.id,
+        device=device_a,
+        consent=True,
+        start_time=start_time_a,
+        end_time=end_time_a,
+        is_submitted=False,
+    )
+
+    db.add(candidate_a_test)
+    db.commit()
+
+    device_b = random_lower_string()
+    start_time_b = "2025-02-10T10:00:00Z"
+    end_time_b = "2025-03-14T12:00:00Z"
+
+    candidate_b_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate_b.id,
+        device=device_b,
+        consent=True,
+        start_time=start_time_b,
+        end_time=end_time_b,
+        is_submitted=False,
+    )
+
+    db.add(candidate_b_test)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}")
+    data = response.json()
+    assert response.status_code == 200
+    assert "id" in data
+    assert data["test_id"] == test.id
+    assert data["candidate_id"] == candidate_a.id
+    assert data["device"] == device_a
+    assert data["is_submitted"] is False
+    assert data["start_time"] == start_time_a.rstrip("Z")
+    assert data["end_time"] == end_time_a.rstrip("Z")
+    assert data["is_submitted"] is False
+
+
+def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        email=random_email(),
+        hashed_password=random_lower_string(),
+    )
+    db.add(user)
+    db.commit()
+
+    candidate_a = Candidate(user_id=user.id)
+    candidate_b = Candidate()
+
+    db.add_all([candidate_a, candidate_b])
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device_a = random_lower_string()
+    start_time_a = "2025-02-19T10:00:00Z"
+    end_time_a = "2025-03-16T12:00:00Z"
+    consent = False
+    is_submitted = False
+
+    candidate_a_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate_a.id,
+        device=device_a,
+        consent=consent,
+        start_time=start_time_a,
+        end_time=end_time_a,
+        is_submitted=is_submitted,
+    )
+
+    db.add(candidate_a_test)
+    db.commit()
+
+    device_b = random_lower_string()
+    start_time_b = "2025-02-10T10:00:00Z"
+    end_time_b = "2025-03-14T12:00:00Z"
+
+    candidate_b_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate_b.id,
+        device=device_b,
+        consent=True,
+        start_time=start_time_b,
+        end_time=end_time_b,
+        is_submitted=False,
+    )
+
+    db.add(candidate_b_test)
+    db.commit()
+
+    # Changing Device
+    response = client.put(
+        f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}",
+        json={
+            "device": device_b,
+            "consent": consent,
+            "end_time": end_time_a,
+            "is_submitted": is_submitted,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert data["device"] == device_b
+    assert data["device"] != device_a
+    assert data["consent"] == consent
+    assert data["end_time"] == end_time_a.rstrip("Z")
+    assert data["is_submitted"] == is_submitted
+
+    # Changing Consent
+    response = client.put(
+        f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}",
+        json={
+            "device": device_b,
+            "consent": True,
+            "end_time": end_time_a,
+            "is_submitted": is_submitted,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert data["device"] == device_b
+    assert data["device"] != device_a
+    assert data["consent"] is True
+    assert data["consent"] != consent
+    assert data["end_time"] == end_time_a.rstrip("Z")
+    assert data["is_submitted"] == is_submitted
+
+    # Changing End Time
+    response = client.put(
+        f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}",
+        json={
+            "device": device_b,
+            "consent": True,
+            "end_time": end_time_b,
+            "is_submitted": is_submitted,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert data["device"] == device_b
+    assert data["device"] != device_a
+    assert data["consent"] is True
+    assert data["consent"] != consent
+    assert data["end_time"] == end_time_b.rstrip("Z")
+    assert data["end_time"] != end_time_a.rstrip("Z")
+    assert data["is_submitted"] == is_submitted
+
+    # Changing is_submitted
+    response = client.put(
+        f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}",
+        json={
+            "device": device_b,
+            "consent": True,
+            "end_time": end_time_b,
+            "is_submitted": True,
+        },
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert data["device"] == device_b
+    assert data["device"] != device_a
+    assert data["consent"] is True
+    assert data["consent"] != consent
+    assert data["end_time"] == end_time_b.rstrip("Z")
+    assert data["end_time"] != end_time_a.rstrip("Z")
+    assert data["is_submitted"] is True
+    assert data["is_submitted"] != is_submitted
