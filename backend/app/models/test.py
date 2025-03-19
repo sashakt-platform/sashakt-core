@@ -29,7 +29,7 @@ class TestTag(SQLModel, table=True):
 
 
 class TestQuestion(SQLModel, table=True):
-    __tablename__ = "test_question"  # type: ignore
+    __tablename__ = "test_question"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "question_id"),)
