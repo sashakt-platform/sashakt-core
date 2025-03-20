@@ -40,7 +40,16 @@ from .organization import (
 )
 from .question import Question
 from .role import Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
-from .tag import Tag
+from .tag import (
+    Tag,
+    TagCreate,
+    TagPublic,
+    TagType,
+    TagTypeCreate,
+    TagTypePublic,
+    TagTypeUpdate,
+    TagUpdate,
+)
 from .test import (
     Test,
     TestCreate,
@@ -123,4 +132,11 @@ __all__ = [
     "CandidateTestAnswerPublic",
     "CandidateTestAnswerUpdate",
     "CandidateTestAnswerCreate",
+    "TagCreate",
+    "TagUpdate",
+    "TagPublic",
+    "TagType",
+    "TagTypeCreate",
+    "TagTypeUpdate",
+    "TagTypePublic",
 ]
