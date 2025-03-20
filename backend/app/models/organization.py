@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from app.models import Tag, TagType
 
 
 class OrganizationBase(SQLModel):
@@ -19,6 +23,8 @@ class Organization(OrganizationBase, table=True):
     )
     is_active: bool | None = Field(default=None, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
+    tag_types: list["TagType"] = Relationship(back_populates="organization")
+    tags: list["Tag"] = Relationship(back_populates="organization")
 
 
 class OrganizationCreate(OrganizationBase):
