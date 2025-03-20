@@ -19,6 +19,7 @@ from app.models import (
     Role,
     State,
     Tag,
+    TagType,
     Test,
     TestQuestion,
     TestState,
@@ -34,6 +35,9 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
+        statement = delete(TagType)
+        session.execute(statement)
+        session.commit()
         statement = delete(Candidate)
         session.execute(statement)
         statement = delete(TestState)
