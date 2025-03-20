@@ -62,3 +62,6 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
     session.commit()
     session.refresh(tag)
     return Message(message="Tag deleted successfully")
+
+
+# Test commit for Tag
