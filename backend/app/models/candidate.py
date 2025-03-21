@@ -77,7 +77,7 @@ class CandidateTest(CandidateTestBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    quesion_revision: list["Question"] = Relationship(
+    question_revision: list["Question"] = Relationship(
         back_populates="candidate_test", link_model=CandidateTestAnswer
     )
 

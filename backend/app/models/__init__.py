@@ -38,7 +38,17 @@ from .organization import (
     OrganizationPublic,
     OrganizationUpdate,
 )
-from .question import Question
+from .question import (
+    Question,
+    QuestionCreate,
+    QuestionLocation,
+    QuestionLocationCreate,
+    QuestionLocationPublic,
+    QuestionPublic,
+    QuestionRevision,
+    QuestionRevisionCreate,
+    QuestionUpdate,
+)
 from .role import Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
 from .tag import Tag
 from .test import (
@@ -108,6 +118,14 @@ __all__ = [
     "TestTag",
     "TestState",
     "Question",
+    "QuestionCreate",
+    "QuestionLocation",
+    "QuestionLocationCreate",
+    "QuestionLocationPublic",
+    "QuestionPublic",
+    "QuestionRevision",
+    "QuestionRevisionCreate",
+    "QuestionUpdate",
     "Tag",
     "Candidate",
     "CandidateCreate",
