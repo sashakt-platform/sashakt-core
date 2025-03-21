@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlmodel import select
+from sqlmodel import not_, select
 
 from app.api.deps import SessionDep
 from app.models import (
@@ -34,7 +34,7 @@ def create_tagtype(tagtype_create: TagTypeCreate, session: SessionDep) -> TagTyp
 
 @router_tagtype.get("/", response_model=list[TagTypePublic])
 def get_tagtype(session: SessionDep) -> Sequence[TagType]:
-    tagtype = session.exec(select(TagType).where(TagType.is_deleted is False)).all()
+    tagtype = session.exec(select(TagType).where(not_(TagType.is_deleted))).all()
     return tagtype
 
 
@@ -97,7 +97,15 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
 # Create a Tag
 @router_tag.post("/", response_model=TagPublic)
 def create_tag(tag_create: TagCreate, session: SessionDep) -> Tag:
-    tag = Tag.model_validate(tag_create)
+    tag_type_id = tag_create.tag_type_id
+    tag_type = session.get(TagType, tag_type_id)
+    if not tag_type or tag_type.is_deleted is True:
+        raise HTTPException(status_code=404, detail="Tag Type not found")
+    organization_id = tag_type.organization_id
+
+    tag_data = tag_create.model_dump(exclude_unset=True)
+    tag_data["organization_id"] = organization_id
+    tag = Tag.model_validate(tag_data)
     session.add(tag)
     session.commit()
     session.refresh(tag)
@@ -107,7 +115,7 @@ def create_tag(tag_create: TagCreate, session: SessionDep) -> Tag:
 # Get all Tags
 @router_tag.get("/", response_model=list[TagPublic])
 def get_tags(session: SessionDep) -> Sequence[Tag]:
-    tags = session.exec(select(Tag).where(Tag.is_deleted is False)).all()
+    tags = session.exec(select(Tag).where(not_(Tag.is_deleted))).all()
     return tags
 
 
