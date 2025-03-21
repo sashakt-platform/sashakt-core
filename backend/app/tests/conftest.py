@@ -10,10 +10,14 @@ from app.main import app
 from app.models import (
     Block,
     Candidate,
+    CandidateTest,
+    CandidateTestAnswer,
     Country,
     District,
     Organization,
     Question,
+    QuestionLocation,
+    QuestionRevision,
     Role,
     State,
     Tag,
@@ -32,36 +36,61 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
-        statement = delete(Candidate)
-        session.execute(statement)
-        statement = delete(TestState)
-        session.execute(statement)
-        statement = delete(TestTag)
-        session.execute(statement)
-        statement = delete(TestQuestion)
-        session.execute(statement)
-        statement = delete(Test)
-        session.execute(statement)
-        statement = delete(Tag)
-        session.execute(statement)
-        statement = delete(Question)
-        session.execute(statement)
 
-        statement = delete(Role)
-        session.execute(statement)
-        statement = delete(User)
-        session.execute(statement)
-        statement = delete(Organization)
-        session.execute(statement)
-        statement = delete(Block)
-        session.execute(statement)
-        statement = delete(District)
-        session.execute(statement)
-        statement = delete(State)
-        session.execute(statement)
-        statement = delete(Country)
-        session.execute(statement)
-        session.commit()
+        # Delete in proper order - dependent tables first
+        try:
+            # First delete candidate test answers
+            statement = delete(CandidateTestAnswer)
+            session.execute(statement)
+
+            # Then delete candidate tests
+            statement = delete(CandidateTest)
+            session.execute(statement)
+
+            # Delete test dependencies
+            statement = delete(TestState)
+            session.execute(statement)
+            statement = delete(TestTag)
+            session.execute(statement)
+            statement = delete(TestQuestion)
+            session.execute(statement)
+
+            # Delete question dependencies
+            statement = delete(QuestionRevision)
+            session.execute(statement)
+            statement = delete(QuestionLocation)
+            session.execute(statement)
+
+            # Delete main objects
+            statement = delete(Test)
+            session.execute(statement)
+            statement = delete(Tag)
+            session.execute(statement)
+            statement = delete(Question)
+            session.execute(statement)
+            statement = delete(Candidate)
+            session.execute(statement)
+            statement = delete(Role)
+            session.execute(statement)
+            statement = delete(User)
+            session.execute(statement)
+            statement = delete(Organization)
+            session.execute(statement)
+
+            # Delete location hierarchy
+            statement = delete(Block)
+            session.execute(statement)
+            statement = delete(District)
+            session.execute(statement)
+            statement = delete(State)
+            session.execute(statement)
+            statement = delete(Country)
+            session.execute(statement)
+
+            session.commit()
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+            session.rollback()
 
 
 @pytest.fixture(scope="module")

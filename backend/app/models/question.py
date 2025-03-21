@@ -1,12 +1,18 @@
+import json
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlmodel import JSON, Field, Relationship, SQLModel
 
+from app.models.candidate import CandidateTestAnswer
+from app.models.test import TestQuestion
+
 if TYPE_CHECKING:
+    from app.models.candidate import CandidateTest
     from app.models.location import Block, District, State
     from app.models.organization import Organization
+    from app.models.test import Test
 
 
 class QuestionType(str, Enum):
@@ -16,18 +22,37 @@ class QuestionType(str, Enum):
     numerical_integer = "numerical-integer"
 
 
-class MarkingScheme(SQLModel):
+class JSONSerializable:
+    """Mixin to make SQLModel classes JSON serializable"""
+
+    def dict(self) -> dict[str, Any]:
+        """Convert the model to a dictionary for JSON serialization"""
+        result = {}
+        for key, value in self.__dict__.items():
+            if not key.startswith("_"):
+                if hasattr(value, "dict") and callable(value.dict):
+                    result[key] = value.dict()
+                else:
+                    result[key] = value
+        return result
+
+    def json(self) -> str:
+        """Convert the model to a JSON string"""
+        return json.dumps(self.dict())
+
+
+class MarkingScheme(JSONSerializable, SQLModel):
     correct: float
     wrong: float
     skipped: float
 
 
-class Image(SQLModel):
+class Image(JSONSerializable, SQLModel):
     url: str
     alt_text: str | None = None
 
 
-class Option(SQLModel):
+class Option(JSONSerializable, SQLModel):
     text: str
     image: Image | None = None
 
@@ -36,15 +61,19 @@ class QuestionBase(SQLModel):
     question_text: str = Field(nullable=False)
     instructions: str | None = Field(default=None, nullable=True)
     question_type: QuestionType = Field(nullable=False)
-    options: list[Option] | None = Field(sa_type=JSON, default=None)
+    options: list[dict[str, Any]] | None = Field(
+        sa_type=JSON, default=None
+    )  # Store as dict, not Option objects
     correct_answer: list[int] | list[str] | float | int | None = Field(
         sa_type=JSON, default=None
     )
     subjective_answer_limit: int | None = Field(default=None, nullable=True)
     is_mandatory: bool = Field(default=True, nullable=False)
-    marking_scheme: MarkingScheme | None = Field(sa_type=JSON, default=None)
+    marking_scheme: dict[str, Any] | None = Field(
+        sa_type=JSON, default=None
+    )  # Store as dict
     solution: str | None = Field(default=None, nullable=True)
-    media: Image | None = Field(sa_type=JSON, default=None)
+    media: dict[str, Any] | None = Field(sa_type=JSON, default=None)  # Store as dict
 
 
 class QuestionLocationBase(SQLModel):
@@ -77,6 +106,12 @@ class Question(SQLModel, table=True):
     revisions: list["QuestionRevision"] = Relationship(back_populates="question")
     locations: list["QuestionLocation"] = Relationship(back_populates="question")
     organization: "Organization" = Relationship(back_populates="question")
+    tests: list["Test"] = Relationship(
+        back_populates="test_question_static", link_model=TestQuestion
+    )
+    candidate_test: list["CandidateTest"] = Relationship(
+        back_populates="question_revision", link_model=CandidateTestAnswer
+    )
 
 
 class QuestionRevision(QuestionBase, table=True):
@@ -148,6 +183,10 @@ class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
 
     question_id: int
+    # Override field types from QuestionBase to accept model objects in API
+    options: list[Option] | None = None
+    marking_scheme: MarkingScheme | None = None
+    media: Image | None = None
 
 
 class QuestionLocationCreate(QuestionLocationBase):
@@ -170,13 +209,13 @@ class QuestionPublic(SQLModel):
     question_text: str
     instructions: str | None
     question_type: QuestionType
-    options: list[Option] | None
+    options: list[dict[str, Any]] | None  # Use dict rather than Option objects
     correct_answer: list[int] | list[str] | float | int | None
     subjective_answer_limit: int | None
     is_mandatory: bool
-    marking_scheme: MarkingScheme | None
+    marking_scheme: dict[str, Any] | None  # Use dict rather than MarkingScheme objects
     solution: str | None
-    media: Image | None
+    media: dict[str, Any] | None  # Use dict rather than Image objects
 
     # Related location information
     locations: list["QuestionLocationPublic"] | None

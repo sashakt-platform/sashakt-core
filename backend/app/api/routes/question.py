@@ -27,6 +27,25 @@ def build_question_response(
     question: Question, revision: QuestionRevision, locations: list[QuestionLocation]
 ) -> QuestionPublic:
     """Build a standardized QuestionPublic response."""
+    # Convert complex types to dictionaries for JSON serialization
+    options_dict = None
+    if revision.options:
+        options_dict = [
+            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+        ]
+
+    marking_scheme_dict = (
+        revision.marking_scheme.dict()
+        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
+        else revision.marking_scheme
+    )
+
+    media_dict = (
+        revision.media.dict()
+        if revision.media and hasattr(revision.media, "dict")
+        else revision.media
+    )
+
     return QuestionPublic(
         id=question.id,
         organization_id=question.organization_id,
@@ -38,13 +57,13 @@ def build_question_response(
         question_text=revision.question_text,
         instructions=revision.instructions,
         question_type=revision.question_type,
-        options=revision.options,
+        options=options_dict,
         correct_answer=revision.correct_answer,
         subjective_answer_limit=revision.subjective_answer_limit,
         is_mandatory=revision.is_mandatory,
-        marking_scheme=revision.marking_scheme,
+        marking_scheme=marking_scheme_dict,
         solution=revision.solution,
-        media=revision.media,
+        media=media_dict,
         # Location data
         locations=[
             QuestionLocationPublic(
@@ -63,29 +82,64 @@ def build_question_response(
     )
 
 
+def prepare_for_db(data):
+    """Helper function to prepare data for database by converting objects to dicts"""
+    # Handle options
+    if data.options:
+        options = [
+            opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
+            for opt in data.options
+        ]
+    else:
+        options = None
+
+    # Handle marking scheme
+    if (
+        data.marking_scheme
+        and hasattr(data.marking_scheme, "dict")
+        and callable(data.marking_scheme.dict)
+    ):
+        marking_scheme = data.marking_scheme.dict()
+    else:
+        marking_scheme = data.marking_scheme
+
+    # Handle media
+    if data.media and hasattr(data.media, "dict") and callable(data.media.dict):
+        media = data.media.dict()
+    else:
+        media = data.media
+
+    return options, marking_scheme, media
+
+
 @router.post("/", response_model=QuestionPublic)
 def create_question(
     question_create: QuestionCreate, session: SessionDep
 ) -> QuestionPublic:
     """Create a new question with its initial revision and optional location."""
+    # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,
     )
     session.add(question)
     session.flush()
 
+    # Prepare data for JSON serialization
+    options, marking_scheme, media = prepare_for_db(question_create)
+
+    # Create the revision with serialized data
     revision = QuestionRevision(
         question_id=question.id,
         question_text=question_create.question_text,
         instructions=question_create.instructions,
         question_type=question_create.question_type,
-        options=question_create.options,
+        options=options,  # Now serialized
         correct_answer=question_create.correct_answer,
         subjective_answer_limit=question_create.subjective_answer_limit,
         is_mandatory=question_create.is_mandatory,
-        marking_scheme=question_create.marking_scheme,
+        marking_scheme=marking_scheme,  # Now serialized
         solution=question_create.solution,
-        media=question_create.media,
+        media=media,  # Now serialized
     )
     session.add(revision)
     session.flush()
@@ -125,16 +179,23 @@ def get_questions(
     district_id: int = None,
     block_id: int = None,
     is_active: bool = None,
+    is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
-    query = select(Question).where(not Question.is_deleted)
+    # Start with a basic query
+    query = select(Question)
 
-    if organization_id is not None:
-        query = query.where(Question.organization_id == organization_id)
+    # Apply filters only if they're provided
+    if is_deleted is not None:
+        query = query.where(Question.is_deleted == is_deleted)
 
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
 
+    if organization_id is not None:
+        query = query.where(Question.organization_id == organization_id)
+
+    # Handle location-based filtering
     if any([state_id, district_id, block_id]):
         location_query = select(QuestionLocation.question_id)
         location_filters = []
@@ -149,14 +210,21 @@ def get_questions(
         if location_filters:
             location_query = location_query.where(and_(*location_filters))
             question_ids = session.exec(location_query).all()
-            query = query.where(Question.id.in_(question_ids))
+            if question_ids:  # Only apply filter if we found matching locations
+                query = query.where(Question.id.in_(question_ids))
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
+
+    # Execute query and get all questions
     questions = session.exec(query).all()
 
     result = []
     for question in questions:
+        # Skip questions without a valid last_revision_id
+        if not question.last_revision_id:
+            continue
+
         latest_revision = session.get(QuestionRevision, question.last_revision_id)
         if not latest_revision:
             continue
@@ -167,7 +235,6 @@ def get_questions(
         locations = session.exec(locations_query).all()
 
         question_data = build_question_response(question, latest_revision, locations)
-
         result.append(question_data)
 
     return result
@@ -234,18 +301,21 @@ def create_question_revision(
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    # Prepare data for JSON serialization
+    options, marking_scheme, media = prepare_for_db(revision_data)
+
     new_revision = QuestionRevision(
         question_id=question_id,
         question_text=revision_data.question_text,
         instructions=revision_data.instructions,
         question_type=revision_data.question_type,
-        options=revision_data.options,
+        options=options,  # Now serialized
         correct_answer=revision_data.correct_answer,
         subjective_answer_limit=revision_data.subjective_answer_limit,
         is_mandatory=revision_data.is_mandatory,
-        marking_scheme=revision_data.marking_scheme,
+        marking_scheme=marking_scheme,  # Now serialized
         solution=revision_data.solution,
-        media=revision_data.media,
+        media=media,  # Now serialized
     )
     session.add(new_revision)
     session.flush()
@@ -291,8 +361,8 @@ def get_question_revisions(question_id: int, session: SessionDep) -> list[dict]:
     ]
 
 
-@router.get("/revisions/{revision_id}", response_model=QuestionRevision)
-def get_revision(revision_id: int, session: SessionDep) -> QuestionRevision:
+@router.get("/revisions/{revision_id}", response_model=dict)
+def get_revision(revision_id: int, session: SessionDep) -> dict:
     """Get a specific question revision by its ID."""
     revision = session.get(QuestionRevision, revision_id)
     if not revision:
@@ -305,9 +375,45 @@ def get_revision(revision_id: int, session: SessionDep) -> QuestionRevision:
             status_code=404, detail="Parent question not found or deleted"
         )
 
-    # Add is_current as a dynamic attribute
-    revision.is_current = revision.id == question.last_revision_id
-    return revision
+    # Convert complex objects to dicts for serialization
+    options_dict = None
+    if revision.options:
+        options_dict = [
+            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+        ]
+
+    marking_scheme_dict = (
+        revision.marking_scheme.dict()
+        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
+        else revision.marking_scheme
+    )
+
+    media_dict = (
+        revision.media.dict()
+        if revision.media and hasattr(revision.media, "dict")
+        else revision.media
+    )
+
+    # Return as dict instead of model to add dynamic is_current attribute
+    return {
+        "id": revision.id,
+        "question_id": revision.question_id,
+        "created_date": revision.created_date,
+        "modified_date": revision.modified_date,
+        "is_active": revision.is_active,
+        "is_deleted": revision.is_deleted,
+        "question_text": revision.question_text,
+        "instructions": revision.instructions,
+        "question_type": revision.question_type,
+        "options": options_dict,
+        "correct_answer": revision.correct_answer,
+        "subjective_answer_limit": revision.subjective_answer_limit,
+        "is_mandatory": revision.is_mandatory,
+        "marking_scheme": marking_scheme_dict,
+        "solution": revision.solution,
+        "media": media_dict,
+        "is_current": revision.id == question.last_revision_id,
+    }
 
 
 @router.post("/{question_id}/locations", response_model=QuestionLocationPublic)
@@ -377,3 +483,35 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     session.commit()
 
     return Message(message="Question deleted successfully")
+
+
+@router.get("/{question_id}/tests", response_model=list[dict])
+def get_question_tests(question_id: int, session: SessionDep) -> list[dict]:
+    """Get all tests that include this question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    return [
+        {"id": test.id, "name": test.name, "created_date": test.created_date}
+        for test in question.tests
+    ]
+
+
+@router.get("/{question_id}/candidate-tests", response_model=list[dict])
+def get_question_candidate_tests(question_id: int, session: SessionDep) -> list[dict]:
+    """Get all candidate tests that include this question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    return [
+        {
+            "id": ct.id,
+            "candidate_id": ct.candidate_id,
+            "test_id": ct.test_id,
+            "start_time": ct.start_time,
+            "is_submitted": ct.is_submitted,
+        }
+        for ct in question.candidate_test
+    ]

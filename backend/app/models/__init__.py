@@ -1,5 +1,19 @@
 from .auth import NewPassword, Token, TokenPayload
-from .candidate import Candidate, CandidateCreate, CandidatePublic, CandidateUpdate
+from .candidate import (
+    Candidate,
+    CandidateCreate,
+    CandidatePublic,
+    CandidateTest,
+    CandidateTestAnswer,
+    CandidateTestAnswerCreate,
+    CandidateTestAnswerPublic,
+    CandidateTestAnswerUpdate,
+    CandidateTestBase,
+    CandidateTestCreate,
+    CandidateTestPublic,
+    CandidateTestUpdate,
+    CandidateUpdate,
+)
 from .location import (
     Block,
     BlockCreate,
@@ -117,4 +131,14 @@ __all__ = [
     "CandidateCreate",
     "CandidatePublic",
     "CandidateUpdate",
+    "CandidateTest",
+    "CandidateTestBase",
+    "CandidateTestCreate",
+    "CandidateTestPublic",
+    "CandidateTestUpdate",
+    "CandidateUpdate",
+    "CandidateTestAnswer",
+    "CandidateTestAnswerPublic",
+    "CandidateTestAnswerUpdate",
+    "CandidateTestAnswerCreate",
 ]
