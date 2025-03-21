@@ -89,7 +89,7 @@ class Tag(TagBase, table=True):
     organization_id: int = Field(
         foreign_key="organization.id",
         nullable=False,
-        description="Organization ID to which the Tag  belongs",
+        description="Organization ID to which the Tag belongs",
     )
     organization: "Organization" = Relationship(back_populates="tags")
     created_by: "User" = Relationship(back_populates="tags")
@@ -105,6 +105,9 @@ class TagPublic(TagBase):
     modified_date: datetime
     is_active: bool | None
     is_deleted: bool
+    tag_type_id: int
+    organization_id: int
+    created_by_id: int
 
 
 class TagUpdate(TagBase):
