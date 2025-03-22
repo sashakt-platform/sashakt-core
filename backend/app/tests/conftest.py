@@ -19,6 +19,7 @@ from app.models import (
     Role,
     State,
     Tag,
+    TagType,
     Test,
     TestQuestion,
     TestState,
@@ -29,11 +30,15 @@ from app.tests.utils.user import authentication_token_from_email
 from app.tests.utils.utils import get_superuser_token_headers
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
+        statement = delete(Tag)
+        session.execute(statement)
+        statement = delete(TagType)
+        session.execute(statement)
         statement = delete(Candidate)
         session.execute(statement)
         statement = delete(TestState)
@@ -44,8 +49,7 @@ def db() -> Generator[Session, None, None]:
         session.execute(statement)
         statement = delete(Test)
         session.execute(statement)
-        statement = delete(Tag)
-        session.execute(statement)
+
         statement = delete(Question)
         session.execute(statement)
 

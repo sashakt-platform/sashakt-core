@@ -4,32 +4,35 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
 
+from ...utils.utils import random_lower_string
+
 
 def test_create_country(client: TestClient) -> None:
+    country = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/location/country/", json={"name": "China"}
+        f"{settings.API_V1_STR}/location/country/", json={"name": country}
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "China"
+    assert data["name"] == country
 
 
 def test_get_country(client: TestClient, db: SessionDep) -> None:
-    dubai = Country(name="Dubai")
-    austria = Country(name="Austria")
+    dubai = Country(name=random_lower_string())
+    austria = Country(name=random_lower_string())
     db.add(dubai)
     db.add(austria)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/location/country/")
     data = response.json()
+    last_index = len(data) - 1
     assert response.status_code == 200
-    assert len(data) == 2
-    assert data[0]["name"] == dubai.name
-    assert data[1]["name"] == austria.name
+    assert data[last_index - 1]["name"] == dubai.name
+    assert data[last_index]["name"] == austria.name
 
 
 def test_get_country_by_id(client: TestClient, db: SessionDep) -> None:
-    srilanka = Country(name="Srilanka")
+    srilanka = Country(name=random_lower_string())
     db.add(srilanka)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/location/country/{srilanka.id}")
@@ -37,28 +40,28 @@ def test_get_country_by_id(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 200
     assert data["name"] == srilanka.name
     assert data["id"] == srilanka.id
-    response = client.get(f"{settings.API_V1_STR}/location/country/2")
+    response = client.get(f"{settings.API_V1_STR}/location/country/-1")
     assert response.status_code == 404
     assert response.json() == {"detail": "Country not found"}
 
 
 def test_update_country(client: TestClient, db: SessionDep) -> None:
-    australia = Country(name="Australiaaa")
+    original_name = random_lower_string()
+    updated_name = random_lower_string()
+    australia = Country(name=original_name)
     db.add(australia)
     db.commit()
     response = client.put(
         f"{settings.API_V1_STR}/location/country/{australia.id}",
-        json={"name": "Australia"},
+        json={"name": updated_name},
     )
     data = response.json()
-    print("data-->", data)
-    print("auss->", australia)
     assert response.status_code == 200
-    assert data["name"] == "Australia"
+    assert data["name"] == updated_name
     assert data["id"] == australia.id
-    assert data["name"] != "Australiaaa"
+    assert data["name"] != original_name
     response = client.put(
-        f"{settings.API_V1_STR}/location/country/2", json={"name": "Australia"}
+        f"{settings.API_V1_STR}/location/country/-1", json={"name": "Australia"}
     )
     assert response.status_code == 404
     assert response.json() == {"detail": "Country not found"}
@@ -68,46 +71,45 @@ def test_update_country(client: TestClient, db: SessionDep) -> None:
 
 
 def test_create_state(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-
+    state_name = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/location/state/",
-        json={"name": "Kerala", "country_id": india.id},
+        json={"name": state_name, "country_id": india.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Kerala"
+    assert data["name"] == state_name
     assert data["country_id"] == india.id
 
 
 def test_get_state(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    goa = State(name="Goa", country_id=india.id)
-    punjab = State(name="Punjab", country_id=india.id)
+    goa = State(name=random_lower_string(), country_id=india.id)
+    punjab = State(name=random_lower_string(), country_id=india.id)
     db.add(goa)
     db.add(punjab)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/location/state/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-    assert data[0]["name"] == goa.name
-    assert data[0]["name"] != "goa"
-    assert data[0]["name"] == "Goa"
-    assert data[1]["name"] == punjab.name
-    assert data[0]["country_id"] == india.id
-    assert data[1]["country_id"] == india.id
+    goa_index = len(data) - 2
+    punjab_index = len(data) - 1
+    assert data[goa_index]["name"] == goa.name
+    assert data[punjab_index]["name"] == punjab.name
+    assert data[goa_index]["country_id"] == india.id
+    assert data[punjab_index]["country_id"] == india.id
 
 
 def test_get_state_by_id(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    maharashtra = State(name="Maharashtra", country_id=india.id)
+    maharashtra = State(name=random_lower_string(), country_id=india.id)
     db.add(maharashtra)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/location/state/{maharashtra.id}")
@@ -116,154 +118,158 @@ def test_get_state_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["name"] == maharashtra.name
     assert data["id"] == maharashtra.id
     assert data["country_id"] == india.id
-    response = client.get(f"{settings.API_V1_STR}/location/state/2")
+    response = client.get(f"{settings.API_V1_STR}/location/state/-1")
     assert response.status_code == 404
     assert response.json() == {"detail": "State not found"}
 
 
 def test_update_state(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
-    db.add(india)
+    original_name = random_lower_string()
+    updated_name = random_lower_string()
+    india = Country(name=random_lower_string())
+    australia = Country(name=random_lower_string())
+    db.add_all([india, australia])
     db.commit()
-    goa = State(name="Goaaa", country_id=india.id)
+    goa = State(name=original_name, country_id=india.id)
     db.add(goa)
     db.commit()
 
     response = client.put(
         f"{settings.API_V1_STR}/location/state/{goa.id}",
-        json={"name": "Goa", "country_id": india.id},
+        json={"name": updated_name, "country_id": india.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Goa"
+    assert data["name"] == updated_name
+    assert data["name"] != original_name
     assert data["id"] == goa.id
-    assert data["name"] != "Goaaa"
+    assert data["country_id"] == india.id
 
     response = client.put(
-        f"{settings.API_V1_STR}/location/state/2",
+        f"{settings.API_V1_STR}/location/state/{goa.id}",
+        json={"name": updated_name, "country_id": australia.id},
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["name"] == updated_name
+    assert data["name"] != original_name
+    assert data["id"] == goa.id
+    assert data["country_id"] == australia.id
+    assert data["country_id"] != india.id
+
+    response = client.put(
+        f"{settings.API_V1_STR}/location/state/-1",
         json={"name": "Goa", "country_id": india.id},
     )
     assert response.status_code == 404
     assert response.json() == {"detail": "State not found"}
-
-    uk = Country(name="UK")
-    db.add(uk)
-    db.commit()
-
-    response = client.put(
-        f"{settings.API_V1_STR}/location/state/{goa.id}",
-        json={"name": goa.name, "country_id": uk.id},
-    )
-
-    data = response.json()
-    assert response.status_code == 200
-    assert data["name"] == goa.name
-    assert data["id"] == goa.id
-    assert data["name"] != "Goaaa"
-    assert data["country_id"] == uk.id
-    assert data["country_id"] != india.id
 
 
 #  ---- District Routes ----
 
 
 def test_create_district(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    kerala = State(name="Kerala", country_id=india.id)
+    kerala = State(name=random_lower_string(), country_id=india.id)
     db.add(kerala)
     db.commit()
+    district_name = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/location/district/",
-        json={"name": "Ernakulam", "state_id": kerala.id},
+        json={"name": district_name, "state_id": kerala.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Ernakulam"
+    assert data["name"] == district_name
     assert data["state_id"] == kerala.id
 
 
 def test_get_district(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    kerala = State(name="Kerala", country_id=india.id)
+    kerala = State(name=random_lower_string(), country_id=india.id)
     db.add(kerala)
     db.commit()
-    ernakulam = District(name="Ernakulam", state_id=kerala.id)
-    thrissur = District(name="Thrissur", state_id=kerala.id)
+    ernakulam = District(name=random_lower_string(), state_id=kerala.id)
+    thrissur = District(name=random_lower_string(), state_id=kerala.id)
     db.add(ernakulam)
     db.add(thrissur)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/location/district/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-    assert data[0]["name"] == ernakulam.name
-    assert data[1]["name"] == thrissur.name
-    assert data[0]["state_id"] == kerala.id
-    assert data[1]["state_id"] == kerala.id
+    ernakulam_index = len(data) - 2
+    thrissur_index = len(data) - 1
+    assert data[ernakulam_index]["name"] == ernakulam.name
+    assert data[ernakulam_index]["id"] == ernakulam.id
+    assert data[thrissur_index]["id"] == thrissur.id
+    assert data[thrissur_index]["name"] == thrissur.name
+    assert data[ernakulam_index]["state_id"] == kerala.id
+    assert data[thrissur_index]["state_id"] == kerala.id
 
 
 def test_get_district_by_id(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    kerala = State(name="Kerala", country_id=india.id)
+    kerala = State(name=random_lower_string(), country_id=india.id)
     db.add(kerala)
     db.commit()
-    ernakulam = District(name="Ernakulam", state_id=kerala.id)
+    ernakulam = District(name=random_lower_string(), state_id=kerala.id)
     db.add(ernakulam)
     db.commit()
     response = client.get(f"{settings.API_V1_STR}/location/district/{ernakulam.id}")
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Ernakulam"
-    assert data["name"] != "Thrissur"
+    assert data["name"] == ernakulam.name
     assert data["id"] == ernakulam.id
     assert data["state_id"] == ernakulam.state_id
     assert data["state_id"] == kerala.id
-    response = client.get(f"{settings.API_V1_STR}/location/district/2")
+    response = client.get(f"{settings.API_V1_STR}/location/district/-1")
     assert response.status_code == 404
     assert response.json() == {"detail": "District not found"}
 
 
 def test_update_district(client: TestClient, db: SessionDep) -> None:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
+    original_name = random_lower_string()
+    updated_name = random_lower_string()
     db.add(india)
     db.commit()
-    kerala = State(name="Kerala", country_id=india.id)
+    kerala = State(name=random_lower_string(), country_id=india.id)
     db.add(kerala)
-    andhra_pradesh = State(name="Andhra Pradesh", country_id=india.id)
+    andhra_pradesh = State(name=random_lower_string(), country_id=india.id)
     db.add(andhra_pradesh)
     db.commit()
-    ernakulam = District(name="Ernakulamm", state_id=kerala.id)
+    ernakulam = District(name=original_name, state_id=kerala.id)
     db.add(ernakulam)
     db.commit()
     response = client.put(
         f"{settings.API_V1_STR}/location/district/{ernakulam.id}",
-        json={"name": "Ernakulam", "state_id": kerala.id},
+        json={"name": updated_name, "state_id": kerala.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Ernakulam"
+    assert data["name"] == updated_name
     assert "id" in data
-    assert data["name"] != "Ernakulamm"
+    assert data["name"] != original_name
 
     response = client.put(
         f"{settings.API_V1_STR}/location/district/{ernakulam.id}",
-        json={"name": "Ernakulam", "state_id": andhra_pradesh.id},
+        json={"name": updated_name, "state_id": andhra_pradesh.id},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "Ernakulam"
+    assert data["name"] == updated_name
     assert data["id"] == ernakulam.id
     assert data["state_id"] == andhra_pradesh.id
     assert data["state_id"] != kerala.id
 
     response = client.put(
-        f"{settings.API_V1_STR}/location/district/2",
+        f"{settings.API_V1_STR}/location/district/-1",
         json={"name": "Thrissur", "state_id": kerala.id},
     )
     assert response.status_code == 404
@@ -274,16 +280,16 @@ def test_update_district(client: TestClient, db: SessionDep) -> None:
 
 
 def setup_district(db: SessionDep) -> tuple[District, District]:
-    india = Country(name="India")
+    india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
 
-    kerala = State(name="Kerala", country_id=india.id)
+    kerala = State(name=random_lower_string(), country_id=india.id)
     db.add(kerala)
     db.commit()
 
-    ernakulam = District(name="Ernakulam", state_id=kerala.id)
-    thrissur = District(name="Thrissur", state_id=kerala.id)
+    ernakulam = District(name=random_lower_string(), state_id=kerala.id)
+    thrissur = District(name=random_lower_string(), state_id=kerala.id)
     db.add(ernakulam)
     db.add(thrissur)
     db.commit()
@@ -293,21 +299,25 @@ def setup_district(db: SessionDep) -> tuple[District, District]:
 
 def test_create_block(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
+    block_name = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/location/block/",
-        json={"name": "Kovil", "district_id": ernakulam.id},
+        json={"name": block_name, "district_id": ernakulam.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Kovil"
+    assert "id" in data
+    assert "created_date" in data
+    assert "modified_date" in data
+    assert data["name"] == block_name
     assert data["district_id"] == ernakulam.id
 
 
 def test_get_block(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
-    kovil = Block(name="Kovil", district_id=ernakulam.id)
-    mayani = Block(name="Mayani", district_id=ernakulam.id)
-    kumuram = Block(name="Kumuram", district_id=thrissur.id)
+    kovil = Block(name=random_lower_string(), district_id=ernakulam.id)
+    mayani = Block(name=random_lower_string(), district_id=ernakulam.id)
+    kumuram = Block(name=random_lower_string(), district_id=thrissur.id)
     db.add(kovil)
     db.add(mayani)
     db.add(kumuram)
@@ -316,27 +326,22 @@ def test_get_block(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/location/block/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 3
-
-    block_names = {block["name"] for block in data}
-    assert "Kovil" in block_names
-    assert "Mayani" in block_names
-    assert "Kumuram" in block_names
-
-    for block in data:
-        if block["name"] == "Kovil":
-            assert block["district_id"] == ernakulam.id
-        elif block["name"] == "Mayani":
-            assert block["district_id"] == ernakulam.id
-        elif block["name"] == "Kumuram":
-            assert block["district_id"] == thrissur.id
+    kovil_index = len(data) - 3
+    mayani_index = len(data) - 2
+    kumuram_index = len(data) - 1
+    assert data[kovil_index]["name"] == kovil.name
+    assert data[mayani_index]["name"] == mayani.name
+    assert data[kumuram_index]["name"] == kumuram.name
+    assert data[kovil_index]["district_id"] == ernakulam.id
+    assert data[mayani_index]["district_id"] == ernakulam.id
+    assert data[kumuram_index]["district_id"] == thrissur.id
 
 
 def test_get_block_by_id(client: TestClient, db: SessionDep) -> None:
     ernakulam, thrissur = setup_district(db)
-    kovil = Block(name="Kovil", district_id=ernakulam.id)
-    mayani = Block(name="Mayani", district_id=ernakulam.id)
-    kumuram = Block(name="Kumuram", district_id=thrissur.id)
+    kovil = Block(name=random_lower_string(), district_id=ernakulam.id)
+    mayani = Block(name=random_lower_string(), district_id=ernakulam.id)
+    kumuram = Block(name=random_lower_string(), district_id=thrissur.id)
     db.add(kovil)
     db.add(mayani)
     db.add(kumuram)
@@ -345,59 +350,61 @@ def test_get_block_by_id(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/location/block/{kovil.id}")
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Kovil"
+    assert data["name"] == kovil.name
     assert data["id"] == kovil.id
     assert data["district_id"] == kovil.district_id
 
     response = client.get(f"{settings.API_V1_STR}/location/block/{mayani.id}")
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Mayani"
+    assert data["name"] == mayani.name
     assert data["id"] == mayani.id
     assert data["district_id"] == mayani.district_id
 
     response = client.get(f"{settings.API_V1_STR}/location/block/{kumuram.id}")
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "Kumuram"
+    assert data["name"] == kumuram.name
     assert data["id"] == kumuram.id
     assert data["district_id"] == kumuram.district_id
 
-    response = client.get(f"{settings.API_V1_STR}/location/block/999")
+    response = client.get(f"{settings.API_V1_STR}/location/block/-1")
     assert response.status_code == 404
     assert response.json() == {"detail": "Block not found"}
 
 
 def test_update_block(client: TestClient, db: SessionDep) -> None:
+    original_name = random_lower_string()
+    updated_name = random_lower_string()
     ernakulam, thrissur = setup_district(db)
-    kovil = Block(name="Kovil", district_id=ernakulam.id)
+    kovil = Block(name=original_name, district_id=ernakulam.id)
     db.add(kovil)
     db.commit()
 
     response = client.put(
         f"{settings.API_V1_STR}/location/block/{kovil.id}",
-        json={"name": "New Kovil", "district_id": ernakulam.id},
+        json={"name": updated_name, "district_id": ernakulam.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "New Kovil"
+    assert data["name"] == updated_name
     assert data["id"] == kovil.id
     assert data["district_id"] == kovil.district_id
     assert data["district_id"] == ernakulam.id
 
     response = client.put(
         f"{settings.API_V1_STR}/location/block/{kovil.id}",
-        json={"name": "New Kovil", "district_id": thrissur.id},
+        json={"name": updated_name, "district_id": thrissur.id},
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["name"] == "New Kovil"
+    assert data["name"] == updated_name
     assert data["id"] == kovil.id
     assert data["district_id"] == thrissur.id
     assert data["district_id"] != ernakulam.id
 
     response = client.put(
-        f"{settings.API_V1_STR}/location/block/999",
+        f"{settings.API_V1_STR}/location/block/-1",
         json={"name": "Nonexistent Block", "district_id": kovil.id},
     )
     assert response.status_code == 404
