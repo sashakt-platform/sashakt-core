@@ -7,7 +7,7 @@ from app.models import Organization, Tag, TagType, User
 from ...utils.utils import random_email, random_lower_string
 
 
-def setup_user_organization(db: SessionDep) -> list[User, Organization]:
+def setup_user_organization(db: SessionDep) -> tuple[User, Organization]:
     user = User(
         email=random_email(),
         hashed_password=random_lower_string(),
