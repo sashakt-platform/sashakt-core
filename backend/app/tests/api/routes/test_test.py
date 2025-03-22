@@ -4,6 +4,7 @@ from sqlmodel import select
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Country, State
+from app.models.organization import Organization
 from app.models.question import Question
 from app.models.tag import Tag
 from app.models.test import (
@@ -32,8 +33,15 @@ def test_create_test(client: TestClient, db: SessionDep) -> None:
     db.add(tag_marathi)
     db.commit()
 
-    question_one = Question(question="What is the size of Sun")
-    question_two = Question(question="What is the speed of light")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_one = Question(question="What is the size of Sun", organization_id=org.id)
+    question_two = Question(
+        question="What is the speed of light", organization_id=org.id
+    )
     db.add(question_one)
     db.add(question_two)
     db.commit()
@@ -268,7 +276,14 @@ def test_get_tests(client: TestClient, db: SessionDep) -> None:
     db.add(tag_english)
     db.commit()
 
-    question_three = Question(question="What is the capital of France?")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_three = Question(
+        question="What is the capital of France?", organization_id=org.id
+    )
     db.add(question_three)
     db.commit()
 
@@ -355,7 +370,14 @@ def test_get_test_by_id(client: TestClient, db: SessionDep) -> None:
     db.add(tag_english)
     db.commit()
 
-    question_three = Question(question="What is the capital of France?")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_three = Question(
+        question="What is the capital of France?", organization_id=org.id
+    )
     db.add(question_three)
     db.commit()
 
@@ -450,7 +472,15 @@ def test_update_test(client: TestClient, db: SessionDep) -> None:
     tag_gujarati = Tag(name="Gujurathi")
     db.add(tag_gujarati)
     db.commit()
-    question_three = Question(question="What is the capital of France?")
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_three = Question(
+        question="What is the capital of France?", organization_id=org.id
+    )
     db.add(question_three)
     db.commit()
 
