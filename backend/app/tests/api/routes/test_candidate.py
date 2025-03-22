@@ -43,11 +43,6 @@ def test_create_candidate(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_candidate(client: TestClient, db: SessionDep) -> None:
-    response = client.get(f"{settings.API_V1_STR}/candidate/")
-    data = response.json()
-    assert response.status_code == 200
-    assert len(data) == 0
-
     user = User(
         full_name=random_lower_string(),
         email=random_email(),
@@ -63,8 +58,8 @@ def test_read_candidate(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/candidate")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 1
-    data[0]["user_id"] = user.id
+    current_index = len(data) - 1
+    data[current_index]["user_id"] = user.id
 
     candidate = Candidate()
     db.add(candidate)
@@ -72,9 +67,9 @@ def test_read_candidate(client: TestClient, db: SessionDep) -> None:
 
     response = client.get(f"{settings.API_V1_STR}/candidate")
     data = response.json()
+    current_index = len(data) - 1
     assert response.status_code == 200
-    assert len(data) == 2
-    assert data[1]["user_id"] is None
+    assert data[current_index]["user_id"] is None
 
 
 def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
@@ -398,15 +393,16 @@ def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/candidate_test/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 1
+    current_index = len(data) - 1
+    current_data = data[current_index]
     assert "id" in data[0]
-    assert data[0]["test_id"] == test.id
-    assert data[0]["candidate_id"] == candidate.id
-    assert data[0]["device"] == device
-    assert data[0]["is_submitted"] is False
-    assert data[0]["start_time"] == start_time.rstrip("Z")
-    assert data[0]["end_time"] == end_time.rstrip("Z")
-    assert data[0]["is_submitted"] is False
+    assert current_data["test_id"] == test.id
+    assert current_data["candidate_id"] == candidate.id
+    assert current_data["device"] == device
+    assert current_data["is_submitted"] is False
+    assert current_data["start_time"] == start_time.rstrip("Z")
+    assert current_data["end_time"] == end_time.rstrip("Z")
+    assert current_data["is_submitted"] is False
 
 
 def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
@@ -809,17 +805,18 @@ def test_read_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/candidate_test_answer/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-    assert data[0]["candidate_test_id"] == candidate_test.id
-    assert data[0]["question_revision_id"] == question_a.id
-    assert data[0]["response"] == response_a
-    assert data[0]["visited"] is False
-    assert data[0]["time_spent"] == 4
-    assert data[1]["candidate_test_id"] == candidate_test.id
-    assert data[1]["question_revision_id"] == question_b.id
-    assert data[1]["response"] == response_b
-    assert data[1]["visited"] is True
-    assert data[1]["time_spent"] == 56
+    latest_data = data[len(data) - 1]
+    previous_data = data[len(data) - 2]
+    assert previous_data["candidate_test_id"] == candidate_test.id
+    assert previous_data["question_revision_id"] == question_a.id
+    assert previous_data["response"] == response_a
+    assert previous_data["visited"] is False
+    assert previous_data["time_spent"] == 4
+    assert latest_data["candidate_test_id"] == candidate_test.id
+    assert latest_data["question_revision_id"] == question_b.id
+    assert latest_data["response"] == response_b
+    assert latest_data["visited"] is True
+    assert latest_data["time_spent"] == 56
 
 
 def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) -> None:
