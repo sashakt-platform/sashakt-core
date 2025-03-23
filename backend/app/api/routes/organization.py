@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlmodel import select
+from sqlmodel import not_, select
 
 from app.api.deps import SessionDep
 from app.models import (
@@ -30,7 +30,9 @@ def create_organization(
 # Get all Organizations
 @router.get("/", response_model=list[OrganizationPublic])
 def get_organization(session: SessionDep) -> Sequence[Organization]:
-    organization = session.exec(select(Organization)).all()
+    organization = session.exec(
+        select(Organization).where(not_(Organization.is_deleted))
+    ).all()
     return organization
 
 
@@ -51,7 +53,7 @@ def update_organization(
     session: SessionDep,
 ) -> Organization:
     organization = session.get(Organization, organization_id)
-    if not organization:
+    if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
     organization_data = updated_data.model_dump(exclude_unset=True)
     organization.sqlmodel_update(organization_data)
@@ -69,7 +71,7 @@ def visibility_organization(
     is_active: bool = Query(False, description="Set visibility of organization"),
 ) -> Organization:
     organization = session.get(Organization, organization_id)
-    if not organization:
+    if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
     organization.is_active = is_active
     session.add(organization)
@@ -82,7 +84,7 @@ def visibility_organization(
 @router.delete("/{organization_id}")
 def delete_organization(organization_id: int, session: SessionDep) -> Message:
     organization = session.get(Organization, organization_id)
-    if not organization:
+    if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
     organization.is_deleted = True
     session.add(organization)
