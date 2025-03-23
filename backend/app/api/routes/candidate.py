@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlmodel import select
+from sqlmodel import not_, select
 
 from app.api.deps import SessionDep
 from app.models import (
@@ -42,9 +42,7 @@ def create_candidate(
 # Get all Candidates
 @router.get("/", response_model=list[CandidatePublic])
 def get_candidate(session: SessionDep) -> Sequence[Candidate]:
-    candidate = session.exec(
-        select(Candidate).where(Candidate.is_deleted is not False)
-    ).all()
+    candidate = session.exec(select(Candidate).where(not_(Candidate.is_deleted))).all()
     return candidate
 
 
@@ -65,7 +63,7 @@ def update_candidate(
     session: SessionDep,
 ) -> Candidate:
     candidate = session.get(Candidate, candidate_id)
-    if not candidate:
+    if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate_data = updated_data.model_dump(exclude_unset=True)
     candidate.sqlmodel_update(candidate_data)
@@ -83,7 +81,7 @@ def visibility_candidate(
     is_active: bool = Query(False, description="Set visibility of candidate"),
 ) -> Candidate:
     candidate = session.get(Candidate, candidate_id)
-    if not candidate:
+    if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate.is_active = is_active
     session.add(candidate)
@@ -96,7 +94,7 @@ def visibility_candidate(
 @router.delete("/{candidate_id}")
 def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
     candidate = session.get(Candidate, candidate_id)
-    if not candidate:
+    if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate.is_deleted = True
     session.add(candidate)
