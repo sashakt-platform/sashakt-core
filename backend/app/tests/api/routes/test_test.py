@@ -587,3 +587,96 @@ def test_update_test(client: TestClient, db: SessionDep) -> None:
     assert len(data["states"]) == 2
     assert data["states"] == [stata_a.id, state_b.id]
     assert state_c.id not in data["states"]
+
+
+def test_visibility_test(client: TestClient, db: SessionDep) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+    ) = setup_data(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{test.id}", params={"is_active": True}
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["is_active"] is True
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{test.id}", params={"is_active": False}
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["is_active"] is False
+
+
+def test_delete_test(client: TestClient, db: SessionDep) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+    ) = setup_data(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.delete(f"{settings.API_V1_STR}/test/{test.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert "delete" in data["message"]
+
+    response = client.delete(f"{settings.API_V1_STR}/test/{test.id}")
+    assert response.status_code == 404
+    assert "id" not in data
