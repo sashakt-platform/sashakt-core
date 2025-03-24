@@ -1,4 +1,3 @@
-import uuid
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -104,7 +103,7 @@ def test_get_existing_user_permissions_error(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
     r = client.get(
-        f"{settings.API_V1_STR}/users/{uuid.uuid4()}",
+        f"{settings.API_V1_STR}/users/444444",
         headers=normal_user_token_headers,
     )
     assert r.status_code == 403
@@ -349,7 +348,7 @@ def test_update_user_not_exists(
 ) -> None:
     data = {"full_name": "Updated_full_name"}
     r = client.patch(
-        f"{settings.API_V1_STR}/users/{uuid.uuid4()}",
+        f"{settings.API_V1_STR}/users/77777",
         headers=superuser_token_headers,
         json=data,
     )
@@ -407,7 +406,7 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
     assert result is None
 
     user_query = select(User).where(User.id == user_id)
-    user_db = db.execute(user_query).first()
+    user_db = db.exec(user_query).first()
     assert user_db is None
 
 
@@ -446,7 +445,7 @@ def test_delete_user_not_found(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
     r = client.delete(
-        f"{settings.API_V1_STR}/users/{uuid.uuid4()}",
+        f"{settings.API_V1_STR}/users/99999",
         headers=superuser_token_headers,
     )
     assert r.status_code == 404
