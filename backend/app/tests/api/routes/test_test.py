@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -19,7 +21,7 @@ from app.models import (
 from app.tests.utils.utils import random_email, random_lower_string
 
 
-def setup_data(db: SessionDep):
+def setup_data(db: SessionDep) -> Any:
     user = User(
         full_name=random_lower_string(),
         email=random_email(),
