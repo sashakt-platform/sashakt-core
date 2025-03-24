@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 
-from fastapi import APIRouter, HTTPException
-from sqlmodel import select
+from fastapi import APIRouter, HTTPException, Query
+from sqlmodel import not_, select
 
 from app.api.deps import SessionDep
-from app.models.test import (
+from app.models import (
+    Message,
     Test,
     TestCreate,
     TestPublic,
@@ -77,11 +78,7 @@ def create_test(
 # Get All Tests
 @router.get("/", response_model=list[TestPublic])
 def get_test(session: SessionDep) -> Sequence[TestPublic]:
-    tests = session.exec(
-        select(Test)
-        .where(Test.is_active is not False)
-        .where(Test.is_deleted is not True)
-    ).all()
+    tests = session.exec(select(Test).where(not_(Test.is_deleted))).all()
 
     test_public = []
     for test in tests:
@@ -109,7 +106,7 @@ def get_test(session: SessionDep) -> Sequence[TestPublic]:
 @router.get("/{test_id}", response_model=TestPublic)
 def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     test = session.get(Test, test_id)
-    if not test or test.is_active is False or test.is_deleted is True:
+    if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
 
     stored_tag_ids = session.exec(
@@ -136,7 +133,7 @@ def update_test(
     test = session.get(Test, test_id)
     print("test-->", test)
 
-    if not test or test.is_active is False or test.is_deleted is True:
+    if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
 
     # Updating Tags
@@ -247,3 +244,50 @@ def update_test(
         test_question_static=stored_question_ids,
         states=stored_state_ids,
     )
+
+
+@router.patch("/{test_id}", response_model=TestPublic)
+def visibility_test(
+    test_id: int,
+    session: SessionDep,
+    is_active: bool = Query(False, description="Set visibility of Test"),
+) -> TestPublic:
+    test = session.get(Test, test_id)
+    if not test or test.is_deleted is True:
+        raise HTTPException(status_code=404, detail="Test is not available")
+
+    test.is_active = is_active
+    session.add(test)
+    session.commit()
+    session.refresh(test)
+
+    stored_tag_ids = session.exec(
+        select(TestTag.tag_id).where(TestTag.test_id == test_id)
+    )
+    stored_question_ids = session.exec(
+        select(TestQuestion.question_id).where(TestQuestion.test_id == test_id)
+    )
+    stored_state_ids = session.exec(
+        select(TestState.state_id).where(TestState.test_id == test_id)
+    )
+
+    return TestPublic(
+        **test.model_dump(),
+        tags=stored_tag_ids,
+        test_question_static=stored_question_ids,
+        states=stored_state_ids,
+    )
+
+
+@router.delete("/{test_id}")
+def delete_test(test_id: int, session: SessionDep) -> Message:
+    test = session.get(Test, test_id)
+    if not test or test.is_deleted is True:
+        raise HTTPException(status_code=404, detail="Test is not available")
+
+    test.is_deleted = True
+    session.add(test)
+    session.commit()
+    session.refresh(test)
+
+    return Message(message="Test deleted successfully")
