@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
     from app.models.location import Block, District, State
     from app.models.organization import Organization
+    from app.models.tag import Tag, TagPublic
     from app.models.test import Test
+    from app.models.user import User
 
 
 class QuestionType(str, Enum):
@@ -84,6 +86,24 @@ class QuestionLocationBase(SQLModel):
     block_id: int | None = Field(default=None, nullable=True, foreign_key="block.id")
 
 
+class QuestionTag(SQLModel, table=True):
+    """Relationship table linking questions to tags"""
+
+    id: int | None = Field(default=None, primary_key=True)
+    question_id: int = Field(foreign_key="question.id", nullable=False)
+    tag_id: int = Field(foreign_key="tag.id", nullable=False)
+
+    created_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    modified_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )
+    is_active: bool | None = Field(default=True, nullable=True)
+    is_deleted: bool | None = Field(default=False, nullable=True)
+
+
 # Table models
 class Question(SQLModel, table=True):
     """Main question entity that tracks metadata and points to latest revision"""
@@ -105,6 +125,7 @@ class Question(SQLModel, table=True):
     # Relationships
     revisions: list["QuestionRevision"] = Relationship(back_populates="question")
     locations: list["QuestionLocation"] = Relationship(back_populates="question")
+    tags: list["Tag"] = Relationship(back_populates="questions", link_model=QuestionTag)
     organization: "Organization" = Relationship(back_populates="question")
     tests: list["Test"] = Relationship(
         back_populates="test_question_static", link_model=TestQuestion
@@ -119,6 +140,7 @@ class QuestionRevision(QuestionBase, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     question_id: int = Field(foreign_key="question.id", nullable=False)
+    created_by_id: int = Field(foreign_key="user.id", nullable=False)
 
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -132,6 +154,7 @@ class QuestionRevision(QuestionBase, table=True):
 
     # Relationships
     question: Question = Relationship(back_populates="revisions")
+    created_by: "User" = Relationship(back_populates="question_revisions")
 
 
 class QuestionLocation(QuestionLocationBase, table=True):
@@ -162,6 +185,7 @@ class QuestionCreate(SQLModel):
     """Data needed to create a new question with initial revision"""
 
     organization_id: int
+    created_by_id: int
     # Question content for initial revision
     question_text: str
     instructions: str | None = None
@@ -177,12 +201,14 @@ class QuestionCreate(SQLModel):
     state_id: int | None = None
     district_id: int | None = None
     block_id: int | None = None
+    tag_ids: list[int] | None = None
 
 
 class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
 
     question_id: int
+    created_by_id: int
     # Override field types from QuestionBase to accept model objects in API
     options: list[Option] | None = None
     marking_scheme: MarkingScheme | None = None
@@ -193,6 +219,13 @@ class QuestionLocationCreate(QuestionLocationBase):
     """Data needed to add a location to a question"""
 
     question_id: int
+
+
+class QuestionTagCreate(SQLModel):
+    """Data needed to add a tag to a question"""
+
+    question_id: int
+    tag_id: int
 
 
 class QuestionPublic(SQLModel):
@@ -216,9 +249,11 @@ class QuestionPublic(SQLModel):
     marking_scheme: dict[str, Any] | None  # Use dict rather than MarkingScheme objects
     solution: str | None
     media: dict[str, Any] | None  # Use dict rather than Image objects
+    created_by_id: int
 
-    # Related location information
+    # Related location and tag information
     locations: list["QuestionLocationPublic"] | None
+    tags: list["TagPublic"] | None
 
 
 class QuestionLocationPublic(QuestionLocationBase):

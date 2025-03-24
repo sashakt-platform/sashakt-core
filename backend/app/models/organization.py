@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from app.models import Tag, TagType
     from app.models.question import Question
 
 
@@ -25,6 +26,8 @@ class Organization(OrganizationBase, table=True):
     is_deleted: bool = Field(default=False, nullable=False)
 
     # Relationships
+    tag_types: list["TagType"] = Relationship(back_populates="organization")
+    tags: list["Tag"] = Relationship(back_populates="organization")
     question: list["Question"] = Relationship(back_populates="organization")
 
 

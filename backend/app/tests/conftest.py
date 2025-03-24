@@ -18,9 +18,11 @@ from app.models import (
     Question,
     QuestionLocation,
     QuestionRevision,
+    QuestionTag,
     Role,
     State,
     Tag,
+    TagType,
     Test,
     TestQuestion,
     TestState,
@@ -38,6 +40,10 @@ def db() -> Generator[Session, None, None]:
         yield session
         # Delete in proper order - dependent tables first
         try:
+            statement = delete(Tag)
+            session.execute(statement)
+            statement = delete(TagType)
+            session.execute(statement)
             # First delete candidate test answers
             statement = delete(CandidateTestAnswer)
             session.execute(statement)
@@ -52,14 +58,14 @@ def db() -> Generator[Session, None, None]:
             statement = delete(TestQuestion)
             session.execute(statement)
             # Delete question dependencies
+            statement = delete(QuestionTag)
+            session.execute(statement)
             statement = delete(QuestionRevision)
             session.execute(statement)
             statement = delete(QuestionLocation)
             session.execute(statement)
             # Delete main objects
             statement = delete(Test)
-            session.execute(statement)
-            statement = delete(Tag)
             session.execute(statement)
             statement = delete(Question)
             session.execute(statement)

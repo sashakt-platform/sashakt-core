@@ -16,15 +16,22 @@ from app.models import (
     QuestionPublic,
     QuestionRevision,
     QuestionRevisionCreate,
+    QuestionTag,
+    QuestionTagCreate,
     QuestionUpdate,
     State,
+    Tag,
+    TagPublic,
 )
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
 def build_question_response(
-    question: Question, revision: QuestionRevision, locations: list[QuestionLocation]
+    question: Question,
+    revision: QuestionRevision,
+    locations: list[QuestionLocation],
+    tags: list[Tag] = None,
 ) -> QuestionPublic:
     """Build a standardized QuestionPublic response."""
     # Convert complex types to dictionaries for JSON serialization
@@ -46,6 +53,25 @@ def build_question_response(
         else revision.media
     )
 
+    # Prepare tag information
+    tag_list = []
+    if tags:
+        tag_list = [
+            TagPublic(
+                id=tag.id,
+                name=tag.name,
+                tag_type_id=tag.tag_type_id,
+                description=tag.description,
+                created_by_id=tag.created_by_id,
+                organization_id=tag.organization_id,
+                created_date=tag.created_date,
+                modified_date=tag.modified_date,
+                is_active=tag.is_active,
+                is_deleted=tag.is_deleted,
+            )
+            for tag in tags
+        ]
+
     return QuestionPublic(
         id=question.id,
         organization_id=question.organization_id,
@@ -64,6 +90,7 @@ def build_question_response(
         marking_scheme=marking_scheme_dict,
         solution=revision.solution,
         media=media_dict,
+        created_by_id=revision.created_by_id,
         # Location data
         locations=[
             QuestionLocationPublic(
@@ -79,6 +106,7 @@ def build_question_response(
         ]
         if locations
         else [],
+        tags=tag_list,
     )
 
 
@@ -116,7 +144,7 @@ def prepare_for_db(data):
 def create_question(
     question_create: QuestionCreate, session: SessionDep
 ) -> QuestionPublic:
-    """Create a new question with its initial revision and optional location."""
+    """Create a new question with its initial revision, optional location, and tags."""
     # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,
@@ -130,6 +158,7 @@ def create_question(
     # Create the revision with serialized data
     revision = QuestionRevision(
         question_id=question.id,
+        created_by_id=question_create.created_by_id,
         question_text=question_create.question_text,
         instructions=question_create.instructions,
         question_type=question_create.question_type,
@@ -163,10 +192,22 @@ def create_question(
         session.add(location)
         locations.append(location)
 
+    tags = []
+    if question_create.tag_ids:
+        for tag_id in question_create.tag_ids:
+            tag = session.get(Tag, tag_id)
+            if tag:
+                question_tag = QuestionTag(
+                    question_id=question.id,
+                    tag_id=tag_id,
+                )
+                session.add(question_tag)
+                tags.append(tag)
+
     session.commit()
     session.refresh(question)
 
-    return build_question_response(question, revision, locations)
+    return build_question_response(question, revision, locations, tags)
 
 
 @router.get("/", response_model=list[QuestionPublic])
@@ -178,6 +219,8 @@ def get_questions(
     state_id: int = None,
     district_id: int = None,
     block_id: int = None,
+    tag_id: int = None,
+    created_by_id: int = None,
     is_active: bool = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> list[QuestionPublic]:
@@ -194,6 +237,32 @@ def get_questions(
 
     if organization_id is not None:
         query = query.where(Question.organization_id == organization_id)
+
+    # Handle tag-based filtering
+    if tag_id is not None:
+        tag_query = select(QuestionTag.question_id).where(QuestionTag.tag_id == tag_id)
+        question_ids_with_tag = session.exec(tag_query).all()
+        if question_ids_with_tag:  # Only apply filter if we found matching tags
+            query = query.where(Question.id.in_(question_ids_with_tag))
+        else:
+            # If no questions have this tag, return empty list
+            return []
+
+    # Handle creator-based filtering
+    if created_by_id is not None:
+        questions_by_creator = []
+        all_questions = session.exec(query).all()
+
+        for q in all_questions:
+            if q.last_revision_id:
+                revision = session.get(QuestionRevision, q.last_revision_id)
+                if revision and revision.created_by_id == created_by_id:
+                    questions_by_creator.append(q.id)
+
+        if questions_by_creator:
+            query = select(Question).where(Question.id.in_(questions_by_creator))
+        else:
+            return []
 
     # Handle location-based filtering
     if any([state_id, district_id, block_id]):
@@ -212,6 +281,8 @@ def get_questions(
             question_ids = session.exec(location_query).all()
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))
+            else:
+                return []
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
@@ -234,7 +305,14 @@ def get_questions(
         )
         locations = session.exec(locations_query).all()
 
-        question_data = build_question_response(question, latest_revision, locations)
+        tags_query = (
+            select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
+        )
+        tags = session.exec(tags_query).all()
+
+        question_data = build_question_response(
+            question, latest_revision, locations, tags
+        )
         result.append(question_data)
 
     return result
@@ -256,7 +334,12 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     )
     locations = session.exec(locations_query).all()
 
-    return build_question_response(question, latest_revision, locations)
+    tags_query = (
+        select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
+    )
+    tags = session.exec(tags_query).all()
+
+    return build_question_response(question, latest_revision, locations, tags)
 
 
 @router.put("/{question_id}", response_model=QuestionPublic)
@@ -287,7 +370,12 @@ def update_question(
     )
     locations = session.exec(locations_query).all()
 
-    return build_question_response(question, latest_revision, locations)
+    tags_query = (
+        select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
+    )
+    tags = session.exec(tags_query).all()
+
+    return build_question_response(question, latest_revision, locations, tags)
 
 
 @router.post("/{question_id}/revisions", response_model=QuestionPublic)
@@ -306,6 +394,7 @@ def create_question_revision(
 
     new_revision = QuestionRevision(
         question_id=question_id,
+        created_by_id=revision_data.created_by_id,
         question_text=revision_data.question_text,
         instructions=revision_data.instructions,
         question_type=revision_data.question_type,
@@ -332,7 +421,12 @@ def create_question_revision(
     )
     locations = session.exec(locations_query).all()
 
-    return build_question_response(question, new_revision, locations)
+    tags_query = (
+        select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
+    )
+    tags = session.exec(tags_query).all()
+
+    return build_question_response(question, new_revision, locations, tags)
 
 
 @router.get("/{question_id}/revisions", response_model=list[dict])
@@ -356,6 +450,7 @@ def get_question_revisions(question_id: int, session: SessionDep) -> list[dict]:
             "text": rev.question_text,
             "type": rev.question_type,
             "is_current": rev.id == question.last_revision_id,
+            "created_by_id": rev.created_by_id,
         }
         for rev in revisions
     ]
@@ -413,6 +508,7 @@ def get_revision(revision_id: int, session: SessionDep) -> dict:
         "solution": revision.solution,
         "media": media_dict,
         "is_current": revision.id == question.last_revision_id,
+        "created_by_id": revision.created_by_id,
     }
 
 
@@ -466,6 +562,107 @@ def add_question_location(
         district_name=district_name,
         block_name=block_name,
     )
+
+
+@router.post("/{question_id}/tags", response_model=dict)
+def add_question_tag(
+    question_id: int,
+    tag_data: QuestionTagCreate,
+    session: SessionDep,
+) -> dict:
+    """Add a new tag to a question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Check if tag exists
+    tag = session.get(Tag, tag_data.tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+
+    # Check if relationship already exists
+    existing_query = select(QuestionTag).where(
+        QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_data.tag_id
+    )
+    existing = session.exec(existing_query).first()
+    if existing:
+        return {"id": existing.id, "message": "Tag already assigned to this question"}
+
+    # Create new relationship
+    question_tag = QuestionTag(
+        question_id=question_id,
+        tag_id=tag_data.tag_id,
+    )
+    session.add(question_tag)
+    session.commit()
+    session.refresh(question_tag)
+
+    return {
+        "id": question_tag.id,
+        "question_id": question_tag.question_id,
+        "tag_id": question_tag.tag_id,
+        "tag_name": tag.name,
+        "created_date": question_tag.created_date,
+    }
+
+
+@router.delete("/{question_id}/tags/{tag_id}", response_model=Message)
+def remove_question_tag(
+    question_id: int,
+    tag_id: int,
+    session: SessionDep,
+) -> Message:
+    """Remove a tag from a question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Find the relationship
+    tag_query = select(QuestionTag).where(
+        QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_id
+    )
+    question_tag = session.exec(tag_query).first()
+    if not question_tag:
+        raise HTTPException(status_code=404, detail="Tag not assigned to this question")
+
+    # Delete the relationship
+    session.delete(question_tag)
+    session.commit()
+
+    return Message(message="Tag removed from question successfully")
+
+
+@router.get("/{question_id}/tags", response_model=list[TagPublic])
+def get_question_tags(
+    question_id: int,
+    session: SessionDep,
+) -> list[TagPublic]:
+    """Get all tags for a question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Get tags for this question
+    tags_query = (
+        select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
+    )
+    tags = session.exec(tags_query).all()
+
+    return [
+        TagPublic(
+            id=tag.id,
+            name=tag.name,
+            description=tag.description,
+            tag_type_id=tag.tag_type_id,
+            created_by_id=tag.created_by_id,
+            organization_id=tag.organization_id,
+            created_date=tag.created_date,
+            modified_date=tag.modified_date,
+            is_active=tag.is_active,
+            is_deleted=tag.is_deleted,
+        )
+        for tag in tags
+    ]
 
 
 @router.delete("/{question_id}")
