@@ -5,6 +5,7 @@ from app.api.routes import (
     location,
     login,
     organization,
+    permissions,
     private,
     question,
     roles,
@@ -20,6 +21,7 @@ api_router.include_router(login.router)
 api_router.include_router(users.router)
 api_router.include_router(utils.router)
 api_router.include_router(roles.router)
+api_router.include_router(permissions.router)
 api_router.include_router(organization.router)
 api_router.include_router(location.router)
 api_router.include_router(test.router)
