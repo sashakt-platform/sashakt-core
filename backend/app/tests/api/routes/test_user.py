@@ -451,7 +451,7 @@ def test_delete_user_not_found(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
     r = client.delete(
-        f"{settings.API_V1_STR}/users/99999",
+        f"{settings.API_V1_STR}/users/0",
         headers=superuser_token_headers,
     )
     assert r.status_code == 404
