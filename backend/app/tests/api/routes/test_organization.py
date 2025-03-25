@@ -142,7 +142,7 @@ def test_visibility_organization(client: TestClient, db: SessionDep) -> None:
 
 
 def test_delete_organization(client: TestClient, db: SessionDep) -> None:
-    response = client.delete(f"{settings.API_V1_STR}/organization/1")
+    response = client.delete(f"{settings.API_V1_STR}/organization/0")
     assert response.status_code == 404
     assert response.json() == {"detail": "Organization not found"}
     jal_vikas = Organization(name=random_lower_string())
