@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import func, select
+from sqlmodel import func, not_, select
 
 from app import crud
 from app.api.deps import (
@@ -37,10 +37,12 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     Retrieve users.
     """
 
-    count_statement = select(func.count()).select_from(User)
+    count_statement = (
+        select(func.count()).select_from(User).where(not_(User.is_deleted))
+    )
     count = session.exec(count_statement).one()
 
-    statement = select(User).offset(skip).limit(limit)
+    statement = select(User).where(not_(User.is_deleted)).offset(skip).limit(limit)
     users = session.exec(statement).all()
 
     return UsersPublic(data=users, count=count)
