@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: da026ad10985
+Revision ID: 1466d8703ddc
 Revises:
-Create Date: 2025-03-22 11:14:06.416761
+Create Date: 2025-03-25 22:04:00.010289
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = 'da026ad10985'
+revision = '1466d8703ddc'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -47,6 +47,8 @@ def upgrade():
     op.create_index(op.f('ix_question_question'), 'question', ['question'], unique=False)
     op.create_table('role',
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('is_deleted', sa.Boolean(), nullable=False),
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
     sa.PrimaryKeyConstraint('id')

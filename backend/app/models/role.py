@@ -5,6 +5,8 @@ from sqlmodel import Field, SQLModel
 class RoleBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
+    is_active: bool | None = Field(default=True, nullable=False)
+    is_deleted: bool = Field(default=False, nullable=False)
 
 
 # Properties to receive on name creation
@@ -14,7 +16,7 @@ class RoleCreate(RoleBase):
 
 # Properties to receive on name update
 class RoleUpdate(RoleBase):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+    pass
 
 
 # Database model, database table inferred from class name
