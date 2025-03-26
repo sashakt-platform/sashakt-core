@@ -4,7 +4,15 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import func, not_, select
 
 from app.api.deps import SessionDep
-from app.models import Message, Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
+from app.models import (
+    Message,
+    Role,
+    RoleCreate,
+    RolePermsission,
+    RolePublic,
+    RolesPublic,
+    RoleUpdate,
+)
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -58,15 +66,30 @@ def read_role(session: SessionDep, id: int) -> Any:
 
 
 @router.post("/", response_model=RolePublic)
-def create_role(*, session: SessionDep, role_in: RoleCreate) -> Role:
+def create_role(*, session: SessionDep, role_create: RoleCreate) -> Role:
     """
     Create new role.
     """
-    role = Role.model_validate(role_in)
+    role_data = role_create.model_dump(exclude={"permissions"})
+    role = Role.model_validate(role_data)
     session.add(role)
     session.commit()
     session.refresh(role)
-    return role
+
+    if role_create.permissions:
+        permission_ids = role_create.permissions
+        permission_links = [
+            RolePermsission(permission_id=permission_id, role_id=role.id)
+            for permission_id in permission_ids
+        ]
+        session.add_all(permission_links)
+        session.commit()
+
+    stored_permission_ids = session.exec(
+        select(RolePermsission.permission_id).where(RolePermsission.role_id == Role.id)
+    )
+
+    return RolePublic(**role.model_dump(), permissions=stored_permission_ids)
 
 
 @router.put("/{id}", response_model=RolePublic)
