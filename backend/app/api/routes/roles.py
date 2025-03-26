@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlmodel import func, select
 
 from app.api.deps import SessionDep
@@ -49,8 +49,8 @@ def read_role(session: SessionDep, id: int) -> Any:
     Get role by ID.
     """
     role = session.get(Role, id)
-    # if not role:
-    #     raise HTTPException(status_code=404, detail="Role not found")
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
     # if not current_user.is_superuser and (role.owner_id != current_user.id):
     #     raise HTTPException(status_code=400, detail="Not enough permissions")
     return role
@@ -79,8 +79,8 @@ def update_role(
     Update an role.
     """
     role = session.get(Role, id)
-    # if not role:
-    #     raise HTTPException(status_code=404, detail="Role not found")
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
     # if not current_user.is_superuser and (role.owner_id != current_user.id):
     #     raise HTTPException(status_code=400, detail="Not enough permissions")
     update_dict = role_in.model_dump(exclude_unset=True)
@@ -98,8 +98,8 @@ def delete_role(session: SessionDep, id: int) -> Message:
     Delete an role.
     """
     role = session.get(Role, id)
-    # if not role:
-    #     raise HTTPException(status_code=404, detail="Role not found")
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
     # if not current_user.is_superuser and (role.owner_id != current_user.id):
     #     raise HTTPException(status_code=400, detail="Not enough permissions")
     session.delete(role)

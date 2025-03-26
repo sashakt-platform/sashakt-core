@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: da026ad10985
+Revision ID: fc05c6f6854c
 Revises:
-Create Date: 2025-03-22 11:14:06.416761
+Create Date: 2025-03-25 22:46:13.313543
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = 'da026ad10985'
+revision = 'fc05c6f6854c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -39,6 +39,14 @@ def upgrade():
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_organization_name'), 'organization', ['name'], unique=False)
+    op.create_table('permission',
+    sa.Column('description', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('is_deleted', sa.Boolean(), nullable=False),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('question',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('question', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -47,6 +55,8 @@ def upgrade():
     op.create_index(op.f('ix_question_question'), 'question', ['question'], unique=False)
     op.create_table('role',
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('is_deleted', sa.Boolean(), nullable=False),
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
     sa.PrimaryKeyConstraint('id')
@@ -251,6 +261,7 @@ def downgrade():
     op.drop_table('role')
     op.drop_index(op.f('ix_question_question'), table_name='question')
     op.drop_table('question')
+    op.drop_table('permission')
     op.drop_index(op.f('ix_organization_name'), table_name='organization')
     op.drop_table('organization')
     op.drop_index(op.f('ix_country_name'), table_name='country')
