@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import jwt
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -8,6 +9,33 @@ from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
 from app.tests.utils.utils import random_email, random_lower_string
+
+
+def test_get_users(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    user = User(
+        full_name=random_lower_string(),
+        hashed_password=random_lower_string(),
+        email=random_email(),
+    )
+    db.add(user)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/users/", headers=superuser_token_headers
+    )
+    data = response.json()["data"]
+    print(data)
+    last_index = len(data) - 1
+    test_data = data[last_index]
+
+    assert test_data["full_name"] == user.full_name
+    assert test_data["email"] == user.email
+    assert "hashed_password" not in test_data
+    assert test_data["phone"] == user.phone
+    assert test_data["role_id"] == user.role_id
+    assert test_data["created_by_id"] == user.created_by_id
+    assert test_data["organization_id"] == user.organization_id
 
 
 def test_get_users_superuser_me(
@@ -58,13 +86,37 @@ def test_get_existing_user(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        full_name=random_lower_string(),
+        phone="1234567890",
+        email=username,
+        password=password,
+    )
+    print("user_in-->", user_in)
     user = crud.create_user(session=db, user_create=user_in)
+    print("Crud user->", user)
     user_id = user.id
+    print("User is --->", user)
     r = client.get(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=superuser_token_headers,
     )
+    print("Response body:", r.json())
+    print(
+        "Error-->",
+        r,
+        " and URL is->",
+        f"{settings.API_V1_STR}/users/{user_id}",
+    )
+    print("superuser_token_headers->", superuser_token_headers)
+    print(
+        "Decoded token:",
+        jwt.decode(
+            superuser_token_headers["Authorization"].split(" ")[1],
+            options={"verify_signature": False},
+        ),
+    )
+    print("r.status_code", r.status_code)
     assert 200 <= r.status_code < 300
     api_user = r.json()
     existing_user = crud.get_user_by_email(session=db, email=username)
