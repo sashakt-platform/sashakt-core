@@ -27,12 +27,12 @@ class RoleBase(SQLModel):
 
 # Properties to receive on name creation
 class RoleCreate(RoleBase):
-    pass
+    permission: list[int] = []
 
 
 # Properties to receive on name update
 class RoleUpdate(RoleBase):
-    pass
+    permission: list[int] = []
 
 
 # Database model, database table inferred from class name
@@ -60,6 +60,7 @@ class RolePublic(RoleBase):
     modified_date: datetime
     is_active: bool | None
     is_deleted: bool
+    permissions: list[int]
 
 
 class RolesPublic(SQLModel):
