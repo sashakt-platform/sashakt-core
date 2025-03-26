@@ -3,8 +3,10 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models import RolePermsission
+
 if TYPE_CHECKING:
-    from app.models import User
+    from app.models import Permission, User
 
 
 # Shared properties
@@ -46,6 +48,9 @@ class Role(RoleBase, table=True):
     is_active: bool | None = Field(default=None, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
     users: list["User"] = Relationship(back_populates="role")
+    permissions: list["Permission"] = Relationship(
+        back_populates="roles", link_model=RolePermsission
+    )
 
 
 # Properties to return via API, id is always required
