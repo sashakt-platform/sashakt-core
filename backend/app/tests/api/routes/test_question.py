@@ -14,7 +14,9 @@ from app.models.user import User
 from app.tests.utils.utils import random_email, random_lower_string
 
 
-def test_create_question(client: TestClient, db: SessionDep) -> None:
+def test_create_question(
+    client: TestClient, db: SessionDep, superuser_token_headers: dict
+) -> None:
     # First create an organization
     org_name = random_lower_string()
     org_response = client.post(
@@ -28,6 +30,7 @@ def test_create_question(client: TestClient, db: SessionDep) -> None:
     user_email = random_email()
     user_response = client.post(
         f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
         json={
             "email": user_email,
             "password": random_lower_string(),
@@ -39,7 +42,7 @@ def test_create_question(client: TestClient, db: SessionDep) -> None:
 
     # Create a tag type
     tag_type_response = client.post(
-        f"{settings.API_V1_STR}/tag-types/",
+        f"{settings.API_V1_STR}/tagtype/",
         json={
             "name": "Test Tag Type",
             "description": "For testing",
@@ -52,7 +55,7 @@ def test_create_question(client: TestClient, db: SessionDep) -> None:
 
     # Create a tag
     tag_response = client.post(
-        f"{settings.API_V1_STR}/tags/",
+        f"{settings.API_V1_STR}/tag/",
         json={
             "name": "Test Tag",
             "description": "For testing questions",

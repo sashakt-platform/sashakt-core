@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
     from app.models.location import Block, District, State
     from app.models.organization import Organization
-    from app.models.tag import Tag, TagPublic
+    from app.models.tag import Tag
     from app.models.test import Test
     from app.models.user import User
 
@@ -253,7 +253,7 @@ class QuestionPublic(SQLModel):
 
     # Related location and tag information
     locations: list["QuestionLocationPublic"] | None
-    tags: list["TagPublic"] | None
+    tags: list[Any] | None  # avoid circular imports
 
 
 class QuestionLocationPublic(QuestionLocationBase):
@@ -270,3 +270,6 @@ class QuestionUpdate(SQLModel):
 
     is_active: bool | None = None
     is_deleted: bool | None = None
+
+
+QuestionPublic.model_rebuild()

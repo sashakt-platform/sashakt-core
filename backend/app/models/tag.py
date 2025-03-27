@@ -66,7 +66,6 @@ class TagBase(SQLModel):
         description="ID of the Tag Type to which the Tag should belong to",
     )
     name: str = Field(nullable=False, index=True, description="Name of the Tag")
-    description: str | None = Field(nullable=True, description="Description of the Tag")
     description: str | None = Field(
         default=None, nullable=True, description="Description of the Tag"
     )
