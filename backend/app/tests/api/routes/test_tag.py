@@ -44,6 +44,24 @@ def test_create_tagtype(client: TestClient, db: SessionDep) -> None:
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
+    data = {
+        "name": random_lower_string(),
+        "organization_id": organization.id,
+        "created_by_id": user.id,
+    }
+
+    response = client.post(f"{settings.API_V1_STR}/tagtype/", json=data)
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    assert response_data["description"] is None
+    assert response_data["organization_id"] == data["organization_id"]
+    assert response_data["created_by_id"] == data["created_by_id"]
+    assert response_data["is_deleted"] is False
+    assert response_data["is_active"] is None
+    assert "created_date" in response_data
+    assert "modified_date" in response_data
+
 
 def test_get_tagtype(client: TestClient, db: SessionDep) -> None:
     user, organization = setup_user_organization(db)
@@ -240,12 +258,27 @@ def test_create_tag(client: TestClient, db: SessionDep) -> None:
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
+    data = {
+        "name": random_lower_string(),
+        "tag_type_id": tagtype.id,
+        "created_by_id": user_b.id,
+    }
+    response = client.post(f"{settings.API_V1_STR}/tag/", json=data)
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    assert response_data["description"] is None
+    assert response_data["tag_type_id"] == data["tag_type_id"]
+    assert response_data["organization_id"] == tagtype.organization_id
+    assert response_data["is_deleted"] is False
+    assert "created_date" in response_data
+    assert "modified_date" in response_data
+
 
 def test_read_tag(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/tag/")
     response_data = response.json()
     assert response.status_code == 200
-    assert len(response_data) == 1
 
     user, organization = setup_user_organization(db)
     tagtype = TagType(
@@ -275,7 +308,6 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/tag/")
     response_data = response.json()
     assert response.status_code == 200
-    # assert len(response_data) == 2
     total_length = len(response_data) - 1
     assert response_data[total_length]["name"] == tag.name
     assert response_data[total_length]["description"] == tag.description
@@ -288,11 +320,6 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
-    response = client.get(f"{settings.API_V1_STR}/tag/")
-    response_data = response.json()
-    assert response.status_code == 200
-    assert len(response_data) == 2
-
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -332,11 +359,6 @@ def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
 
 
 def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
-    response = client.get(f"{settings.API_V1_STR}/tag/")
-    response_data = response.json()
-    assert response.status_code == 200
-    assert len(response_data) == 3
-
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),

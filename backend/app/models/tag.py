@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class TagTypeBase(SQLModel):
     name: str = Field(nullable=False, index=True, description="Name of the Tag Type")
     description: str | None = Field(
-        nullable=True, description="Description of the Tag Type"
+        default=None, nullable=True, description="Description of the Tag Type"
     )
     created_by_id: int = Field(
         foreign_key="user.id",
@@ -67,6 +67,9 @@ class TagBase(SQLModel):
     )
     name: str = Field(nullable=False, index=True, description="Name of the Tag")
     description: str | None = Field(nullable=True, description="Description of the Tag")
+    description: str | None = Field(
+        default=None, nullable=True, description="Description of the Tag"
+    )
     created_by_id: int = Field(
         foreign_key="user.id",
         nullable=False,

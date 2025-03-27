@@ -38,6 +38,13 @@ from .organization import (
     OrganizationPublic,
     OrganizationUpdate,
 )
+from .permission import (
+    Permission,
+    PermissionCreate,
+    PermissionPublic,
+    PermissionsPublic,
+    PermissionUpdate,
+)
 from .question import (
     Question,
     QuestionCreate,
@@ -161,4 +168,16 @@ __all__ = [
     "CandidateTestAnswerPublic",
     "CandidateTestAnswerUpdate",
     "CandidateTestAnswerCreate",
+    "TagCreate",
+    "TagUpdate",
+    "TagPublic",
+    "TagType",
+    "TagTypeCreate",
+    "TagTypeUpdate",
+    "TagTypePublic",
+    "Permission",
+    "PermissionCreate",
+    "PermissionPublic",
+    "PermissionsPublic",
+    "PermissionUpdate",
 ]

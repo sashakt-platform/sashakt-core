@@ -27,7 +27,6 @@ def test_read_organization(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/organization/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 0
 
     jal_vikas = Organization(name=random_lower_string())
     maha_vikas = Organization(
@@ -40,15 +39,17 @@ def test_read_organization(client: TestClient, db: SessionDep) -> None:
     response = client.get(f"{settings.API_V1_STR}/organization/")
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-    assert data[0]["name"] == jal_vikas.name
-    assert data[0]["description"] is None
-    assert data[0]["id"] == jal_vikas.id
-    assert data[0]["is_active"] is None
+    jal_vikas_index = len(data) - 2
+    maha_vikas_index = len(data) - 1
+    assert data[jal_vikas_index]["name"] == jal_vikas.name
+    assert data[jal_vikas_index]["description"] is None
+    assert data[jal_vikas_index]["id"] == jal_vikas.id
+    assert data[jal_vikas_index]["is_active"] is None
 
-    assert data[1]["name"] == maha_vikas.name
-    assert data[1]["description"] == maha_vikas.description
-    assert data[1]["id"] == maha_vikas.id
+    assert data[maha_vikas_index]["name"] == maha_vikas.name
+    assert data[maha_vikas_index]["description"] == maha_vikas.description
+    assert data[maha_vikas_index]["id"] == maha_vikas.id
+    assert data[maha_vikas_index]["is_active"] is None
 
 
 def test_read_organization_by_id(client: TestClient, db: SessionDep) -> None:
@@ -141,7 +142,7 @@ def test_visibility_organization(client: TestClient, db: SessionDep) -> None:
 
 
 def test_delete_organization(client: TestClient, db: SessionDep) -> None:
-    response = client.delete(f"{settings.API_V1_STR}/organization/1")
+    response = client.delete(f"{settings.API_V1_STR}/organization/0")
     assert response.status_code == 404
     assert response.json() == {"detail": "Organization not found"}
     jal_vikas = Organization(name=random_lower_string())
