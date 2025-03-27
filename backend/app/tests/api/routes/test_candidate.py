@@ -6,6 +6,7 @@ from app.models import (
     Candidate,
     CandidateTest,
     CandidateTestAnswer,
+    Organization,
     Question,
     Test,
     User,
@@ -697,8 +698,13 @@ def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> No
     db.add(candidate_test)
     db.commit()
 
-    question_a = Question(question=random_lower_string())
-    question_b = Question(question=random_lower_string())
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_a = Question(question=random_lower_string(), organization_id=org.id)
+    question_b = Question(question=random_lower_string(), organization_id=org.id)
     db.add_all([question_a, question_b])
     db.commit()
 
@@ -775,8 +781,13 @@ def test_read_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
     db.add(candidate_test)
     db.commit()
 
-    question_a = Question(question=random_lower_string())
-    question_b = Question(question=random_lower_string())
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_a = Question(question=random_lower_string(), organization_id=org.id)
+    question_b = Question(question=random_lower_string(), organization_id=org.id)
     db.add_all([question_a, question_b])
     db.commit()
 
@@ -872,8 +883,13 @@ def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) ->
     db.add(candidate_test)
     db.commit()
 
-    question_a = Question(question=random_lower_string())
-    question_b = Question(question=random_lower_string())
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_a = Question(question=random_lower_string(), organization_id=org.id)
+    question_b = Question(question=random_lower_string(), organization_id=org.id)
     db.add_all([question_a, question_b])
     db.commit()
 
@@ -965,8 +981,13 @@ def test_update_candidate_test_answer(client: TestClient, db: SessionDep) -> Non
     db.add(candidate_test)
     db.commit()
 
-    question_a = Question(question=random_lower_string())
-    question_b = Question(question=random_lower_string())
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_a = Question(question=random_lower_string(), organization_id=org.id)
+    question_b = Question(question=random_lower_string(), organization_id=org.id)
     db.add_all([question_a, question_b])
     db.commit()
 

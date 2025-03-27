@@ -33,10 +33,10 @@ def setup_data(db: SessionDep) -> Any:
     india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    punjab = State(name=random_lower_string(), country_id=india.id)
-    db.add(punjab)
-    goa = State(name=random_lower_string(), country_id=india.id)
-    db.add(goa)
+    stata_a = State(name=random_lower_string(), country_id=india.id)
+    db.add(stata_a)
+    state_b = State(name=random_lower_string(), country_id=india.id)
+    db.add(state_b)
     db.commit()
 
     organization = Organization(name=random_lower_string())
@@ -51,25 +51,32 @@ def setup_data(db: SessionDep) -> Any:
     db.add(tag_type)
     db.commit()
 
-    tag_hindi = Tag(
+    tag_a = Tag(
         name=random_lower_string(),
         created_by_id=user.id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
 
-    tag_marathi = Tag(
+    tag_b = Tag(
         name=random_lower_string(),
         created_by_id=user.id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
-    db.add(tag_hindi)
-    db.add(tag_marathi)
+    db.add(tag_a)
+    db.add(tag_b)
     db.commit()
 
-    question_one = Question(question=random_lower_string())
-    question_two = Question(question=random_lower_string())
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_one = Question(question="What is the size of Sun", organization_id=org.id)
+    question_two = Question(
+        question="What is the speed of light", organization_id=org.id
+    )
     db.add(question_one)
     db.add(question_two)
     db.commit()
@@ -77,12 +84,12 @@ def setup_data(db: SessionDep) -> Any:
     return (
         user,
         india,
-        punjab,
-        goa,
+        stata_a,
+        state_b,
         organization,
         tag_type,
-        tag_hindi,
-        tag_marathi,
+        tag_a,
+        tag_b,
         question_one,
         question_two,
     )

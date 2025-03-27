@@ -5,6 +5,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from app.models import Tag, TagType
+    from app.models.question import Question
 
 
 class OrganizationBase(SQLModel):
@@ -25,6 +26,11 @@ class Organization(OrganizationBase, table=True):
     is_deleted: bool = Field(default=False, nullable=False)
     tag_types: list["TagType"] = Relationship(back_populates="organization")
     tags: list["Tag"] = Relationship(back_populates="organization")
+
+    # Relationships
+    tag_types: list["TagType"] = Relationship(back_populates="organization")
+    tags: list["Tag"] = Relationship(back_populates="organization")
+    question: list["Question"] = Relationship(back_populates="organization")
 
 
 class OrganizationCreate(OrganizationBase):
