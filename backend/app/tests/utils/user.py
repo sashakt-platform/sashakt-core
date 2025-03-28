@@ -1,9 +1,9 @@
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
-from app.models import User, UserCreate, UserUpdate
+from app.models import Role, User, UserCreate, UserUpdate
 from app.tests.utils.utils import random_email, random_lower_string
 
 
@@ -38,7 +38,17 @@ def authentication_token_from_email(
     password = random_lower_string()
     user = crud.get_user_by_email(session=db, email=email)
     if not user:
-        user_in_create = UserCreate(email=email, password=password)
+        super_admin = db.exec(select(Role).where(Role.name == "super_admin")).first()
+        if not super_admin:
+            raise Exception("Role with name 'super_admin' not found")
+        role_id = super_admin.id
+        user_in_create = UserCreate(
+            email=email,
+            password=password,
+            full_name=random_lower_string(),
+            phone=random_lower_string(),
+            role_id=role_id,
+        )
         user = crud.create_user(session=db, user_create=user_in_create)
     else:
         user_in_update = UserUpdate(password=password)
