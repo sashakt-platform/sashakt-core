@@ -7,6 +7,7 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
+from app.tests.utils.role import create_random_role
 from app.tests.utils.utils import random_email, random_lower_string
 
 
@@ -39,8 +40,17 @@ def test_create_user_new_email(
         patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
     ):
         username = random_email()
+        full_name = random_lower_string()
         password = random_lower_string()
-        data = {"email": username, "password": password}
+        phone = random_lower_string()
+        role = create_random_role(db)
+        data = {
+            "email": username,
+            "password": password,
+            "phone": phone,
+            "role_id": role.id,
+            "full_name": full_name,
+        }
         r = client.post(
             f"{settings.API_V1_STR}/users/",
             headers=superuser_token_headers,
@@ -58,7 +68,16 @@ def test_get_existing_user(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    full_name = random_lower_string()
+    phone = random_lower_string()
+    role = create_random_role(db)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=full_name,
+        phone=phone,
+        role_id=role.id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
     r = client.get(
@@ -75,7 +94,13 @@ def test_get_existing_user(
 def test_get_existing_user_current_user(client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
 
@@ -116,11 +141,25 @@ def test_create_user_existing_username(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
     username = random_email()
-    # username = email
+    full_name = random_lower_string()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    phone = random_lower_string()
+    role = create_random_role(db)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     crud.create_user(session=db, user_create=user_in)
-    data = {"email": username, "password": password}
+    data = {
+        "email": username,
+        "password": password,
+        "phone": phone,
+        "role_id": role.id,
+        "full_name": full_name,
+    }
     r = client.post(
         f"{settings.API_V1_STR}/users/",
         headers=superuser_token_headers,
@@ -153,12 +192,24 @@ def test_retrieve_users(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     crud.create_user(session=db, user_create=user_in)
 
     username2 = random_email()
     password2 = random_lower_string()
-    user_in2 = UserCreate(email=username2, password=password2)
+    user_in2 = UserCreate(
+        email=username2,
+        password=password2,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     crud.create_user(session=db, user_create=user_in2)
 
     r = client.get(f"{settings.API_V1_STR}/users/", headers=superuser_token_headers)
@@ -168,14 +219,26 @@ def test_retrieve_users(
     assert "count" in all_users
     for item in all_users["data"]:
         assert "email" in item
+        assert "full_name" in item
+        assert "phone" in item
+        assert "role_id" in item
 
 
 def test_update_user_me(
     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
 ) -> None:
-    full_name = "Updated Name"
     email = random_email()
-    data = {"full_name": full_name, "email": email}
+    full_name = random_lower_string()
+    password = random_lower_string()
+    phone = random_lower_string()
+    role = create_random_role(db)
+    data = {
+        "email": email,
+        "password": password,
+        "phone": phone,
+        "role_id": role.id,
+        "full_name": full_name,
+    }
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
         headers=normal_user_token_headers,
@@ -252,7 +315,13 @@ def test_update_user_me_email_exists(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
 
     data = {"email": user.email}
@@ -288,7 +357,15 @@ def test_register_user(client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
-    data = {"email": username, "password": password, "full_name": full_name}
+    phone = random_lower_string()
+    role_id = create_random_role(db).id
+    data = {
+        "email": username,
+        "password": password,
+        "full_name": full_name,
+        "phone": phone,
+        "role_id": role_id,
+    }
     r = client.post(
         f"{settings.API_V1_STR}/users/signup",
         json=data,
@@ -306,13 +383,17 @@ def test_register_user(client: TestClient, db: Session) -> None:
     assert verify_password(password, user_db.hashed_password)
 
 
-def test_register_user_already_exists_error(client: TestClient) -> None:
+def test_register_user_already_exists_error(db: Session, client: TestClient) -> None:
     password = random_lower_string()
     full_name = random_lower_string()
+    phone = random_lower_string()
+    role_id = create_random_role(db).id
     data = {
         "email": settings.FIRST_SUPERUSER,
         "password": password,
         "full_name": full_name,
+        "phone": phone,
+        "role_id": role_id,
     }
     r = client.post(
         f"{settings.API_V1_STR}/users/signup",
@@ -327,10 +408,23 @@ def test_update_user(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
 
-    data = {"full_name": "Updated_full_name"}
+    data = {
+        "email": user_in.email,
+        "password": user_in.password,
+        "full_name": "Updated_full_name",
+        "phone": user_in.phone,
+        "role_id": user_in.role_id,
+    }
     r = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
         headers=superuser_token_headers,
@@ -349,11 +443,17 @@ def test_update_user(
 
 
 def test_update_user_not_exists(
-    client: TestClient, superuser_token_headers: dict[str, str]
+    db: Session, client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
-    data = {"full_name": "Updated_full_name"}
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": "Updated_full_name",
+        "phone": random_lower_string(),
+        "role_id": create_random_role(db).id,
+    }
     r = client.patch(
-        f"{settings.API_V1_STR}/users/77777",
+        f"{settings.API_V1_STR}/users/-1",
         headers=superuser_token_headers,
         json=data,
     )
@@ -366,15 +466,34 @@ def test_update_user_email_exists(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
 
     username2 = random_email()
     password2 = random_lower_string()
-    user_in2 = UserCreate(email=username2, password=password2)
+    user_in2 = UserCreate(
+        email=username2,
+        password=password2,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user2 = crud.create_user(session=db, user_create=user_in2)
 
     data = {"email": user2.email}
+    data = {
+        "email": user2.email,
+        "password": user_in.password,
+        "full_name": "Updated_full_name",
+        "phone": user_in.phone,
+        "role_id": user_in.role_id,
+    }
     r = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
         headers=superuser_token_headers,
@@ -387,7 +506,13 @@ def test_update_user_email_exists(
 def test_delete_user_me(client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
 
@@ -433,7 +558,13 @@ def test_delete_user_super_user(
 ) -> None:
     username = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
+    user_in = UserCreate(
+        email=username,
+        password=password,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=create_random_role(db).id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
     r = client.delete(
