@@ -52,11 +52,11 @@ def db() -> Generator[Session, None, None]:
 
         statement = delete(Question)
         session.execute(statement)
-
-        statement = delete(Role)
-        session.execute(statement)
         statement = delete(User)
         session.execute(statement)
+        statement = delete(Role)
+        session.execute(statement)
+
         statement = delete(Organization)
         session.execute(statement)
         statement = delete(Block)
