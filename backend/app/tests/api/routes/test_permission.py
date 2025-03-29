@@ -108,6 +108,42 @@ def test_update_permission_not_found(
     assert content["detail"] == "Permission not found"
 
 
+def test_visibility_permission(
+    client: TestClient, db: Session, superuser_token_headers: [str, str]
+) -> None:
+    permission = create_random_permission(db)
+    assert permission.is_active is True
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/permissions/{permission.id}",
+        headers=superuser_token_headers,
+        params={"is_active": False},
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["is_active"] is False
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/permissions/{permission.id}",
+        headers=superuser_token_headers,
+        params={"is_active": True},
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["is_active"] is True
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/permissions/{permission.id}",
+        headers=superuser_token_headers,
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["is_active"] is True
+
+
 # TODO: Fix this once we have permisions in place
 # def test_update_permission_not_enough_permissions(
 #     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
