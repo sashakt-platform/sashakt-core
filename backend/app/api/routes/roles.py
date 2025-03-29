@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import func, select
 
 from app.api.deps import SessionDep
@@ -86,6 +86,25 @@ def update_role(
     update_dict = role_in.model_dump(exclude_unset=True)
     if role:
         role.sqlmodel_update(update_dict)
+    session.add(role)
+    session.commit()
+    session.refresh(role)
+    return role
+
+
+@router.patch("/{id}")
+def set_visibility_role(
+    session: SessionDep,
+    id: int,
+    is_active: bool = Query(False, description="Set visibility of the Role"),
+) -> RolePublic:
+    """
+    Set visitibility of the Role
+    """
+    role = session.get(Role, id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    role.is_active = is_active
     session.add(role)
     session.commit()
     session.refresh(role)
