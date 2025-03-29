@@ -5,8 +5,6 @@ from sqlmodel import Field, SQLModel
 class PermissionBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
-    is_active: bool | None = Field(default=True, nullable=False)
-    is_deleted: bool = Field(default=False, nullable=False)
 
 
 # Properties to receive on name creation
@@ -22,12 +20,13 @@ class PermissionUpdate(PermissionBase):
 # Database model, database table inferred from class name
 class Permission(PermissionBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(max_length=255)
+    is_active: bool = Field(default=True, nullable=False)
 
 
 # Properties to return via API, id is always required
 class PermissionPublic(PermissionBase):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int
+    is_active: bool
 
 
 class PermissionsPublic(SQLModel):

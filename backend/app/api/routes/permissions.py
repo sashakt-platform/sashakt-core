@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import func, select
 
 from app.api.deps import SessionDep
@@ -93,6 +93,25 @@ def update_permission(
     update_dict = permission_in.model_dump(exclude_unset=True)
     if permission:
         permission.sqlmodel_update(update_dict)
+    session.add(permission)
+    session.commit()
+    session.refresh(permission)
+    return permission
+
+
+@router.patch("/{id}")
+def set_visibility_permission(
+    session: SessionDep,
+    id: int,
+    is_active: bool = Query(True, description="Set visibility of the Permission"),
+) -> PermissionPublic:
+    """
+    Set visitibility of the Permission
+    """
+    permission = session.get(Permission, id)
+    if not permission:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    permission.is_active = is_active
     session.add(permission)
     session.commit()
     session.refresh(permission)
