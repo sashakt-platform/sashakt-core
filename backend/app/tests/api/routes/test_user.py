@@ -486,7 +486,6 @@ def test_update_user_email_exists(
     )
     user2 = crud.create_user(session=db, user_create=user_in2)
 
-    data = {"email": user2.email}
     data = {
         "email": user2.email,
         "password": user_in.password,
