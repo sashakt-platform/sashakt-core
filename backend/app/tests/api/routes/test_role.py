@@ -148,6 +148,14 @@ def test_visibility_role(
     content = response.json()
     assert content["is_active"] is True
 
+    response = client.patch(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["is_active"] is True
+
 
 # TODO: Fix this once we have permisions in place
 # def test_update_role_not_enough_permissions(
