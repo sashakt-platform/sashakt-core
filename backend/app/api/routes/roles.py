@@ -96,7 +96,7 @@ def update_role(
 def set_visibility_role(
     session: SessionDep,
     id: int,
-    is_active: bool = Query(False, description="Set visibility of the Role"),
+    is_active: bool = Query(True, description="Set visibility of the Role"),
 ) -> RolePublic:
     """
     Set visitibility of the Role
