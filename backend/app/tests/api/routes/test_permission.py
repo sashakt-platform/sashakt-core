@@ -109,7 +109,7 @@ def test_update_permission_not_found(
 
 
 def test_visibility_permission(
-    client: TestClient, db: Session, superuser_token_headers: [str, str]
+    client: TestClient, db: Session, superuser_token_headers: dict[str, str]
 ) -> None:
     permission = create_random_permission(db)
     assert permission.is_active is True
