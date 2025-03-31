@@ -190,7 +190,14 @@ def set_visibility_role(
     session.add(role)
     session.commit()
     session.refresh(role)
-    return role
+
+    stored_permission_ids = session.exec(
+        select(RolePermission.permission_id).where(RolePermission.role_id == id)
+    )
+    return RolePublic(
+        **role.model_dump(),
+        permissions=stored_permission_ids,
+    )
 
 
 @router.delete("/{id}")
