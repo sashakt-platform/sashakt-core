@@ -1,4 +1,11 @@
-from sqlmodel import Field, SQLModel
+from typing import TYPE_CHECKING
+
+from sqlmodel import Field, Relationship, SQLModel
+
+from app.models.role import RolePermission
+
+if TYPE_CHECKING:
+    from app.models import Role
 
 
 # Shared properties
@@ -21,6 +28,9 @@ class PermissionUpdate(PermissionBase):
 class Permission(PermissionBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     is_active: bool = Field(default=True, nullable=False)
+    roles: list["Role"] | None = Relationship(
+        back_populates="permissions", link_model=RolePermission
+    )
 
 
 # Properties to return via API, id is always required
