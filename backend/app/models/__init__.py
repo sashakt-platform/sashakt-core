@@ -46,7 +46,7 @@ from .permission import (
     PermissionUpdate,
 )
 from .question import Question
-from .role import Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
+from .role import Role, RoleCreate, RolePermission, RolePublic, RolesPublic, RoleUpdate
 from .tag import (
     Tag,
     TagCreate,
@@ -149,4 +149,5 @@ __all__ = [
     "PermissionPublic",
     "PermissionsPublic",
     "PermissionUpdate",
+    "RolePermission",
 ]
