@@ -4,7 +4,15 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import func, select
 
 from app.api.deps import SessionDep
-from app.models import Message, Role, RoleCreate, RolePublic, RolesPublic, RoleUpdate
+from app.models import (
+    Message,
+    Role,
+    RoleCreate,
+    RolePermission,
+    RolePublic,
+    RolesPublic,
+    RoleUpdate,
+)
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -61,11 +69,28 @@ def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
     """
     Create new role.
     """
-    role = Role.model_validate(role_in)
+    role_data = role_in.model_dump(exclude={"permissions"})
+    role = Role.model_validate(role_data)
     session.add(role)
     session.commit()
+    if role_in.permissions:
+        permission_ids = role_in.permissions
+        permission_links = [
+            RolePermission(role_id=role.id, permission_id=permission_id)
+            for permission_id in permission_ids
+        ]
+        session.add_all(permission_links)
+        session.commit()
     session.refresh(role)
-    return role
+
+    stored_permission_ids = session.exec(
+        select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
+    )
+
+    return RolePublic(
+        **role.model_dump(),
+        permissions=stored_permission_ids,
+    )
 
 
 @router.put("/{id}", response_model=RolePublic)
