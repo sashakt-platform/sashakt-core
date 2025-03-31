@@ -16,6 +16,7 @@ def test_create_role(
 
     db.add(permission)
     db.commit()
+    db.refresh(permission)
 
     data = {
         "name": random_lower_string(),
