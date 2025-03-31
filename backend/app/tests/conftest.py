@@ -18,6 +18,7 @@ from app.models import (
     Permission,
     Question,
     Role,
+    RolePermission,
     State,
     Tag,
     TagType,
@@ -36,6 +37,8 @@ def db() -> Generator[Session, None, None]:
     with Session(engine) as session:
         init_db(session)
         yield session
+        statement = delete(RolePermission)
+        session.execute(statement)
         statement = delete(Permission)
         session.execute(statement)
         statement = delete(Tag)
