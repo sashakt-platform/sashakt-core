@@ -104,7 +104,7 @@ def set_visibility_permission(
     session: SessionDep,
     id: int,
     is_active: bool = Query(True, description="Set visibility of the Permission"),
-) -> PermissionPublic:
+) -> Permission:
     """
     Set visitibility of the Permission
     """
