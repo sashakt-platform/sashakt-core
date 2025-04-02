@@ -38,8 +38,10 @@ def create_random_user(db: Session) -> User:
     return user
 
 
-def get_user_token(*, db: Session, role: str):
+def get_user_token(*, db: Session, role: str) -> dict[str, str]:
     current_role = db.exec(select(Role).where(Role.name == role)).first()
+    if not current_role:
+        raise Exception(f"Role with name '{role}' not found")
     user_in = UserCreate(
         full_name=random_lower_string(),
         email=random_email(),
