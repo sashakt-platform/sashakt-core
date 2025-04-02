@@ -20,11 +20,36 @@ def user_authentication_headers(
 
 
 def create_random_user(db: Session) -> User:
+    role = Role(name=random_lower_string(), label=random_lower_string())
+    db.add(role)
+    db.commit()
     email = random_email()
     password = random_lower_string()
-    user_in = UserCreate(email=email, password=password)
+    full_name = random_lower_string()
+    phone = random_lower_string()
+    user_in = UserCreate(
+        email=email,
+        password=password,
+        phone=phone,
+        full_name=full_name,
+        role_id=role.id,
+    )
     user = crud.create_user(session=db, user_create=user_in)
     return user
+
+
+def get_user_token(*, db: Session, role: str):
+    current_role = db.exec(select(Role).where(Role.name == role)).first()
+    user_in = UserCreate(
+        full_name=random_lower_string(),
+        email=random_email(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=current_role.id,
+    )
+    user = crud.create_user(session=db, user_create=user_in)
+    headers = {"Authorization": f"Bearer {user.token}"}
+    return headers
 
 
 def authentication_token_from_email(
@@ -51,7 +76,13 @@ def authentication_token_from_email(
         )
         user = crud.create_user(session=db, user_create=user_in_create)
     else:
-        user_in_update = UserUpdate(password=password)
+        user_in_update = UserUpdate(
+            full_name=user.full_name,
+            phone=user.phone,
+            role_id=user.role_id,
+            email=user.email,
+            password=password,
+        )
         if not user.id:
             raise Exception("User id not set")
         user = crud.update_user(session=db, db_user=user, user_in=user_in_update)

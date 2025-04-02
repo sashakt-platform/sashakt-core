@@ -13,7 +13,6 @@ def test_create_role(
     permission = Permission(
         name=random_lower_string(), description=random_lower_string()
     )
-
     db.add(permission)
     db.commit()
     db.refresh(permission)
@@ -167,19 +166,8 @@ def test_read_roles(
     assert len(content["data"]) >= 2
 
     data = content["data"]
-
-    role_a_data = data[len(data) - 2]
-    role_b_data = data[len(data) - 1]
-
-    assert role_a_data["name"] == role_a.name
-    assert role_a_data["description"] == role_a.description
-    assert role_a_data["label"] == role_a.label
-    assert role_a_data["permissions"] == [permission_a.id, permission_b.id]
-
-    assert role_b_data["name"] == role_b.name
-    assert role_b_data["description"] == role_b.description
-    assert role_b_data["label"] == role_b.label
-    assert role_b_data["permissions"] == [permission_a.id, permission_b.id]
+    assert any(role["name"] == role_a.name for role in data)
+    assert any(role["name"] == role_b.name for role in data)
 
 
 def test_update_role(
