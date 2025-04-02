@@ -93,13 +93,13 @@ def db() -> Generator[Session, None, None]:
             session.rollback()
 
 
-@pytest.fixture(scope="function")  # Changed from module to function
+@pytest.fixture(scope="module")  # Changed from module to function
 def client() -> Generator[TestClient, None, None]:
     with TestClient(app) as c:
         yield c
 
 
-@pytest.fixture(scope="function")  # Changed from module to function
+@pytest.fixture(scope="module")  # Changed from module to function
 def superuser_token_headers(client: TestClient) -> dict[str, str]:
     try:
         headers = get_superuser_token_headers(client)
@@ -114,7 +114,7 @@ def superuser_token_headers(client: TestClient) -> dict[str, str]:
         return {"Authorization": "Bearer dummy_token_for_tests"}
 
 
-@pytest.fixture(scope="function")  # Changed from module to function
+@pytest.fixture(scope="module")  # Changed from module to function
 def normal_user_token_headers(client: TestClient, db: Session) -> dict[str, str]:
     try:
         return authentication_token_from_email(
