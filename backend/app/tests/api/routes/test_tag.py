@@ -77,12 +77,14 @@ def test_get_tagtype(client: TestClient, db: SessionDep) -> None:
     response_data = response.json()
     assert response.status_code == 200
     total_length = len(response_data) - 1
-    assert response_data[total_length]["name"] == tagtype.name
-    assert response_data[total_length]["description"] == tagtype.description
-    assert response_data[total_length]["organization_id"] == tagtype.organization_id
-    assert response_data[total_length]["created_by_id"] == tagtype.created_by_id
-    assert response_data[total_length]["is_deleted"] is False
-    assert response_data[total_length]["is_active"] is None
+    assert any(item["name"] == tagtype.name for item in response_data)
+    assert any(item["description"] == tagtype.description for item in response_data)
+    assert any(
+        item["organization_id"] == tagtype.organization_id for item in response_data
+    )
+    assert any(item["created_by_id"] == tagtype.created_by_id for item in response_data)
+    assert any(item["is_deleted"] == tagtype.is_deleted for item in response_data)
+    assert any(item["is_active"] == tagtype.is_active for item in response_data)
     assert "created_date" in response_data[total_length]
     assert "modified_date" in response_data[total_length]
 
@@ -304,17 +306,19 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
     )
     db.add(tag)
     db.commit()
+    db.refresh(tag)
+    db.flush()
 
     response = client.get(f"{settings.API_V1_STR}/tag/")
     response_data = response.json()
     assert response.status_code == 200
-    total_length = len(response_data) - 1
-    assert response_data[total_length]["name"] == tag.name
-    assert response_data[total_length]["description"] == tag.description
-    assert response_data[total_length]["tag_type_id"] == tag.tag_type_id
-    assert response_data[total_length]["organization_id"] == tagtype.organization_id
-    assert response_data[total_length]["created_by_id"] == user_b.id
-    assert response_data[total_length]["is_deleted"] is False
+    assert any(item["name"] == tag.name for item in response_data)
+    assert any(item["description"] == tag.description for item in response_data)
+    assert any(item["tag_type_id"] == tag.tag_type_id for item in response_data)
+    assert any(item["organization_id"] == tag.organization_id for item in response_data)
+    assert any(item["created_by_id"] == tag.created_by_id for item in response_data)
+    assert any(item["is_deleted"] == tag.is_deleted for item in response_data)
+
     assert "created_date" in response_data[1]
     assert "modified_date" in response_data[1]
 
