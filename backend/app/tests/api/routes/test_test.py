@@ -16,19 +16,13 @@ from app.models import (
     TestQuestion,
     TestState,
     TestTag,
-    User,
 )
-from app.tests.utils.utils import random_email, random_lower_string
+from app.tests.utils.user import create_random_user
+from app.tests.utils.utils import random_lower_string
 
 
 def setup_data(db: SessionDep) -> Any:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     india = Country(name=random_lower_string())
     db.add(india)

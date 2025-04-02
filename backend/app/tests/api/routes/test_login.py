@@ -6,7 +6,7 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.core.security import verify_password
 from app.crud import create_user
-from app.models import UserCreate
+from app.models import Role, UserCreate
 from app.tests.utils.user import user_authentication_headers
 from app.tests.utils.utils import random_email, random_lower_string
 from app.utils import generate_password_reset_token
@@ -77,11 +77,22 @@ def test_reset_password(client: TestClient, db: Session) -> None:
     password = random_lower_string()
     new_password = random_lower_string()
 
+    role = Role(
+        name=random_lower_string(),
+        label=random_lower_string(),
+        description=random_lower_string(),
+    )
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+
     user_create = UserCreate(
         email=email,
-        full_name="Test User",
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
         password=password,
         is_active=True,
+        role_id=role.id,
     )
     user = create_user(session=db, user_create=user_create)
     token = generate_password_reset_token(email=email)
