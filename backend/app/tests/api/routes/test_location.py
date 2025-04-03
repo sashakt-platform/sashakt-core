@@ -1,3 +1,4 @@
+from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
@@ -7,14 +8,29 @@ from app.models.location import Block, Country, District, State
 from ...utils.utils import random_lower_string
 
 
-def test_create_country(client: TestClient) -> None:
+def test_create_country(
+    client: TestClient,
+    get_user_candidate_token: dict[str, str],
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     country = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/location/country/", json={"name": country}
+        f"{settings.API_V1_STR}/location/country/",
+        json={"name": country},
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
     assert data["name"] == country
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/country/",
+        json={"name": country},
+        headers=get_user_candidate_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert data["detail"] == "User Not Permitted"
 
 
 def test_get_country(client: TestClient, db: SessionDep) -> None:
