@@ -61,6 +61,9 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
 
 
 def get_user_permission(current_user: CurrentUser) -> list[str]:
-    permissions = [permission.name for permission in current_user.role.permissions]
-    print("permissions-->", permissions)
+    permissions = (
+        [permission.name for permission in current_user.role.permissions]
+        if current_user.role and current_user.role.permissions
+        else []
+    )
     return permissions
