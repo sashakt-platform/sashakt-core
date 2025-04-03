@@ -1,11 +1,12 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 
-from app.api.deps import SessionDep
-from app.models.location import (
+from app.api.deps import SessionDep, get_user_permission
+from app.api.routes.utils import MANAGE_ORGANIZATION
+from app.models import (
     Block,
     BlockCreate,
     BlockPublic,
@@ -33,8 +34,19 @@ block_router = APIRouter()
 
 
 # Create a Country
-@country_router.post("/", response_model=CountryPublic)
-def create_country(country: CountryCreate, session: SessionDep) -> Country:
+@country_router.post(
+    "/",
+    response_model=CountryPublic,
+)
+def create_country(
+    country: CountryCreate,
+    session: SessionDep,
+    permissions: Annotated[list[str], Depends(get_user_permission)],
+) -> Country:
+    if MANAGE_ORGANIZATION not in permissions:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User Not Permitted"
+        )
     db_country = Country.model_validate(country)
     session.add(db_country)
     session.commit()
