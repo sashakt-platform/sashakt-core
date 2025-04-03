@@ -1,15 +1,27 @@
+from datetime import timedelta
 from typing import Any
 
 from sqlmodel import Session, select
 
-from app.core.security import get_password_hash, verify_password
+from app.core.config import settings
+from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import User, UserCreate, UserUpdate
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
     db_obj = User.model_validate(
-        user_create, update={"hashed_password": get_password_hash(user_create.password)}
+        user_create,
+        update={
+            "hashed_password": get_password_hash(user_create.password),
+        },
     )
+    session.add(db_obj)
+    session.commit()
+    session.refresh(db_obj)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = create_access_token(db_obj.id, access_token_expires)
+
+    db_obj.token = token
     session.add(db_obj)
     session.commit()
     session.refresh(db_obj)
