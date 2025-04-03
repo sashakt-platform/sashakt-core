@@ -58,3 +58,9 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
     # TODO: Need to fix this when roles are in place
     # current_user.is_superuser = True
     return current_user
+
+
+def get_user_permission(current_user: CurrentUser) -> list[str]:
+    permissions = [permission.name for permission in current_user.role.permissions]
+    print("permissions-->", permissions)
+    return permissions
