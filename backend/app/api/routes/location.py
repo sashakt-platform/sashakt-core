@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 
 from app.api.deps import SessionDep, get_user_permission
-from app.api.routes.utils import MANAGE_ORGANIZATION
+from app.core.permissions import manage_organization
 from app.models import (
     Block,
     BlockCreate,
@@ -43,7 +43,7 @@ def create_country(
     session: SessionDep,
     permissions: Annotated[list[str], Depends(get_user_permission)],
 ) -> Country:
-    if MANAGE_ORGANIZATION not in permissions:
+    if manage_organization.name not in permissions:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User Not Permitted"
         )
