@@ -50,4 +50,4 @@ def create_permission(
         session.add(current_permission)
         session.commit()
         session.refresh(current_permission)
-    return current_permission
+    return PermissionPublic(**current_permission.model_dump())
