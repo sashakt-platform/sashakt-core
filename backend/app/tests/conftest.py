@@ -40,11 +40,14 @@ def db() -> Generator[Session, None, None]:
         yield session
         # Delete in proper order - dependent tables first
         try:
+            # delete tag dependencies
+            statement = delete(QuestionTag)
+            session.execute(statement)
             statement = delete(Tag)
             session.execute(statement)
             statement = delete(TagType)
             session.execute(statement)
-            # First delete candidate test answers
+            # delete candidate test answers
             statement = delete(CandidateTestAnswer)
             session.execute(statement)
             # Then delete candidate tests
@@ -58,8 +61,6 @@ def db() -> Generator[Session, None, None]:
             statement = delete(TestQuestion)
             session.execute(statement)
             # Delete question dependencies
-            statement = delete(QuestionTag)
-            session.execute(statement)
             statement = delete(QuestionRevision)
             session.execute(statement)
             statement = delete(QuestionLocation)
