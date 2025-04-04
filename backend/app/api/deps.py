@@ -12,6 +12,7 @@ from app.core import security
 from app.core.config import settings
 from app.core.db import engine
 from app.models import TokenPayload, User
+from app.models.permission import PermissionCreate
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/login/access-token"
@@ -69,11 +70,13 @@ def get_user_permissions(current_user: CurrentUser) -> list[str]:
     return permissions
 
 
-def permission_dependency(required_permission: str) -> Callable[[list[str]], None]:
+def permission_dependency(
+    required_permission: PermissionCreate,
+) -> Callable[[list[str]], None]:
     def check_permissions(
         permissions: Annotated[list[str], Depends(get_user_permissions)],
     ) -> None:
-        if required_permission not in permissions:
+        if required_permission.name not in permissions:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="User Not Permitted"
             )
