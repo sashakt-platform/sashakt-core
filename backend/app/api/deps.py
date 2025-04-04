@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Annotated
 
 import jwt
@@ -12,6 +12,7 @@ from app.core import security
 from app.core.config import settings
 from app.core.db import engine
 from app.models import TokenPayload, User
+from app.models.permission import PermissionCreate
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/login/access-token"
@@ -58,3 +59,26 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
     # TODO: Need to fix this when roles are in place
     # current_user.is_superuser = True
     return current_user
+
+
+def get_user_permissions(current_user: CurrentUser) -> list[str]:
+    permissions = (
+        [permission.name for permission in current_user.role.permissions]
+        if current_user.role and current_user.role.permissions
+        else []
+    )
+    return permissions
+
+
+def permission_dependency(
+    required_permission: PermissionCreate,
+) -> Callable[[list[str]], None]:
+    def check_permissions(
+        permissions: Annotated[list[str], Depends(get_user_permissions)],
+    ) -> None:
+        if required_permission.name not in permissions:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User Not Permitted"
+            )
+
+    return check_permissions

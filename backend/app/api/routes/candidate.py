@@ -28,7 +28,10 @@ router_candidate_test_answer = APIRouter(
 
 
 # Create a Candidate
-@router.post("/", response_model=CandidatePublic)
+@router.post(
+    "/",
+    response_model=CandidatePublic,
+)
 def create_candidate(
     candidate_create: CandidateCreate, session: SessionDep
 ) -> Candidate:

@@ -2,7 +2,33 @@ from sqlmodel import Session, create_engine, select
 
 from app import crud
 from app.core.config import settings
-from app.models import Permission, Role, RolePermission, RolePublic, User, UserCreate
+from app.core.permissions import (
+    attempt_test,
+    create_permission,
+    create_question,
+    create_template,
+    create_test,
+    create_user,
+    delete_question,
+    delete_template,
+    delete_test,
+    delete_user,
+    edit_question,
+    edit_template,
+    edit_test,
+    edit_user,
+    manage_organization,
+    view_dashboard,
+)
+from app.core.roles import (
+    candidate,
+    create_role,
+    state_admin,
+    super_admin,
+    system_admin,
+    test_admin,
+)
+from app.models import User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
@@ -14,169 +40,128 @@ engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 def init_db(session: Session) -> None:
     # Creating all Permissions
-
-    def create_permission(name: str, description: str | None = None) -> Permission:
-        permission = session.exec(
-            select(Permission).where(Permission.name == name)
-        ).first()
-
-        if not permission:
-            permission = Permission(name=name, description=description)
-            session.add(permission)
-            session.commit()
-            session.refresh(permission)
-        return permission
-
-    # organization Permission
-
-    manage_organization = create_permission(
-        name="manage_organization", description="Add/Remove/Edit Organizations"
+    manage_organization_permission = create_permission(
+        session=session, permission_create=manage_organization
     )
-    create_user = create_permission(name="create_user", description="Create New Users")
-    edit_user = create_permission(name="edit_user", description="Edit Existing User")
-    delete_user = create_permission(
-        name="delete_user", description="Delete Existing User"
+    view_dashboard_permission = create_permission(
+        session=session, permission_create=view_dashboard
     )
-    create_template = create_permission(
-        name="create_template", description="Create New Template"
+    create_user_permission = create_permission(
+        session=session, permission_create=create_user
     )
-    edit_template = create_permission(
-        name="edit_template", description="Edit Existing Template"
+    edit_user_permission = create_permission(
+        session=session, permission_create=edit_user
     )
-    delete_template = create_permission(
-        name="delete_template", description="Delete Template"
+    delete_user_permission = create_permission(
+        session=session, permission_create=delete_user
     )
-    create_question = create_permission(
-        name="create_question", description="Create New Question"
+    create_template_permission = create_permission(
+        session=session, permission_create=create_template
     )
-    edit_question = create_permission(
-        name="edit_question", description="Edit Existing Question"
+    edit_template_permission = create_permission(
+        session=session, permission_create=edit_template
     )
-    delete_question = create_permission(
-        name="delete_question", description="Delete Question"
+    delete_template_permission = create_permission(
+        session=session, permission_create=delete_template
     )
-    create_test = create_permission(name="create_test", description="Create New Test")
-    edit_test = create_permission(name="edit_test", description="Edit Existing Test")
-    delete_test = create_permission(name="delete_test", description="Delete Test")
-    attempt_test = create_permission(name="attempt_test", description="Attempt a Test")
-    view_dashboard = create_permission(
-        name="view_dashboard", description="View Dashboards"
+    create_test_permission = create_permission(
+        session=session, permission_create=create_test
+    )
+    edit_test_permission = create_permission(
+        session=session, permission_create=edit_test
+    )
+    delete_test_permission = create_permission(
+        session=session, permission_create=delete_test
+    )
+    attempt_test_permission = create_permission(
+        session=session, permission_create=attempt_test
+    )
+    create_question_permission = create_permission(
+        session=session, permission_create=create_question
+    )
+    edit_question_permission = create_permission(
+        session=session, permission_create=edit_question
+    )
+    delete_question_permission = create_permission(
+        session=session, permission_create=delete_question
     )
 
-    # Creating role
-
-    def create_role(
-        name: str,
-        label: str,
-        permissions: list[Permission],
-        description: str | None = None,
-    ) -> RolePublic:
-        role = session.exec(select(Role).where(Role.name == name)).first()
-        if not role:
-            role = Role(name=name, description=description, label=label)
-            session.add(role)
-            session.commit()
-            session.refresh(role)
-            if len(permissions) > 0:
-                for permission in permissions:
-                    role_permission = RolePermission(
-                        role_id=role.id, permission_id=permission.id
-                    )
-                    session.add(role_permission)
-                    session.commit()
-                    session.refresh(role_permission)
-
-            stored_permission_ids = session.exec(
-                select(RolePermission.permission_id).where(
-                    RolePermission.role_id == role.id
-                )
-            )
-        else:
-            stored_permission_ids = session.exec(
-                select(RolePermission.permission_id).where(
-                    RolePermission.role_id == role.id
-                )
-            )
-
-        return RolePublic(
-            **role.model_dump(),
-            permissions=stored_permission_ids,
-        )
-
-    super_admin = create_role(
-        name="super_admin",
-        label="Super Admin",
-        description="A super-admin has overall access to the system",
+    super_admin_role = create_role(
+        session=session,
+        role_create=super_admin,
         permissions=[
-            manage_organization,
-            create_user,
-            edit_user,
-            delete_user,
-            create_template,
-            edit_template,
-            delete_template,
-            create_question,
-            edit_question,
-            delete_question,
-            create_test,
-            edit_test,
-            delete_test,
-            view_dashboard,
-        ],
-    )
-    create_role(
-        name="system_admin",
-        label="System Admin",
-        description="System-level admin who can handle organization-level tasks",
-        permissions=[
-            create_user,
-            edit_user,
-            delete_user,
-            create_template,
-            edit_template,
-            delete_template,
-            create_question,
-            edit_question,
-            delete_question,
-            create_test,
-            edit_test,
-            delete_test,
-            view_dashboard,
+            manage_organization_permission,
+            view_dashboard_permission,
+            create_user_permission,
+            edit_user_permission,
+            delete_user_permission,
+            create_template_permission,
+            edit_template_permission,
+            delete_template_permission,
+            create_test_permission,
+            edit_test_permission,
+            delete_test_permission,
+            create_question_permission,
+            edit_question_permission,
+            delete_question_permission,
         ],
     )
 
     create_role(
-        name="state_admin",
-        label="State Admin",
-        description="State-level admin of a organization",
+        session=session,
+        role_create=system_admin,
         permissions=[
-            create_user,
-            edit_user,
-            delete_user,
-            create_question,
-            edit_question,
-            delete_question,
-            create_test,
-            edit_test,
-            delete_test,
-            view_dashboard,
+            view_dashboard_permission,
+            create_user_permission,
+            edit_user_permission,
+            delete_user_permission,
+            create_template_permission,
+            edit_template_permission,
+            delete_template_permission,
+            create_test_permission,
+            edit_test_permission,
+            delete_test_permission,
+            create_question_permission,
+            edit_question_permission,
+            delete_question_permission,
         ],
     )
 
     create_role(
-        name="test_admin",
-        label="Test Admin",
-        description="Test Admin who creates and conducts test",
-        permissions=[create_test, edit_test, delete_test, view_dashboard],
+        session=session,
+        role_create=state_admin,
+        permissions=[
+            view_dashboard_permission,
+            create_user_permission,
+            edit_user_permission,
+            delete_user_permission,
+            create_test_permission,
+            edit_test_permission,
+            delete_test_permission,
+            create_question_permission,
+            edit_question_permission,
+            delete_question_permission,
+        ],
     )
 
     create_role(
-        name="candidate",
-        label="Candidate",
-        description="Candidate who attempts Test",
-        permissions=[attempt_test],
+        session=session,
+        role_create=test_admin,
+        permissions=[
+            create_test_permission,
+            edit_test_permission,
+            delete_test_permission,
+            view_dashboard_permission,
+        ],
     )
-    print("super_admin-->", super_admin)
+
+    create_role(
+        session=session,
+        role_create=candidate,
+        permissions=[
+            attempt_test_permission,
+        ],
+    )
 
     user = session.exec(
         select(User).where(User.email == settings.FIRST_SUPERUSER)
@@ -187,7 +172,7 @@ def init_db(session: Session) -> None:
             full_name=settings.FIRST_SUPERUSER_FULLNAME,
             email=settings.FIRST_SUPERUSER,
             password=settings.FIRST_SUPERUSER_PASSWORD,
-            role_id=super_admin.id,
+            role_id=super_admin_role.id,
             phone=settings.FIRST_SUPERUSER_MOBILE,
             created_by_id=None,
         )
