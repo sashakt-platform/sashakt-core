@@ -15,11 +15,13 @@ from app.models import (
     Country,
     District,
     Organization,
+    Permission,
     Question,
     QuestionLocation,
     QuestionRevision,
     QuestionTag,
     Role,
+    RolePermission,
     State,
     Tag,
     TagType,
@@ -40,6 +42,10 @@ def db() -> Generator[Session, None, None]:
         yield session
         # Delete in proper order - dependent tables first
         try:
+            statement = delete(RolePermission)
+            session.execute(statement)
+            statement = delete(Permission)
+            session.execute(statement)
             statement = delete(QuestionTag)
             session.execute(statement)
             statement = delete(Tag)
@@ -91,7 +97,6 @@ def db() -> Generator[Session, None, None]:
         except Exception as e:
             print(f"Error during cleanup: {e}")
             session.rollback()
-
 
 @pytest.fixture(scope="module")  # Changed from module to function
 def client() -> Generator[TestClient, None, None]:

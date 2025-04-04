@@ -3,18 +3,13 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
+from app.tests.utils.user import create_random_user
 
-from ...utils.utils import random_email, random_lower_string
+from ...utils.utils import random_lower_string
 
 
 def setup_user_organization(db: SessionDep) -> tuple[User, Organization]:
-    user = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     organization = Organization(name=random_lower_string())
     db.add(organization)
     db.commit()
@@ -234,12 +229,8 @@ def test_create_tag(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
     db.refresh(tagtype)
 
@@ -289,12 +280,8 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -331,12 +318,8 @@ def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -370,12 +353,8 @@ def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -432,12 +411,8 @@ def test_visibility_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -491,12 +466,8 @@ def test_delete_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(

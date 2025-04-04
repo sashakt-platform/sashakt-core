@@ -28,6 +28,13 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose down -v --remove-orphans
       - run: docker compose up -d db mailcatcher
+      - name: Wait for PostgreSQL
+        run: |
+          echo "Waiting for PostgreSQL to be healthy..."
+          until [ "$(docker compose ps -q db | xargs docker inspect -f '{{.State.Health.Status}}')" == "healthy" ]; do
+            echo "Database is not ready yet..."
+            sleep 2
+          done
       - name: Migrate DB
         run: uv run bash scripts/prestart.sh
         working-directory: backend
