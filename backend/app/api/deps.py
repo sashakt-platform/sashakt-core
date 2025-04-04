@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Annotated
 
 import jwt
@@ -60,10 +60,22 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
     return current_user
 
 
-def get_user_permission(current_user: CurrentUser) -> list[str]:
+def get_user_permissions(current_user: CurrentUser) -> list[str]:
     permissions = (
         [permission.name for permission in current_user.role.permissions]
         if current_user.role and current_user.role.permissions
         else []
     )
     return permissions
+
+
+def permission_dependency(required_permission: str) -> Callable[[list[str]], None]:
+    def check_permissions(
+        permissions: Annotated[list[str], Depends(get_user_permissions)],
+    ) -> None:
+        if required_permission not in permissions:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User Not Permitted"
+            )
+
+    return check_permissions
