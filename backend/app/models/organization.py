@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.models import Tag, TagType, User
+    from app.models import Tag, TagType, User,Question
 
 
 class OrganizationBase(SQLModel):
@@ -26,6 +26,11 @@ class Organization(OrganizationBase, table=True):
     tag_types: list["TagType"] = Relationship(back_populates="organization")
     tags: list["Tag"] = Relationship(back_populates="organization")
     users: list["User"] = Relationship(back_populates="organization")
+
+    # Relationships
+    tag_types: list["TagType"] = Relationship(back_populates="organization")
+    tags: list["Tag"] = Relationship(back_populates="organization")
+    question: list["Question"] = Relationship(back_populates="organization")
 
 
 class OrganizationCreate(OrganizationBase):
