@@ -9,20 +9,14 @@ from app.models import (
     Organization,
     Question,
     Test,
-    User,
 )
+from app.tests.utils.user import create_random_user
 
-from ...utils.utils import random_email, random_lower_string
+from ...utils.utils import random_lower_string
 
 
 def test_create_candidate(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     response = client.post(
         f"{settings.API_V1_STR}/candidate/",
@@ -44,14 +38,7 @@ def test_create_candidate(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_candidate(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
-
+    user = create_random_user(db)
     candidate = Candidate(user_id=user.id)
     db.add(candidate)
     db.commit()
@@ -74,18 +61,8 @@ def test_read_candidate(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
-    user_a = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    user_b = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add_all([user_a, user_b])
-    db.commit()
+    user_a = create_random_user(db)
+    user_b = create_random_user(db)
 
     candidate_a = Candidate(user_id=user_a.id)
     candidate_aa = Candidate(user_id=user_a.id)
@@ -142,18 +119,8 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
 
 
 def test_update_candidate(client: TestClient, db: SessionDep) -> None:
-    user_a = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    user_b = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add_all([user_a, user_b])
-    db.commit()
+    user_a = create_random_user(db)
+    user_b = create_random_user(db)
 
     candidate_a = Candidate(user_id=user_a.id)
     candidate_aa = Candidate(user_id=user_a.id)
@@ -192,18 +159,8 @@ def test_update_candidate(client: TestClient, db: SessionDep) -> None:
 
 
 def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
-    user_a = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    user_b = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add_all([user_a, user_b])
-    db.commit()
+    user_a = create_random_user(db)
+    user_b = create_random_user(db)
 
     candidate_aa = Candidate(user_id=user_a.id)
     candidate_b = Candidate(user_id=user_b.id)
@@ -243,18 +200,8 @@ def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
 
 
 def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
-    user_a = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    user_b = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add_all([user_a, user_b])
-    db.commit()
+    user_a = create_random_user(db)
+    user_b = create_random_user(db)
 
     candidate_aa = Candidate(user_id=user_a.id)
     candidate_b = Candidate(user_id=user_b.id)
@@ -280,13 +227,7 @@ def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
 
 
 def test_create_candidate_test(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
 
@@ -342,13 +283,7 @@ def test_create_candidate_test(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
 
@@ -407,13 +342,7 @@ def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate_a = Candidate(user_id=user.id)
     candidate_b = Candidate()
@@ -489,13 +418,7 @@ def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
 
 
 def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate_a = Candidate(user_id=user.id)
     candidate_b = Candidate()
@@ -646,13 +569,7 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
 
 
 def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
 
@@ -729,13 +646,7 @@ def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> No
 
 
 def test_read_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
 
@@ -831,13 +742,7 @@ def test_read_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
 
@@ -929,13 +834,7 @@ def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) ->
 
 
 def test_update_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
-    user = User(
-        full_name=random_lower_string(),
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
 
     candidate = Candidate()
 

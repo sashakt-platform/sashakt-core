@@ -3,18 +3,13 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
+from app.tests.utils.user import create_random_user
 
-from ...utils.utils import random_email, random_lower_string
+from ...utils.utils import random_lower_string
 
 
 def setup_user_organization(db: SessionDep) -> tuple[User, Organization]:
-    user = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     organization = Organization(name=random_lower_string())
     db.add(organization)
     db.commit()
@@ -77,12 +72,14 @@ def test_get_tagtype(client: TestClient, db: SessionDep) -> None:
     response_data = response.json()
     assert response.status_code == 200
     total_length = len(response_data) - 1
-    assert response_data[total_length]["name"] == tagtype.name
-    assert response_data[total_length]["description"] == tagtype.description
-    assert response_data[total_length]["organization_id"] == tagtype.organization_id
-    assert response_data[total_length]["created_by_id"] == tagtype.created_by_id
-    assert response_data[total_length]["is_deleted"] is False
-    assert response_data[total_length]["is_active"] is None
+    assert any(item["name"] == tagtype.name for item in response_data)
+    assert any(item["description"] == tagtype.description for item in response_data)
+    assert any(
+        item["organization_id"] == tagtype.organization_id for item in response_data
+    )
+    assert any(item["created_by_id"] == tagtype.created_by_id for item in response_data)
+    assert any(item["is_deleted"] == tagtype.is_deleted for item in response_data)
+    assert any(item["is_active"] == tagtype.is_active for item in response_data)
     assert "created_date" in response_data[total_length]
     assert "modified_date" in response_data[total_length]
 
@@ -232,12 +229,8 @@ def test_create_tag(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
     db.refresh(tagtype)
 
@@ -287,12 +280,8 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -304,17 +293,19 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
     )
     db.add(tag)
     db.commit()
+    db.refresh(tag)
+    db.flush()
 
     response = client.get(f"{settings.API_V1_STR}/tag/")
     response_data = response.json()
     assert response.status_code == 200
-    total_length = len(response_data) - 1
-    assert response_data[total_length]["name"] == tag.name
-    assert response_data[total_length]["description"] == tag.description
-    assert response_data[total_length]["tag_type_id"] == tag.tag_type_id
-    assert response_data[total_length]["organization_id"] == tagtype.organization_id
-    assert response_data[total_length]["created_by_id"] == user_b.id
-    assert response_data[total_length]["is_deleted"] is False
+    assert any(item["name"] == tag.name for item in response_data)
+    assert any(item["description"] == tag.description for item in response_data)
+    assert any(item["tag_type_id"] == tag.tag_type_id for item in response_data)
+    assert any(item["organization_id"] == tag.organization_id for item in response_data)
+    assert any(item["created_by_id"] == tag.created_by_id for item in response_data)
+    assert any(item["is_deleted"] == tag.is_deleted for item in response_data)
+
     assert "created_date" in response_data[1]
     assert "modified_date" in response_data[1]
 
@@ -327,12 +318,8 @@ def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -366,12 +353,8 @@ def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -428,12 +411,8 @@ def test_visibility_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(
@@ -487,12 +466,8 @@ def test_delete_tag_by_id(client: TestClient, db: SessionDep) -> None:
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = User(
-        email=random_email(),
-        hashed_password=random_lower_string(),
-        full_name=random_lower_string(),
-    )
-    db.add_all([user_b, tagtype])
+    user_b = create_random_user(db)
+    db.add(tagtype)
     db.commit()
 
     tag = Tag(

@@ -15,11 +15,13 @@ from app.models import (
     Country,
     District,
     Organization,
+    Permission,
     Question,
     QuestionLocation,
     QuestionRevision,
     QuestionTag,
     Role,
+    RolePermission,
     State,
     Tag,
     TagType,
@@ -40,7 +42,10 @@ def db() -> Generator[Session, None, None]:
         yield session
         # Delete in proper order - dependent tables first
         try:
-            # delete tag dependencies
+            statement = delete(RolePermission)
+            session.execute(statement)
+            statement = delete(Permission)
+            session.execute(statement)
             statement = delete(QuestionTag)
             session.execute(statement)
             statement = delete(Tag)
@@ -61,6 +66,7 @@ def db() -> Generator[Session, None, None]:
             statement = delete(TestQuestion)
             session.execute(statement)
             # Delete question dependencies
+
             statement = delete(QuestionRevision)
             session.execute(statement)
             statement = delete(QuestionLocation)
@@ -93,13 +99,13 @@ def db() -> Generator[Session, None, None]:
             session.rollback()
 
 
-@pytest.fixture(scope="function")  # Changed from module to function
+@pytest.fixture(scope="module")  # Changed from module to function
 def client() -> Generator[TestClient, None, None]:
     with TestClient(app) as c:
         yield c
 
 
-@pytest.fixture(scope="function")  # Changed from module to function
+@pytest.fixture(scope="module")  # Changed from module to function
 def superuser_token_headers(client: TestClient) -> dict[str, str]:
     try:
         headers = get_superuser_token_headers(client)
@@ -114,7 +120,7 @@ def superuser_token_headers(client: TestClient) -> dict[str, str]:
         return {"Authorization": "Bearer dummy_token_for_tests"}
 
 
-@pytest.fixture(scope="function")  # Changed from module to function
+@pytest.fixture(scope="module")  # Changed from module to function
 def normal_user_token_headers(client: TestClient, db: Session) -> dict[str, str]:
     try:
         return authentication_token_from_email(
