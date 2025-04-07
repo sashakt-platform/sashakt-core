@@ -59,7 +59,8 @@ def get_role_permissions(role: RoleCreate, session: Session) -> list[int]:
             current_permission = session.exec(
                 select(Permission.id).where(Permission.name == permission["name"])
             ).first()
-            permission_list.append(current_permission)
+            if current_permission is not None:
+                permission_list.append(current_permission)
     return permission_list
 
 
@@ -98,7 +99,7 @@ def create_role(
     return RolePublic(**current_role.model_dump(), permissions=stored_permission_ids)
 
 
-def init_roles(session: Session):
+def init_roles(session: Session) -> None:
     """
     Function to initialize roles in the database.
     It creates roles based on the data provided in permission_data.json file.
