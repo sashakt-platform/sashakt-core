@@ -12,6 +12,7 @@ from app.models.question import Question, QuestionRevision, QuestionTag, Questio
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.models.user import User
+from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_email, random_lower_string
 
 
@@ -127,13 +128,7 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create test user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create tag type and tag
@@ -271,13 +266,7 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create tag type and tag
@@ -360,13 +349,7 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create question
@@ -581,13 +564,7 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create question with revision
@@ -637,13 +614,7 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create tag type and tags
@@ -747,13 +718,7 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     db.add(org)
 
     # Create user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Set up location hierarchy similar to how it's done in test_location.py
@@ -849,13 +814,7 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create user
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create question
@@ -907,13 +866,7 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     db.refresh(org)
 
     # Create user for test
-    user = User(
-        full_name="Test User",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    db.add(user)
-    db.commit()
+    user = create_random_user(db)
     db.refresh(user)
 
     # Create question
