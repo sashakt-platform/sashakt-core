@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.models import Tag, TagType, User,Question
+    from app.models import Question, Tag, TagType, User
 
 
 class OrganizationBase(SQLModel):

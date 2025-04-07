@@ -66,7 +66,6 @@ def db() -> Generator[Session, None, None]:
             statement = delete(TestQuestion)
             session.execute(statement)
             # Delete question dependencies
-
             statement = delete(QuestionRevision)
             session.execute(statement)
             statement = delete(QuestionLocation)
@@ -78,9 +77,9 @@ def db() -> Generator[Session, None, None]:
             session.execute(statement)
             statement = delete(Candidate)
             session.execute(statement)
-            statement = delete(Role)
-            session.execute(statement)
             statement = delete(User)
+            session.execute(statement)
+            statement = delete(Role)
             session.execute(statement)
             statement = delete(Organization)
             session.execute(statement)

@@ -11,14 +11,11 @@ from app.models.organization import Organization
 from app.models.question import Question, QuestionRevision, QuestionTag, QuestionType
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
-from app.models.user import User
 from app.tests.utils.user import create_random_user
-from app.tests.utils.utils import random_email, random_lower_string
+from app.tests.utils.utils import random_lower_string
 
 
-def test_create_question(
-    client: TestClient, db: SessionDep, superuser_token_headers: dict
-) -> None:
+def test_create_question(client: TestClient, db: SessionDep) -> None:
     # First create an organization
     org_name = random_lower_string()
     org_response = client.post(
@@ -28,19 +25,8 @@ def test_create_question(
     org_data = org_response.json()
     org_id = org_data["id"]
 
-    # Create a user
-    user_email = random_email()
-    user_response = client.post(
-        f"{settings.API_V1_STR}/users/",
-        headers=superuser_token_headers,
-        json={
-            "email": user_email,
-            "password": random_lower_string(),
-            "full_name": "Test User",
-        },
-    )
-    user_data = user_response.json()
-    user_id = user_data["id"]
+    user = create_random_user(db)
+    user_id = user.id
 
     # Create a tag type
     tag_type_response = client.post(
@@ -129,6 +115,7 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
 
     # Create test user
     user = create_random_user(db)
+    db.refresh(user)
     db.refresh(user)
 
     # Create tag type and tag
@@ -469,16 +456,8 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create users - original creator and revision creator
-    user1 = User(
-        full_name="Original Creator",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
-    user2 = User(
-        full_name="Revision Creator",
-        email=random_email(),
-        hashed_password=random_lower_string(),
-    )
+    user1 = create_random_user(db)
+    user2 = create_random_user(db)
     db.add(user1)
     db.add(user2)
     db.commit()

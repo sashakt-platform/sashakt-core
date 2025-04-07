@@ -5,7 +5,15 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.models import Candidate, Organization, Role, Tag, TagType, Test,QuestionRevision
+    from app.models import (
+        Candidate,
+        Organization,
+        QuestionRevision,
+        Role,
+        Tag,
+        TagType,
+        Test,
+    )
 
 
 # Shared properties
