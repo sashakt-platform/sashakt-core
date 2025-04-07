@@ -1,7 +1,9 @@
+import json
+
 from sqlmodel import Session, select
 
 from app.models import (
-    PermissionPublic,
+    Permission,
     Role,
     RoleCreate,
     RolePermission,
@@ -41,9 +43,28 @@ candidate = RoleCreate(
     description="Candidate who attempts Test",
 )
 
+with open("app/core/permission_data.json") as file:
+    permission_data = json.load(file)
+
+
+def get_role_permissions(role: RoleCreate, session: Session) -> list[int]:
+    """
+    Function to get the permissions of a role.
+    It fetches the permission IDs from permission table if that permission is assigned to the role.
+    """
+    role_name = role.name
+    permission_list = []
+    for permission in permission_data:
+        if permission[role_name]:
+            current_permission = session.exec(
+                select(Permission.id).where(Permission.name == permission["name"])
+            ).first()
+            permission_list.append(current_permission)
+    return permission_list
+
 
 def create_role(
-    session: Session, role_create: RoleCreate, permissions: list[PermissionPublic]
+    session: Session, role_create: RoleCreate, permissions: list[int]
 ) -> RolePublic:
     current_role = session.exec(
         select(Role).where(Role.name == role_create.name)
@@ -57,7 +78,7 @@ def create_role(
         if len(permissions) > 0:
             for permission in permissions:
                 role_permission = RolePermission(
-                    role_id=current_role.id, permission_id=permission.id
+                    role_id=current_role.id, permission_id=permission
                 )
                 session.add(role_permission)
                 session.commit()
@@ -75,3 +96,25 @@ def create_role(
             )
         )
     return RolePublic(**current_role.model_dump(), permissions=stored_permission_ids)
+
+
+def init_roles(session: Session):
+    """
+    Function to initialize roles in the database.
+    It creates roles based on the data provided in permission_data.json file.
+    """
+    super_admin_permissions = get_role_permissions(super_admin, session)
+    system_admin_permissions = get_role_permissions(system_admin, session)
+    state_admin_permissions = get_role_permissions(state_admin, session)
+    test_admin_permissions = get_role_permissions(test_admin, session)
+    candidate_permissions = get_role_permissions(candidate, session)
+
+    create_role(session, super_admin, super_admin_permissions)
+
+    create_role(session, system_admin, system_admin_permissions)
+
+    create_role(session, state_admin, state_admin_permissions)
+
+    create_role(session, test_admin, test_admin_permissions)
+
+    create_role(session, candidate, candidate_permissions)
