@@ -53,6 +53,7 @@ def create_country(
 @country_router.get(
     "/",
     response_model=list[CountryPublic],
+    dependencies=[Depends(permission_dependency("create_location"))],
 )
 def get_countries(
     session: SessionDep,
@@ -80,6 +81,7 @@ def get_country_by_id(
 @country_router.put(
     "/{country_id}",
     response_model=CountryPublic,
+    dependencies=[Depends(permission_dependency("update_location"))],
 )
 def update_country(
     country_id: int,
@@ -104,6 +106,7 @@ def update_country(
 @state_router.post(
     "/",
     response_model=StatePublic,
+    dependencies=[Depends(permission_dependency("create_location"))],
 )
 def create_state(
     *,
@@ -121,6 +124,7 @@ def create_state(
 @state_router.get(
     "/",
     response_model=list[StatePublic],
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state(
     session: SessionDep,
@@ -133,6 +137,7 @@ def get_state(
 @state_router.get(
     "/{state_id}",
     response_model=StatePublic,
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state_by_id(
     state_id: int,
@@ -148,6 +153,7 @@ def get_state_by_id(
 @state_router.put(
     "/{state_id}",
     response_model=StatePublic,
+    dependencies=[Depends(permission_dependency("update_location"))],
 )
 def update_state(
     *,
@@ -173,6 +179,7 @@ def update_state(
 @district_router.post(
     "/",
     response_model=DistrictPublic,
+    dependencies=[Depends(permission_dependency("create_location"))],
 )
 def create_district(
     *,
@@ -190,6 +197,7 @@ def create_district(
 @district_router.get(
     "/",
     response_model=list[DistrictPublic],
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district(
     session: SessionDep,
@@ -202,6 +210,7 @@ def get_district(
 @district_router.get(
     "/{district_id}",
     response_model=DistrictPublic,
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district_by_id(
     district_id: int,
@@ -217,6 +226,7 @@ def get_district_by_id(
 @district_router.put(
     "/{district_id}",
     response_model=DistrictPublic,
+    dependencies=[Depends(permission_dependency("update_location"))],
 )
 def update_district(
     *,
@@ -242,6 +252,7 @@ def update_district(
 @block_router.post(
     "/",
     response_model=BlockPublic,
+    dependencies=[Depends(permission_dependency("create_location"))],
 )
 def create_block(
     *,
@@ -259,6 +270,7 @@ def create_block(
 @block_router.get(
     "/",
     response_model=list[BlockPublic],
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block(
     session: SessionDep,
@@ -271,6 +283,7 @@ def get_block(
 @block_router.get(
     "/{block_id}",
     response_model=BlockPublic,
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block_by_id(
     block_id: int,
@@ -286,6 +299,7 @@ def get_block_by_id(
 @block_router.put(
     "/{block_id}",
     response_model=BlockPublic,
+    dependencies=[Depends(permission_dependency("update_location"))],
 )
 def update_block(
     *,
