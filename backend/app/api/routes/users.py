@@ -8,6 +8,7 @@ from app.api.deps import (
     CurrentUser,
     SessionDep,
     get_current_active_superuser,
+    permission_dependency,
 )
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get(
     "/",
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(permission_dependency("read_user"))],
     response_model=UsersPublic,
 )
 def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
@@ -46,7 +47,9 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
 
 
 @router.post(
-    "/", dependencies=[Depends(get_current_active_superuser)], response_model=UserPublic
+    "/",
+    dependencies=[Depends(permission_dependency("create_user"))],
+    response_model=UserPublic,
 )
 def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     """
@@ -72,7 +75,11 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     return user
 
 
-@router.patch("/me", response_model=UserPublic)
+@router.patch(
+    "/me",
+    response_model=UserPublic,
+    dependencies=[Depends(permission_dependency("update_user"))],
+)
 def update_user_me(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
@@ -94,7 +101,11 @@ def update_user_me(
     return current_user
 
 
-@router.patch("/me/password", response_model=Message)
+@router.patch(
+    "/me/password",
+    response_model=Message,
+    dependencies=[Depends(permission_dependency("update_user"))],
+)
 def update_password_me(
     *, session: SessionDep, body: UpdatePassword, current_user: CurrentUser
 ) -> Any:
@@ -114,7 +125,11 @@ def update_password_me(
     return Message(message="Password updated successfully")
 
 
-@router.get("/me", response_model=UserPublic)
+@router.get(
+    "/me",
+    response_model=UserPublic,
+    dependencies=[Depends(permission_dependency("read_user"))],
+)
 def read_user_me(current_user: CurrentUser) -> Any:
     """
     Get current user.
@@ -122,7 +137,11 @@ def read_user_me(current_user: CurrentUser) -> Any:
     return current_user
 
 
-@router.delete("/me", response_model=Message)
+@router.delete(
+    "/me",
+    response_model=Message,
+    dependencies=[Depends(permission_dependency("delete_user"))],
+)
 def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     Delete own user.
@@ -136,7 +155,11 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     return Message(message="User deleted successfully")
 
 
-@router.post("/signup", response_model=UserPublic)
+@router.post(
+    "/signup",
+    response_model=UserPublic,
+    dependencies=[Depends(permission_dependency("create_user"))],
+)
 def register_user(session: SessionDep, user_in: UserCreate) -> Any:
     """
     Create new user without the need to be logged in.
@@ -152,7 +175,11 @@ def register_user(session: SessionDep, user_in: UserCreate) -> Any:
     return user
 
 
-@router.get("/{user_id}", response_model=UserPublic)
+@router.get(
+    "/{user_id}",
+    response_model=UserPublic,
+    dependencies=[Depends(permission_dependency("read_user"))],
+)
 def read_user_by_id(
     user_id: int, session: SessionDep, current_user: CurrentUser
 ) -> Any:
@@ -172,7 +199,7 @@ def read_user_by_id(
 
 @router.patch(
     "/{user_id}",
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(permission_dependency("update_user"))],
     response_model=UserPublic,
 )
 def update_user(

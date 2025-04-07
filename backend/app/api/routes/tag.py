@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import not_, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Message,
     Tag,
@@ -16,8 +16,16 @@ from app.models import (
     TagUpdate,
 )
 
-router_tagtype = APIRouter(prefix="/tagtype", tags=["TagType"])
-router_tag = APIRouter(prefix="/tag", tags=["Tag"])
+router_tagtype = APIRouter(
+    prefix="/tagtype",
+    tags=["TagType"],
+    dependencies=[Depends(permission_dependency("create_tag"))],
+)
+router_tag = APIRouter(
+    prefix="/tag",
+    tags=["Tag"],
+    dependencies=[Depends(permission_dependency("create_tag"))],
+)
 
 
 # Routers fro Tag-Types

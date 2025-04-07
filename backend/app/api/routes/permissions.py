@@ -1,9 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import func, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Message,
     Permission,
@@ -16,7 +16,11 @@ from app.models import (
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 
 
-@router.get("/", response_model=PermissionsPublic)
+@router.get(
+    "/",
+    response_model=PermissionsPublic,
+    dependencies=[Depends(permission_dependency("create_permission"))],
+)
 def read_permissions(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     """
     Retrieve permissions.
@@ -50,7 +54,11 @@ def read_permissions(session: SessionDep, skip: int = 0, limit: int = 100) -> An
     return PermissionsPublic(data=permissions, count=count)
 
 
-@router.get("/{id}", response_model=PermissionPublic)
+@router.get(
+    "/{id}",
+    response_model=PermissionPublic,
+    dependencies=[Depends(permission_dependency("read_permission"))],
+)
 def read_permission(session: SessionDep, id: int) -> Any:
     """
     Get permission by ID.
@@ -63,8 +71,16 @@ def read_permission(session: SessionDep, id: int) -> Any:
     return permission
 
 
-@router.post("/", response_model=PermissionPublic)
-def create_permission(*, session: SessionDep, permission_in: PermissionCreate) -> Any:
+@router.post(
+    "/",
+    response_model=PermissionPublic,
+    dependencies=[Depends(permission_dependency("create_permission"))],
+)
+def create_permission(
+    *,
+    session: SessionDep,
+    permission_in: PermissionCreate,
+) -> Any:
     """
     Create new permission.
     """
@@ -75,7 +91,11 @@ def create_permission(*, session: SessionDep, permission_in: PermissionCreate) -
     return permission
 
 
-@router.put("/{id}", response_model=PermissionPublic)
+@router.put(
+    "/{id}",
+    response_model=PermissionPublic,
+    dependencies=[Depends(permission_dependency("update_permission"))],
+)
 def update_permission(
     *,
     session: SessionDep,
@@ -99,7 +119,11 @@ def update_permission(
     return permission
 
 
-@router.patch("/{id}")
+@router.patch(
+    "/{id}",
+    response_model=PermissionPublic,
+    dependencies=[Depends(permission_dependency("create_organization"))],
+)
 def set_visibility_permission(
     session: SessionDep,
     id: int,
@@ -118,7 +142,10 @@ def set_visibility_permission(
     return permission
 
 
-@router.delete("/{id}")
+@router.delete(
+    "/{id}",
+    dependencies=[Depends(permission_dependency("create_organization"))],
+)
 def delete_permission(session: SessionDep, id: int) -> Message:
     """
     Delete an permission.
