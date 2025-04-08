@@ -8,7 +8,9 @@ from app.tests.utils.user import create_random_user
 from ...utils.utils import random_lower_string
 
 
-def setup_user_organization(db: SessionDep) -> tuple[User, Organization]:
+def setup_user_organization(
+    db: SessionDep,
+) -> tuple[User, Organization]:
     user = create_random_user(db)
     organization = Organization(name=random_lower_string())
     db.add(organization)
@@ -17,7 +19,9 @@ def setup_user_organization(db: SessionDep) -> tuple[User, Organization]:
     return user, organization
 
 
-def test_create_tagtype(client: TestClient, db: SessionDep) -> None:
+def test_create_tagtype(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     user, organization = setup_user_organization(db)
 
     data = {
@@ -27,7 +31,11 @@ def test_create_tagtype(client: TestClient, db: SessionDep) -> None:
         "created_by_id": user.id,
     }
 
-    response = client.post(f"{settings.API_V1_STR}/tagtype/", json=data)
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
@@ -45,7 +53,11 @@ def test_create_tagtype(client: TestClient, db: SessionDep) -> None:
         "created_by_id": user.id,
     }
 
-    response = client.post(f"{settings.API_V1_STR}/tagtype/", json=data)
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
@@ -58,7 +70,11 @@ def test_create_tagtype(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data
 
 
-def test_get_tagtype(client: TestClient, db: SessionDep) -> None:
+def test_get_tagtype(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -68,7 +84,10 @@ def test_get_tagtype(client: TestClient, db: SessionDep) -> None:
     )
     db.add(tagtype)
     db.commit()
-    response = client.get(f"{settings.API_V1_STR}/tagtype/")
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     total_length = len(response_data) - 1
@@ -82,7 +101,11 @@ def test_get_tagtype(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data[total_length]
 
 
-def test_get_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
+def test_get_tagtype_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -92,7 +115,10 @@ def test_get_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     )
     db.add(tagtype)
     db.commit()
-    response = client.get(f"{settings.API_V1_STR}/tagtype/{tagtype.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == tagtype.name
@@ -105,7 +131,11 @@ def test_get_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data
 
 
-def test_update_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
+def test_update_tagtype_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     user_b, organization_b = setup_user_organization(db)
     tagtype = TagType(
@@ -129,7 +159,11 @@ def test_update_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
         "organization_id": organization_b.id,
         "created_by_id": user_b.id,
     }
-    response = client.put(f"{settings.API_V1_STR}/tagtype/{tagtype.id}", json=data)
+    response = client.put(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
@@ -141,7 +175,11 @@ def test_update_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
-    response = client.put(f"{settings.API_V1_STR}/tagtype/{tagtype.id}", json=data_b)
+    response = client.put(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        json=data_b,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data_b["name"]
@@ -154,7 +192,11 @@ def test_update_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data
 
 
-def test_visibility_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
+def test_visibility_tagtype_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -165,7 +207,9 @@ def test_visibility_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     db.add(tagtype)
     db.commit()
     response = client.patch(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}", params={"is_active": True}
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
     )
     response_data = response.json()
 
@@ -179,7 +223,9 @@ def test_visibility_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == tagtype.created_by_id
     response = client.patch(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}", json={"is_active": False}
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        json={"is_active": False},
+        headers=get_user_superadmin_token,
     )
     response_data = response.json()
     assert response.status_code == 200
@@ -193,7 +239,11 @@ def test_visibility_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     assert response_data["created_by_id"] == tagtype.created_by_id
 
 
-def test_delete_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
+def test_delete_tagtype_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -203,11 +253,17 @@ def test_delete_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
     )
     db.add(tagtype)
     db.commit()
-    response = client.delete(f"{settings.API_V1_STR}/tagtype/{tagtype.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert "delete" in response_data["message"]
-    response = client.get(f"{settings.API_V1_STR}/tagtype/{tagtype.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 404
 
@@ -218,7 +274,11 @@ def test_delete_tagtype_by_id(client: TestClient, db: SessionDep) -> None:
 # Create a Tag
 
 
-def test_create_tag(client: TestClient, db: SessionDep) -> None:
+def test_create_tag(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
 
     tagtype = TagType(
@@ -238,7 +298,11 @@ def test_create_tag(client: TestClient, db: SessionDep) -> None:
         "tag_type_id": tagtype.id,
         "created_by_id": user_b.id,
     }
-    response = client.post(f"{settings.API_V1_STR}/tag/", json=data)
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
@@ -254,7 +318,11 @@ def test_create_tag(client: TestClient, db: SessionDep) -> None:
         "tag_type_id": tagtype.id,
         "created_by_id": user_b.id,
     }
-    response = client.post(f"{settings.API_V1_STR}/tag/", json=data)
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
@@ -266,8 +334,15 @@ def test_create_tag(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data
 
 
-def test_read_tag(client: TestClient, db: SessionDep) -> None:
-    response = client.get(f"{settings.API_V1_STR}/tag/")
+def test_read_tag(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
 
@@ -292,7 +367,10 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
     db.add(tag)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/tag/")
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     total_length = len(response_data) - 1
@@ -306,7 +384,11 @@ def test_read_tag(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data[1]
 
 
-def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
+def test_read_tag_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -328,7 +410,10 @@ def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
     db.add(tag)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/tag/{tag.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == tag.name
@@ -341,7 +426,11 @@ def test_read_tag_by_id(client: TestClient, db: SessionDep) -> None:
     assert "modified_date" in response_data
 
 
-def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
+def test_update_tag_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -378,7 +467,11 @@ def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
         "created_by_id": user.id,
         "organization_id": organization.id,
     }
-    response = client.put(f"{settings.API_V1_STR}/tag/{tag.id}", json=data_a)
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json=data_a,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data_a["name"]
@@ -390,7 +483,11 @@ def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
-    response = client.put(f"{settings.API_V1_STR}/tag/{tag.id}", json=data_b)
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json=data_b,
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data_b["name"]
@@ -399,7 +496,11 @@ def test_update_tag_by_id(client: TestClient, db: SessionDep) -> None:
     assert response_data["organization_id"] == tagtype.organization_id
 
 
-def test_visibility_tag_by_id(client: TestClient, db: SessionDep) -> None:
+def test_visibility_tag_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -424,7 +525,9 @@ def test_visibility_tag_by_id(client: TestClient, db: SessionDep) -> None:
     assert tag.is_active is None
 
     response = client.patch(
-        f"{settings.API_V1_STR}/tag/{tag.id}", params={"is_active": True}
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
     )
     response_data = response.json()
     assert response.status_code == 200
@@ -439,7 +542,9 @@ def test_visibility_tag_by_id(client: TestClient, db: SessionDep) -> None:
     assert response_data["created_by_id"] == user_b.id
 
     response = client.patch(
-        f"{settings.API_V1_STR}/tag/{tag.id}", json={"is_active": False}
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json={"is_active": False},
+        headers=get_user_superadmin_token,
     )
     response_data = response.json()
     assert response.status_code == 200
@@ -454,7 +559,11 @@ def test_visibility_tag_by_id(client: TestClient, db: SessionDep) -> None:
     assert response_data["created_by_id"] == user_b.id
 
 
-def test_delete_tag_by_id(client: TestClient, db: SessionDep) -> None:
+def test_delete_tag_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
@@ -476,16 +585,25 @@ def test_delete_tag_by_id(client: TestClient, db: SessionDep) -> None:
     db.add(tag)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/tag/{tag.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert "id" in response_data
 
-    response = client.delete(f"{settings.API_V1_STR}/tag/{tag.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 200
     assert "delete" in response_data["message"]
-    response = client.get(f"{settings.API_V1_STR}/tag/{tag.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
     response_data = response.json()
     assert response.status_code == 404
     assert response_data["detail"] == "Tag not found"

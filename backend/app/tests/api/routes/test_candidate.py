@@ -14,12 +14,17 @@ from app.tests.utils.user import create_random_user
 from ...utils.utils import random_lower_string
 
 
-def test_create_candidate(client: TestClient, db: SessionDep) -> None:
+def test_create_candidate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_candidate_token: dict[str, str],
+) -> None:
     user = create_random_user(db)
 
     response = client.post(
         f"{settings.API_V1_STR}/candidate/",
         json={"user_id": user.id},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -29,6 +34,7 @@ def test_create_candidate(client: TestClient, db: SessionDep) -> None:
 
     response = client.post(
         f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_candidate_token,
         json={},
     )
     data = response.json()
@@ -36,13 +42,20 @@ def test_create_candidate(client: TestClient, db: SessionDep) -> None:
     assert "id" in data
 
 
-def test_read_candidate(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_testadmin_token: dict[str, str],
+) -> None:
     user = create_random_user(db)
     candidate = Candidate(user_id=user.id)
     db.add(candidate)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/candidate")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate",
+        headers=get_user_testadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     current_index = len(data) - 1
@@ -52,14 +65,21 @@ def test_read_candidate(client: TestClient, db: SessionDep) -> None:
     db.add(candidate)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/candidate")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate",
+        headers=get_user_testadmin_token,
+    )
     data = response.json()
     current_index = len(data) - 1
     assert response.status_code == 200
     assert data[current_index]["user_id"] is None
 
 
-def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+) -> None:
     user_a = create_random_user(db)
     user_b = create_random_user(db)
 
@@ -71,7 +91,10 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     db.add_all([candidate_a, candidate_aa, candidate_b, candidate_c])
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/candidate/{candidate_aa.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
+        headers=get_user_stateadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -86,7 +109,10 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["is_active"] is None
     assert data["is_deleted"] is False
 
-    response = client.get(f"{settings.API_V1_STR}/candidate/{candidate_b.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_b.id}",
+        headers=get_user_stateadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -101,7 +127,10 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["is_active"] is None
     assert data["is_deleted"] is False
 
-    response = client.get(f"{settings.API_V1_STR}/candidate/{candidate_c.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_c.id}",
+        headers=get_user_stateadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -117,7 +146,9 @@ def test_read_candidate_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["is_deleted"] is False
 
 
-def test_update_candidate(client: TestClient, db: SessionDep) -> None:
+def test_update_candidate(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
     user_a = create_random_user(db)
     user_b = create_random_user(db)
 
@@ -132,6 +163,7 @@ def test_update_candidate(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
         json={"user_id": user_b.id},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -141,6 +173,7 @@ def test_update_candidate(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
         json={"user_id": None},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -150,6 +183,7 @@ def test_update_candidate(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/candidate/{candidate_c.id}",
         json={"user_id": user_a.id},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -157,7 +191,9 @@ def test_update_candidate(client: TestClient, db: SessionDep) -> None:
     assert data["user_id"] == user_a.id
 
 
-def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
+def test_visibility_candidate(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
     user_a = create_random_user(db)
     user_b = create_random_user(db)
 
@@ -169,7 +205,9 @@ def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
     db.commit()
 
     response = client.patch(
-        f"{settings.API_V1_STR}/candidate/{candidate_aa.id}", params={"is_active": True}
+        f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
+        params={"is_active": True},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -180,6 +218,7 @@ def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
     response = client.patch(
         f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
         params={"is_active": False},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -190,6 +229,7 @@ def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
     response = client.patch(
         f"{settings.API_V1_STR}/candidate/{candidate_c.id}",
         params={"is_active": False},
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -198,7 +238,9 @@ def test_visibility_candidate(client: TestClient, db: SessionDep) -> None:
     assert data["is_active"] is not True and not None
 
 
-def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
+def test_delete_candidate(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     user_a = create_random_user(db)
     user_b = create_random_user(db)
 
@@ -209,13 +251,19 @@ def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
     db.add_all([candidate_aa, candidate_b, candidate_c])
     db.commit()
 
-    response = client.delete(f"{settings.API_V1_STR}/candidate/{candidate_aa.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
 
     assert "delete" in data["message"]
 
-    response = client.get(f"{settings.API_V1_STR}/candidate/{candidate_aa.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_aa.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 404
@@ -225,7 +273,9 @@ def test_delete_candidate(client: TestClient, db: SessionDep) -> None:
 # Test cases for Candidate and Tests
 
 
-def test_create_candidate_test(client: TestClient, db: SessionDep) -> None:
+def test_create_candidate_test(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
@@ -268,6 +318,7 @@ def test_create_candidate_test(client: TestClient, db: SessionDep) -> None:
             "end_time": end_time,
             "is_submitted": False,
         },
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -281,7 +332,9 @@ def test_create_candidate_test(client: TestClient, db: SessionDep) -> None:
     assert data["is_submitted"] is False
 
 
-def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate_test(
+    client: TestClient, db: SessionDep, get_user_stateadmin_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
@@ -325,7 +378,10 @@ def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
 
     db.add(candidate_test)
     db.commit()
-    response = client.get(f"{settings.API_V1_STR}/candidate_test/")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate_test/",
+        headers=get_user_stateadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     current_index = len(data) - 1
@@ -340,7 +396,9 @@ def test_read_candidate_test(client: TestClient, db: SessionDep) -> None:
     assert current_data["is_submitted"] is False
 
 
-def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate_test_by_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate_a = Candidate(user_id=user.id)
@@ -403,7 +461,10 @@ def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
     db.add(candidate_b_test)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate_test/{candidate_a_test.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert "id" in data
@@ -416,7 +477,9 @@ def test_read_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["is_submitted"] is False
 
 
-def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None:
+def test_update_candidate_test_by_id(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate_a = Candidate(user_id=user.id)
@@ -490,6 +553,7 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
             "end_time": end_time_a,
             "is_submitted": is_submitted,
         },
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -509,6 +573,7 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
             "end_time": end_time_a,
             "is_submitted": is_submitted,
         },
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -529,6 +594,7 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
             "end_time": end_time_b,
             "is_submitted": is_submitted,
         },
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -550,6 +616,7 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
             "end_time": end_time_b,
             "is_submitted": True,
         },
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -567,7 +634,9 @@ def test_update_candidate_test_by_id(client: TestClient, db: SessionDep) -> None
 # Test cases for Candidate-Tests & Answers
 
 
-def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> None:
+def test_create_candidate_test_answers(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
@@ -628,6 +697,7 @@ def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> No
             "visited": False,
             "time_spent": 4,
         },
+        headers=get_user_candidate_token,
     )
 
     data = response.json()
@@ -639,98 +709,9 @@ def test_create_candidate_test_answers(client: TestClient, db: SessionDep) -> No
     assert data["time_spent"] == 4
 
 
-def test_read_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
-    user = create_random_user(db)
-
-    candidate = Candidate(user_id=user.id)
-
-    db.add(candidate)
-    db.commit()
-
-    test = Test(
-        name=random_lower_string(),
-        description=random_lower_string(),
-        time_limit=5,
-        marks=10,
-        completion_message=random_lower_string(),
-        start_instructions=random_lower_string(),
-        marks_level=None,
-        link=random_lower_string(),
-        no_of_attempts=1,
-        shuffle=False,
-        random_questions=False,
-        no_of_questions=2,
-        question_pagination=1,
-        is_template=True,
-        created_by_id=user.id,
-    )
-    db.add(test)
-    db.commit()
-
-    device = random_lower_string()
-    start_time = "2025-02-10T10:00:00Z"
-    end_time = "2025-03-14T12:00:00Z"
-    consent = True
-    is_submitted = False
-
-    candidate_test = CandidateTest(
-        test_id=test.id,
-        candidate_id=candidate.id,
-        device=device,
-        consent=consent,
-        start_time=start_time,
-        end_time=end_time,
-        is_submitted=is_submitted,
-    )
-
-    db.add(candidate_test)
-    db.commit()
-
-    question_a = Question(question=random_lower_string())
-    question_b = Question(question=random_lower_string())
-    db.add_all([question_a, question_b])
-    db.commit()
-
-    response_a = random_lower_string()
-    response_b = random_lower_string()
-
-    candidate_test_answer_a = CandidateTestAnswer(
-        candidate_test_id=candidate_test.id,
-        question_revision_id=question_a.id,
-        response=response_a,
-        visited=False,
-        time_spent=4,
-    )
-
-    candidate_test_answer_b = CandidateTestAnswer(
-        candidate_test_id=candidate_test.id,
-        question_revision_id=question_b.id,
-        response=response_b,
-        visited=True,
-        time_spent=56,
-    )
-
-    db.add_all([candidate_test_answer_a, candidate_test_answer_b])
-    db.commit()
-
-    response = client.get(f"{settings.API_V1_STR}/candidate_test_answer/")
-    data = response.json()
-    assert response.status_code == 200
-    latest_data = data[len(data) - 1]
-    previous_data = data[len(data) - 2]
-    assert previous_data["candidate_test_id"] == candidate_test.id
-    assert previous_data["question_revision_id"] == question_a.id
-    assert previous_data["response"] == response_a
-    assert previous_data["visited"] is False
-    assert previous_data["time_spent"] == 4
-    assert latest_data["candidate_test_id"] == candidate_test.id
-    assert latest_data["question_revision_id"] == question_b.id
-    assert latest_data["response"] == response_b
-    assert latest_data["visited"] is True
-    assert latest_data["time_spent"] == 56
-
-
-def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) -> None:
+def test_read_candidate_test_answer(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate = Candidate(user_id=user.id)
@@ -805,7 +786,104 @@ def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) ->
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate_test_answer/{candidate_test_answer_a.id}"
+        f"{settings.API_V1_STR}/candidate_test_answer/",
+        headers=get_user_systemadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    latest_data = data[len(data) - 1]
+    previous_data = data[len(data) - 2]
+    assert previous_data["candidate_test_id"] == candidate_test.id
+    assert previous_data["question_revision_id"] == question_a.id
+    assert previous_data["response"] == response_a
+    assert previous_data["visited"] is False
+    assert previous_data["time_spent"] == 4
+    assert latest_data["candidate_test_id"] == candidate_test.id
+    assert latest_data["question_revision_id"] == question_b.id
+    assert latest_data["response"] == response_b
+    assert latest_data["visited"] is True
+    assert latest_data["time_spent"] == 56
+
+
+def test_read_candidate_test_answer_by_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    candidate = Candidate(user_id=user.id)
+
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    device = random_lower_string()
+    start_time = "2025-02-10T10:00:00Z"
+    end_time = "2025-03-14T12:00:00Z"
+    consent = True
+    is_submitted = False
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=device,
+        consent=consent,
+        start_time=start_time,
+        end_time=end_time,
+        is_submitted=is_submitted,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+
+    question_a = Question(question=random_lower_string())
+    question_b = Question(question=random_lower_string())
+    db.add_all([question_a, question_b])
+    db.commit()
+
+    response_a = random_lower_string()
+    response_b = random_lower_string()
+
+    candidate_test_answer_a = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_a.id,
+        response=response_a,
+        visited=False,
+        time_spent=4,
+    )
+
+    candidate_test_answer_b = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_b.id,
+        response=response_b,
+        visited=True,
+        time_spent=56,
+    )
+
+    db.add_all([candidate_test_answer_a, candidate_test_answer_b])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate_test_answer/{candidate_test_answer_a.id}",
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -817,7 +895,9 @@ def test_read_candidate_test_answer_by_id(client: TestClient, db: SessionDep) ->
     assert data["time_spent"] == 4
 
 
-def test_update_candidate_test_answer(client: TestClient, db: SessionDep) -> None:
+def test_update_candidate_test_answer(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
     user = create_random_user(db)
 
     candidate = Candidate()
@@ -898,6 +978,7 @@ def test_update_candidate_test_answer(client: TestClient, db: SessionDep) -> Non
             "visited": True,
             "time_spent": 56,
         },
+        headers=get_user_candidate_token,
     )
     data = response.json()
     assert response.status_code == 200
