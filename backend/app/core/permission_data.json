@@ -513,6 +513,15 @@
     "candidate": false
   },
   {
+    "name": "update_user_me",
+    "description": "Update Own User Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": true
+  },
+  {
     "name": "delete_user",
     "description": "Delete Existing User",
     "super_admin": true,
