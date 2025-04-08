@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any, TypedDict
 
 from fastapi import APIRouter, Body, HTTPException
 from sqlmodel import and_, select
@@ -31,7 +32,7 @@ def build_question_response(
     question: Question,
     revision: QuestionRevision,
     locations: list[QuestionLocation],
-    tags: list[Tag] = None,
+    tags: list[Tag] | None = None,
 ) -> QuestionPublic:
     """Build a standardized QuestionPublic response."""
     # Convert complex types to dictionaries for JSON serialization
@@ -110,18 +111,20 @@ def build_question_response(
     )
 
 
-def prepare_for_db(data):
+def prepare_for_db(
+    data: QuestionCreate | QuestionRevisionCreate,
+) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
+    options: list[dict[str, Any]] | None = None
     if data.options:
         options = [
             opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
             for opt in data.options
         ]
-    else:
-        options = None
 
     # Handle marking scheme
+    marking_scheme: dict[str, Any] | None = None
     if (
         data.marking_scheme
         and hasattr(data.marking_scheme, "dict")
@@ -132,6 +135,7 @@ def prepare_for_db(data):
         marking_scheme = data.marking_scheme
 
     # Handle media
+    media: dict[str, Any] | None = None
     if data.media and hasattr(data.media, "dict") and callable(data.media.dict):
         media = data.media.dict()
     else:
@@ -175,7 +179,7 @@ def create_question(
 
     question.last_revision_id = revision.id
 
-    locations = []
+    locations: list[QuestionLocation] = []
     if any(
         [
             question_create.state_id,
@@ -192,7 +196,7 @@ def create_question(
         session.add(location)
         locations.append(location)
 
-    tags = []
+    tags: list[Tag] = []
     if question_create.tag_ids:
         for tag_id in question_create.tag_ids:
             tag = session.get(Tag, tag_id)
@@ -210,18 +214,71 @@ def create_question(
     return build_question_response(question, revision, locations, tags)
 
 
+# TypedDict classes with all required fields
+class QuestionRevisionInfo(TypedDict):
+    id: int
+    created_date: datetime
+    text: str
+    type: str
+    is_current: bool
+    created_by_id: int
+
+
+class RevisionDetailDict(TypedDict):
+    id: int
+    question_id: int
+    created_date: datetime
+    modified_date: datetime
+    is_active: bool | None
+    is_deleted: bool | None
+    question_text: str
+    instructions: str | None
+    question_type: str
+    options: list[dict[str, Any]] | None
+    correct_answer: Any
+    subjective_answer_limit: int | None
+    is_mandatory: bool
+    marking_scheme: dict[str, Any] | None
+    solution: str | None
+    media: dict[str, Any] | None
+    is_current: bool
+    created_by_id: int
+
+
+class QuestionTagResponse(TypedDict):
+    id: int
+    question_id: int
+    tag_id: int
+    tag_name: str
+    created_date: datetime
+
+
+class TestInfoDict(TypedDict):
+    id: int
+    name: str
+    created_date: datetime
+
+
+class CandidateTestInfoDict(TypedDict):
+    id: int
+    candidate_id: int
+    test_id: int
+    start_time: datetime
+    is_submitted: bool
+
+
 @router.get("/", response_model=list[QuestionPublic])
 def get_questions(
     session: SessionDep,
     skip: int = 0,
     limit: int = 100,
-    organization_id: int = None,
-    state_id: int = None,
-    district_id: int = None,
-    block_id: int = None,
-    tag_id: int = None,
-    created_by_id: int = None,
-    is_active: bool = None,
+    organization_id: int | None = None,
+    state_id: int | None = None,
+    district_id: int | None = None,
+    block_id: int | None = None,
+    tag_id: int | None = None,
+    created_by_id: int | None = None,
+    is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
@@ -250,13 +307,13 @@ def get_questions(
 
     # Handle creator-based filtering
     if created_by_id is not None:
-        questions_by_creator = []
+        questions_by_creator: list[int] = []
         all_questions = session.exec(query).all()
 
         for q in all_questions:
-            if q.last_revision_id:
+            if q.last_revision_id is not None:
                 revision = session.get(QuestionRevision, q.last_revision_id)
-                if revision and revision.created_by_id == created_by_id:
+                if revision is not None and revision.created_by_id == created_by_id:
                     questions_by_creator.append(q.id)
 
         if questions_by_creator:
@@ -265,7 +322,7 @@ def get_questions(
             return []
 
     # Handle location-based filtering
-    if any([state_id, district_id, block_id]):
+    if any([state_id is not None, district_id is not None, block_id is not None]):
         location_query = select(QuestionLocation.question_id)
         location_filters = []
 
@@ -290,14 +347,14 @@ def get_questions(
     # Execute query and get all questions
     questions = session.exec(query).all()
 
-    result = []
+    result: list[QuestionPublic] = []
     for question in questions:
         # Skip questions without a valid last_revision_id
-        if not question.last_revision_id:
+        if question.last_revision_id is None:
             continue
 
         latest_revision = session.get(QuestionRevision, question.last_revision_id)
-        if not latest_revision:
+        if latest_revision is None:
             continue
 
         locations_query = select(QuestionLocation).where(
@@ -311,7 +368,7 @@ def get_questions(
         tags = session.exec(tags_query).all()
 
         question_data = build_question_response(
-            question, latest_revision, locations, tags
+            question, latest_revision, list(locations), list(tags)
         )
         result.append(question_data)
 
@@ -326,7 +383,7 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
         raise HTTPException(status_code=404, detail="Question not found")
 
     latest_revision = session.get(QuestionRevision, question.last_revision_id)
-    if not latest_revision:
+    if latest_revision is None:
         raise HTTPException(status_code=404, detail="Question revision not found")
 
     locations_query = select(QuestionLocation).where(
@@ -339,14 +396,16 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(question, latest_revision, locations, tags)
+    return build_question_response(
+        question, latest_revision, list(locations), list(tags)
+    )
 
 
 @router.put("/{question_id}", response_model=QuestionPublic)
 def update_question(
     question_id: int,
     updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
-    session: SessionDep = None,
+    session: SessionDep = Body(...),
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
@@ -364,6 +423,8 @@ def update_question(
     session.refresh(question)
 
     latest_revision = session.get(QuestionRevision, question.last_revision_id)
+    if latest_revision is None:
+        raise HTTPException(status_code=404, detail="Question revision not found")
 
     locations_query = select(QuestionLocation).where(
         QuestionLocation.question_id == question.id
@@ -375,7 +436,9 @@ def update_question(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(question, latest_revision, locations, tags)
+    return build_question_response(
+        question, latest_revision, list(locations), list(tags)
+    )
 
 
 @router.post("/{question_id}/revisions", response_model=QuestionPublic)
@@ -426,11 +489,13 @@ def create_question_revision(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(question, new_revision, locations, tags)
+    return build_question_response(question, new_revision, list(locations), list(tags))
 
 
-@router.get("/{question_id}/revisions", response_model=list[dict])
-def get_question_revisions(question_id: int, session: SessionDep) -> list[dict]:
+@router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])
+def get_question_revisions(
+    question_id: int, session: SessionDep
+) -> list[QuestionRevisionInfo]:
     """Get all revisions for a question."""
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
@@ -443,25 +508,41 @@ def get_question_revisions(question_id: int, session: SessionDep) -> list[dict]:
     )
     revisions = session.exec(revisions_query).all()
 
-    return [
-        {
-            "id": rev.id,
-            "created_date": rev.created_date,
-            "text": rev.question_text,
-            "type": rev.question_type,
-            "is_current": rev.id == question.last_revision_id,
-            "created_by_id": rev.created_by_id,
-        }
-        for rev in revisions
-    ]
+    result: list[QuestionRevisionInfo] = []
+    for rev in revisions:
+        # Ensure all fields have non-None values before creating TypedDict
+        if rev.id is not None and rev.created_date is not None:
+            result.append(
+                QuestionRevisionInfo(
+                    id=rev.id,
+                    created_date=rev.created_date,
+                    text=rev.question_text,
+                    type=rev.question_type,
+                    is_current=(rev.id == question.last_revision_id),
+                    created_by_id=rev.created_by_id,
+                )
+            )
+
+    return result
 
 
-@router.get("/revisions/{revision_id}", response_model=dict)
-def get_revision(revision_id: int, session: SessionDep) -> dict:
+@router.get("/revisions/{revision_id}", response_model=RevisionDetailDict)
+def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     """Get a specific question revision by its ID."""
     revision = session.get(QuestionRevision, revision_id)
-    if not revision:
+    if revision is None:
         raise HTTPException(status_code=404, detail="Revision not found")
+
+    # Ensure we have non-None values for required fields
+    if (
+        revision.id is None
+        or revision.question_id is None
+        or revision.created_date is None
+        or revision.modified_date is None
+    ):
+        raise HTTPException(
+            status_code=500, detail="Revision has missing required fields"
+        )
 
     # Check if parent question exists and is not deleted
     question = session.get(Question, revision.question_id)
@@ -490,26 +571,26 @@ def get_revision(revision_id: int, session: SessionDep) -> dict:
     )
 
     # Return as dict instead of model to add dynamic is_current attribute
-    return {
-        "id": revision.id,
-        "question_id": revision.question_id,
-        "created_date": revision.created_date,
-        "modified_date": revision.modified_date,
-        "is_active": revision.is_active,
-        "is_deleted": revision.is_deleted,
-        "question_text": revision.question_text,
-        "instructions": revision.instructions,
-        "question_type": revision.question_type,
-        "options": options_dict,
-        "correct_answer": revision.correct_answer,
-        "subjective_answer_limit": revision.subjective_answer_limit,
-        "is_mandatory": revision.is_mandatory,
-        "marking_scheme": marking_scheme_dict,
-        "solution": revision.solution,
-        "media": media_dict,
-        "is_current": revision.id == question.last_revision_id,
-        "created_by_id": revision.created_by_id,
-    }
+    return RevisionDetailDict(
+        id=revision.id,
+        question_id=revision.question_id,
+        created_date=revision.created_date,
+        modified_date=revision.modified_date,
+        is_active=revision.is_active,
+        is_deleted=revision.is_deleted,
+        question_text=revision.question_text,
+        instructions=revision.instructions,
+        question_type=revision.question_type,
+        options=options_dict,
+        correct_answer=revision.correct_answer,
+        subjective_answer_limit=revision.subjective_answer_limit,
+        is_mandatory=revision.is_mandatory,
+        marking_scheme=marking_scheme_dict,
+        solution=revision.solution,
+        media=media_dict,
+        is_current=(revision.id == question.last_revision_id),
+        created_by_id=revision.created_by_id,
+    )
 
 
 @router.post("/{question_id}/locations", response_model=QuestionLocationPublic)
@@ -532,6 +613,10 @@ def add_question_location(
     session.add(location)
     session.commit()
     session.refresh(location)
+
+    # Ensure we have a valid ID after refresh
+    if location.id is None:
+        raise HTTPException(status_code=500, detail="Failed to create location")
 
     # Get related location names for response
     state_name = None
@@ -564,12 +649,12 @@ def add_question_location(
     )
 
 
-@router.post("/{question_id}/tags", response_model=dict)
+@router.post("/{question_id}/tags", response_model=QuestionTagResponse)
 def add_question_tag(
     question_id: int,
     tag_data: QuestionTagCreate,
     session: SessionDep,
-) -> dict:
+) -> QuestionTagResponse:
     """Add a new tag to a question."""
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
@@ -585,8 +670,14 @@ def add_question_tag(
         QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_data.tag_id
     )
     existing = session.exec(existing_query).first()
-    if existing:
-        return {"id": existing.id, "message": "Tag already assigned to this question"}
+    if existing and existing.id is not None and existing.created_date is not None:
+        return QuestionTagResponse(
+            id=existing.id,
+            question_id=existing.question_id,
+            tag_id=existing.tag_id,
+            tag_name=tag.name,
+            created_date=existing.created_date,
+        )
 
     # Create new relationship
     question_tag = QuestionTag(
@@ -597,13 +688,17 @@ def add_question_tag(
     session.commit()
     session.refresh(question_tag)
 
-    return {
-        "id": question_tag.id,
-        "question_id": question_tag.question_id,
-        "tag_id": question_tag.tag_id,
-        "tag_name": tag.name,
-        "created_date": question_tag.created_date,
-    }
+    # Ensure we have valid ID and created_date after refresh
+    if question_tag.id is None or question_tag.created_date is None:
+        raise HTTPException(status_code=500, detail="Failed to create tag relationship")
+
+    return QuestionTagResponse(
+        id=question_tag.id,
+        question_id=question_tag.question_id,
+        tag_id=question_tag.tag_id,
+        tag_name=tag.name,
+        created_date=question_tag.created_date,
+    )
 
 
 @router.delete("/{question_id}/tags/{tag_id}", response_model=Message)
@@ -682,33 +777,47 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     return Message(message="Question deleted successfully")
 
 
-@router.get("/{question_id}/tests", response_model=list[dict])
-def get_question_tests(question_id: int, session: SessionDep) -> list[dict]:
+@router.get("/{question_id}/tests", response_model=list[TestInfoDict])
+def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
     """Get all tests that include this question."""
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    return [
-        {"id": test.id, "name": test.name, "created_date": test.created_date}
-        for test in question.tests
-    ]
+    result: list[TestInfoDict] = []
+    for test in question.tests:
+        # Ensure all required fields are non-None
+        if test.id is not None and test.created_date is not None:
+            result.append(
+                TestInfoDict(id=test.id, name=test.name, created_date=test.created_date)
+            )
+
+    return result
 
 
-@router.get("/{question_id}/candidate-tests", response_model=list[dict])
-def get_question_candidate_tests(question_id: int, session: SessionDep) -> list[dict]:
+@router.get(
+    "/{question_id}/candidate-tests", response_model=list[CandidateTestInfoDict]
+)
+def get_question_candidate_tests(
+    question_id: int, session: SessionDep
+) -> list[CandidateTestInfoDict]:
     """Get all candidate tests that include this question."""
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    return [
-        {
-            "id": ct.id,
-            "candidate_id": ct.candidate_id,
-            "test_id": ct.test_id,
-            "start_time": ct.start_time,
-            "is_submitted": ct.is_submitted,
-        }
-        for ct in question.candidate_test
-    ]
+    result: list[CandidateTestInfoDict] = []
+    for ct in question.candidate_test:
+        # Ensure all required fields are non-None
+        if ct.id is not None and ct.start_time is not None:
+            result.append(
+                CandidateTestInfoDict(
+                    id=ct.id,
+                    candidate_id=ct.candidate_id,
+                    test_id=ct.test_id,
+                    start_time=ct.start_time,
+                    is_submitted=ct.is_submitted,
+                )
+            )
+
+    return result

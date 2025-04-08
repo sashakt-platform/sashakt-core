@@ -23,13 +23,11 @@ class Organization(OrganizationBase, table=True):
     )
     is_active: bool | None = Field(default=None, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
-    tag_types: list["TagType"] = Relationship(back_populates="organization")
-    tags: list["Tag"] = Relationship(back_populates="organization")
-    users: list["User"] = Relationship(back_populates="organization")
 
     # Relationships
     tag_types: list["TagType"] = Relationship(back_populates="organization")
     tags: list["Tag"] = Relationship(back_populates="organization")
+    users: list["User"] = Relationship(back_populates="organization")
     question: list["Question"] = Relationship(back_populates="organization")
 
 
