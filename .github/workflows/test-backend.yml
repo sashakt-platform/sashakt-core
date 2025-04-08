@@ -36,14 +36,11 @@ jobs:
             sleep 2
           done
       - name: Migrate DB
-        run: uv run bash scripts/prestart.sh
-        working-directory: backend
+        run: docker-compose exec backend bash scripts/prestart.sh
       - name: Run tests
-        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-        working-directory: backend
+        run: docker compose exec backend bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         # the generated xml is pushed to codecov
-      - run: uv run pytest --cov=app --cov-branch --cov-report=xml
-        working-directory: backend
+      - run: docker compose exec backend pytest --cov=app --cov-branch --cov-report=xml
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
