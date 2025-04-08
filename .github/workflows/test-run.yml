@@ -1,4 +1,4 @@
-name: Test Backend
+name: Run tests
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
           enable-cache: true
       - run: cp .env.example .env
       - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d db mailcatcher
+      - run: docker compose up -d db mailcatcher backend
       - name: Wait for PostgreSQL
         run: |
           echo "Waiting for PostgreSQL to be healthy..."
