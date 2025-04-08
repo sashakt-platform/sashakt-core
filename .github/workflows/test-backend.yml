@@ -36,7 +36,7 @@ jobs:
             sleep 2
           done
       - name: Migrate DB
-        run: docker-compose exec backend bash scripts/prestart.sh
+        run: docker compose exec backend bash scripts/prestart.sh
       - name: Run tests
         run: docker compose exec backend bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         # the generated xml is pushed to codecov
