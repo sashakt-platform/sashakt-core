@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
-from typing import Any, TypedDict
+from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
 from sqlmodel import and_, select
+from typing_extensions import TypedDict
 
 from app.api.deps import SessionDep
 from app.models import (
@@ -404,8 +405,8 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
 @router.put("/{question_id}", response_model=QuestionPublic)
 def update_question(
     question_id: int,
+    session: SessionDep,
     updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
-    session: SessionDep = Body(...),
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
@@ -760,23 +761,6 @@ def get_question_tags(
     ]
 
 
-@router.delete("/{question_id}")
-def delete_question(question_id: int, session: SessionDep) -> Message:
-    """Soft delete a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Soft delete
-    question.is_deleted = True
-    question.is_active = False
-    question.modified_date = datetime.now(timezone.utc)
-    session.add(question)
-    session.commit()
-
-    return Message(message="Question deleted successfully")
-
-
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])
 def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
     """Get all tests that include this question."""
@@ -821,3 +805,20 @@ def get_question_candidate_tests(
             )
 
     return result
+
+
+@router.delete("/{question_id}")
+def delete_question(question_id: int, session: SessionDep) -> Message:
+    """Soft delete a question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Soft delete
+    question.is_deleted = True
+    question.is_active = False
+    question.modified_date = datetime.now(timezone.utc)
+    session.add(question)
+    session.commit()
+
+    return Message(message="Question deleted successfully")

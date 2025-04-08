@@ -219,30 +219,26 @@ class Question(SQLModel, table=True):
     )
 
     # Relationships
-    revisions: list["QuestionRevision"] = Relationship(
-        back_populates="question", description="All revisions of this question"
-    )
-    locations: list["QuestionLocation"] = Relationship(
-        back_populates="question",
-        description="Geographic locations associated with this question",
-    )
+    # All revisions of this question
+    revisions: list["QuestionRevision"] = Relationship(back_populates="question")
+    # Geographic locations associated with this question
+    locations: list["QuestionLocation"] = Relationship(back_populates="question")
+    # Tags associated with this question
     tags: list["Tag"] = Relationship(
         back_populates="questions",
         link_model=QuestionTag,
-        description="Tags associated with this question",
     )
-    organization: "Organization" = Relationship(
-        back_populates="question", description="Organization that owns this question"
-    )
+    # Organization that owns this question
+    organization: "Organization" = Relationship(back_populates="question")
+    # Tests that include this question
     tests: list["Test"] = Relationship(
         back_populates="test_question_static",
         link_model=TestQuestion,
-        description="Tests that include this question",
     )
+    # Candidate tests that include this question
     candidate_test: list["CandidateTest"] = Relationship(
         back_populates="question_revision",
         link_model=CandidateTestAnswer,
-        description="Candidate tests that include this question",
     )
 
 
@@ -284,13 +280,10 @@ class QuestionRevision(QuestionBase, table=True):
     )
 
     # Relationships
-    question: Question = Relationship(
-        back_populates="revisions", description="Parent question for this revision"
-    )
-    created_by: "User" = Relationship(
-        back_populates="question_revisions",
-        description="User who created this revision",
-    )
+    # Parent question for this revision
+    question: Question = Relationship(back_populates="revisions")
+    # User who created this revision
+    created_by: "User" = Relationship(back_populates="question_revisions")
 
 
 class QuestionLocation(QuestionLocationBase, table=True):
@@ -324,18 +317,14 @@ class QuestionLocation(QuestionLocationBase, table=True):
     )
 
     # Relationships
-    question: Question = Relationship(
-        back_populates="locations", description="Question associated with this location"
-    )
-    state: Optional["State"] = Relationship(
-        description="State associated with this location"
-    )
-    district: Optional["District"] = Relationship(
-        description="District associated with this location"
-    )
-    block: Optional["Block"] = Relationship(
-        description="Block associated with this location"
-    )
+    # Question associated with this location
+    question: Question = Relationship(back_populates="locations")
+    # State associated with this location
+    state: Optional["State"] = Relationship()
+    # District associated with this location
+    district: Optional["District"] = Relationship()
+    # Block associated with this location
+    block: Optional["Block"] = Relationship()
 
 
 class QuestionCreate(SQLModel):
