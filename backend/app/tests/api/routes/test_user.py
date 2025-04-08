@@ -9,6 +9,7 @@ from app.core.security import verify_password
 from app.models import User, UserCreate
 from app.models.role import Role
 from app.tests.utils.role import create_random_role
+from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_email, random_lower_string
 
 
@@ -231,7 +232,7 @@ def test_retrieve_users(
 
 
 def test_update_user_me(
-    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_candidate_token: dict[str, str], db: Session
 ) -> None:
     email = random_email()
     full_name = random_lower_string()
@@ -247,7 +248,7 @@ def test_update_user_me(
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
-        headers=normal_user_token_headers,
+        headers=get_user_candidate_token,
         json=data,
     )
     assert r.status_code == 200
@@ -260,6 +261,24 @@ def test_update_user_me(
     assert user_db
     assert user_db.email == email
     assert user_db.full_name == full_name
+
+    user = create_random_user(db)
+    print("user--->", user)
+
+    data = {
+        "email": user.email,
+        "phone": random_lower_string(),
+        "password": password,
+        "role_id": user.role_id,
+        "full_name": user.full_name,
+    }
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers={"Authorization": f"Bearer {user.token}"},
+        json=data,
+    )
+
+    assert response.status_code == 401
 
 
 def test_update_password_me(
