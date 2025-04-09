@@ -89,7 +89,9 @@ def setup_data(db: SessionDep) -> Any:
     )
 
 
-def test_create_test(client: TestClient, db: SessionDep) -> None:
+def test_create_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     (
         user,
         india,
@@ -124,7 +126,11 @@ def test_create_test(client: TestClient, db: SessionDep) -> None:
         "states": [punjab.id],
     }
 
-    response = client.post(f"{settings.API_V1_STR}/test/", json=payload)
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert data["name"] == payload["name"]
@@ -210,6 +216,7 @@ def test_create_test(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=payload,
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -271,7 +278,11 @@ def test_create_test(client: TestClient, db: SessionDep) -> None:
         "created_by_id": user.id,
     }
 
-    response = client.post(f"{settings.API_V1_STR}/test/", json=payload)
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
 
     data = response.json()
     assert response.status_code == 200
@@ -311,7 +322,9 @@ def test_create_test(client: TestClient, db: SessionDep) -> None:
     assert test_question_link == []
 
 
-def test_get_tests(client: TestClient, db: SessionDep) -> None:
+def test_get_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     (
         user,
         india,
@@ -356,7 +369,10 @@ def test_get_tests(client: TestClient, db: SessionDep) -> None:
 
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/")
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -387,7 +403,9 @@ def test_get_tests(client: TestClient, db: SessionDep) -> None:
     assert test_data["tags"][0] == tag_a.id
 
 
-def test_get_test_by_id(client: TestClient, db: SessionDep) -> None:
+def test_get_test_by_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     (
         user,
         india,
@@ -432,7 +450,10 @@ def test_get_test_by_id(client: TestClient, db: SessionDep) -> None:
     test_state_link = TestState(test_id=test.id, state_id=stata_a.id)
     db.add(test_state_link)
     db.commit()
-    response = client.get(f"{settings.API_V1_STR}/test/{test.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -462,7 +483,9 @@ def test_get_test_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["states"][0] == stata_a.id
 
 
-def test_update_test(client: TestClient, db: SessionDep) -> None:
+def test_update_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     (
         user,
         india,
@@ -545,7 +568,11 @@ def test_update_test(client: TestClient, db: SessionDep) -> None:
         "states": [stata_a.id, state_b.id],
     }
 
-    response = client.put(f"{settings.API_V1_STR}/test/{test.id}", json=payload)
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert data["id"] == test.id
@@ -592,7 +619,9 @@ def test_update_test(client: TestClient, db: SessionDep) -> None:
     assert state_c.id not in data["states"]
 
 
-def test_visibility_test(client: TestClient, db: SessionDep) -> None:
+def test_visibility_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     (
         user,
         india,
@@ -627,21 +656,27 @@ def test_visibility_test(client: TestClient, db: SessionDep) -> None:
     db.commit()
 
     response = client.patch(
-        f"{settings.API_V1_STR}/test/{test.id}", params={"is_active": True}
+        f"{settings.API_V1_STR}/test/{test.id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
     assert data["is_active"] is True
 
     response = client.patch(
-        f"{settings.API_V1_STR}/test/{test.id}", params={"is_active": False}
+        f"{settings.API_V1_STR}/test/{test.id}",
+        params={"is_active": False},
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
     assert data["is_active"] is False
 
 
-def test_delete_test(client: TestClient, db: SessionDep) -> None:
+def test_delete_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     (
         user,
         india,
@@ -675,11 +710,17 @@ def test_delete_test(client: TestClient, db: SessionDep) -> None:
     db.add(test)
     db.commit()
 
-    response = client.delete(f"{settings.API_V1_STR}/test/{test.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 200
     data = response.json()
     assert "delete" in data["message"]
 
-    response = client.delete(f"{settings.API_V1_STR}/test/{test.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 404
     assert "id" not in data
