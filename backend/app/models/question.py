@@ -128,29 +128,6 @@ class QuestionBase(SQLModel):
     )
 
 
-class QuestionLocationBase(SQLModel):
-    """Base model for geographic location of a question"""
-
-    state_id: int | None = Field(
-        default=None,
-        nullable=True,
-        foreign_key="state.id",
-        description="ID of the state this question is associated with",
-    )
-    district_id: int | None = Field(
-        default=None,
-        nullable=True,
-        foreign_key="district.id",
-        description="ID of the district this question is associated with",
-    )
-    block_id: int | None = Field(
-        default=None,
-        nullable=True,
-        foreign_key="block.id",
-        description="ID of the block this question is associated with",
-    )
-
-
 class QuestionTag(SQLModel, table=True):
     """Relationship table linking questions to tags"""
 
@@ -281,12 +258,12 @@ class QuestionRevision(QuestionBase, table=True):
     created_by: "User" = Relationship(back_populates="question_revisions")
 
 
-class QuestionLocation(QuestionLocationBase, table=True):
+class QuestionLocation(SQLModel, table=True):
     """Geographical locations for questions"""
 
     __tablename__ = "question_location"
     __table_args__ = (
-        # Added unique constraints for locations per question
+        # Each row has only one of state_id, district_id, or block_id
         UniqueConstraint("question_id", "state_id"),
         UniqueConstraint("question_id", "district_id"),
         UniqueConstraint("question_id", "block_id"),
@@ -302,6 +279,24 @@ class QuestionLocation(QuestionLocationBase, table=True):
         nullable=False,
         description="ID of the question",
         ondelete="CASCADE",
+    )
+    state_id: int | None = Field(
+        default=None,
+        nullable=True,
+        foreign_key="state.id",
+        description="ID of the state this question is associated with",
+    )
+    district_id: int | None = Field(
+        default=None,
+        nullable=True,
+        foreign_key="district.id",
+        description="ID of the district this question is associated with",
+    )
+    block_id: int | None = Field(
+        default=None,
+        nullable=True,
+        foreign_key="block.id",
+        description="ID of the block this question is associated with",
     )
 
     created_date: datetime | None = Field(
@@ -328,10 +323,15 @@ class QuestionCreate(QuestionBase):
         description="ID of the organization that will own this question"
     )
     created_by_id: int = Field(description="ID of the user creating this question")
-    # Location fields
-    state_id: int | None = Field(default=None, description="ID of the state")
-    district_id: int | None = Field(default=None, description="ID of the district")
-    block_id: int | None = Field(default=None, description="ID of the block")
+    state_ids: list[int] | None = Field(
+        default=None, description="IDs of states to associate"
+    )
+    district_ids: list[int] | None = Field(
+        default=None, description="IDs of districts to associate"
+    )
+    block_ids: list[int] | None = Field(
+        default=None, description="IDs of blocks to associate"
+    )
     # Tag relationships
     tag_ids: list[int] | None = Field(
         default=None, description="IDs of tags to associate with the question"
@@ -341,29 +341,40 @@ class QuestionCreate(QuestionBase):
 class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
 
-    question_id: int = Field(description="ID of the question to create a revision for")
     created_by_id: int = Field(description="ID of the user creating this revision")
 
 
-class QuestionLocationCreate(QuestionLocationBase):
+class QuestionLocationCreate(SQLModel):
     """Data needed to add a location to a question"""
 
     question_id: int = Field(
         description="ID of the question to associate with this location"
+    )
+    # Only one of these should be provided
+    state_id: int | None = Field(
+        default=None, description="ID of the state to associate"
+    )
+    district_id: int | None = Field(
+        default=None, description="ID of the district to associate"
+    )
+    block_id: int | None = Field(
+        default=None, description="ID of the block to associate"
     )
 
 
 class QuestionTagCreate(SQLModel):
     """Data needed to add a tag to a question"""
 
-    question_id: int = Field(description="ID of the question to tag")
     tag_id: int = Field(description="ID of the tag to associate with the question")
 
 
-class QuestionLocationPublic(QuestionLocationBase):
+class QuestionLocationPublic(SQLModel):
     """Public representation of question location"""
 
     id: int = Field(description="ID of the location")
+    state_id: int | None = Field(default=None, description="ID of the state")
+    district_id: int | None = Field(default=None, description="ID of the district")
+    block_id: int | None = Field(default=None, description="ID of the block")
     state_name: str | None = Field(default=None, description="Name of the state")
     district_name: str | None = Field(default=None, description="Name of the district")
     block_name: str | None = Field(default=None, description="Name of the block")

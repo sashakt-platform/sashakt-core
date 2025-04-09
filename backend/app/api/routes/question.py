@@ -183,38 +183,41 @@ def create_question(
     # This allows each association to be uniquely identified and deleted if needed
     locations: list[QuestionLocation] = []
 
-    # Handle state association
-    if question_create.state_id:
-        state_location = QuestionLocation(
-            question_id=question.id,
-            state_id=question_create.state_id,
-            district_id=None,  # Each row has only one location type
-            block_id=None,
-        )
-        session.add(state_location)
-        locations.append(state_location)
+    # Handle state associations
+    if question_create.state_ids:
+        for state_id in question_create.state_ids:
+            state_location = QuestionLocation(
+                question_id=question.id,
+                state_id=state_id,
+                district_id=None,
+                block_id=None,
+            )
+            session.add(state_location)
+            locations.append(state_location)
 
-    # Handle district association (if we decide to support it)
-    if question_create.district_id:
-        district_location = QuestionLocation(
-            question_id=question.id,
-            state_id=None,
-            district_id=question_create.district_id,
-            block_id=None,
-        )
-        session.add(district_location)
-        locations.append(district_location)
+    # Handle district associations
+    if question_create.district_ids:
+        for district_id in question_create.district_ids:
+            district_location = QuestionLocation(
+                question_id=question.id,
+                state_id=None,
+                district_id=district_id,
+                block_id=None,
+            )
+            session.add(district_location)
+            locations.append(district_location)
 
-    # Handle block association (if we decide to support it)
-    if question_create.block_id:
-        block_location = QuestionLocation(
-            question_id=question.id,
-            state_id=None,
-            district_id=None,
-            block_id=question_create.block_id,
-        )
-        session.add(block_location)
-        locations.append(block_location)
+    # Handle block associations
+    if question_create.block_ids:
+        for block_id in question_create.block_ids:
+            block_location = QuestionLocation(
+                question_id=question.id,
+                state_id=None,
+                district_id=None,
+                block_id=block_id,
+            )
+            session.add(block_location)
+            locations.append(block_location)
 
     # Add tags as separate entries, similar to the approach with locations
     tags: list[Tag] = []

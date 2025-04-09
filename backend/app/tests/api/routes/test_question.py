@@ -493,7 +493,6 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     # Create a new revision with a different user
     new_text = random_lower_string()
     new_revision_data = {
-        "question_id": q1.id,
         "created_by_id": user2.id,
         "question_text": new_text,
         "question_type": QuestionType.multi_choice,
@@ -659,7 +658,6 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={
-            "question_id": question_id,
             "tag_id": tag2.id,
         },
     )
@@ -743,7 +741,7 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
         "options": [{"text": "Option 1"}, {"text": "Option 2"}],
         "correct_answer": [0],
         # Add location data with real IDs
-        "state_id": kerala.id,  # remove district, block for now
+        "state_ids": [kerala.id],  # remove district, block for now
     }
 
     response = client.post(
