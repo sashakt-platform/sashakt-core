@@ -15,12 +15,15 @@ from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_lower_string
 
 
-def test_create_question(client: TestClient, db: SessionDep) -> None:
+def test_create_question(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
     # First create an organization
     org_name = random_lower_string()
     org_response = client.post(
         f"{settings.API_V1_STR}/organization/",
         json={"name": org_name},
+        headers=get_user_superadmin_token,
     )
     org_data = org_response.json()
     org_id = org_data["id"]
@@ -37,6 +40,7 @@ def test_create_question(client: TestClient, db: SessionDep) -> None:
             "created_by_id": user_id,
             "organization_id": org_id,
         },
+        headers=get_user_superadmin_token,
     )
     tag_type_data = tag_type_response.json()
     tag_type_id = tag_type_data["id"]
@@ -51,6 +55,7 @@ def test_create_question(client: TestClient, db: SessionDep) -> None:
             "created_by_id": user_id,
             "organization_id": org_id,
         },
+        headers=get_user_superadmin_token,
     )
     tag_data = tag_response.json()
     tag_id = tag_data["id"]
