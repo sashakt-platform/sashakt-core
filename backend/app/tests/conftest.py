@@ -31,7 +31,7 @@ from app.models import (
     TestTag,
     User,
 )
-from app.tests.utils.user import authentication_token_from_email
+from app.tests.utils.user import authentication_token_from_email, get_user_token
 from app.tests.utils.utils import get_superuser_token_headers
 
 
@@ -119,7 +119,32 @@ def superuser_token_headers(client: TestClient) -> dict[str, str]:
         return {"Authorization": "Bearer dummy_token_for_tests"}
 
 
-@pytest.fixture(scope="module")  # Changed from module to function
+@pytest.fixture(scope="module")
+def get_user_superadmin_token(db: Session) -> dict[str, str]:
+    return get_user_token(db=db, role="super_admin")
+
+
+@pytest.fixture(scope="module")
+def get_user_systemadmin_token(db: Session) -> dict[str, str]:
+    return get_user_token(db=db, role="system_admin")
+
+
+@pytest.fixture(scope="module")
+def get_user_stateadmin_token(db: Session) -> dict[str, str]:
+    return get_user_token(db=db, role="state_admin")
+
+
+@pytest.fixture(scope="module")
+def get_user_testadmin_token(db: Session) -> dict[str, str]:
+    return get_user_token(db=db, role="test_admin")
+
+
+@pytest.fixture(scope="module")
+def get_user_candidate_token(db: Session) -> dict[str, str]:
+    return get_user_token(db=db, role="candidate")
+
+
+@pytest.fixture(scope="module")
 def normal_user_token_headers(client: TestClient, db: Session) -> dict[str, str]:
     try:
         return authentication_token_from_email(

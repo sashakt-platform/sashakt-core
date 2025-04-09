@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import not_, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Message,
     Test,
@@ -19,7 +19,11 @@ router = APIRouter(prefix="/test", tags=["Test"])
 
 
 # Create a Test
-@router.post("/", response_model=TestPublic)
+@router.post(
+    "/",
+    response_model=TestPublic,
+    dependencies=[Depends(permission_dependency("create_test"))],
+)
 def create_test(
     test_create: TestCreate,
     session: SessionDep,
@@ -76,7 +80,11 @@ def create_test(
 
 
 # Get All Tests
-@router.get("/", response_model=list[TestPublic])
+@router.get(
+    "/",
+    response_model=list[TestPublic],
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
 def get_test(session: SessionDep) -> Sequence[TestPublic]:
     tests = session.exec(select(Test).where(not_(Test.is_deleted))).all()
 
@@ -103,7 +111,11 @@ def get_test(session: SessionDep) -> Sequence[TestPublic]:
     return test_public
 
 
-@router.get("/{test_id}", response_model=TestPublic)
+@router.get(
+    "/{test_id}",
+    response_model=TestPublic,
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
 def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     test = session.get(Test, test_id)
     if not test or test.is_deleted is True:
@@ -126,7 +138,11 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     )
 
 
-@router.put("/{test_id}", response_model=TestPublic)
+@router.put(
+    "/{test_id}",
+    response_model=TestPublic,
+    dependencies=[Depends(permission_dependency("update_test"))],
+)
 def update_test(
     test_id: int, test_update: TestUpdate, session: SessionDep
 ) -> TestPublic:
@@ -246,7 +262,11 @@ def update_test(
     )
 
 
-@router.patch("/{test_id}", response_model=TestPublic)
+@router.patch(
+    "/{test_id}",
+    response_model=TestPublic,
+    dependencies=[Depends(permission_dependency("update_test"))],
+)
 def visibility_test(
     test_id: int,
     session: SessionDep,
@@ -279,7 +299,10 @@ def visibility_test(
     )
 
 
-@router.delete("/{test_id}")
+@router.delete(
+    "/{test_id}",
+    dependencies=[Depends(permission_dependency("delete_test"))],
+)
 def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
     if not test or test.is_deleted is True:

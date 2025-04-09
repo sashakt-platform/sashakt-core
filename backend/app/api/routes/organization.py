@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import not_, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Message,
     Organization,
@@ -16,7 +16,11 @@ router = APIRouter(prefix="/organization", tags=["Organization"])
 
 
 # Create a Organization
-@router.post("/", response_model=OrganizationPublic)
+@router.post(
+    "/",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("create_organization"))],
+)
 def create_organization(
     organization_create: OrganizationCreate, session: SessionDep
 ) -> Organization:
@@ -28,7 +32,11 @@ def create_organization(
 
 
 # Get all Organizations
-@router.get("/", response_model=list[OrganizationPublic])
+@router.get(
+    "/",
+    response_model=list[OrganizationPublic],
+    dependencies=[Depends(permission_dependency("read_organization"))],
+)
 def get_organization(session: SessionDep) -> Sequence[Organization]:
     organization = session.exec(
         select(Organization).where(not_(Organization.is_deleted))
@@ -37,7 +45,11 @@ def get_organization(session: SessionDep) -> Sequence[Organization]:
 
 
 # Get Organization by ID
-@router.get("/{organization_id}", response_model=OrganizationPublic)
+@router.get(
+    "/{organization_id}",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("read_organization"))],
+)
 def get_organization_by_id(organization_id: int, session: SessionDep) -> Organization:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
@@ -46,7 +58,11 @@ def get_organization_by_id(organization_id: int, session: SessionDep) -> Organiz
 
 
 # Update a Organization
-@router.put("/{organization_id}", response_model=OrganizationPublic)
+@router.put(
+    "/{organization_id}",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_organization"))],
+)
 def update_organization(
     organization_id: int,
     updated_data: OrganizationUpdate,
@@ -64,7 +80,11 @@ def update_organization(
 
 
 # Set Visibility of Organization
-@router.patch("/{organization_id}", response_model=OrganizationPublic)
+@router.patch(
+    "/{organization_id}",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_organization"))],
+)
 def visibility_organization(
     organization_id: int,
     session: SessionDep,
@@ -81,7 +101,10 @@ def visibility_organization(
 
 
 # Delete a Organization
-@router.delete("/{organization_id}")
+@router.delete(
+    "/{organization_id}",
+    dependencies=[Depends(permission_dependency("delete_organization"))],
+)
 def delete_organization(organization_id: int, session: SessionDep) -> Message:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:

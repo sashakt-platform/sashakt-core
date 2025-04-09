@@ -6,12 +6,12 @@ from app.tests.utils.permission import create_random_permission
 
 
 def test_create_permission(
-    client: TestClient, superuser_token_headers: dict[str, str]
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     data = {"name": "Foo", "description": "Fighters"}
     response = client.post(
         f"{settings.API_V1_STR}/permissions/",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -22,12 +22,12 @@ def test_create_permission(
 
 
 def test_read_permission(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     permission = create_random_permission(db)
     response = client.get(
         f"{settings.API_V1_STR}/permissions/{permission.id}",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     content = response.json()
@@ -37,11 +37,11 @@ def test_read_permission(
 
 
 def test_read_permission_not_found(
-    client: TestClient, superuser_token_headers: dict[str, str]
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
         f"{settings.API_V1_STR}/permissions/0",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 404
     content = response.json()
@@ -64,13 +64,13 @@ def test_read_permission_not_found(
 
 
 def test_read_permissions(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     create_random_permission(db)
     create_random_permission(db)
     response = client.get(
         f"{settings.API_V1_STR}/permissions/",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     content = response.json()
@@ -78,13 +78,13 @@ def test_read_permissions(
 
 
 def test_update_permission(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     permission = create_random_permission(db)
     data = {"name": "Updated name", "description": "Updated description"}
     response = client.put(
         f"{settings.API_V1_STR}/permissions/{permission.id}",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -95,12 +95,12 @@ def test_update_permission(
 
 
 def test_update_permission_not_found(
-    client: TestClient, superuser_token_headers: dict[str, str]
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     data = {"name": "Updated name", "description": "Updated description"}
     response = client.put(
         f"{settings.API_V1_STR}/permissions/0",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         json=data,
     )
     assert response.status_code == 404
@@ -109,14 +109,14 @@ def test_update_permission_not_found(
 
 
 def test_visibility_permission(
-    client: TestClient, db: Session, superuser_token_headers: dict[str, str]
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
 ) -> None:
     permission = create_random_permission(db)
     assert permission.is_active is True
 
     response = client.patch(
         f"{settings.API_V1_STR}/permissions/{permission.id}",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         params={"is_active": False},
     )
 
@@ -126,7 +126,7 @@ def test_visibility_permission(
 
     response = client.patch(
         f"{settings.API_V1_STR}/permissions/{permission.id}",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         params={"is_active": True},
     )
 
@@ -136,7 +136,7 @@ def test_visibility_permission(
 
     response = client.patch(
         f"{settings.API_V1_STR}/permissions/{permission.id}",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -161,12 +161,12 @@ def test_visibility_permission(
 
 
 def test_delete_permission(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     permission = create_random_permission(db)
     response = client.delete(
         f"{settings.API_V1_STR}/permissions/{permission.id}",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     content = response.json()
@@ -174,11 +174,11 @@ def test_delete_permission(
 
 
 def test_delete_permission_not_found(
-    client: TestClient, superuser_token_headers: dict[str, str]
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.delete(
         f"{settings.API_V1_STR}/permissions/0",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 404
     content = response.json()

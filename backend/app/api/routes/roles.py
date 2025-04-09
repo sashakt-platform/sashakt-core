@@ -1,9 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import func, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Message,
     Role,
@@ -14,10 +14,17 @@ from app.models import (
     RoleUpdate,
 )
 
-router = APIRouter(prefix="/roles", tags=["roles"])
+router = APIRouter(
+    prefix="/roles",
+    tags=["roles"],
+    dependencies=[Depends(permission_dependency("create_role"))],
+)
 
 
-@router.get("/", response_model=RolesPublic)
+@router.get(
+    "/",
+    response_model=RolesPublic,
+)
 def read_roles(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     """
     Retrieve roles.
