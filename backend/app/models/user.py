@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 class UserBase(SQLModel):
     full_name: str = Field(
         max_length=255,
-        nullable=False,
         title="Full Name of the User",
         description="Enter Full Name of the User",
     )
@@ -20,12 +19,11 @@ class UserBase(SQLModel):
         unique=True,
         index=True,
         max_length=255,
-        nullable=False,
         title="Email of the User",
         description="Enter Email Address",
     )
-    phone: str = Field(max_length=255, nullable=False)
-    role_id: int = Field(foreign_key="role.id", nullable=False)
+    phone: str = Field(max_length=255)
+    role_id: int = Field(foreign_key="role.id")
     organization_id: int = Field(foreign_key="organization.id")
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
 
