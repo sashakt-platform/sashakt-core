@@ -4,12 +4,14 @@ from sqlmodel import Session
 from app import crud
 from app.core.security import verify_password
 from app.models import User, UserCreate, UserUpdate
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
 from app.tests.utils.utils import random_email, random_lower_string
 
 
 def test_create_user(db: Session) -> None:
     role = create_random_role(db)
+    organization = create_random_organization(db)
     email = random_email()
     password = random_lower_string()
     phone = random_lower_string()
@@ -21,6 +23,7 @@ def test_create_user(db: Session) -> None:
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     assert user.email == email
@@ -29,6 +32,7 @@ def test_create_user(db: Session) -> None:
 
 def test_authenticate_user(db: Session) -> None:
     role = create_random_role(db)
+    organization = create_random_organization(db)
     phone = random_lower_string()
     full_name = random_lower_string()
     email = random_email()
@@ -39,6 +43,7 @@ def test_authenticate_user(db: Session) -> None:
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     authenticated_user = crud.authenticate(session=db, email=email, password=password)
@@ -59,6 +64,7 @@ def test_not_authenticate_user(db: Session) -> None:
 
 def test_check_if_user_is_active(db: Session) -> None:
     role = create_random_role(db)
+    organization = create_random_organization(db)
     phone = random_lower_string()
     full_name = random_lower_string()
     email = random_email()
@@ -69,6 +75,7 @@ def test_check_if_user_is_active(db: Session) -> None:
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     assert user.is_active is True
@@ -76,6 +83,7 @@ def test_check_if_user_is_active(db: Session) -> None:
 
 def test_check_if_user_is_active_inactive(db: Session) -> None:
     role = create_random_role(db)
+    organization = create_random_organization(db)
     phone = random_lower_string()
     full_name = random_lower_string()
     email = random_email()
@@ -86,6 +94,7 @@ def test_check_if_user_is_active_inactive(db: Session) -> None:
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
         disabled=True,
     )
     user = crud.create_user(session=db, user_create=user_in)
@@ -112,6 +121,7 @@ def test_check_if_user_is_active_inactive(db: Session) -> None:
 
 def test_get_user(db: Session) -> None:
     role = create_random_role(db)
+    organization = create_random_organization(db)
     phone = random_lower_string()
     full_name = random_lower_string()
     username = random_email()
@@ -122,6 +132,7 @@ def test_get_user(db: Session) -> None:
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_2 = db.get(User, user.id)
@@ -132,6 +143,7 @@ def test_get_user(db: Session) -> None:
 
 def test_update_user(db: Session) -> None:
     role = create_random_role(db)
+    organization = create_random_organization(db)
     phone = random_lower_string()
     full_name = random_lower_string()
     username = random_email()
@@ -142,6 +154,7 @@ def test_update_user(db: Session) -> None:
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     new_password = random_lower_string()
@@ -151,6 +164,7 @@ def test_update_user(db: Session) -> None:
         role_id=user.role_id,
         password=new_password,
         email=user.email,
+        organization_id=user.organization_id,
     )
     if user.id is not None:
         crud.update_user(session=db, db_user=user, user_in=user_in_update)
