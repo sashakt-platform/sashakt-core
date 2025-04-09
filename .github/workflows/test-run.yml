@@ -1,4 +1,4 @@
-name: Test Backend
+name: Run tests
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch: # allows manual runs
 
 jobs:
-  test-backend:
+  test-run:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,7 +27,7 @@ jobs:
           enable-cache: true
       - run: cp .env.example .env
       - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d db mailcatcher
+      - run: docker compose up -d db mailcatcher backend
       - name: Wait for PostgreSQL
         run: |
           echo "Waiting for PostgreSQL to be healthy..."
@@ -36,14 +36,12 @@ jobs:
             sleep 2
           done
       - name: Migrate DB
-        run: uv run bash scripts/prestart.sh
-        working-directory: backend
+        run: docker compose exec backend bash scripts/prestart.sh
       - name: Run tests
-        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
-        working-directory: backend
+        run: docker compose exec backend bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         # the generated xml is pushed to codecov
-      - run: uv run pytest --cov=app --cov-branch --cov-report=xml
-        working-directory: backend
+      - run: docker compose exec backend pytest --cov=app --cov-branch --cov-report=xml
+      - run: docker cp sashakt-core-backend-1:app/coverage.xml .
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:

@@ -8,7 +8,7 @@ from app.tests.utils.utils import random_lower_string
 
 
 def test_create_role(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     permission = Permission(
         name=random_lower_string(), description=random_lower_string()
@@ -25,7 +25,7 @@ def test_create_role(
     }
     response = client.post(
         f"{settings.API_V1_STR}/roles/",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -50,7 +50,7 @@ def test_create_role(
     }
     response = client.post(
         f"{settings.API_V1_STR}/roles/",
-        headers=superuser_token_headers,
+        headers=get_user_superadmin_token,
         json=data,
     )
 

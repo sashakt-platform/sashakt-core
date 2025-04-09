@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import not_, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Candidate,
     CandidateCreate,
@@ -28,7 +28,11 @@ router_candidate_test_answer = APIRouter(
 
 
 # Create a Candidate
-@router.post("/", response_model=CandidatePublic)
+@router.post(
+    "/",
+    response_model=CandidatePublic,
+    dependencies=[Depends(permission_dependency("create_candidate"))],
+)
 def create_candidate(
     candidate_create: CandidateCreate, session: SessionDep
 ) -> Candidate:
@@ -40,14 +44,22 @@ def create_candidate(
 
 
 # Get all Candidates
-@router.get("/", response_model=list[CandidatePublic])
+@router.get(
+    "/",
+    response_model=list[CandidatePublic],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
+)
 def get_candidate(session: SessionDep) -> Sequence[Candidate]:
     candidate = session.exec(select(Candidate).where(not_(Candidate.is_deleted))).all()
     return candidate
 
 
 # Get Candidate by ID
-@router.get("/{candidate_id}", response_model=CandidatePublic)
+@router.get(
+    "/{candidate_id}",
+    response_model=CandidatePublic,
+    dependencies=[Depends(permission_dependency("read_candidate"))],
+)
 def get_candidate_by_id(candidate_id: int, session: SessionDep) -> Candidate:
     candidate = session.get(Candidate, candidate_id)
     if not candidate or candidate.is_deleted is True:
@@ -56,7 +68,11 @@ def get_candidate_by_id(candidate_id: int, session: SessionDep) -> Candidate:
 
 
 # Update a Candidate
-@router.put("/{candidate_id}", response_model=CandidatePublic)
+@router.put(
+    "/{candidate_id}",
+    response_model=CandidatePublic,
+    dependencies=[Depends(permission_dependency("update_candidate"))],
+)
 def update_candidate(
     candidate_id: int,
     updated_data: CandidateUpdate,
@@ -74,7 +90,11 @@ def update_candidate(
 
 
 # Set Visibility of Candidate
-@router.patch("/{candidate_id}", response_model=CandidatePublic)
+@router.patch(
+    "/{candidate_id}",
+    response_model=CandidatePublic,
+    dependencies=[Depends(permission_dependency("update_candidate"))],
+)
 def visibility_candidate(
     candidate_id: int,
     session: SessionDep,
@@ -91,7 +111,10 @@ def visibility_candidate(
 
 
 # Delete a Candidate
-@router.delete("/{candidate_id}")
+@router.delete(
+    "/{candidate_id}",
+    dependencies=[Depends(permission_dependency("delete_candidate"))],
+)
 def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
     candidate = session.get(Candidate, candidate_id)
     if not candidate or candidate.is_deleted is True:
@@ -107,7 +130,11 @@ def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
 
 
 # Create a Candidate-Test Link
-@router_candidate_test.post("/", response_model=CandidateTestPublic)
+@router_candidate_test.post(
+    "/",
+    response_model=CandidateTestPublic,
+    dependencies=[Depends(permission_dependency("create_candidate_test"))],
+)
 def create_candidate_test(
     candidate_test_create: CandidateTestCreate, session: SessionDep
 ) -> CandidateTest:
@@ -119,14 +146,22 @@ def create_candidate_test(
 
 
 # Get all Candidate-Test Link
-@router_candidate_test.get("/", response_model=list[CandidateTestPublic])
+@router_candidate_test.get(
+    "/",
+    response_model=list[CandidateTestPublic],
+    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+)
 def get_candidate_test(session: SessionDep) -> Sequence[CandidateTest]:
     candidate_test = session.exec(select(CandidateTest)).all()
     return candidate_test
 
 
 # Get Candidate-Test Link by ID
-@router_candidate_test.get("/{candidate_test_id}", response_model=CandidateTestPublic)
+@router_candidate_test.get(
+    "/{candidate_test_id}",
+    response_model=CandidateTestPublic,
+    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+)
 def get_candidate_test_by_id(
     candidate_test_id: int, session: SessionDep
 ) -> CandidateTest:
@@ -139,7 +174,11 @@ def get_candidate_test_by_id(
 
 
 # Update Candidate-Test Link
-@router_candidate_test.put("/{candidate_test_id}", response_model=CandidateTestPublic)
+@router_candidate_test.put(
+    "/{candidate_test_id}",
+    response_model=CandidateTestPublic,
+    dependencies=[Depends(permission_dependency("update_candidate_test"))],
+)
 def update_candidate_test(
     candidate_test_id: int,
     updated_data: CandidateTestUpdate,
@@ -163,7 +202,11 @@ def update_candidate_test(
 
 
 # Create a Candidate-Test & Answers Link
-@router_candidate_test_answer.post("/", response_model=CandidateTestAnswerPublic)
+@router_candidate_test_answer.post(
+    "/",
+    response_model=CandidateTestAnswerPublic,
+    dependencies=[Depends(permission_dependency("create_candidate_test_answer"))],
+)
 def create_candidate_test_answer(
     candidate_test_answer_create: CandidateTestAnswerCreate, session: SessionDep
 ) -> CandidateTestAnswer:
@@ -177,7 +220,11 @@ def create_candidate_test_answer(
 
 
 # Get all Candidate-Test  & Answer Link
-@router_candidate_test_answer.get("/", response_model=list[CandidateTestAnswerPublic])
+@router_candidate_test_answer.get(
+    "/",
+    response_model=list[CandidateTestAnswerPublic],
+    dependencies=[Depends(permission_dependency("read_candidate_test_answer"))],
+)
 def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnswer]:
     candidate_test_answer = session.exec(select(CandidateTestAnswer)).all()
     return candidate_test_answer
@@ -185,7 +232,9 @@ def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnsw
 
 # Get Candidate-Test  & Answer Link by ID
 @router_candidate_test_answer.get(
-    "/{candidate_test_answer_id}", response_model=CandidateTestAnswerPublic
+    "/{candidate_test_answer_id}",
+    response_model=CandidateTestAnswerPublic,
+    dependencies=[Depends(permission_dependency("read_candidate_test_answer"))],
 )
 def get_candidate_test_answer_by_id(
     candidate_test_answer_id: int, session: SessionDep
@@ -201,7 +250,9 @@ def get_candidate_test_answer_by_id(
 
 # Update Candidate-Test & Answer Link
 @router_candidate_test_answer.put(
-    "/{candidate_test_answer_id}", response_model=CandidateTestAnswerPublic
+    "/{candidate_test_answer_id}",
+    response_model=CandidateTestAnswerPublic,
+    dependencies=[Depends(permission_dependency("update_candidate_test_answer"))],
 )
 def update_candidate_answer_test(
     candidate_test_answer_id: int,
