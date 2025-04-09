@@ -220,7 +220,7 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     assert q1_data["tags"][0]["id"] == tag.id
 
     # Test filtering by tag
-    response = client.get(f"{settings.API_V1_STR}/questions/?tag_id={tag.id}")
+    response = client.get(f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}")
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 1
@@ -738,9 +738,7 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
         "options": [{"text": "Option 1"}, {"text": "Option 2"}],
         "correct_answer": [0],
         # Add location data with real IDs
-        "state_id": kerala.id,
-        "district_id": ernakulam.id,
-        "block_id": kovil.id,
+        "state_id": kerala.id,  # remove district, block for now
     }
 
     response = client.post(
@@ -754,14 +752,13 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     assert data["created_by_id"] == user.id
     assert len(data["locations"]) == 1
     assert data["locations"][0]["state_id"] == kerala.id
-    assert data["locations"][0]["district_id"] == ernakulam.id
-    assert data["locations"][0]["block_id"] == kovil.id
+    assert data["locations"][0]["district_id"] is None
+    assert data["locations"][0]["block_id"] is None
 
     # Test adding another location to the same question
-    # Here's the fix - we need to include the question_id in the request
     location_data = {
         "question_id": data["id"],  # Include the question_id field
-        "state_id": kerala.id,
+        "state_id": None,
         "district_id": thrissur.id,
         "block_id": None,  # Test with a null block_id
     }
@@ -773,16 +770,59 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
 
     assert response.status_code == 200, response.text
     location = response.json()
-    assert location["state_id"] == kerala.id
+    assert location["state_id"] is None
     assert location["district_id"] == thrissur.id
     assert location["block_id"] is None
 
-    # Verify that both locations are returned when getting the question
+    # check for block location as well
+    block_location_data = {
+        "question_id": data["id"],
+        "state_id": None,
+        "district_id": None,
+        "block_id": kovil.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{data['id']}/locations",
+        json=block_location_data,
+    )
+
+    assert response.status_code == 200, response.text
+    location = response.json()
+    assert location["state_id"] is None
+    assert location["district_id"] is None
+    assert location["block_id"] == kovil.id
+
+    # test location deletion endpoint
     response = client.get(f"{settings.API_V1_STR}/questions/{data['id']}")
     assert response.status_code == 200
     question = response.json()
-    assert len(question["locations"]) == 2
-    assert question["created_by_id"] == user.id
+    assert len(question["locations"]) == 3  # State, district, and block
+
+    district_location_id = None
+    for loc in question["locations"]:
+        if loc["district_id"] == thrissur.id:
+            district_location_id = loc["id"]
+            break
+
+    assert district_location_id is not None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{data['id']}/locations/{district_location_id}"
+    )
+    assert response.status_code == 200
+    assert "removed" in response.json()["message"]
+
+    # Verify location was removed
+    response = client.get(f"{settings.API_V1_STR}/questions/{data['id']}")
+    assert response.status_code == 200
+    question = response.json()
+    assert len(question["locations"]) == 2  # Now only state and block
+
+    # Verify we can still filter by location
+    response = client.get(f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}")
+    assert response.status_code == 200
+    assert len(response.json()) >= 1
 
 
 def test_delete_question(client: TestClient, db: SessionDep) -> None:

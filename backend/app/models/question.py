@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlmodel import JSON, Field, Relationship, SQLModel
+from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
@@ -78,9 +78,9 @@ class Option(SQLModel):
 
 
 # Type aliases for cleaner annotations
-OptionDict = dict[str, Any]
-MarkingSchemeDict = dict[str, Any]
-ImageDict = dict[str, Any]
+OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
+MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
+ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
 CorrectAnswerType = list[int] | list[str] | float | int | None
 
 
@@ -97,7 +97,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
-    options: list[dict[str, Any]] | None = Field(
+    options: list[OptionDict] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -117,7 +117,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Whether the question must be answered",
     )
-    marking_scheme: dict[str, Any] | None = Field(
+    marking_scheme: MarkingSchemeDict | None = Field(
         sa_type=JSON, default=None, description="Scoring rules for this question"
     )
     solution: str | None = Field(
@@ -154,34 +154,30 @@ class QuestionLocationBase(SQLModel):
 class QuestionTag(SQLModel, table=True):
     """Relationship table linking questions to tags"""
 
+    __tablename__ = "question_tag"
+    __table_args__ = (UniqueConstraint("question_id", "tag_id"),)
+
     id: int | None = Field(
         default=None,
         primary_key=True,
         description="Primary key for the question-tag relationship",
     )
     question_id: int = Field(
-        foreign_key="question.id", nullable=False, description="ID of the question"
+        foreign_key="question.id",
+        nullable=False,
+        description="ID of the question",
+        ondelete="CASCADE",
     )
     tag_id: int = Field(
-        foreign_key="tag.id", nullable=False, description="ID of the tag"
+        foreign_key="tag.id",
+        nullable=False,
+        description="ID of the tag",
+        ondelete="CASCADE",
     )
 
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this relationship was created",
-    )
-    modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
-        description="When this relationship was last modified",
-    )
-    is_active: bool | None = Field(
-        default=True, nullable=True, description="Whether this relationship is active"
-    )
-    is_deleted: bool | None = Field(
-        default=False,
-        nullable=True,
-        description="Whether this relationship is marked as deleted",
     )
 
 
@@ -235,7 +231,6 @@ class Question(SQLModel, table=True):
         back_populates="test_question_static",
         link_model=TestQuestion,
     )
-    # Candidate tests that include this question
     candidate_test: list["CandidateTest"] = Relationship(
         back_populates="question_revision",
         link_model=CandidateTestAnswer,
@@ -289,31 +284,29 @@ class QuestionRevision(QuestionBase, table=True):
 class QuestionLocation(QuestionLocationBase, table=True):
     """Geographical locations for questions"""
 
+    __tablename__ = "question_location"
+    __table_args__ = (
+        # Added unique constraints for locations per question
+        UniqueConstraint("question_id", "state_id"),
+        UniqueConstraint("question_id", "district_id"),
+        UniqueConstraint("question_id", "block_id"),
+    )
+
     id: int | None = Field(
         default=None,
         primary_key=True,
         description="Primary key for the question location",
     )
     question_id: int = Field(
-        foreign_key="question.id", nullable=False, description="ID of the question"
+        foreign_key="question.id",
+        nullable=False,
+        description="ID of the question",
+        ondelete="CASCADE",
     )
 
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this location was created",
-    )
-    modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
-        description="When this location was last modified",
-    )
-    is_active: bool | None = Field(
-        default=True, nullable=True, description="Whether this location is active"
-    )
-    is_deleted: bool | None = Field(
-        default=False,
-        nullable=True,
-        description="Whether this location is marked as deleted",
     )
 
     # Relationships
@@ -327,73 +320,29 @@ class QuestionLocation(QuestionLocationBase, table=True):
     block: Optional["Block"] = Relationship()
 
 
-class QuestionCreate(SQLModel):
+# Use inheritance to avoid field duplication
+class QuestionCreate(QuestionBase):
     """Data needed to create a new question with initial revision"""
 
     organization_id: int = Field(
         description="ID of the organization that will own this question"
     )
     created_by_id: int = Field(description="ID of the user creating this question")
-    # Question content for initial revision
-    question_text: str = Field(description="The question text")
-    instructions: str | None = Field(
-        default=None, description="Instructions for answering"
-    )
-    question_type: QuestionType = Field(description="Type of question")
-    options: list[dict[str, Any]] | None = Field(
-        default=None, description="Available options for choice questions"
-    )
-    correct_answer: CorrectAnswerType = Field(
-        default=None, description="The correct answer(s)"
-    )
-    subjective_answer_limit: int | None = Field(
-        default=None, description="Character limit for subjective answers"
-    )
-    is_mandatory: bool = Field(
-        default=True, description="Whether the question must be answered"
-    )
-    marking_scheme: dict[str, Any] | None = Field(
-        default=None, description="Scoring rules"
-    )
-    solution: str | None = Field(default=None, description="Explanation of the answer")
-    media: dict[str, Any] | None = Field(default=None, description="Associated media")
-    # Optional location information
+    # Location fields
     state_id: int | None = Field(default=None, description="ID of the state")
     district_id: int | None = Field(default=None, description="ID of the district")
     block_id: int | None = Field(default=None, description="ID of the block")
+    # Tag relationships
     tag_ids: list[int] | None = Field(
         default=None, description="IDs of tags to associate with the question"
     )
 
 
-class QuestionRevisionCreate(SQLModel):
+class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
 
     question_id: int = Field(description="ID of the question to create a revision for")
     created_by_id: int = Field(description="ID of the user creating this revision")
-    # Question content fields
-    question_text: str = Field(description="The question text")
-    instructions: str | None = Field(
-        default=None, description="Instructions for answering"
-    )
-    question_type: QuestionType = Field(description="Type of question")
-    options: list[dict[str, Any]] | None = Field(
-        default=None, description="Available options for choice questions"
-    )
-    correct_answer: CorrectAnswerType = Field(
-        default=None, description="The correct answer(s)"
-    )
-    subjective_answer_limit: int | None = Field(
-        default=None, description="Character limit for subjective answers"
-    )
-    is_mandatory: bool = Field(
-        default=True, description="Whether the question must be answered"
-    )
-    marking_scheme: dict[str, Any] | None = Field(
-        default=None, description="Scoring rules"
-    )
-    solution: str | None = Field(default=None, description="Explanation of the answer")
-    media: dict[str, Any] | None = Field(default=None, description="Associated media")
 
 
 class QuestionLocationCreate(QuestionLocationBase):
@@ -438,7 +387,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[dict[str, Any]] | None = Field(
+    options: list[OptionDict] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -446,7 +395,7 @@ class QuestionPublic(SQLModel):
         description="Character limit for subjective answers"
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
-    marking_scheme: dict[str, Any] | None = Field(description="Scoring rules")
+    marking_scheme: MarkingSchemeDict | None = Field(description="Scoring rules")
     solution: str | None = Field(description="Explanation of the answer")
     media: dict[str, Any] | None = Field(description="Associated media")
     created_by_id: int = Field(

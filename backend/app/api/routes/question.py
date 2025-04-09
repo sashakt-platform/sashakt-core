@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException
-from sqlmodel import and_, select
+from fastapi import APIRouter, Body, HTTPException, Query
+from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import SessionDep
@@ -114,7 +114,7 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
     options: list[dict[str, Any]] | None = None
@@ -124,8 +124,7 @@ def prepare_for_db(
             for opt in data.options
         ]
 
-    # Handle marking scheme
-    marking_scheme: dict[str, Any] | None = None
+    marking_scheme: dict[str, float] | None = None
     if (
         data.marking_scheme
         and hasattr(data.marking_scheme, "dict")
@@ -180,23 +179,44 @@ def create_question(
 
     question.last_revision_id = revision.id
 
+    # Create separate location rows for state, district, block
+    # This allows each association to be uniquely identified and deleted if needed
     locations: list[QuestionLocation] = []
-    if any(
-        [
-            question_create.state_id,
-            question_create.district_id,
-            question_create.block_id,
-        ]
-    ):
-        location = QuestionLocation(
+
+    # Handle state association
+    if question_create.state_id:
+        state_location = QuestionLocation(
             question_id=question.id,
             state_id=question_create.state_id,
+            district_id=None,  # Each row has only one location type
+            block_id=None,
+        )
+        session.add(state_location)
+        locations.append(state_location)
+
+    # Handle district association (if we decide to support it)
+    if question_create.district_id:
+        district_location = QuestionLocation(
+            question_id=question.id,
+            state_id=None,
             district_id=question_create.district_id,
+            block_id=None,
+        )
+        session.add(district_location)
+        locations.append(district_location)
+
+    # Handle block association (if we decide to support it)
+    if question_create.block_id:
+        block_location = QuestionLocation(
+            question_id=question.id,
+            state_id=None,
+            district_id=None,
             block_id=question_create.block_id,
         )
-        session.add(location)
-        locations.append(location)
+        session.add(block_location)
+        locations.append(block_location)
 
+    # Add tags as separate entries, similar to the approach with locations
     tags: list[Tag] = []
     if question_create.tag_ids:
         for tag_id in question_create.tag_ids:
@@ -210,7 +230,7 @@ def create_question(
                 tags.append(tag)
 
     session.commit()
-    session.refresh(question)
+    # No need to set modified_date manually, as SQLModel will handle it via onupdate
 
     return build_question_response(question, revision, locations, tags)
 
@@ -239,7 +259,7 @@ class RevisionDetailDict(TypedDict):
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
-    marking_scheme: dict[str, Any] | None
+    marking_scheme: dict[str, float] | None  # Updated type to float
     solution: str | None
     media: dict[str, Any] | None
     is_current: bool
@@ -274,10 +294,10 @@ def get_questions(
     skip: int = 0,
     limit: int = 100,
     organization_id: int | None = None,
-    state_id: int | None = None,
-    district_id: int | None = None,
-    block_id: int | None = None,
-    tag_id: int | None = None,
+    state_ids: list[int] = Query(None),  # Support multiple states
+    district_ids: list[int] = Query(None),  # Support multiple districts
+    block_ids: list[int] = Query(None),  # Support multiple blocks
+    tag_ids: list[int] = Query(None),  # Support multiple tags
     created_by_id: int | None = None,
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
@@ -296,14 +316,16 @@ def get_questions(
     if organization_id is not None:
         query = query.where(Question.organization_id == organization_id)
 
-    # Handle tag-based filtering
-    if tag_id is not None:
-        tag_query = select(QuestionTag.question_id).where(QuestionTag.tag_id == tag_id)
-        question_ids_with_tag = session.exec(tag_query).all()
-        if question_ids_with_tag:  # Only apply filter if we found matching tags
-            query = query.where(Question.id.in_(question_ids_with_tag))
+    # Handle tag-based filtering with multiple tags
+    if tag_ids:
+        tag_query = select(QuestionTag.question_id).where(
+            QuestionTag.tag_id.in_(tag_ids)
+        )
+        question_ids_with_tags = session.exec(tag_query).all()
+        if question_ids_with_tags:  # Only apply filter if we found matching tags
+            query = query.where(Question.id.in_(question_ids_with_tags))
         else:
-            # If no questions have this tag, return empty list
+            # If no questions have these tags, return empty list
             return []
 
     # Handle creator-based filtering
@@ -322,20 +344,21 @@ def get_questions(
         else:
             return []
 
-    # Handle location-based filtering
-    if any([state_id is not None, district_id is not None, block_id is not None]):
+    # Handle location-based filtering with multiple locations
+    if any([state_ids, district_ids, block_ids]):
         location_query = select(QuestionLocation.question_id)
         location_filters = []
 
-        if state_id is not None:
-            location_filters.append(QuestionLocation.state_id == state_id)
-        if district_id is not None:
-            location_filters.append(QuestionLocation.district_id == district_id)
-        if block_id is not None:
-            location_filters.append(QuestionLocation.block_id == block_id)
+        if state_ids:
+            location_filters.append(QuestionLocation.state_id.in_(state_ids))
+        if district_ids:
+            location_filters.append(QuestionLocation.district_id.in_(district_ids))
+        if block_ids:
+            location_filters.append(QuestionLocation.block_id.in_(block_ids))
 
         if location_filters:
-            location_query = location_query.where(and_(*location_filters))
+            # Use OR between different location types (any match is valid)
+            location_query = location_query.where(or_(*location_filters))
             question_ids = session.exec(location_query).all()
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))
@@ -374,6 +397,69 @@ def get_questions(
         result.append(question_data)
 
     return result
+
+
+@router.get("/{question_id}/tests", response_model=list[TestInfoDict])
+def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
+    """Get all tests that include this question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    result: list[TestInfoDict] = []
+    for test in question.tests:
+        # Ensure all required fields are non-None
+        if test.id is not None and test.created_date is not None:
+            result.append(
+                TestInfoDict(id=test.id, name=test.name, created_date=test.created_date)
+            )
+
+    return result
+
+
+@router.get(
+    "/{question_id}/candidate-tests", response_model=list[CandidateTestInfoDict]
+)
+def get_question_candidate_tests(
+    question_id: int, session: SessionDep
+) -> list[CandidateTestInfoDict]:
+    """Get all candidate tests that include this question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    result: list[CandidateTestInfoDict] = []
+    for ct in question.candidate_test:
+        # Ensure all required fields are non-None
+        if ct.id is not None and ct.start_time is not None:
+            result.append(
+                CandidateTestInfoDict(
+                    id=ct.id,
+                    candidate_id=ct.candidate_id,
+                    test_id=ct.test_id,
+                    start_time=ct.start_time,
+                    is_submitted=ct.is_submitted,
+                )
+            )
+
+    return result
+
+
+@router.delete("/{question_id}")
+def delete_question(question_id: int, session: SessionDep) -> Message:
+    """Soft delete a question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Soft delete
+    question.is_deleted = True
+    question.is_active = False
+    # No need to set modified_date manually as it will be updated by SQLModel
+    session.add(question)
+    session.commit()
+
+    return Message(message="Question deleted successfully")
 
 
 @router.get("/{question_id}", response_model=QuestionPublic)
@@ -418,7 +504,7 @@ def update_question(
     for key, value in question_data.items():
         setattr(question, key, value)
 
-    question.modified_date = datetime.now(timezone.utc)
+    # No need to set modified_date manually, as it will be updated by SQLModel
     session.add(question)
     session.commit()
     session.refresh(question)
@@ -474,7 +560,7 @@ def create_question_revision(
     session.flush()
 
     question.last_revision_id = new_revision.id
-    question.modified_date = datetime.now(timezone.utc)
+    # No need to set modified_date manually
     session.add(question)
     session.commit()
     session.refresh(question)
@@ -605,12 +691,71 @@ def add_question_location(
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    location = QuestionLocation(
-        question_id=question_id,
-        state_id=location_data.state_id,
-        district_id=location_data.district_id,
-        block_id=location_data.block_id,
-    )
+    # Create separate location entries for state, district, block
+    # to maintain unique constraints and allow individual deletion
+
+    # Determine which location type is being added
+    location = None
+
+    if location_data.state_id:
+        # Check if this state is already associated
+        existing_query = select(QuestionLocation).where(
+            QuestionLocation.question_id == question_id,
+            QuestionLocation.state_id == location_data.state_id,
+        )
+        if session.exec(existing_query).first():
+            raise HTTPException(
+                status_code=400,
+                detail="This state is already associated with the question",
+            )
+
+        location = QuestionLocation(
+            question_id=question_id,
+            state_id=location_data.state_id,
+            district_id=None,
+            block_id=None,
+        )
+    elif location_data.district_id:
+        # Check if this district is already associated
+        existing_query = select(QuestionLocation).where(
+            QuestionLocation.question_id == question_id,
+            QuestionLocation.district_id == location_data.district_id,
+        )
+        if session.exec(existing_query).first():
+            raise HTTPException(
+                status_code=400,
+                detail="This district is already associated with the question",
+            )
+
+        location = QuestionLocation(
+            question_id=question_id,
+            state_id=None,
+            district_id=location_data.district_id,
+            block_id=None,
+        )
+    elif location_data.block_id:
+        # Check if this block is already associated
+        existing_query = select(QuestionLocation).where(
+            QuestionLocation.question_id == question_id,
+            QuestionLocation.block_id == location_data.block_id,
+        )
+        if session.exec(existing_query).first():
+            raise HTTPException(
+                status_code=400,
+                detail="This block is already associated with the question",
+            )
+
+        location = QuestionLocation(
+            question_id=question_id,
+            state_id=None,
+            district_id=None,
+            block_id=location_data.block_id,
+        )
+    else:
+        raise HTTPException(
+            status_code=400, detail="At least one location type must be specified"
+        )
+
     session.add(location)
     session.commit()
     session.refresh(location)
@@ -648,6 +793,31 @@ def add_question_location(
         district_name=district_name,
         block_name=block_name,
     )
+
+
+@router.delete("/{question_id}/locations/{location_id}", response_model=Message)
+def remove_question_location(
+    question_id: int,
+    location_id: int,
+    session: SessionDep,
+) -> Message:
+    """Remove a location from a question."""
+    question = session.get(Question, question_id)
+    if not question or question.is_deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Find the location
+    location = session.get(QuestionLocation, location_id)
+    if not location or location.question_id != question_id:
+        raise HTTPException(
+            status_code=404, detail="Location not found for this question"
+        )
+
+    # Delete the location
+    session.delete(location)
+    session.commit()
+
+    return Message(message="Location removed from question successfully")
 
 
 @router.post("/{question_id}/tags", response_model=QuestionTagResponse)
@@ -761,64 +931,54 @@ def get_question_tags(
     ]
 
 
-@router.get("/{question_id}/tests", response_model=list[TestInfoDict])
-def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
-    """Get all tests that include this question."""
+@router.get("/{question_id}/locations", response_model=list[QuestionLocationPublic])
+def get_question_locations(
+    question_id: int,
+    session: SessionDep,
+) -> list[QuestionLocationPublic]:
+    """Get all locations for a question."""
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    result: list[TestInfoDict] = []
-    for test in question.tests:
-        # Ensure all required fields are non-None
-        if test.id is not None and test.created_date is not None:
-            result.append(
-                TestInfoDict(id=test.id, name=test.name, created_date=test.created_date)
+    # Get locations for this question
+    locations_query = select(QuestionLocation).where(
+        QuestionLocation.question_id == question.id
+    )
+    locations = session.exec(locations_query).all()
+
+    result: list[QuestionLocationPublic] = []
+    for loc in locations:
+        # Get related location names
+        state_name = None
+        district_name = None
+        block_name = None
+
+        if loc.state_id:
+            state = session.get(State, loc.state_id)
+            if state:
+                state_name = state.name
+
+        if loc.district_id:
+            district = session.get(District, loc.district_id)
+            if district:
+                district_name = district.name
+
+        if loc.block_id:
+            block = session.get(Block, loc.block_id)
+            if block:
+                block_name = block.name
+
+        result.append(
+            QuestionLocationPublic(
+                id=loc.id,
+                state_id=loc.state_id,
+                district_id=loc.district_id,
+                block_id=loc.block_id,
+                state_name=state_name,
+                district_name=district_name,
+                block_name=block_name,
             )
+        )
 
     return result
-
-
-@router.get(
-    "/{question_id}/candidate-tests", response_model=list[CandidateTestInfoDict]
-)
-def get_question_candidate_tests(
-    question_id: int, session: SessionDep
-) -> list[CandidateTestInfoDict]:
-    """Get all candidate tests that include this question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    result: list[CandidateTestInfoDict] = []
-    for ct in question.candidate_test:
-        # Ensure all required fields are non-None
-        if ct.id is not None and ct.start_time is not None:
-            result.append(
-                CandidateTestInfoDict(
-                    id=ct.id,
-                    candidate_id=ct.candidate_id,
-                    test_id=ct.test_id,
-                    start_time=ct.start_time,
-                    is_submitted=ct.is_submitted,
-                )
-            )
-
-    return result
-
-
-@router.delete("/{question_id}")
-def delete_question(question_id: int, session: SessionDep) -> Message:
-    """Soft delete a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Soft delete
-    question.is_deleted = True
-    question.is_active = False
-    question.modified_date = datetime.now(timezone.utc)
-    session.add(question)
-    session.commit()
-
-    return Message(message="Question deleted successfully")
