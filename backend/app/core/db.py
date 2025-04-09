@@ -2,9 +2,7 @@ from sqlmodel import Session, create_engine, select
 
 from app import crud
 from app.core.config import settings
-
 from app.core.location import init_location
-from app.models import Permission, Role, RolePermission, RolePublic, User, UserCreate
 from app.core.permissions import (
     init_permissions,
 )
@@ -12,8 +10,7 @@ from app.core.roles import (
     init_roles,
     super_admin,
 )
-
-
+from app.models import Role, User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
@@ -24,11 +21,13 @@ engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
 def init_db(session: Session) -> None:
-    # Creating Location Data
+    # Creating Initial Location Data
     init_location(session)
-    # Creating all Permissions
 
+    # Creating Initial Permissions
     init_permissions(session)
+
+    # Creating Initial Roles
     init_roles(session)
 
     super_admin_role = session.exec(
