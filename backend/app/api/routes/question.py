@@ -77,6 +77,22 @@ def build_question_response(
             for tag in tags
         ]
 
+    # Prepare location information
+    location_list = []
+    if locations:
+        location_list = [
+            QuestionLocationPublic(
+                id=loc.id,
+                state_id=loc.state_id,
+                district_id=loc.district_id,
+                block_id=loc.block_id,
+                state_name=loc.state.name if loc.state else None,
+                district_name=loc.district.name if loc.district else None,
+                block_name=loc.block.name if loc.block else None,
+            )
+            for loc in locations
+        ]
+
     return QuestionPublic(
         id=question.id,
         organization_id=question.organization_id,
@@ -97,20 +113,7 @@ def build_question_response(
         media=media_dict,
         created_by_id=revision.created_by_id,
         # Location data
-        locations=[
-            QuestionLocationPublic(
-                id=loc.id,
-                state_id=loc.state_id,
-                district_id=loc.district_id,
-                block_id=loc.block_id,
-                state_name=loc.state.name if loc.state else None,
-                district_name=loc.district.name if loc.district else None,
-                block_name=loc.block.name if loc.block else None,
-            )
-            for loc in locations
-        ]
-        if locations
-        else [],
+        locations=location_list,
         tags=tag_list,
     )
 
