@@ -525,6 +525,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     # Verify in database
     db.refresh(q1)
     new_rev = db.get(QuestionRevision, q1.last_revision_id)
+    assert new_rev is not None
     assert new_rev.question_text == new_text
     assert new_rev.id != rev1.id
     assert new_rev.created_by_id == user2.id

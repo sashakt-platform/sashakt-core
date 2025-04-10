@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
+from sqlalchemy import desc
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
@@ -324,11 +325,11 @@ def get_questions(
     # Handle tag-based filtering with multiple tags
     if tag_ids:
         tag_query = select(QuestionTag.question_id).where(
-            QuestionTag.tag_id.in_(tag_ids)
+            QuestionTag.tag_id.in_(tag_ids)  # type: ignore
         )
         question_ids_with_tags = session.exec(tag_query).all()
         if question_ids_with_tags:  # Only apply filter if we found matching tags
-            query = query.where(Question.id.in_(question_ids_with_tags))
+            query = query.where(Question.id.in_(question_ids_with_tags))  # type: ignore
         else:
             # If no questions have these tags, return empty list
             return []
@@ -342,10 +343,11 @@ def get_questions(
             if q.last_revision_id is not None:
                 revision = session.get(QuestionRevision, q.last_revision_id)
                 if revision is not None and revision.created_by_id == created_by_id:
-                    questions_by_creator.append(q.id)
+                    if q.id is not None:
+                        questions_by_creator.append(q.id)
 
         if questions_by_creator:
-            query = select(Question).where(Question.id.in_(questions_by_creator))
+            query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
         else:
             return []
 
@@ -355,18 +357,18 @@ def get_questions(
         location_filters = []
 
         if state_ids:
-            location_filters.append(QuestionLocation.state_id.in_(state_ids))
+            location_filters.append(QuestionLocation.state_id.in_(state_ids))  # type: ignore
         if district_ids:
-            location_filters.append(QuestionLocation.district_id.in_(district_ids))
+            location_filters.append(QuestionLocation.district_id.in_(district_ids))  # type: ignore
         if block_ids:
-            location_filters.append(QuestionLocation.block_id.in_(block_ids))
+            location_filters.append(QuestionLocation.block_id.in_(block_ids))  # type: ignore
 
         if location_filters:
             # Use OR between different location types (any match is valid)
             location_query = location_query.where(or_(*location_filters))
             question_ids = session.exec(location_query).all()
             if question_ids:  # Only apply filter if we found matching locations
-                query = query.where(Question.id.in_(question_ids))
+                query = query.where(Question.id.in_(question_ids))  # type: ignore
             else:
                 return []
 
@@ -384,6 +386,7 @@ def get_questions(
 
         latest_revision = session.get(QuestionRevision, question.last_revision_id)
         if latest_revision is None:
+            raise HTTPException(status_code=404, detail="Question revision not found")
             continue
 
         locations_query = select(QuestionLocation).where(
@@ -426,7 +429,7 @@ def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDi
 
     for test_id in test_ids:
         test = session.get(Test, test_id)
-        if test and test.created_date is not None:
+        if test and test.id is not None and test.created_date is not None:
             test_info = TestInfoDict(
                 id=test.id, name=test.name, created_date=test.created_date
             )
@@ -465,7 +468,11 @@ def get_question_candidate_tests(
     # Query each CandidateTest directly
     for candidate_test_id in candidate_test_ids:
         candidate_test = session.get(CandidateTest, candidate_test_id)
-        if candidate_test and candidate_test.start_time is not None:
+        if (
+            candidate_test
+            and candidate_test.id is not None
+            and candidate_test.start_time is not None
+        ):
             candidate_test_info = CandidateTestInfoDict(
                 id=candidate_test.id,
                 candidate_id=candidate_test.candidate_id,
@@ -628,7 +635,7 @@ def get_question_revisions(
     revisions_query = (
         select(QuestionRevision)
         .where(QuestionRevision.question_id == question_id)
-        .order_by(QuestionRevision.created_date.desc())
+        .order_by(desc(QuestionRevision.created_date))  # type: ignore
     )
     revisions = session.exec(revisions_query).all()
 
