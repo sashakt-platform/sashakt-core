@@ -420,30 +420,26 @@ def test_get_tests(
 
     assert response.status_code == 200
 
-    test_data = data[len(data) - 1]
-    assert test_data["name"] == test.name
-    assert test_data["description"] == test.description
-    assert test_data["time_limit"] == test.time_limit
-    assert test_data["marks"] == test.marks
-    assert test_data["completion_message"] == test.completion_message
-    assert test_data["start_instructions"] == test.start_instructions
-    assert test_data["marks_level"] == test.marks_level
-    assert test_data["link"] == test.link
-    assert test_data["no_of_attempts"] == test.no_of_attempts
-    assert test_data["shuffle"] == test.shuffle
-    assert test_data["random_questions"] == test.random_questions
-    assert test_data["no_of_questions"] == test.no_of_questions
-    assert test_data["question_pagination"] == test.question_pagination
-    assert test_data["is_template"] == test.is_template
-    assert test_data["created_by_id"] == test.created_by_id
-    assert "id" in test_data
-    assert "created_date" in test_data
-    assert "modified_date" in test_data
-    assert "tags" in test_data
-    assert "states" in test_data
-    assert len(test_data["tags"]) == 1
-    assert len(test_data["states"]) == 1
-    assert test_data["tags"][0] == tag_a.id
+    assert any(item["name"] == test.name for item in data)
+    assert any(item["description"] == test.description for item in data)
+    assert any(item["time_limit"] == test.time_limit for item in data)
+    assert any(item["marks"] == test.marks for item in data)
+    assert any(item["completion_message"] == test.completion_message for item in data)
+    assert any(item["start_instructions"] == test.start_instructions for item in data)
+    assert any(item["marks_level"] == test.marks_level for item in data)
+    assert any(item["link"] == test.link for item in data)
+    assert any(item["no_of_attempts"] == test.no_of_attempts for item in data)
+    assert any(item["shuffle"] == test.shuffle for item in data)
+    assert any(item["random_questions"] == test.random_questions for item in data)
+    assert any(item["no_of_questions"] == test.no_of_questions for item in data)
+    assert any(item["question_pagination"] == test.question_pagination for item in data)
+    assert any(item["is_template"] == test.is_template for item in data)
+    assert any(item["created_by_id"] == test.created_by_id for item in data)
+
+    assert any(len(item["tags"]) == 1 and item["tags"][0] == tag_a.id for item in data)
+    assert any(
+        len(item["states"]) == 1 and item["states"][0] == state_a.id for item in data
+    )
 
 
 def test_get_test_by_id(

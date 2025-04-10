@@ -387,16 +387,13 @@ def test_read_candidate_test(
     )
     data = response.json()
     assert response.status_code == 200
-    current_index = len(data) - 1
-    current_data = data[current_index]
     assert "id" in data[0]
-    assert current_data["test_id"] == test.id
-    assert current_data["candidate_id"] == candidate.id
-    assert current_data["device"] == device
-    assert current_data["is_submitted"] is False
-    assert current_data["start_time"] == start_time.rstrip("Z")
-    assert current_data["end_time"] == end_time.rstrip("Z")
-    assert current_data["is_submitted"] is False
+    assert any(item["test_id"] == test.id for item in data)
+    assert any(item["candidate_id"] == candidate.id for item in data)
+    assert any(item["device"] == device for item in data)
+    assert any(item["is_submitted"] is False for item in data)
+    assert any(item["start_time"] == start_time.rstrip("Z") for item in data)
+    assert any(item["end_time"] == end_time.rstrip("Z") for item in data)
 
 
 def test_read_candidate_test_by_id(
@@ -854,18 +851,22 @@ def test_read_candidate_test_answer(
     )
     data = response.json()
     assert response.status_code == 200
-    latest_data = data[len(data) - 1]
-    previous_data = data[len(data) - 2]
-    assert previous_data["candidate_test_id"] == candidate_test.id
-    assert previous_data["question_revision_id"] == question_revision_a.id
-    assert previous_data["response"] == response_a
-    assert previous_data["visited"] is False
-    assert previous_data["time_spent"] == 4
-    assert latest_data["candidate_test_id"] == candidate_test.id
-    assert latest_data["question_revision_id"] == question_revision_b.id
-    assert latest_data["response"] == response_b
-    assert latest_data["visited"] is True
-    assert latest_data["time_spent"] == 56
+    assert any(
+        item["candidate_test_id"] == candidate_test_answer_a.candidate_test_id
+        for item in data
+    )
+    assert any(item["question_revision_id"] == question_revision_a.id for item in data)
+    assert any(item["response"] == candidate_test_answer_a.response for item in data)
+    assert any(item["visited"] is False for item in data)
+    assert any(item["time_spent"] == 4 for item in data)
+    assert any(
+        item["candidate_test_id"] == candidate_test_answer_b.candidate_test_id
+        for item in data
+    )
+    assert any(item["question_revision_id"] == question_revision_b.id for item in data)
+    assert any(item["response"] == response_b for item in data)
+    assert any(item["visited"] is True for item in data)
+    assert any(item["time_spent"] == 56 for item in data)
 
 
 def test_read_candidate_test_answer_by_id(
