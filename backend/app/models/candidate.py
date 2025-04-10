@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
-    from app.models import Question, Test, User
+    from app.models import QuestionRevision, Test, User
 
 
 # Storing Answers for a question in a test by a candidate
@@ -14,8 +14,8 @@ class CandidateTestAnswerBase(SQLModel):
     __test__ = False
     candidate_test_id: int = Field(foreign_key="candidate_test.id", ondelete="CASCADE")
     question_revision_id: int = Field(
-        foreign_key="question.id", ondelete="CASCADE"
-    )  # Will Update to question_revision.id once the latter model is ready
+        foreign_key="question_revision.id", ondelete="CASCADE"
+    )
     response: str | None = Field(nullable=False, default=None)
     visited: bool = Field(nullable=False, default=False)
     time_spent: int = Field(nullable=True, default=0)
@@ -31,6 +31,10 @@ class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
     modified_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )
+    # Add relationship to QuestionRevision
+    question_revision: "QuestionRevision" = Relationship(
+        back_populates="candidate_test_answers"
     )
 
 
@@ -77,8 +81,9 @@ class CandidateTest(CandidateTestBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    question_revision: list["Question"] = Relationship(
-        back_populates="candidate_test", link_model=CandidateTestAnswer
+    # Updated relationship to reference QuestionRevision instead of Question
+    question_revisions: list["QuestionRevision"] = Relationship(
+        back_populates="candidate_tests", link_model=CandidateTestAnswer
     )
 
 

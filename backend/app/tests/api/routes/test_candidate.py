@@ -8,8 +8,10 @@ from app.models import (
     CandidateTestAnswer,
     Organization,
     Question,
+    QuestionRevision,
     Test,
 )
+from app.models.question import QuestionType
 from app.tests.utils.user import create_random_user
 
 from ...utils.utils import random_lower_string
@@ -689,16 +691,34 @@ def test_create_candidate_test_answers(
     db.commit()
     db.refresh(org)
 
-    question_a = Question(question=random_lower_string(), organization_id=org.id)
-    question_b = Question(question=random_lower_string(), organization_id=org.id)
-    db.add_all([question_a, question_b])
+    # Create question first
+    question_a = Question(organization_id=org.id)
+    db.add(question_a)
+    db.flush()
+
+    # Create question revision linked to the question
+    question_revision_a = QuestionRevision(
+        question_id=question_a.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"text": "Option 1"}, {"text": "Option 2"}],
+        correct_answer=[0],
+    )
+    db.add(question_revision_a)
+    db.flush()
+
+    # Set the last_revision_id on the question
+    question_a.last_revision_id = question_revision_a.id
     db.commit()
+    db.refresh(question_a)
+    db.refresh(question_revision_a)
 
     response = client.post(
         f"{settings.API_V1_STR}/candidate_test_answer/",
         json={
             "candidate_test_id": candidate_test.id,
-            "question_revision_id": question_a.id,
+            "question_revision_id": question_revision_a.id,  # Use the revision ID
             "response": random_lower_string(),
             "visited": False,
             "time_spent": 4,
@@ -709,7 +729,7 @@ def test_create_candidate_test_answers(
     data = response.json()
     assert response.status_code == 200
     assert data["candidate_test_id"] == candidate_test.id
-    assert data["question_revision_id"] == question_a.id
+    assert data["question_revision_id"] == question_revision_a.id
     assert data["response"] is not None
     assert data["visited"] is False
     assert data["time_spent"] == 4
@@ -769,17 +789,49 @@ def test_read_candidate_test_answer(
     db.commit()
     db.refresh(org)
 
-    question_a = Question(question=random_lower_string(), organization_id=org.id)
-    question_b = Question(question=random_lower_string(), organization_id=org.id)
+    # Create questions first
+    question_a = Question(organization_id=org.id)
+    question_b = Question(organization_id=org.id)
     db.add_all([question_a, question_b])
+    db.flush()
+
+    # Create question revisions
+    question_revision_a = QuestionRevision(
+        question_id=question_a.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"text": "Option 1"}, {"text": "Option 2"}],
+        correct_answer=[0],
+    )
+
+    question_revision_b = QuestionRevision(
+        question_id=question_b.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[{"text": "Option A"}, {"text": "Option B"}, {"text": "Option C"}],
+        correct_answer=[0, 1],
+    )
+
+    db.add_all([question_revision_a, question_revision_b])
+    db.flush()
+
+    # Set the last_revision_id on the questions
+    question_a.last_revision_id = question_revision_a.id
+    question_b.last_revision_id = question_revision_b.id
     db.commit()
+    db.refresh(question_a)
+    db.refresh(question_b)
+    db.refresh(question_revision_a)
+    db.refresh(question_revision_b)
 
     response_a = random_lower_string()
     response_b = random_lower_string()
 
     candidate_test_answer_a = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=question_a.id,
+        question_revision_id=question_revision_a.id,
         response=response_a,
         visited=False,
         time_spent=4,
@@ -787,7 +839,7 @@ def test_read_candidate_test_answer(
 
     candidate_test_answer_b = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=question_b.id,
+        question_revision_id=question_revision_b.id,
         response=response_b,
         visited=True,
         time_spent=56,
@@ -805,12 +857,12 @@ def test_read_candidate_test_answer(
     latest_data = data[len(data) - 1]
     previous_data = data[len(data) - 2]
     assert previous_data["candidate_test_id"] == candidate_test.id
-    assert previous_data["question_revision_id"] == question_a.id
+    assert previous_data["question_revision_id"] == question_revision_a.id
     assert previous_data["response"] == response_a
     assert previous_data["visited"] is False
     assert previous_data["time_spent"] == 4
     assert latest_data["candidate_test_id"] == candidate_test.id
-    assert latest_data["question_revision_id"] == question_b.id
+    assert latest_data["question_revision_id"] == question_revision_b.id
     assert latest_data["response"] == response_b
     assert latest_data["visited"] is True
     assert latest_data["time_spent"] == 56
@@ -870,17 +922,49 @@ def test_read_candidate_test_answer_by_id(
     db.commit()
     db.refresh(org)
 
-    question_a = Question(question=random_lower_string(), organization_id=org.id)
-    question_b = Question(question=random_lower_string(), organization_id=org.id)
+    # Create questions first
+    question_a = Question(organization_id=org.id)
+    question_b = Question(organization_id=org.id)
     db.add_all([question_a, question_b])
+    db.flush()
+
+    # Create question revisions
+    question_revision_a = QuestionRevision(
+        question_id=question_a.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"text": "Option 1"}, {"text": "Option 2"}],
+        correct_answer=[0],
+    )
+
+    question_revision_b = QuestionRevision(
+        question_id=question_b.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[{"text": "Option A"}, {"text": "Option B"}, {"text": "Option C"}],
+        correct_answer=[0, 1],
+    )
+
+    db.add_all([question_revision_a, question_revision_b])
+    db.flush()
+
+    # Set the last_revision_id on the questions
+    question_a.last_revision_id = question_revision_a.id
+    question_b.last_revision_id = question_revision_b.id
     db.commit()
+    db.refresh(question_a)
+    db.refresh(question_b)
+    db.refresh(question_revision_a)
+    db.refresh(question_revision_b)
 
     response_a = random_lower_string()
     response_b = random_lower_string()
 
     candidate_test_answer_a = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=question_a.id,
+        question_revision_id=question_revision_a.id,
         response=response_a,
         visited=False,
         time_spent=4,
@@ -888,7 +972,7 @@ def test_read_candidate_test_answer_by_id(
 
     candidate_test_answer_b = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=question_b.id,
+        question_revision_id=question_revision_b.id,
         response=response_b,
         visited=True,
         time_spent=56,
@@ -905,7 +989,7 @@ def test_read_candidate_test_answer_by_id(
     assert response.status_code == 200
     assert data["id"] == candidate_test_answer_a.id
     assert data["candidate_test_id"] == candidate_test.id
-    assert data["question_revision_id"] == question_a.id
+    assert data["question_revision_id"] == question_revision_a.id
     assert data["response"] == response_a
     assert data["visited"] is False
     assert data["time_spent"] == 4
@@ -965,17 +1049,49 @@ def test_update_candidate_test_answer(
     db.commit()
     db.refresh(org)
 
-    question_a = Question(question=random_lower_string(), organization_id=org.id)
-    question_b = Question(question=random_lower_string(), organization_id=org.id)
+    # Create questions first
+    question_a = Question(organization_id=org.id)
+    question_b = Question(organization_id=org.id)
     db.add_all([question_a, question_b])
+    db.flush()
+
+    # Create question revisions
+    question_revision_a = QuestionRevision(
+        question_id=question_a.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"text": "Option 1"}, {"text": "Option 2"}],
+        correct_answer=[0],
+    )
+
+    question_revision_b = QuestionRevision(
+        question_id=question_b.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[{"text": "Option A"}, {"text": "Option B"}, {"text": "Option C"}],
+        correct_answer=[0, 1],
+    )
+
+    db.add_all([question_revision_a, question_revision_b])
+    db.flush()
+
+    # Set the last_revision_id on the questions
+    question_a.last_revision_id = question_revision_a.id
+    question_b.last_revision_id = question_revision_b.id
     db.commit()
+    db.refresh(question_a)
+    db.refresh(question_b)
+    db.refresh(question_revision_a)
+    db.refresh(question_revision_b)
 
     response_a = random_lower_string()
     response_b = random_lower_string()
 
     candidate_test_answer_a = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=question_a.id,
+        question_revision_id=question_revision_a.id,
         response=response_a,
         visited=False,
         time_spent=4,
@@ -983,7 +1099,7 @@ def test_update_candidate_test_answer(
 
     candidate_test_answer_b = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=question_b.id,
+        question_revision_id=question_revision_b.id,
         response=response_b,
         visited=True,
         time_spent=56,

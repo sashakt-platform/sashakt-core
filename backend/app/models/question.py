@@ -203,20 +203,12 @@ class Question(SQLModel, table=True):
     )
     # Organization that owns this question
     organization: "Organization" = Relationship(back_populates="question")
-    # Tests that include this question
-    tests: list["Test"] = Relationship(
-        back_populates="test_question_static",
-        link_model=TestQuestion,
-    )
-    candidate_test: list["CandidateTest"] = Relationship(
-        back_populates="question_revision",
-        link_model=CandidateTestAnswer,
-    )
 
 
 class QuestionRevision(QuestionBase, table=True):
     """Versioned content of a question"""
 
+    __tablename__ = "question_revision"
     id: int | None = Field(
         default=None,
         primary_key=True,
@@ -232,7 +224,6 @@ class QuestionRevision(QuestionBase, table=True):
         nullable=False,
         description="ID of the user who created this revision",
     )
-
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this revision was created",
@@ -250,12 +241,29 @@ class QuestionRevision(QuestionBase, table=True):
         nullable=True,
         description="Whether this revision is marked as deleted",
     )
-
     # Relationships
     # Parent question for this revision
     question: Question = Relationship(back_populates="revisions")
     # User who created this revision
     created_by: "User" = Relationship(back_populates="question_revisions")
+    # Tests that include this question revision
+    tests: list["Test"] = Relationship(
+        back_populates="question_revisions",
+        link_model=TestQuestion,
+    )
+    # Candidate tests that include this question revision
+    candidate_tests: list["CandidateTest"] = Relationship(
+        back_populates="question_revisions",
+        link_model=CandidateTestAnswer,
+    )
+    # Direct relationship to candidate test answers
+    candidate_test_answers: list["CandidateTestAnswer"] = Relationship(
+        back_populates="question_revision"
+    )
+    # Direct relationship to test questions
+    test_questions: list["TestQuestion"] = Relationship(
+        back_populates="question_revision"
+    )
 
 
 class QuestionLocation(SQLModel, table=True):
@@ -433,3 +441,4 @@ class QuestionUpdate(SQLModel):
 
 # Force model rebuild to handle forward references
 QuestionPublic.model_rebuild()
+QuestionRevision.model_rebuild()

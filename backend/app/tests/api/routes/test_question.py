@@ -402,8 +402,12 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
     db.flush()
 
     # Link question to tests
-    test_question1 = TestQuestion(test_id=test1.id, question_id=q1.id)
-    test_question2 = TestQuestion(test_id=test2.id, question_id=q1.id)
+    test_question1 = TestQuestion(
+        test_id=test1.id, question_id=q1.id, question_revision_id=rev1.id
+    )
+    test_question2 = TestQuestion(
+        test_id=test2.id, question_id=q1.id, question_revision_id=rev1.id
+    )
     db.add(test_question1)
     db.add(test_question2)
     db.commit()
@@ -953,7 +957,7 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     # Link question to candidate test
     answer = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
-        question_revision_id=q1.id,
+        question_revision_id=rev1.id,
         response="0",
         visited=True,
         time_spent=30,
