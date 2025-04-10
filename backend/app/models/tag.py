@@ -3,10 +3,11 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models.question import QuestionTag
 from app.models.test import TestTag
 
 if TYPE_CHECKING:
-    from app.models import Organization, Test, User
+    from app.models import Organization, Question, Test, User
 
 
 class TagTypeBase(SQLModel):
@@ -88,6 +89,9 @@ class Tag(TagBase, table=True):
     is_deleted: bool = Field(default=False, nullable=False)
     tag_type: "TagType" = Relationship(back_populates="tags")
     tests: list["Test"] = Relationship(back_populates="tags", link_model=TestTag)
+    questions: list["Question"] = Relationship(
+        back_populates="tags", link_model=QuestionTag
+    )
     organization_id: int = Field(
         foreign_key="organization.id",
         nullable=False,

@@ -5,7 +5,15 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.models import Candidate, Organization, Role, Tag, TagType, Test
+    from app.models import (
+        Candidate,
+        Organization,
+        QuestionRevision,
+        Role,
+        Tag,
+        TagType,
+        Test,
+    )
 
 
 # Shared properties
@@ -72,6 +80,9 @@ class User(UserBase, table=True):
     is_active: bool = Field(default=True, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
     hashed_password: str
+    question_revisions: list["QuestionRevision"] = Relationship(
+        back_populates="created_by"
+    )
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
     tests: list["Test"] | None = Relationship(back_populates="created_by")

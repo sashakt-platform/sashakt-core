@@ -1,6 +1,6 @@
 ## Summary
 
-Fixes issue: #_PLEASE_TYPE_ISSUE_NUMBER_  
+Fixes issue: #_PLEASE_TYPE_ISSUE_NUMBER_
 Explain the **motivation** for making this change. Does this pull request do anything other than the problem mentioned in above issue.
 
 ## Checklist

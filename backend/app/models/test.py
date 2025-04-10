@@ -13,7 +13,7 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, Question, State, Tag, User
+    from app.models import Candidate, QuestionRevision, State, Tag, User
 
 
 class TestTag(SQLModel, table=True):
@@ -32,12 +32,18 @@ class TestQuestion(SQLModel, table=True):
     __tablename__ = "test_question"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
-    __table_args__ = (UniqueConstraint("test_id", "question_id"),)
+    __table_args__ = (UniqueConstraint("test_id", "question_revision_id"),)
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
-    question_id: int = Field(foreign_key="question.id", ondelete="CASCADE")
+    question_revision_id: int = Field(
+        foreign_key="question_revision.id", ondelete="CASCADE"
+    )
+
+    question_revision: "QuestionRevision" = Relationship(
+        back_populates="test_questions"
+    )
 
 
 class TestState(SQLModel, table=True):
@@ -90,7 +96,7 @@ class Test(TestBase, table=True):
     )
     tests: list["Test"] | None = Relationship(back_populates="template")
     tags: list["Tag"] | None = Relationship(back_populates="tests", link_model=TestTag)
-    test_question_static: list["Question"] | None = Relationship(
+    question_revisions: list["QuestionRevision"] | None = Relationship(
         back_populates="tests", link_model=TestQuestion
     )
     states: list["State"] | None = Relationship(
@@ -104,7 +110,7 @@ class Test(TestBase, table=True):
 
 class TestCreate(TestBase):
     tags: list[int] = []
-    test_question_static: list[int] = []
+    question_revision_ids: list[int] = []
     states: list[int] = []
 
 
@@ -115,11 +121,11 @@ class TestPublic(TestBase):
     is_active: bool | None
     is_deleted: bool
     tags: list[int]
-    test_question_static: list[int]
+    question_revision_ids: list[int]
     states: list[int]
 
 
 class TestUpdate(TestBase):
     tags: list[int] = []
-    test_question_static: list[int] = []
+    question_revision_ids: list[int] = []
     states: list[int] = []
