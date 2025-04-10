@@ -53,7 +53,7 @@ def create_country(
 @country_router.get(
     "/",
     response_model=list[CountryPublic],
-    dependencies=[Depends(permission_dependency("create_location"))],
+    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_countries(
     session: SessionDep,
