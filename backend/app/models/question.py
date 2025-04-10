@@ -316,11 +316,11 @@ class QuestionLocation(SQLModel, table=True):
     # Question associated with this location
     question: Question = Relationship(back_populates="locations")
     # State associated with this location
-    state: Optional["State"] = Relationship()
+    state: Optional["State"] = Relationship(back_populates="question_locations")
     # District associated with this location
-    district: Optional["District"] = Relationship()
+    district: Optional["District"] = Relationship(back_populates="question_locations")
     # Block associated with this location
-    block: Optional["Block"] = Relationship()
+    block: Optional["Block"] = Relationship(back_populates="question_locations")
 
 
 # Use inheritance to avoid field duplication
