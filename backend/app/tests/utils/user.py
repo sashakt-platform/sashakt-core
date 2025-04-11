@@ -3,7 +3,8 @@ from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
-from app.models import Role, User, UserCreate, UserUpdate
+from app.models import Organization, Role, User, UserCreate, UserUpdate
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.utils import random_email, random_lower_string
 
 
@@ -21,7 +22,8 @@ def user_authentication_headers(
 
 def create_random_user(db: Session) -> User:
     role = Role(name=random_lower_string(), label=random_lower_string())
-    db.add(role)
+    organization = create_random_organization(session=db)
+    db.add_all([organization, role])
     db.commit()
     email = random_email()
     password = random_lower_string()
@@ -33,6 +35,7 @@ def create_random_user(db: Session) -> User:
         phone=phone,
         full_name=full_name,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     return user
@@ -40,14 +43,24 @@ def create_random_user(db: Session) -> User:
 
 def get_user_token(*, db: Session, role: str) -> dict[str, str]:
     current_role = db.exec(select(Role).where(Role.name == role)).first()
+
     if not current_role:
         raise Exception(f"Role with name '{role}' not found")
+
+    organization = Organization(
+        name=random_lower_string(), description=random_lower_string()
+    )
+    db.add(organization)
+    db.commit()
+    db.refresh(organization)
+
     user_in = UserCreate(
         full_name=random_lower_string(),
         email=random_email(),
         phone=random_lower_string(),
         password=random_lower_string(),
         role_id=current_role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     headers = {"Authorization": f"Bearer {user.token}"}
@@ -64,6 +77,7 @@ def authentication_token_from_email(
     """
     password = random_lower_string()
     user = crud.get_user_by_email(session=db, email=email)
+    organization = create_random_organization(db)
     if not user:
         super_admin = db.exec(select(Role).where(Role.name == "super_admin")).first()
         if not super_admin:
@@ -75,6 +89,7 @@ def authentication_token_from_email(
             full_name=random_lower_string(),
             phone=random_lower_string(),
             role_id=role_id,
+            organization_id=organization.id,
         )
         user = crud.create_user(session=db, user_create=user_in_create)
     else:
@@ -84,6 +99,7 @@ def authentication_token_from_email(
             role_id=user.role_id,
             email=user.email,
             password=password,
+            organization_id=user.organization_id,
         )
         if not user.id:
             raise Exception("User id not set")

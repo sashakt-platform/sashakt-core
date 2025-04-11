@@ -10,7 +10,7 @@ from app.core.roles import (
     init_roles,
     super_admin,
 )
-from app.models import Role, User, UserCreate
+from app.models import Organization, Role, User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
@@ -30,6 +30,10 @@ def init_db(session: Session) -> None:
     # Creating Initial Roles
     init_roles(session)
 
+    initial_organization = Organization(name="T4D", description="T4D Organization")
+    session.add(initial_organization)
+    session.commit()
+
     super_admin_role = session.exec(
         select(Role.id).where(Role.name == super_admin.name)
     ).first()
@@ -46,5 +50,6 @@ def init_db(session: Session) -> None:
             role_id=super_admin_role,
             phone=settings.FIRST_SUPERUSER_MOBILE,
             created_by_id=None,
+            organization_id=initial_organization.id,
         )
         user = crud.create_user(session=session, user_create=user_in)

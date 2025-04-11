@@ -20,6 +20,7 @@ class PrivateUserCreate(BaseModel):
     is_verified: bool = False
     phone: str
     role_id: int
+    organization_id: int
 
 
 @router.post("/users/", response_model=UserPublic)
@@ -34,6 +35,7 @@ def create_user(user_in: PrivateUserCreate, session: SessionDep) -> Any:
         hashed_password=get_password_hash(user_in.password),
         phone=user_in.phone,
         role_id=user_in.role_id,
+        organization_id=user_in.organization_id,
     )
 
     session.add(user)
