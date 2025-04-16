@@ -6,8 +6,8 @@ from sqlmodel import Session, select
 from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
-from app.models import User, UserCreate
-from app.models.role import Role
+from app.models import Role, User, UserCreate
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_email, random_lower_string
@@ -46,12 +46,14 @@ def test_create_user_new_email(
         password = random_lower_string()
         phone = random_lower_string()
         role = create_random_role(db)
+        organization = create_random_organization(db)
         data = {
             "email": username,
             "password": password,
             "phone": phone,
             "role_id": role.id,
             "full_name": full_name,
+            "organization_id": organization.id,
         }
         r = client.post(
             f"{settings.API_V1_STR}/users/",
@@ -68,6 +70,7 @@ def test_create_user_new_email(
 def test_get_existing_user(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
+    organization = create_random_organization(db)
     username = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
@@ -79,6 +82,7 @@ def test_get_existing_user(
         full_name=full_name,
         phone=phone,
         role_id=role.id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
@@ -97,12 +101,14 @@ def test_get_existing_user_current_user(client: TestClient, db: Session) -> None
     username = random_email()
     password = random_lower_string()
     role = db.exec(select(Role.id).where(Role.name == "test_admin")).first()
+    organization = create_random_organization(db)
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=role,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
@@ -152,12 +158,14 @@ def test_create_user_existing_username(
     password = random_lower_string()
     phone = random_lower_string()
     role = create_random_role(db)
+    organization = create_random_organization(db)
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
-        role_id=create_random_role(db).id,
+        role_id=role.id,
+        organization_id=organization.id,
     )
     crud.create_user(session=db, user_create=user_in)
     data = {
@@ -166,6 +174,7 @@ def test_create_user_existing_username(
         "phone": phone,
         "role_id": role.id,
         "full_name": full_name,
+        "organization_id": organization.id,
     }
     r = client.post(
         f"{settings.API_V1_STR}/users/",
@@ -199,12 +208,14 @@ def test_retrieve_users(
 ) -> None:
     username = random_email()
     password = random_lower_string()
+    organization = create_random_organization(db)
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=organization.id,
     )
     crud.create_user(session=db, user_create=user_in)
 
@@ -216,6 +227,7 @@ def test_retrieve_users(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=organization.id,
     )
     crud.create_user(session=db, user_create=user_in2)
 
@@ -239,12 +251,14 @@ def test_update_user_me(
     password = random_lower_string()
     phone = random_lower_string()
     role = create_random_role(db)
+    organization = create_random_organization(db)
     data = {
         "email": email,
         "password": password,
         "phone": phone,
         "role_id": role.id,
         "full_name": full_name,
+        "organization_id": organization.id,
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
@@ -271,6 +285,7 @@ def test_update_user_me(
         "password": password,
         "role_id": user.role_id,
         "full_name": user.full_name,
+        "organization_id": organization.id,
     }
     response = client.patch(
         f"{settings.API_V1_STR}/users/me",
@@ -346,6 +361,7 @@ def test_update_user_me_email_exists(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=create_random_organization(db).id,
     )
     user = crud.create_user(session=db, user_create=user_in)
 
@@ -388,12 +404,14 @@ def test_register_user(
     full_name = random_lower_string()
     phone = random_lower_string()
     role_id = create_random_role(db).id
+    organization = create_random_organization(db)
     data = {
         "email": username,
         "password": password,
         "full_name": full_name,
         "phone": phone,
         "role_id": role_id,
+        "organization_id": organization.id,
     }
     r = client.post(
         f"{settings.API_V1_STR}/users/signup",
@@ -422,12 +440,14 @@ def test_register_user_already_exists_error(
     full_name = random_lower_string()
     phone = random_lower_string()
     role_id = create_random_role(db).id
+    organization = create_random_organization(db)
     data = {
         "email": settings.FIRST_SUPERUSER,
         "password": password,
         "full_name": full_name,
         "phone": phone,
         "role_id": role_id,
+        "organization_id": organization.id,
     }
     r = client.post(
         f"{settings.API_V1_STR}/users/signup",
@@ -450,6 +470,7 @@ def test_update_user(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=create_random_organization(db).id,
     )
     user = crud.create_user(session=db, user_create=user_in)
 
@@ -459,6 +480,7 @@ def test_update_user(
         "full_name": "Updated_full_name",
         "phone": user_in.phone,
         "role_id": user_in.role_id,
+        "organization_id": user_in.organization_id,
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
@@ -486,6 +508,7 @@ def test_update_user_not_exists(
         "full_name": "Updated_full_name",
         "phone": random_lower_string(),
         "role_id": create_random_role(db).id,
+        "organization_id": create_random_organization(db).id,
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/-1",
@@ -507,6 +530,7 @@ def test_update_user_email_exists(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=create_random_organization(db).id,
     )
     user = crud.create_user(session=db, user_create=user_in)
 
@@ -518,6 +542,7 @@ def test_update_user_email_exists(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=create_random_organization(db).id,
     )
     user2 = crud.create_user(session=db, user_create=user_in2)
 
@@ -527,6 +552,7 @@ def test_update_user_email_exists(
         "full_name": "Updated_full_name",
         "phone": user_in.phone,
         "role_id": user_in.role_id,
+        "organization_id": user_in.organization_id,
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
@@ -544,12 +570,14 @@ def test_delete_user_me(
     username = random_email()
     password = random_lower_string()
     role = db.exec(select(Role.id).where(Role.name == "system_admin")).first()
+    organization_id = create_random_organization(db).id
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=role,
+        organization_id=organization_id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
@@ -605,6 +633,7 @@ def test_delete_user_super_user(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
+        organization_id=create_random_organization(db).id,
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id

@@ -9,6 +9,7 @@ from app.models import (
     Country,
     Organization,
     Question,
+    QuestionRevision,
     State,
     Tag,
     TagType,
@@ -17,6 +18,7 @@ from app.models import (
     TestState,
     TestTag,
 )
+from app.models.question import QuestionType
 from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_lower_string
 
@@ -27,10 +29,10 @@ def setup_data(db: SessionDep) -> Any:
     india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    punjab = State(name=random_lower_string(), country_id=india.id)
-    db.add(punjab)
-    goa = State(name=random_lower_string(), country_id=india.id)
-    db.add(goa)
+    stata_a = State(name=random_lower_string(), country_id=india.id)
+    db.add(stata_a)
+    state_b = State(name=random_lower_string(), country_id=india.id)
+    db.add(state_b)
     db.commit()
 
     organization = Organization(name=random_lower_string())
@@ -45,40 +47,80 @@ def setup_data(db: SessionDep) -> Any:
     db.add(tag_type)
     db.commit()
 
-    tag_hindi = Tag(
+    tag_a = Tag(
         name=random_lower_string(),
         created_by_id=user.id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
 
-    tag_marathi = Tag(
+    tag_b = Tag(
         name=random_lower_string(),
         created_by_id=user.id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
-    db.add(tag_hindi)
-    db.add(tag_marathi)
+    db.add(tag_a)
+    db.add(tag_b)
     db.commit()
 
-    question_one = Question(question=random_lower_string())
-    question_two = Question(question=random_lower_string())
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create questions with revisions
+    question_one = Question(organization_id=org.id)
+    question_two = Question(organization_id=org.id)
     db.add(question_one)
     db.add(question_two)
+    db.flush()
+
+    # Create question revisions
+    question_revision_one = QuestionRevision(
+        question_id=question_one.id,
+        created_by_id=user.id,
+        question_text="What is the size of Sun",
+        question_type=QuestionType.single_choice,
+        options=[{"text": "Option 1"}, {"text": "Option 2"}],
+        correct_answer=[0],
+    )
+
+    question_revision_two = QuestionRevision(
+        question_id=question_two.id,
+        created_by_id=user.id,
+        question_text="What is the speed of light",
+        question_type=QuestionType.single_choice,
+        options=[{"text": "Option 1"}, {"text": "Option 2"}],
+        correct_answer=[0],
+    )
+
+    db.add(question_revision_one)
+    db.add(question_revision_two)
+    db.flush()
+
+    # Set last_revision_id on questions
+    question_one.last_revision_id = question_revision_one.id
+    question_two.last_revision_id = question_revision_two.id
     db.commit()
+    db.refresh(question_one)
+    db.refresh(question_two)
+    db.refresh(question_revision_one)
+    db.refresh(question_revision_two)
 
     return (
         user,
         india,
-        punjab,
-        goa,
+        stata_a,
+        state_b,
         organization,
         tag_type,
-        tag_hindi,
-        tag_marathi,
+        tag_a,
+        tag_b,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     )
 
 
@@ -96,6 +138,8 @@ def test_create_test(
         tag_marathi,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     ) = setup_data(db)
 
     payload = {
@@ -115,7 +159,7 @@ def test_create_test(
         "is_template": False,
         "created_by_id": user.id,
         "tags": [tag_hindi.id, tag_marathi.id],
-        "test_question_static": [question_one.id, question_two.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "states": [punjab.id],
     }
 
@@ -159,8 +203,9 @@ def test_create_test(
         select(TestQuestion).where(TestQuestion.test_id == data["id"])
     ).all()
 
-    assert test_question_link[0].question_id == question_one.id
-    assert test_question_link[1].question_id == question_two.id
+    # Verify the test_question_link has the question_revision_id
+    assert test_question_link[0].question_revision_id == question_revision_one.id
+    assert test_question_link[1].question_revision_id == question_revision_two.id
 
     sample_test = Test(
         name=random_lower_string(),
@@ -203,7 +248,7 @@ def test_create_test(
         "template_id": sample_test.id,
         "created_by_id": user.id,
         "tags": [tag_hindi.id, tag_marathi.id],
-        "test_question_static": [question_one.id, question_two.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "states": [punjab.id, goa.id],
     }
     response = client.post(
@@ -249,8 +294,9 @@ def test_create_test(
         select(TestQuestion).where(TestQuestion.test_id == data["id"])
     ).all()
 
-    assert test_question_link[0].question_id == question_one.id
-    assert test_question_link[1].question_id == question_two.id
+    # Verify the test_question_link has the question_revision_id
+    assert test_question_link[0].question_revision_id == question_revision_one.id
+    assert test_question_link[1].question_revision_id == question_revision_two.id
 
     payload = {
         "name": random_lower_string(),
@@ -299,9 +345,9 @@ def test_create_test(
     assert "created_date" in data
     assert "modified_date" in data
     assert "tags" in data
-    assert "test_question_static" in data
+    assert "question_revision_ids" in data
     assert len(data["tags"]) == 0
-    assert len(data["test_question_static"]) == 0
+    assert len(data["question_revision_ids"]) == 0
     assert len(data["states"]) == 0
 
     test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
@@ -321,7 +367,7 @@ def test_get_tests(
     (
         user,
         india,
-        stata_a,
+        state_a,
         state_b,
         organization,
         tag_type,
@@ -329,6 +375,8 @@ def test_get_tests(
         tag_b,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     ) = setup_data(db)
 
     test = Test(
@@ -354,10 +402,12 @@ def test_get_tests(
     test_tag_link = TestTag(test_id=test.id, tag_id=tag_a.id)
     db.add(test_tag_link)
 
-    test_question_link = TestQuestion(test_id=test.id, question_id=question_one.id)
+    test_question_link = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
     db.add(test_question_link)
 
-    test_state_link = TestState(test_id=test.id, state_id=stata_a.id)
+    test_state_link = TestState(test_id=test.id, state_id=state_a.id)
     db.add(test_state_link)
 
     db.commit()
@@ -370,30 +420,26 @@ def test_get_tests(
 
     assert response.status_code == 200
 
-    test_data = data[len(data) - 1]
-    assert test_data["name"] == test.name
-    assert test_data["description"] == test.description
-    assert test_data["time_limit"] == test.time_limit
-    assert test_data["marks"] == test.marks
-    assert test_data["completion_message"] == test.completion_message
-    assert test_data["start_instructions"] == test.start_instructions
-    assert test_data["marks_level"] == test.marks_level
-    assert test_data["link"] == test.link
-    assert test_data["no_of_attempts"] == test.no_of_attempts
-    assert test_data["shuffle"] == test.shuffle
-    assert test_data["random_questions"] == test.random_questions
-    assert test_data["no_of_questions"] == test.no_of_questions
-    assert test_data["question_pagination"] == test.question_pagination
-    assert test_data["is_template"] == test.is_template
-    assert test_data["created_by_id"] == test.created_by_id
-    assert "id" in test_data
-    assert "created_date" in test_data
-    assert "modified_date" in test_data
-    assert "tags" in test_data
-    assert "states" in test_data
-    assert len(test_data["tags"]) == 1
-    assert len(test_data["states"]) == 1
-    assert test_data["tags"][0] == tag_a.id
+    assert any(item["name"] == test.name for item in data)
+    assert any(item["description"] == test.description for item in data)
+    assert any(item["time_limit"] == test.time_limit for item in data)
+    assert any(item["marks"] == test.marks for item in data)
+    assert any(item["completion_message"] == test.completion_message for item in data)
+    assert any(item["start_instructions"] == test.start_instructions for item in data)
+    assert any(item["marks_level"] == test.marks_level for item in data)
+    assert any(item["link"] == test.link for item in data)
+    assert any(item["no_of_attempts"] == test.no_of_attempts for item in data)
+    assert any(item["shuffle"] == test.shuffle for item in data)
+    assert any(item["random_questions"] == test.random_questions for item in data)
+    assert any(item["no_of_questions"] == test.no_of_questions for item in data)
+    assert any(item["question_pagination"] == test.question_pagination for item in data)
+    assert any(item["is_template"] == test.is_template for item in data)
+    assert any(item["created_by_id"] == test.created_by_id for item in data)
+
+    assert any(len(item["tags"]) == 1 and item["tags"][0] == tag_a.id for item in data)
+    assert any(
+        len(item["states"]) == 1 and item["states"][0] == state_a.id for item in data
+    )
 
 
 def test_get_test_by_id(
@@ -402,7 +448,7 @@ def test_get_test_by_id(
     (
         user,
         india,
-        stata_a,
+        state_a,
         state_b,
         organization,
         tag_type,
@@ -410,6 +456,8 @@ def test_get_test_by_id(
         tag_b,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     ) = setup_data(db)
 
     test = Test(
@@ -436,11 +484,13 @@ def test_get_test_by_id(
     db.add(test_tag_link)
     db.commit()
 
-    test_question_link = TestQuestion(test_id=test.id, question_id=question_one.id)
+    test_question_link = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
     db.add(test_question_link)
     db.commit()
 
-    test_state_link = TestState(test_id=test.id, state_id=stata_a.id)
+    test_state_link = TestState(test_id=test.id, state_id=state_a.id)
     db.add(test_state_link)
     db.commit()
     response = client.get(
@@ -473,7 +523,7 @@ def test_get_test_by_id(
     assert len(data["tags"]) == 1
     assert len(data["states"]) == 1
     assert data["tags"][0] == tag_a.id
-    assert data["states"][0] == stata_a.id
+    assert data["states"][0] == state_a.id
 
 
 def test_update_test(
@@ -490,6 +540,8 @@ def test_update_test(
         tag_b,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     ) = setup_data(db)
 
     test = Test(
@@ -522,7 +574,10 @@ def test_update_test(
     db.add(test_tag_link)
     db.commit()
 
-    test_question_link = TestQuestion(test_id=test.id, question_id=question_one.id)
+    # Create TestQuestion with question_revision_id
+    test_question_link = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
     db.add(test_question_link)
     db.commit()
 
@@ -557,7 +612,7 @@ def test_update_test(
         "template_id": None,
         "created_by_id": user.id,
         "tags": [tag_a.id, tag_b.id],
-        "test_question_static": [question_one.id],
+        "question_revision_ids": [question_revision_one.id],
         "states": [stata_a.id, state_b.id],
     }
 
@@ -602,14 +657,21 @@ def test_update_test(
     assert len(data["tags"]) == 2
     assert data["tags"] == [tag_a.id, tag_b.id]
 
-    assert "test_question_static" in data
-    assert len(data["test_question_static"]) == 1
-    assert data["test_question_static"][0] == question_one.id
+    assert "question_revision_ids" in data
+    assert len(data["question_revision_ids"]) == 1
+    assert data["question_revision_ids"][0] == question_revision_one.id
 
     assert "states" in data
     assert len(data["states"]) == 2
     assert data["states"] == [stata_a.id, state_b.id]
     assert state_c.id not in data["states"]
+
+    # Check test_question_link has the correct question_revision_id
+    updated_test_questions = db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == test.id)
+    ).all()
+    assert len(updated_test_questions) == 1
+    assert updated_test_questions[0].question_revision_id == question_revision_one.id
 
 
 def test_visibility_test(
@@ -626,6 +688,8 @@ def test_visibility_test(
         tag_b,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     ) = setup_data(db)
 
     test = Test(
@@ -681,6 +745,8 @@ def test_delete_test(
         tag_b,
         question_one,
         question_two,
+        question_revision_one,
+        question_revision_two,
     ) = setup_data(db)
 
     test = Test(

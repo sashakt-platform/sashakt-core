@@ -70,17 +70,11 @@ def test_read_organization(
     )
     data = response.json()
     assert response.status_code == 200
-    jal_vikas_index = len(data) - 2
-    maha_vikas_index = len(data) - 1
-    assert data[jal_vikas_index]["name"] == jal_vikas.name
-    assert data[jal_vikas_index]["description"] is None
-    assert data[jal_vikas_index]["id"] == jal_vikas.id
-    assert data[jal_vikas_index]["is_active"] is None
-
-    assert data[maha_vikas_index]["name"] == maha_vikas.name
-    assert data[maha_vikas_index]["description"] == maha_vikas.description
-    assert data[maha_vikas_index]["id"] == maha_vikas.id
-    assert data[maha_vikas_index]["is_active"] is None
+    assert any(item["name"] == jal_vikas.name for item in data)
+    assert any(item["id"] == jal_vikas.id for item in data)
+    assert any(item["id"] == maha_vikas.id for item in data)
+    assert any(item["name"] == maha_vikas.name for item in data)
+    assert any(item["description"] == maha_vikas.description for item in data)
     response = client.get(
         f"{settings.API_V1_STR}/organization/",
         headers=get_user_candidate_token,

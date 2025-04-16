@@ -1,8 +1,12 @@
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.test import Test, TestState
+
+if TYPE_CHECKING:
+    from app.models.question import QuestionLocation
 
 
 # -----Models for Country-----
@@ -64,6 +68,7 @@ class State(StateBase, table=True):
     tests: list["Test"] | None = Relationship(
         back_populates="states", link_model=TestState
     )
+    question_locations: list["QuestionLocation"] = Relationship(back_populates="state")
 
 
 class StatePublic(StateBase):
@@ -104,6 +109,9 @@ class District(DistrictBase, table=True):
     is_active: bool | None = Field(default=None, nullable=True)
     state: State | None = Relationship(back_populates="districts")
     blocks: list["Block"] | None = Relationship(back_populates="district")
+    question_locations: list["QuestionLocation"] = Relationship(
+        back_populates="district"
+    )
 
 
 class DistrictPublic(DistrictBase):
@@ -145,6 +153,7 @@ class Block(BlockBase, table=True):
     )
     is_active: bool | None = Field(default=None, nullable=True)
     district: District | None = Relationship(back_populates="blocks")
+    question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
 
 
 class BlockPublic(BlockBase):

@@ -5,14 +5,21 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.models import Candidate, Organization, Role, Tag, TagType, Test
+    from app.models import (
+        Candidate,
+        Organization,
+        QuestionRevision,
+        Role,
+        Tag,
+        TagType,
+        Test,
+    )
 
 
 # Shared properties
 class UserBase(SQLModel):
     full_name: str = Field(
         max_length=255,
-        nullable=False,
         title="Full Name of the User",
         description="Enter Full Name of the User",
     )
@@ -20,15 +27,12 @@ class UserBase(SQLModel):
         unique=True,
         index=True,
         max_length=255,
-        nullable=False,
         title="Email of the User",
         description="Enter Email Address",
     )
-    phone: str = Field(max_length=255, nullable=False)
-    role_id: int = Field(foreign_key="role.id", nullable=False)
-    organization_id: int | None = Field(
-        default=None, foreign_key="organization.id", nullable=True
-    )
+    phone: str = Field(max_length=255)
+    role_id: int = Field(foreign_key="role.id")
+    organization_id: int = Field(foreign_key="organization.id")
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
 
 
@@ -72,6 +76,9 @@ class User(UserBase, table=True):
     is_active: bool = Field(default=True, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
     hashed_password: str
+    question_revisions: list["QuestionRevision"] = Relationship(
+        back_populates="created_by"
+    )
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
     tests: list["Test"] | None = Relationship(back_populates="created_by")
