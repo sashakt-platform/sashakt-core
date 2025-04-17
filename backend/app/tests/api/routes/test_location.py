@@ -362,7 +362,7 @@ def test_get_district(
     db.refresh(ernakulam)
     db.refresh(thrissur)
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?limit=1000",
+        f"{settings.API_V1_STR}/location/district/?limit=10000",
         headers=get_user_superadmin_token,
     )
     data = response.json()
