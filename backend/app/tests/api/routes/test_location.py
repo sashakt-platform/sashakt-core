@@ -204,7 +204,7 @@ def test_get_state(
     db.refresh(goa)
     db.refresh(punjab)
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?limit=100",
+        f"{settings.API_V1_STR}/location/state/?limit=1000",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -359,6 +359,8 @@ def test_get_district(
     db.add(ernakulam)
     db.add(thrissur)
     db.commit()
+    db.refresh(ernakulam)
+    db.refresh(thrissur)
     response = client.get(
         f"{settings.API_V1_STR}/location/district/?limit=1000",
         headers=get_user_superadmin_token,
