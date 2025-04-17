@@ -57,8 +57,20 @@ def create_country(
 )
 def get_countries(
     session: SessionDep,
+    skip: int = 0,
+    limit: int = 10,
+    is_active: bool | None = None,
 ) -> Sequence[Country]:
-    countries = session.exec(select(Country)).all()
+    query = select(Country)
+
+    if is_active is not None:
+        query = query.where(Country.is_active == is_active)
+
+    # Apply pagination
+    query = query.offset(skip).limit(limit)
+
+    countries = session.exec(query).all()
+
     return countries
 
 
@@ -128,8 +140,24 @@ def create_state(
 )
 def get_state(
     session: SessionDep,
+    skip: int = 0,
+    limit: int = 10,
+    is_active: bool | None = None,
+    country: int | None = None,
 ) -> Sequence[State]:
-    states = session.exec(select(State)).all()
+    query = select(State)
+
+    if is_active is not None:
+        query = query.where(State.is_active == is_active)
+
+    if country is not None:
+        query = query.where(State.country_id == country)
+
+    # Apply apgination
+    query = query.offset(skip).limit(limit)
+
+    states = session.exec(query).all()
+
     return states
 
 
@@ -201,8 +229,24 @@ def create_district(
 )
 def get_district(
     session: SessionDep,
+    skip: int = 0,
+    limit: int = 10,
+    is_active: bool | None = None,
+    state: int | None = None,
 ) -> Sequence[District]:
-    districts = session.exec(select(District)).all()
+    query = select(District)
+
+    if is_active is not None:
+        query = query.where(District.is_active == is_active)
+
+    if state is not None:
+        query = query.where(District.state_id == state)
+
+    # Apply apgination
+    query = query.offset(skip).limit(limit)
+
+    districts = session.exec(query).all()
+
     return districts
 
 
@@ -274,8 +318,24 @@ def create_block(
 )
 def get_block(
     session: SessionDep,
+    skip: int = 0,
+    limit: int = 10,
+    is_active: bool | None = None,
+    district: int | None = None,
 ) -> Sequence[Block]:
-    blocks = session.exec(select(Block)).all()
+    query = select(Block)
+
+    if is_active is not None:
+        query = query.where(Block.is_active == is_active)
+
+    if district is not None:
+        query = query.where(Block.district_id == district)
+
+    # Apply apgination
+    query = query.offset(skip).limit(limit)
+
+    blocks = session.exec(query).all()
+
     return blocks
 
 
