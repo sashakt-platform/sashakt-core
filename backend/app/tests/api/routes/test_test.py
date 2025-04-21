@@ -901,7 +901,7 @@ def test_get_test_by_filter_time_limit(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_gte=25&time_limit_lte=40",
+        f"{settings.API_V1_STR}/test/?time_limit_gte=25&time_limit_lte=40&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -910,7 +910,7 @@ def test_get_test_by_filter_time_limit(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_gte=31",
+        f"{settings.API_V1_STR}/test/?time_limit_gte=31&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -919,13 +919,13 @@ def test_get_test_by_filter_time_limit(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_lte=40",
+        f"{settings.API_V1_STR}/test/?time_limit_lte=40&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 7
+    assert len(data) == 2
 
 
 def test_get_test_by_filter_completion_message(
@@ -1472,21 +1472,21 @@ def test_get_test_order_by(
     user = create_random_user(db)
 
     test_1 = Test(
-        name="a-test",
+        name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_questions=1,
     )
     test_2 = Test(
-        name="c-test",
+        name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_questions=1,
     )
     test_3 = Test(
-        name="b-test",
+        name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
@@ -1495,17 +1495,19 @@ def test_get_test_order_by(
     db.add_all([test_1, test_2, test_3])
     db.commit()
 
+    test_names = [test_1.name, test_2.name, test_3.name]
+    test_names.sort()
+
     response = client.get(
         f"{settings.API_V1_STR}/test/?sort=name&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    print("data is -->", data)
     assert len(data) == 3
-    assert data[0]["name"] == test_1.name
-    assert data[1]["name"] == test_3.name
-    assert data[2]["name"] == test_2.name
+    assert data[0]["name"] == test_names[0]
+    assert data[1]["name"] == test_names[1]
+    assert data[2]["name"] == test_names[2]
     response = client.get(
         f"{settings.API_V1_STR}/test/?sort=name&created_by={user.id}&order=asc",
         headers=get_user_superadmin_token,
@@ -1513,11 +1515,10 @@ def test_get_test_order_by(
 
     assert response.status_code == 200
     data = response.json()
-    print("data is -->", data)
     assert len(data) == 3
-    assert data[0]["name"] == test_1.name
-    assert data[1]["name"] == test_3.name
-    assert data[2]["name"] == test_2.name
+    assert data[0]["name"] == test_names[0]
+    assert data[1]["name"] == test_names[1]
+    assert data[2]["name"] == test_names[2]
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?sort=name&created_by={user.id}&order=desc",
@@ -1525,11 +1526,49 @@ def test_get_test_order_by(
     )
     assert response.status_code == 200
     data = response.json()
-    print("data is -->", data)
     assert len(data) == 3
-    assert data[0]["name"] == test_2.name
-    assert data[1]["name"] == test_3.name
-    assert data[2]["name"] == test_1.name
+    assert data[0]["name"] == test_names[2]
+    assert data[1]["name"] == test_names[1]
+    assert data[2]["name"] == test_names[0]
+
+    test_dates = [test_1.created_date, test_2.created_date, test_3.created_date]
+    test_dates.sort()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+    assert datetime.fromisoformat(data[0]["created_date"]) == test_dates[0]
+    assert datetime.fromisoformat(data[1]["created_date"]) == test_dates[1]
+    assert datetime.fromisoformat(data[2]["created_date"]) == test_dates[2]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&order=asc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+    assert datetime.fromisoformat(data[0]["created_date"]) == test_dates[0]
+    assert datetime.fromisoformat(data[1]["created_date"]) == test_dates[1]
+    assert datetime.fromisoformat(data[2]["created_date"]) == test_dates[2]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&order=desc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+    assert datetime.fromisoformat(data[0]["created_date"]) == test_dates[2]
+    assert datetime.fromisoformat(data[1]["created_date"]) == test_dates[1]
+    assert datetime.fromisoformat(data[2]["created_date"]) == test_dates[0]
 
 
 def test_get_test_by_id(
