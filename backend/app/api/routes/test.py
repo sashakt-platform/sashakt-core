@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import asc, desc, select
+from sqlmodel import asc, col, desc, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
@@ -137,7 +137,7 @@ def get_test(
             detail=f"Invalid sort field: {sort}",
         )
 
-    sort_asc = asc(sort_column) if order == "asc" else desc(sort_column)
+    sort_asc: Any = asc(sort_column) if order == "asc" else desc(sort_column)
 
     query = query.order_by(sort_asc)
 
@@ -149,41 +149,41 @@ def get_test(
         query = query.where(Test.is_active == is_active)
 
     if name is not None:
-        query = query.where(Test.name.like(f"%{name}%"))
+        query = query.where(col(Test.name).contains(name))
 
     if description is not None:
-        query = query.where(Test.description.like(f"%{description}%"))
+        query = query.where(col(Test.description).contains(description))
 
     if completion_message is not None:
-        query = query.where(Test.completion_message.like(f"%{completion_message}%"))
+        query = query.where(col(Test.completion_message).contains(completion_message))
 
     if start_instructions is not None:
-        query = query.where(Test.start_instructions.like(f"%{start_instructions}%"))
+        query = query.where(col(Test.start_instructions).contains(start_instructions))
 
-    if start_time_gte is not None:
+    if start_time_gte is not None and Test.start_time is not None:
         query = query.where(Test.start_time >= start_time_gte)
-    if start_time_lte is not None:
+    if start_time_lte is not None and Test.start_time is not None:
         query = query.where(Test.start_time <= start_time_lte)
 
-    if end_time_gte is not None:
+    if end_time_gte is not None and Test.end_time is not None:
         query = query.where(Test.end_time >= end_time_gte)
-    if end_time_lte is not None:
+    if end_time_lte is not None and Test.end_time is not None:
         query = query.where(Test.end_time <= end_time_lte)
 
-    if time_limit_gte is not None:
+    if time_limit_gte is not None and Test.time_limit is not None:
         query = query.where(Test.time_limit >= time_limit_gte)
-    if time_limit_lte is not None:
+    if time_limit_lte is not None and Test.time_limit is not None:
         query = query.where(Test.time_limit <= time_limit_lte)
 
-    if marks_level is not None:
+    if marks_level is not None and Test.marks_level is not None:
         query = query.where(Test.marks_level == marks_level)
 
-    if no_of_attempts is not None:
+    if no_of_attempts is not None and Test.no_of_attempts is not None:
         query = query.where(Test.no_of_attempts == no_of_attempts)
 
-    if no_of_attempts_gte is not None:
+    if no_of_attempts_gte is not None and Test.no_of_attempts is not None:
         query = query.where(Test.no_of_attempts >= no_of_attempts_gte)
-    if no_of_attempts_lte is not None:
+    if no_of_attempts_lte is not None and Test.no_of_attempts is not None:
         query = query.where(Test.no_of_attempts <= no_of_attempts_lte)
 
     if shuffle is not None:
@@ -194,9 +194,9 @@ def get_test(
 
     if no_of_questions is not None:
         query = query.where(Test.no_of_questions == no_of_questions)
-    if no_of_questions_gte is not None:
+    if no_of_questions_gte is not None and Test.no_of_questions is not None:
         query = query.where(Test.no_of_questions >= no_of_questions_gte)
-    if no_of_questions_lte is not None:
+    if no_of_questions_lte is not None and Test.no_of_questions is not None:
         query = query.where(Test.no_of_questions <= no_of_questions_lte)
 
     if question_pagination is not None:
@@ -206,7 +206,7 @@ def get_test(
         query = query.where(Test.is_template == is_template)
 
     if created_by is not None:
-        query = query.where(Test.created_by_id.in_(created_by))
+        query = query.where(col(Test.created_by_id).in_(created_by))
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
@@ -280,7 +280,6 @@ def update_test(
     test_id: int, test_update: TestUpdate, session: SessionDep
 ) -> TestPublic:
     test = session.get(Test, test_id)
-    print("test-->", test)
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
 
