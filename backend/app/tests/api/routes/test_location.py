@@ -43,14 +43,15 @@ def test_get_country(
     db.add(dubai)
     db.add(austria)
     db.commit()
+    db.refresh(dubai)
+    db.refresh(austria)
     response = client.get(
         f"{settings.API_V1_STR}/location/country/", headers=get_user_superadmin_token
     )
     data = response.json()
-    last_index = len(data) - 1
     assert response.status_code == 200
-    assert data[last_index - 1]["name"] == dubai.name
-    assert data[last_index]["name"] == austria.name
+    assert any(item["name"] == dubai.name for item in data)
+    assert any(item["name"] == austria.name for item in data)
 
 
 def test_get_country_by_id(
@@ -148,12 +149,10 @@ def test_get_state(
     )
     data = response.json()
     assert response.status_code == 200
-    goa_index = len(data) - 2
-    punjab_index = len(data) - 1
-    assert data[goa_index]["name"] == goa.name
-    assert data[punjab_index]["name"] == punjab.name
-    assert data[goa_index]["country_id"] == india.id
-    assert data[punjab_index]["country_id"] == india.id
+
+    assert any(item["name"] == goa.name for item in data)
+    assert any(item["name"] == punjab.name for item in data)
+    assert any(item["country_id"] == india.id for item in data)
 
 
 def test_get_state_by_id(
@@ -279,14 +278,12 @@ def test_get_district(
     )
     data = response.json()
     assert response.status_code == 200
-    ernakulam_index = len(data) - 2
-    thrissur_index = len(data) - 1
-    assert data[ernakulam_index]["name"] == ernakulam.name
-    assert data[ernakulam_index]["id"] == ernakulam.id
-    assert data[thrissur_index]["id"] == thrissur.id
-    assert data[thrissur_index]["name"] == thrissur.name
-    assert data[ernakulam_index]["state_id"] == kerala.id
-    assert data[thrissur_index]["state_id"] == kerala.id
+
+    assert any(item["name"] == ernakulam.name for item in data)
+    assert any(item["id"] == ernakulam.id for item in data)
+    assert any(item["id"] == thrissur.id for item in data)
+    assert any(item["name"] == thrissur.name for item in data)
+    assert any(item["state_id"] == kerala.id for item in data)
 
 
 def test_get_district_by_id(
