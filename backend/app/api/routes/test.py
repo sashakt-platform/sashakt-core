@@ -7,14 +7,17 @@ from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Message,
     QuestionRevision,
+    State,
     Test,
     TestCreate,
     TestPublic,
+    TestPublicEach,
     TestQuestion,
     TestState,
     TestTag,
     TestUpdate,
 )
+from app.models.tag import Tag
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -128,28 +131,32 @@ def get_test(session: SessionDep) -> Sequence[TestPublic]:
 
 @router.get(
     "/{test_id}",
-    response_model=TestPublic,
+    response_model=TestPublicEach,
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
+def get_test_by_id(test_id: int, session: SessionDep) -> TestPublicEach:
     test = session.get(Test, test_id)
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
 
-    stored_tag_ids = session.exec(
-        select(TestTag.tag_id).where(TestTag.test_id == test_id)
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
     )
-    stored_revision_ids = session.exec(
-        select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test_id)
-    )
-    stored_state_ids = session.exec(
-        select(TestState.state_id).where(TestState.test_id == test_id)
-    )
-    return TestPublic(
+    question_revisions = session.exec(question_revision_query).all()
+
+    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
+    states = session.exec(state_query).all()
+
+    return TestPublicEach(
         **test.model_dump(),
-        tags=stored_tag_ids,
-        question_revision_ids=stored_revision_ids,
-        states=stored_state_ids,
+        tags=tags,
+        question_revisions=question_revisions,
+        states=states,
     )
 
 
