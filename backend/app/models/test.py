@@ -125,6 +125,17 @@ class TestPublic(TestBase):
     states: list[int]
 
 
+class TestPublicEach(TestBase):
+    id: int
+    created_date: datetime
+    modified_date: datetime
+    is_active: bool | None
+    is_deleted: bool
+    tags: list["Tag"]
+    question_revisions: list["QuestionRevision"]
+    states: list["State"]
+
+
 class TestUpdate(TestBase):
     tags: list[int] = []
     question_revision_ids: list[int] = []
