@@ -3,8 +3,9 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.question import QuestionTag
-from app.models.test import TestTag
+from app.models.location import State
+from app.models.question import QuestionRevision, QuestionTag
+from app.models.test import TestPublicEach, TestTag
 
 if TYPE_CHECKING:
     from app.models import Organization, Question, Test, User
@@ -118,3 +119,8 @@ class TagPublic(TagBase):
 
 class TagUpdate(TagBase):
     pass
+
+
+State.model_rebuild()
+QuestionRevision.model_rebuild()
+TestPublicEach.model_rebuild()
