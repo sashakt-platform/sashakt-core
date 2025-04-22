@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -19,6 +20,9 @@ from app.models import (
     TestTag,
 )
 from app.models.question import QuestionType
+from app.tests.utils.location import create_random_state
+from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_lower_string
 
@@ -445,20 +449,25 @@ def test_get_tests(
 def test_get_test_by_id(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    (
-        user,
-        india,
-        state_a,
-        state_b,
-        organization,
-        tag_type,
-        tag_a,
-        tag_b,
-        question_one,
-        question_two,
-        question_revision_one,
-        question_revision_two,
-    ) = setup_data(db)
+    user = create_random_user(db)
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state_a = State(name=random_lower_string(), country_id=country.id)
+    db.add(state_a)
+    state_b = State(name=random_lower_string(), country_id=country.id)
+    db.add(state_b)
+
+    tags = [
+        create_random_tag(db),
+        create_random_tag(db),
+        create_random_tag(db),
+        create_random_tag(db),
+    ]
+
+    db.add_all(tags)
+    db.commit()
 
     test = Test(
         name=random_lower_string(),
@@ -477,22 +486,48 @@ def test_get_test_by_id(
         is_template=False,
         created_by_id=user.id,
     )
+
     db.add(test)
     db.commit()
 
-    test_tag_link = TestTag(test_id=test.id, tag_id=tag_a.id)
-    db.add(test_tag_link)
+    for tag in tags:
+        test_tag_link = TestTag(test_id=test.id, tag_id=tag.id)
+        db.add(test_tag_link)
+        db.commit()
+
+    questions = [
+        create_random_question_revision(db),
+        create_random_question_revision(db),
+        create_random_question_revision(db),
+        create_random_question_revision(db),
+    ]
+
+    db.add_all(questions)
     db.commit()
 
-    test_question_link = TestQuestion(
-        test_id=test.id, question_revision_id=question_revision_one.id
-    )
-    db.add(test_question_link)
+    for question in questions:
+        test_question_link = TestQuestion(
+            test_id=test.id, question_revision_id=question.id
+        )
+        db.add(test_question_link)
+        db.commit()
+
+    states: list[State] = [
+        create_random_state(db),
+        create_random_state(db),
+        create_random_state(db),
+        create_random_state(db),
+    ]
+
+    db.add_all(states)
     db.commit()
 
-    test_state_link = TestState(test_id=test.id, state_id=state_a.id)
-    db.add(test_state_link)
-    db.commit()
+    for state in states:
+        db.refresh(state)
+        test_state_link = TestState(test_id=test.id, state_id=state.id)
+        db.add(test_state_link)
+        db.commit()
+
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}",
         headers=get_user_superadmin_token,
@@ -501,29 +536,90 @@ def test_get_test_by_id(
 
     assert response.status_code == 200
     assert data["name"] == test.name
+    assert data["link"] == test.link
+    assert data["no_of_questions"] == test.no_of_questions
+    assert data["created_by_id"] == test.created_by_id
     assert data["description"] == test.description
     assert data["time_limit"] == test.time_limit
     assert data["marks"] == test.marks
     assert data["completion_message"] == test.completion_message
     assert data["start_instructions"] == test.start_instructions
     assert data["marks_level"] is None
-    assert data["link"] == test.link
     assert data["no_of_attempts"] == test.no_of_attempts
     assert data["shuffle"] == test.shuffle
     assert data["random_questions"] == test.random_questions
-    assert data["no_of_questions"] == test.no_of_questions
     assert data["question_pagination"] == test.question_pagination
     assert data["is_template"] == test.is_template
-    assert data["created_by_id"] == test.created_by_id
-    assert "id" in data
-    assert "created_date" in data
-    assert "modified_date" in data
-    assert "tags" in data
-    assert "states" in data
-    assert len(data["tags"]) == 1
-    assert len(data["states"]) == 1
-    assert data["tags"][0] == tag_a.id
-    assert data["states"][0] == state_a.id
+    assert data["template_id"] is None
+    assert data["is_active"] == test.is_active
+    assert data["id"] == test.id
+
+    assert datetime.fromisoformat(data["created_date"]) == test.created_date
+    assert datetime.fromisoformat(data["modified_date"]) == test.modified_date
+
+    assert len(data["states"]) == len(states)
+    assert len(data["tags"]) == len(tags)
+    assert len(data["question_revisions"]) == len(questions)
+
+    for state_data in data["states"]:
+        assert any(state_data["id"] == state.id for state in states)
+        assert any(state_data["name"] == state.name for state in states)
+
+    for tag_data in data["tags"]:
+        assert any(tag_data["id"] == tag.id for tag in tags)
+        assert any(tag_data["name"] == tag.name for tag in tags)
+
+    for question_data in data["question_revisions"]:
+        assert any(question_data["id"] == question.id for question in questions)
+        assert any(
+            question_data["question_text"] == question.question_text
+            for question in questions
+        )
+        assert any(
+            question_data["question_type"] == question.question_type
+            for question in questions
+        )
+        assert any(
+            question_data["options"] == question.options for question in questions
+        )
+        assert any(
+            question_data["correct_answer"] == question.correct_answer
+            for question in questions
+        )
+
+    test_2 = Test(
+        name=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+
+    db.add(test_2)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test_2.id
+    assert data["name"] == test_2.name
+    assert data["link"] == test_2.link
+    assert data["no_of_questions"] == test_2.no_of_questions
+    assert data["created_by_id"] == test_2.created_by_id
+    assert data["is_template"] == test_2.is_template
+    assert data["is_active"] == test_2.is_active
+    assert datetime.fromisoformat(data["created_date"]) == test_2.created_date
+    assert datetime.fromisoformat(data["modified_date"]) == test_2.modified_date
+
+    assert data["tags"] == []
+    assert data["states"] == []
+    assert data["question_revisions"] == []
 
 
 def test_update_test(
