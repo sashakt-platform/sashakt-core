@@ -1,5 +1,6 @@
 from typing import Any
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -359,6 +360,71 @@ def test_create_test(
     ).all()
 
     assert test_question_link == []
+
+
+def test_create_test_random_question_field(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+        "no_of_random_questions": 5,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+        "no_of_random_questions": 0,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+        "no_of_random_questions": None,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 def test_get_tests(
