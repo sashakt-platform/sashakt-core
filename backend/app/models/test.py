@@ -59,24 +59,89 @@ class TestState(SQLModel, table=True):
 
 
 class TestBase(SQLModel):
-    name: str = Field(nullable=False, index=True)
-    description: str | None = Field(default=None, nullable=True)
-    start_time: datetime | None = Field(default=None, nullable=True)
-    end_time: datetime | None = Field(default=None, nullable=True)
-    time_limit: int | None = Field(default=None, nullable=True)
-    marks_level: MarksLevelEnum | None = Field(default=None, nullable=True)
-    marks: int | None = Field(default=None, nullable=True)
-    completion_message: str | None = Field(default=None, nullable=True)
-    start_instructions: str | None = Field(default=None, nullable=True)
-    link: str | None = Field(nullable=False)
-    no_of_attempts: int | None = Field(nullable=False, default=1)
-    shuffle: bool | None = Field(nullable=False, default=False)
-    random_questions: bool | None = Field(nullable=False, default=False)
-    no_of_questions: int | None = Field(default=None, nullable=False)
-    question_pagination: int = Field(default=1, nullable=False)
-    is_template: bool | None = Field(default=False, nullable=False)
-    template_id: int | None = Field(default=None, foreign_key="test.id", nullable=True)
-    created_by_id: int = Field(foreign_key="user.id", nullable=False)
+    name: str = Field(
+        index=True,
+        title="Test Name",
+        description="Name of the test. The same will be shown to the candidate.",
+    )
+    description: str | None = Field(
+        default=None,
+        title="Test Description",
+        description="Description of the test. The same will be shown to the candidate.",
+    )
+    start_time: datetime | None = Field(
+        default=None,
+        title="Start Time of the Test",
+        description="The tiem when the test will be started and can be attempted by the candidate.",
+    )
+    end_time: datetime | None = Field(
+        default=None,
+        title="End Time of the Test",
+        description="The time when the test will be ended and can not be any more attempted by the candidate.",
+    )
+    time_limit: int | None = Field(
+        default=None,
+        title="Time Limit in  Minutes",
+        ge=1,
+        description="The maximum time allowed for the test in minutes.",
+    )
+    marks_level: MarksLevelEnum | None = Field(
+        default=None,
+        title="Marks Level as Question or Test",
+        description="Field to set the marks level as question or test. If set to question, then the marks will be calculated as per the question level. If set to test, then the marks will be calculated as per the test level.",
+    )
+    marks: int | None = Field(
+        default=None,
+        title="Total Marks of the Test",
+        description="Total marks of the test when marks level is set to test.",
+    )
+    completion_message: str | None = Field(
+        default=None,
+        title="Completion Message",
+        description="Message to be shown to the candidate after the test is completed.",
+    )
+    start_instructions: str | None = Field(
+        default=None,
+        title="Start Instructions",
+        description="Instructions to be shown to the candidate before starting the test.",
+    )
+    link: str = Field(
+        title="Test Link", description="Link to the test shared with the candidate."
+    )
+    no_of_attempts: int | None = Field(
+        nullable=False,
+        default=1,
+        title="No of Attempts of a Test",
+        description="No of attempts allowed for the test. If set to 'None', then unlimited attempts are allowed.",
+    )
+    shuffle: bool = Field(
+        default=False,
+        title="Shuffle Selected Questions",
+        description="Field to set the shuffle of the selected questions. If set to true, then the set questions will be shuffled and displayed to the candidate.",
+    )
+    random_questions: bool = Field(
+        default=False,
+        title="Random Questions",
+        description="Field to set the random questions. If set to true, then the random questions will be selected from the question bank and displayed to the candidate.",
+    )
+    no_of_random_questions: int | None = Field(
+        default=None,
+        title="No of Random Questions",
+        description="No of random questions to be selected from the question bank. This field is only applicable when random_questions is set to true.",
+    )
+    question_pagination: int = Field(
+        default=1,
+        ge=0,
+        title="Question Pagination",
+        description="Field to set the question pagination. If set to 1 or more, then the questions will be paginated and displayed to the candidate. If set to 0, then all the questions will be displayed at once.",
+    )
+    is_template: bool = Field(
+        default=False,
+        title="Save Test as Template",
+        description="Field to set the test as template. If set to true, then the test will be treated as a template and can be used to create other tests.",
+    )
+    template_id: int | None = Field(default=None, foreign_key="test.id")
+    created_by_id: int = Field(foreign_key="user.id")
 
 
 class Test(TestBase, table=True):
