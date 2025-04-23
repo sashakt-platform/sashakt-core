@@ -140,8 +140,17 @@ class TestBase(SQLModel):
         title="Save Test as Template",
         description="Field to set the test as template. If set to true, then the test will be treated as a template and can be used to create other tests.",
     )
-    template_id: int | None = Field(default=None, foreign_key="test.id")
-    created_by_id: int = Field(foreign_key="user.id")
+    template_id: int | None = Field(
+        default=None,
+        foreign_key="test.id",
+        title="Template ID",
+        description="ID of the template from which the test is created.",
+    )
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class Test(TestBase, table=True):
