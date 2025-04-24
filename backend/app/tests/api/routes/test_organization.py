@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.organization import Organization
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.utils import random_lower_string
 
 
@@ -22,8 +23,7 @@ def test_create_organization(
         },
         headers=get_user_superadmin_token,
     )
-    print("This is link->", f"{settings.API_V1_STR}/organization/")
-    print("response-->", response)
+
     data = response.json()
     assert response.status_code == 200
     assert data["name"] == name
@@ -49,12 +49,25 @@ def test_read_organization(
     get_user_superadmin_token: dict[str, str],
     get_user_candidate_token: dict[str, str],
 ) -> None:
+    for _ in range(12):
+        create_random_organization(db)
+
     response = client.get(
         f"{settings.API_V1_STR}/organization/",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
+
+    assert len(data) == 10
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?limit=2&skip=10",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
 
     jal_vikas = Organization(name=random_lower_string())
     maha_vikas = Organization(
@@ -65,7 +78,7 @@ def test_read_organization(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization/?limit=1000",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -81,6 +94,191 @@ def test_read_organization(
     )
     data = response.json()
     assert response.status_code == 200
+
+
+def test_read_organization_filter_by_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization_name = random_lower_string()
+    organization_name_2 = random_lower_string()
+
+    organization = Organization(name=organization_name + random_lower_string())
+    organization_2 = Organization(
+        name=organization_name,
+        description=random_lower_string(),
+    )
+    organization_3 = Organization(
+        name=organization_name_2,
+        description=random_lower_string(),
+    )
+    db.add_all([organization, organization_2, organization_3])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?name={organization_name}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?name={organization_name_2}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 1
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?name={random_lower_string()}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 0
+
+
+def test_read_organization_filter_by_description(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization_description = random_lower_string()
+    organization_description_2 = random_lower_string()
+
+    organization = Organization(
+        name=random_lower_string(),
+        description=organization_description + random_lower_string(),
+    )
+    organization_2 = Organization(
+        name=random_lower_string(),
+        description=organization_description,
+    )
+    organization_3 = Organization(
+        name=random_lower_string(),
+        description=organization_description_2,
+    )
+    db.add_all([organization, organization_2, organization_3])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?description={organization_description}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?description={organization_description_2}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 1
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?description={random_lower_string()}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 0
+
+
+def test_read_organization_order_by(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    create_random_organization(db)
+    create_random_organization(db)
+    create_random_organization(db)
+    create_random_organization(db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    organization_created_date = [item["created_date"] for item in data]
+
+    sorted_organization_created_date = sorted(organization_created_date)
+
+    assert sorted_organization_created_date == organization_created_date
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-created_date",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    organization_created_date = [item["created_date"] for item in data]
+
+    sorted_organization_created_date = sorted(organization_created_date, reverse=True)
+
+    assert sorted_organization_created_date == organization_created_date
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=name",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    organization_name = [item["name"] for item in data]
+
+    sorted_organization_name = sorted(organization_name, key=str.lower)
+
+    assert sorted_organization_name == organization_name
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-name",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    organization_name = [item["name"] for item in data]
+
+    sorted_organization_name = sorted(organization_name, key=str.lower, reverse=True)
+
+    assert sorted_organization_name == organization_name
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-name&order_by=created_date",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    organization_name_date = [
+        {"name": item["name"], "created_date": item["created_date"]} for item in data
+    ]
+
+    sort_by_date = sorted(organization_name_date, key=lambda x: x["created_date"])
+    sorted_array = sorted(sort_by_date, key=lambda x: x["name"].lower(), reverse=True)
+
+    assert sorted_array == organization_name_date
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-test",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "invalid" in data["detail"].lower()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "invalid" in data["detail"].lower()
 
 
 def test_read_organization_by_id(

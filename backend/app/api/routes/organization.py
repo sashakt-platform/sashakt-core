@@ -1,9 +1,10 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import not_, select
+from sqlmodel import col, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
+from app.core.config import PAGINATION_SIZE
 from app.models import (
     Message,
     Organization,
@@ -37,10 +38,53 @@ def create_organization(
     response_model=list[OrganizationPublic],
     dependencies=[Depends(permission_dependency("read_organization"))],
 )
-def get_organization(session: SessionDep) -> Sequence[Organization]:
-    organization = session.exec(
-        select(Organization).where(not_(Organization.is_deleted))
-    ).all()
+def get_organization(
+    session: SessionDep,
+    skip: int = Query(0, description="Number of rows to skip"),
+    limit: int = Query(
+        PAGINATION_SIZE, description="Maximum number of entries to return"
+    ),
+    name: str | None = Query(
+        None,
+        title="Filter by Name",
+        description="Filter by organization name",
+        min_length=3,
+    ),
+    description: str | None = Query(
+        None, description="Filter by organization description", min_length=3
+    ),
+    order_by: list[str] = Query(
+        default=["created_date"],
+        title="Order by",
+        description="Order by fields",
+        examples=["-created_date", "name"],
+    ),
+) -> Sequence[Organization]:
+    query = select(Organization).where(not_(Organization.is_deleted))
+
+    if name:
+        query = query.where(col(Organization.name).contains(name))
+
+    if description:
+        query = query.where(col(Organization.description).contains(description))
+
+    for order in order_by:
+        is_desc = order.startswith("-")
+        order = order.lstrip("-")
+        column = getattr(Organization, order, None)
+        if column is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid order_by field: {order}",
+            )
+        query = query.order_by(column.desc() if is_desc else column)
+
+    # Apply pagination
+    query = query.offset(skip).limit(limit)
+
+    # Execute query and get all organization
+    organization = session.exec(query).all()
+
     return organization
 
 
