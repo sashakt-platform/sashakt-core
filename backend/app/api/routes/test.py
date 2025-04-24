@@ -1,7 +1,8 @@
 from collections.abc import Sequence
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import not_, select
+from sqlmodel import col, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
@@ -17,7 +18,9 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
+
 from app.models.tag import Tag
+from app.models.test import MarksLevelEnum
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -108,8 +111,133 @@ def create_test(
     response_model=list[TestPublic],
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test(session: SessionDep) -> Sequence[TestPublic]:
-    tests = session.exec(select(Test).where(not_(Test.is_deleted))).all()
+def get_test(
+    session: SessionDep,
+    skip: int = 0,
+    limit: int = 100,
+    marks_level: MarksLevelEnum | None = None,
+    name: str | None = None,
+    description: str | None = None,
+    start_time_gte: datetime | None = None,
+    start_time_lte: datetime | None = None,
+    end_time_gte: datetime | None = None,
+    end_time_lte: datetime | None = None,
+    time_limit_gte: int | None = None,
+    time_limit_lte: int | None = None,
+    completion_message: str | None = None,
+    start_instructions: str | None = None,
+    no_of_attempts: int | None = None,
+    no_of_attempts_gte: int | None = None,
+    no_of_attempts_lte: int | None = None,
+    shuffle: bool | None = None,
+    random_questions: bool | None = None,
+    no_of_random_questions: int | None = None,
+    no_of_random_questions_gte: int | None = Query(None),
+    no_of_random_questions_lte: int | None = None,
+    question_pagination: int | None = None,
+    is_template: bool | None = None,
+    created_by: list[int] | None = Query(None),
+    is_active: bool | None = None,
+    is_deleted: bool | None = False,  # Default to showing non-deleted questions
+    order_by: list[str] = Query(
+        default=["created_date"],
+        title="Order by",
+        description="Order by fields",
+        examples=["-created_date", "name"],
+    ),
+) -> Sequence[TestPublic]:
+    query = select(Test)
+
+    for order in order_by:
+        is_desc = order.startswith("-")
+        order = order.lstrip("-")
+        column = getattr(Test, order, None)
+        if column is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid order_by field: {order}",
+            )
+        query = query.order_by(column.desc() if is_desc else column)
+
+    # Apply filters only if they're provided
+    if is_deleted is not None:
+        query = query.where(Test.is_deleted == is_deleted)
+
+    if is_active is not None:
+        query = query.where(Test.is_active == is_active)
+
+    if name is not None:
+        query = query.where(col(Test.name).contains(name))
+
+    if description is not None:
+        query = query.where(col(Test.description).contains(description))
+
+    if completion_message is not None:
+        query = query.where(col(Test.completion_message).contains(completion_message))
+
+    if start_instructions is not None:
+        query = query.where(col(Test.start_instructions).contains(start_instructions))
+
+    if start_time_gte is not None and Test.start_time is not None:
+        query = query.where(Test.start_time >= start_time_gte)
+    if start_time_lte is not None and Test.start_time is not None:
+        query = query.where(Test.start_time <= start_time_lte)
+
+    if end_time_gte is not None and Test.end_time is not None:
+        query = query.where(Test.end_time >= end_time_gte)
+    if end_time_lte is not None and Test.end_time is not None:
+        query = query.where(Test.end_time <= end_time_lte)
+
+    if time_limit_gte is not None and Test.time_limit is not None:
+        query = query.where(Test.time_limit >= time_limit_gte)
+    if time_limit_lte is not None and Test.time_limit is not None:
+        query = query.where(Test.time_limit <= time_limit_lte)
+
+    if marks_level is not None and Test.marks_level is not None:
+        query = query.where(Test.marks_level == marks_level)
+
+    if no_of_attempts is not None and Test.no_of_attempts is not None:
+        query = query.where(Test.no_of_attempts == no_of_attempts)
+
+    if no_of_attempts_gte is not None and Test.no_of_attempts is not None:
+        query = query.where(Test.no_of_attempts >= no_of_attempts_gte)
+    if no_of_attempts_lte is not None and Test.no_of_attempts is not None:
+        query = query.where(Test.no_of_attempts <= no_of_attempts_lte)
+
+    if shuffle is not None:
+        query = query.where(Test.shuffle == shuffle)
+
+    if random_questions is not None:
+        query = query.where(Test.random_questions == random_questions)
+
+    if no_of_random_questions is not None:
+        query = query.where(Test.no_of_random_questions == no_of_random_questions)
+    if (
+        no_of_random_questions_gte is not None
+        and Test.no_of_random_questions is not None
+    ):
+        query = query.where(Test.no_of_random_questions >= no_of_random_questions_gte)
+    if (
+        no_of_random_questions_lte is not None
+        and Test.no_of_random_questions is not None
+    ):
+        query = query.where(Test.no_of_random_questions <= no_of_random_questions_lte)
+
+    if question_pagination is not None:
+        query = query.where(Test.question_pagination == question_pagination)
+
+    if is_template is not None:
+        query = query.where(Test.is_template == is_template)
+
+    if created_by is not None:
+        query = query.where(col(Test.created_by_id).in_(created_by))
+
+    # Apply pagination
+    query = query.offset(skip).limit(limit)
+
+    # Execute query and get all questions
+    tests = session.exec(query).all()
+
     test_public = []
 
     for test in tests:
@@ -180,7 +308,6 @@ def update_test(
     test_id: int, test_update: TestUpdate, session: SessionDep
 ) -> TestPublic:
     test = session.get(Test, test_id)
-    print("test-->", test)
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
 
