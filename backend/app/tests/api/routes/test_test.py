@@ -605,7 +605,7 @@ def test_get_test_by_id(
     assert response.status_code == 200
     assert data["name"] == test.name
     assert data["link"] == test.link
-    assert data["no_of_questions"] == test.no_of_questions
+    assert data["no_of_random_questions"] == test.no_of_random_questions
     assert data["created_by_id"] == test.created_by_id
     assert data["description"] == test.description
     assert data["time_limit"] == test.time_limit
@@ -662,7 +662,7 @@ def test_get_test_by_id(
         name=random_lower_string(),
         marks_level=None,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
@@ -681,7 +681,7 @@ def test_get_test_by_id(
     assert data["id"] == test_2.id
     assert data["name"] == test_2.name
     assert data["link"] == test_2.link
-    assert data["no_of_questions"] == test_2.no_of_questions
+    assert data["no_of_random_questions"] == test_2.no_of_random_questions
     assert data["created_by_id"] == test_2.created_by_id
     assert data["is_template"] == test_2.is_template
     assert data["is_active"] == test_2.is_active
