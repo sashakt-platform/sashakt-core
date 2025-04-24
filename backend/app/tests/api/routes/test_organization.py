@@ -271,6 +271,15 @@ def test_read_organization_order_by(
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "invalid" in data["detail"].lower()
 
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "invalid" in data["detail"].lower()
+
 
 def test_read_organization_by_id(
     client: TestClient,
