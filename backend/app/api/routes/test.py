@@ -18,7 +18,6 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
-
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
 
