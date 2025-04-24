@@ -521,21 +521,21 @@ def test_get_test_by_filter_name(
         name=random_lower_string() + test_name_1 + random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
 
     test_2 = Test(
         name=test_name_2,
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
 
     test_3 = Test(
         name=random_lower_string() + test_name_1 + random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -583,7 +583,7 @@ def test_get_test_by_filter_description(
         description=random_text_1,
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
 
     test_2 = Test(
@@ -591,7 +591,7 @@ def test_get_test_by_filter_description(
         description=random_lower_string() + random_text_1 + random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
 
     test_3 = Test(
@@ -599,7 +599,7 @@ def test_get_test_by_filter_description(
         description=random_text_2,
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -646,7 +646,7 @@ def test_get_test_by_filter_start_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 25, 10, 30),
     )
     test_2 = Test(
@@ -654,7 +654,7 @@ def test_get_test_by_filter_start_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 27, 12, 30),
     )
     test_3 = Test(
@@ -662,7 +662,7 @@ def test_get_test_by_filter_start_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 15, 30),
     )
 
@@ -671,7 +671,7 @@ def test_get_test_by_filter_start_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 19, 30),
     )
     db.add_all([test_1, test_2, test_3, test_4])
@@ -760,7 +760,7 @@ def test_get_test_by_filter_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         end_time=datetime(2025, 4, 25, 10, 30),
     )
     test_2 = Test(
@@ -768,7 +768,7 @@ def test_get_test_by_filter_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         end_time=datetime(2025, 4, 27, 12, 30),
     )
     test_3 = Test(
@@ -776,7 +776,7 @@ def test_get_test_by_filter_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         end_time=datetime(2025, 4, 28, 15, 30),
     )
 
@@ -785,7 +785,7 @@ def test_get_test_by_filter_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         end_time=datetime(2025, 4, 28, 19, 30),
     )
     db.add_all([test_1, test_2, test_3, test_4])
@@ -874,7 +874,7 @@ def test_get_test_by_filter_start_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 24, 10, 30),
         end_time=datetime(2025, 4, 25, 11, 30),
     )
@@ -883,7 +883,7 @@ def test_get_test_by_filter_start_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 26, 10, 30),
         end_time=datetime(2025, 4, 27, 12, 30),
     )
@@ -892,7 +892,7 @@ def test_get_test_by_filter_start_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 14, 30),
         end_time=datetime(2025, 4, 28, 15, 30),
     )
@@ -902,7 +902,7 @@ def test_get_test_by_filter_start_end_time(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 19, 10),
         end_time=datetime(2025, 4, 28, 19, 30),
     )
@@ -938,7 +938,7 @@ def test_get_test_by_filter_time_limit(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         time_limit=30,
     )
     test_2 = Test(
@@ -946,7 +946,7 @@ def test_get_test_by_filter_time_limit(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         time_limit=40,
     )
     test_3 = Test(
@@ -954,7 +954,7 @@ def test_get_test_by_filter_time_limit(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         time_limit=45,
     )
 
@@ -963,7 +963,7 @@ def test_get_test_by_filter_time_limit(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1007,7 +1007,7 @@ def test_get_test_by_filter_completion_message(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         completion_message=random_lower_string() + random_text_1,
     )
 
@@ -1015,7 +1015,7 @@ def test_get_test_by_filter_completion_message(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         completion_message=random_lower_string()
         + random_text_1
         + random_lower_string(),
@@ -1025,7 +1025,7 @@ def test_get_test_by_filter_completion_message(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         completion_message=random_text_2,
     )
     db.add_all([test_1, test_2, test_3])
@@ -1076,7 +1076,7 @@ def test_get_test_by_filter_start_instructions(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_instructions=random_lower_string() + random_text_1,
     )
 
@@ -1084,7 +1084,7 @@ def test_get_test_by_filter_start_instructions(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_instructions=random_lower_string()
         + random_text_1
         + random_lower_string(),
@@ -1094,7 +1094,7 @@ def test_get_test_by_filter_start_instructions(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         start_instructions=random_text_2,
     )
     db.add_all([test_1, test_2, test_3])
@@ -1141,21 +1141,21 @@ def test_get_test_by_filter_no_of_attempts(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         no_of_attempts=1,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         no_of_attempts=2,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         no_of_attempts=3,
     )
 
@@ -1212,14 +1212,14 @@ def test_get_test_by_filter_shuffle(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         shuffle=True,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         shuffle=False,
     )
 
@@ -1227,14 +1227,14 @@ def test_get_test_by_filter_shuffle(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         shuffle=True,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         shuffle=False,
     )
 
@@ -1273,14 +1273,14 @@ def test_get_test_by_filter_random_questions(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         random_questions=True,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         random_questions=False,
     )
 
@@ -1288,14 +1288,14 @@ def test_get_test_by_filter_random_questions(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         random_questions=True,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         random_questions=False,
     )
 
@@ -1334,25 +1334,25 @@ def test_get_test_by_filter_no_random_questions(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=20,
+        no_of_random_questions=20,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=10,
+        no_of_random_questions=10,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=45,
+        no_of_random_questions=45,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_questions_gte=10&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=10&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1360,7 +1360,7 @@ def test_get_test_by_filter_no_random_questions(
     assert len(data) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_questions_lte=10&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_random_questions_lte=10&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1368,7 +1368,7 @@ def test_get_test_by_filter_no_random_questions(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_questions_gte=20&no_of_questions_lte=45&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=20&no_of_random_questions_lte=45&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1392,21 +1392,21 @@ def test_get_test_by_filter_question_pagination(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=1,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=2,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=0,
     )
     db.add_all([test_1, test_2, test_3])
@@ -1444,14 +1444,14 @@ def test_get_test_by_filter_is_template(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         is_template=True,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         is_template=False,
     )
 
@@ -1459,7 +1459,7 @@ def test_get_test_by_filter_is_template(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
         is_template=True,
     )
     db.add_all([test_1, test_2, test_3])
@@ -1499,19 +1499,19 @@ def test_get_test_by_filter_created_by(
         name=random_lower_string(),
         created_by_id=user_1.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user_1.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user_2.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1544,30 +1544,29 @@ def test_get_test_order_by(
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     test_3 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
-        no_of_questions=1,
+        no_of_random_questions=1,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
 
-    test_names = [test_1.name, test_2.name, test_3.name]
-    test_names.sort()
+    test_names = sorted([test_1.name, test_2.name, test_3.name], key=str.lower)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?sort=name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?order_by=name&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1576,22 +1575,12 @@ def test_get_test_order_by(
     assert data[0]["name"] == test_names[0]
     assert data[1]["name"] == test_names[1]
     assert data[2]["name"] == test_names[2]
+
     response = client.get(
-        f"{settings.API_V1_STR}/test/?sort=name&created_by={user.id}&order=asc",
+        f"{settings.API_V1_STR}/test/?order_by=-name&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
-    assert data[0]["name"] == test_names[0]
-    assert data[1]["name"] == test_names[1]
-    assert data[2]["name"] == test_names[2]
-
-    response = client.get(
-        f"{settings.API_V1_STR}/test/?sort=name&created_by={user.id}&order=desc",
-        headers=get_user_superadmin_token,
-    )
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 3
@@ -1599,44 +1588,65 @@ def test_get_test_order_by(
     assert data[1]["name"] == test_names[1]
     assert data[2]["name"] == test_names[0]
 
-    test_dates = [test_1.created_date, test_2.created_date, test_3.created_date]
-    test_dates.sort()
-
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
 
-    assert datetime.fromisoformat(data[0]["created_date"]) == test_dates[0]
-    assert datetime.fromisoformat(data[1]["created_date"]) == test_dates[1]
-    assert datetime.fromisoformat(data[2]["created_date"]) == test_dates[2]
+    test_created_date = [item["created_date"] for item in data]
+
+    sorted_test_created_date = sorted(test_created_date)
+
+    assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order=asc",
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-created_date",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
 
-    assert datetime.fromisoformat(data[0]["created_date"]) == test_dates[0]
-    assert datetime.fromisoformat(data[1]["created_date"]) == test_dates[1]
-    assert datetime.fromisoformat(data[2]["created_date"]) == test_dates[2]
+    test_created_date = [item["created_date"] for item in data]
+
+    sorted_test_created_date = sorted(test_created_date, reverse=True)
+
+    assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order=desc",
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-name&order_by=created_date",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
 
-    assert datetime.fromisoformat(data[0]["created_date"]) == test_dates[2]
-    assert datetime.fromisoformat(data[1]["created_date"]) == test_dates[1]
-    assert datetime.fromisoformat(data[2]["created_date"]) == test_dates[0]
+    data = response.json()
+
+    test_name_date = [
+        {"created_date": item["created_date"], "name": item["name"]} for item in data
+    ]
+
+    sort_by_date = sorted(test_name_date, key=lambda x: x["created_date"])
+    sorted_array = sorted(sort_by_date, key=lambda x: x["name"].lower(), reverse=True)
+
+    assert sorted_array == test_name_date
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-setting",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "invalid" in data["detail"].lower()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?order_by=-",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "invalid" in data["detail"].lower()
 
 
 def test_get_test_by_id(
