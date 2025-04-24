@@ -8,8 +8,12 @@ if TYPE_CHECKING:
 
 
 class OrganizationBase(SQLModel):
-    name: str = Field(nullable=False, index=True)
-    description: str | None = Field(default=None, nullable=True)
+    name: str = Field(
+        index=True, title="Organization Name", description="Name of the organization"
+    )
+    description: str | None = Field(
+        default=None, title="Description", description="Description of the organization"
+    )
 
 
 class Organization(OrganizationBase, table=True):
@@ -21,8 +25,8 @@ class Organization(OrganizationBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
-    is_deleted: bool = Field(default=False, nullable=False)
+    is_active: bool | None = Field(default=None)
+    is_deleted: bool = Field(default=False)
 
     # Relationships
     tag_types: list["TagType"] = Relationship(back_populates="organization")
