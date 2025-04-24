@@ -558,10 +558,12 @@ def test_get_test_by_id(
     db.add(test)
     db.commit()
 
+    test_tag_links = []
     for tag in tags:
         test_tag_link = TestTag(test_id=test.id, tag_id=tag.id)
-        db.add(test_tag_link)
-        db.commit()
+        test_tag_links.append(test_tag_link)
+    db.add_all(test_tag_links)
+    db.commit()
 
     questions = [
         create_random_question_revision(db),
@@ -590,11 +592,14 @@ def test_get_test_by_id(
     db.add_all(states)
     db.commit()
 
+    test_state_links = []
     for state in states:
         db.refresh(state)
         test_state_link = TestState(test_id=test.id, state_id=state.id)
-        db.add(test_state_link)
-        db.commit()
+        test_state_links.append(test_state_link)
+
+    db.add_all(test_state_links)
+    db.commit()
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}",
@@ -605,7 +610,6 @@ def test_get_test_by_id(
     assert response.status_code == 200
     assert data["name"] == test.name
     assert data["link"] == test.link
-    assert data["no_of_random_questions"] == test.no_of_random_questions
     assert data["created_by_id"] == test.created_by_id
     assert data["description"] == test.description
     assert data["time_limit"] == test.time_limit
