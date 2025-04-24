@@ -51,6 +51,8 @@ def test_get_country(
     db.commit()
     db.refresh(dubai)
 
+    db.refresh(austria)
+
     response = client.get(
         f"{settings.API_V1_STR}/location/country/", headers=get_user_superadmin_token
     )
@@ -237,6 +239,7 @@ def test_get_state(
 
     data = response.json()
     assert response.status_code == 200
+
     assert len(data) == 2
 
 
@@ -369,6 +372,7 @@ def test_get_district(
     assert response.status_code == 200
 
     assert any(item["name"] == ernakulam.name for item in data)
+
     assert any(item["name"] == thrissur.name for item in data)
     assert any(item["id"] == ernakulam.id for item in data)
     assert any(item["id"] == thrissur.id for item in data)
