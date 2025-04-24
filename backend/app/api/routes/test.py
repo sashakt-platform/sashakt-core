@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import not_, select
 
 from app.api.deps import SessionDep, permission_dependency
@@ -36,6 +36,17 @@ def create_test(
         exclude={"tags", "question_revision_ids", "states"}
     )
     test = Test.model_validate(test_data)
+
+    if (
+        test.random_questions is True
+        and test.no_of_random_questions is None
+        or (test.no_of_random_questions is not None and test.no_of_random_questions < 1)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No. of random questions must be provided if random questions are enabled",
+        )
+
     session.add(test)
     session.commit()
     session.refresh(test)
