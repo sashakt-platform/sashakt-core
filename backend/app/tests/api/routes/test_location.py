@@ -101,7 +101,6 @@ def test_get_country(
     assert len(data) == 2
 
 
-
 def test_get_country_by_id(
     client: TestClient,
     db: SessionDep,
@@ -242,7 +241,6 @@ def test_get_state(
     assert response.status_code == 200
 
     assert len(data) == 2
-
 
 
 def test_get_state_by_id(
