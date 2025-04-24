@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: 5a569fdae5c8
+Revision ID: b923c98086b0
 Revises:
-Create Date: 2025-04-21 09:20:38.824118
+Create Date: 2025-04-24 11:12:26.287606
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '5a569fdae5c8'
+revision = 'b923c98086b0'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -178,7 +178,7 @@ def upgrade():
     sa.Column('no_of_attempts', sa.Integer(), nullable=False),
     sa.Column('shuffle', sa.Boolean(), nullable=False),
     sa.Column('random_questions', sa.Boolean(), nullable=False),
-    sa.Column('no_of_questions', sa.Integer(), nullable=False),
+    sa.Column('no_of_random_questions', sa.Integer(), nullable=True),
     sa.Column('question_pagination', sa.Integer(), nullable=False),
     sa.Column('is_template', sa.Boolean(), nullable=False),
     sa.Column('template_id', sa.Integer(), nullable=True),
