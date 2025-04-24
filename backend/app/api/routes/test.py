@@ -1,11 +1,8 @@
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-
-from sqlmodel import asc, col, desc, select,not_
-
+from sqlmodel import col, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
@@ -130,29 +127,33 @@ def get_test(
     no_of_attempts_lte: int | None = None,
     shuffle: bool | None = None,
     random_questions: bool | None = None,
-    no_of_questions: int | None = None,
-    no_of_questions_gte: int | None = Query(None),
-    no_of_questions_lte: int | None = None,
+    no_of_random_questions: int | None = None,
+    no_of_random_questions_gte: int | None = Query(None),
+    no_of_random_questions_lte: int | None = None,
     question_pagination: int | None = None,
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
     is_active: bool | None = None,
     is_deleted: bool | None = False,  # Default to showing non-deleted questions
-    sort: Annotated[str, Query(description="Field to sort by")] = "created_date",
-    order: Annotated[Literal["asc", "desc"], Query(description="Sort order")] = "asc",
+    order_by: list[str] = Query(
+        default=["created_date"],
+        title="Order by",
+        description="Order by fields",
+        examples=["-created_date", "name"],
+    ),
 ) -> Sequence[TestPublic]:
     query = select(Test)
 
-    sort_column = getattr(Test, sort, None)
-    if sort_column is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sort field: {sort}",
-        )
-
-    sort_asc: Any = asc(sort_column) if order == "asc" else desc(sort_column)
-
-    query = query.order_by(sort_asc)
+    for order in order_by:
+        is_desc = order.startswith("-")
+        order = order.lstrip("-")
+        column = getattr(Test, order, None)
+        if column is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid order_by field: {order}",
+            )
+        query = query.order_by(column.desc() if is_desc else column)
 
     # Apply filters only if they're provided
     if is_deleted is not None:
@@ -205,12 +206,18 @@ def get_test(
     if random_questions is not None:
         query = query.where(Test.random_questions == random_questions)
 
-    if no_of_questions is not None:
-        query = query.where(Test.no_of_questions == no_of_questions)
-    if no_of_questions_gte is not None and Test.no_of_questions is not None:
-        query = query.where(Test.no_of_questions >= no_of_questions_gte)
-    if no_of_questions_lte is not None and Test.no_of_questions is not None:
-        query = query.where(Test.no_of_questions <= no_of_questions_lte)
+    if no_of_random_questions is not None:
+        query = query.where(Test.no_of_random_questions == no_of_random_questions)
+    if (
+        no_of_random_questions_gte is not None
+        and Test.no_of_random_questions is not None
+    ):
+        query = query.where(Test.no_of_random_questions >= no_of_random_questions_gte)
+    if (
+        no_of_random_questions_lte is not None
+        and Test.no_of_random_questions is not None
+    ):
+        query = query.where(Test.no_of_random_questions <= no_of_random_questions_lte)
 
     if question_pagination is not None:
         query = query.where(Test.question_pagination == question_pagination)
