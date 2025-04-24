@@ -1,5 +1,6 @@
 from typing import Any
 
+from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -154,7 +155,7 @@ def test_create_test(
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
-        "no_of_questions": 4,
+        "no_of_random_questions": 4,
         "question_pagination": 1,
         "is_template": False,
         "created_by_id": user.id,
@@ -181,7 +182,7 @@ def test_create_test(
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
-    assert data["no_of_questions"] == payload["no_of_questions"]
+    assert data["no_of_random_questions"] == payload["no_of_random_questions"]
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["created_by_id"] == user.id
@@ -219,7 +220,7 @@ def test_create_test(
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
-        no_of_questions=2,
+        no_of_random_questions=2,
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
@@ -242,7 +243,7 @@ def test_create_test(
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
-        "no_of_questions": 4,
+        "no_of_random_questions": 4,
         "question_pagination": 1,
         "is_template": False,
         "template_id": sample_test.id,
@@ -269,7 +270,7 @@ def test_create_test(
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
-    assert data["no_of_questions"] == payload["no_of_questions"]
+    assert data["no_of_random_questions"] == payload["no_of_random_questions"]
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
@@ -310,7 +311,7 @@ def test_create_test(
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
-        "no_of_questions": 4,
+        "no_of_random_questions": 4,
         "question_pagination": 1,
         "is_template": False,
         "template_id": sample_test.id,
@@ -336,7 +337,7 @@ def test_create_test(
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
-    assert data["no_of_questions"] == payload["no_of_questions"]
+    assert data["no_of_random_questions"] == payload["no_of_random_questions"]
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == sample_test.id
@@ -359,6 +360,71 @@ def test_create_test(
     ).all()
 
     assert test_question_link == []
+
+
+def test_create_test_random_question_field(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+        "no_of_random_questions": 5,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+        "no_of_random_questions": 0,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+        "no_of_random_questions": None,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_questions": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 def test_get_tests(
@@ -391,7 +457,7 @@ def test_get_tests(
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
-        no_of_questions=2,
+        no_of_random_questions=2,
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
@@ -431,7 +497,9 @@ def test_get_tests(
     assert any(item["no_of_attempts"] == test.no_of_attempts for item in data)
     assert any(item["shuffle"] == test.shuffle for item in data)
     assert any(item["random_questions"] == test.random_questions for item in data)
-    assert any(item["no_of_questions"] == test.no_of_questions for item in data)
+    assert any(
+        item["no_of_random_questions"] == test.no_of_random_questions for item in data
+    )
     assert any(item["question_pagination"] == test.question_pagination for item in data)
     assert any(item["is_template"] == test.is_template for item in data)
     assert any(item["created_by_id"] == test.created_by_id for item in data)
@@ -472,7 +540,7 @@ def test_get_test_by_id(
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
@@ -511,7 +579,7 @@ def test_get_test_by_id(
     assert data["no_of_attempts"] == test.no_of_attempts
     assert data["shuffle"] == test.shuffle
     assert data["random_questions"] == test.random_questions
-    assert data["no_of_questions"] == test.no_of_questions
+    assert data["no_of_random_questions"] == test.no_of_random_questions
     assert data["question_pagination"] == test.question_pagination
     assert data["is_template"] == test.is_template
     assert data["created_by_id"] == test.created_by_id
@@ -556,7 +624,7 @@ def test_update_test(
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
@@ -606,7 +674,7 @@ def test_update_test(
         "no_of_attempts": 3,
         "shuffle": True,
         "random_questions": True,
-        "no_of_questions": 50,
+        "no_of_random_questions": 50,
         "question_pagination": 1,
         "is_template": False,
         "template_id": None,
@@ -638,7 +706,7 @@ def test_update_test(
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
-    assert data["no_of_questions"] == payload["no_of_questions"]
+    assert data["no_of_random_questions"] == payload["no_of_random_questions"]
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
@@ -704,7 +772,7 @@ def test_visibility_test(
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
@@ -761,7 +829,7 @@ def test_delete_test(
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
-        no_of_questions=1,
+        no_of_random_questions=1,
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
