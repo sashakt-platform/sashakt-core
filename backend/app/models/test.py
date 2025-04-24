@@ -72,7 +72,7 @@ class TestBase(SQLModel):
     start_time: datetime | None = Field(
         default=None,
         title="Start Time of the Test",
-        description="The tiem when the test will be started and can be attempted by the candidate.",
+        description="The time when the test will be started and can be attempted by the candidate.",
     )
     end_time: datetime | None = Field(
         default=None,
