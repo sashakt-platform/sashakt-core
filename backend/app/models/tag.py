@@ -121,6 +121,7 @@ class TagUpdate(TagBase):
     pass
 
 
+# Rebuild the TestPublicEach model to ensure all relationships are set up correctly
 State.model_rebuild()
 QuestionRevision.model_rebuild()
 TestPublicEach.model_rebuild()
