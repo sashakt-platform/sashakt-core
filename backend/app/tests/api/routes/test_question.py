@@ -982,3 +982,133 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     # Non-existent question
     response = client.get(f"{settings.API_V1_STR}/questions/99999/candidate-tests")
     assert response.status_code == 404
+
+
+def test_bulk_upload_questions(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org_name = random_lower_string()
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": org_name},
+        headers=get_user_superadmin_token,
+    )
+    org_data = org_response.json()
+    org_id = org_data["id"]
+
+    # Create user
+    user = create_random_user(db)
+    user.organization_id = org_id
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    user_id = user.id
+
+    # Create country and state
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    kerala = State(name="Kerala", country_id=india.id)
+    db.add(kerala)
+    db.commit()
+    db.refresh(kerala)
+
+    # Create tag type
+    client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json={
+            "name": "Test Tag Type",
+            "description": "For testing",
+            "created_by_id": user_id,
+            "organization_id": org_id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    # Create a CSV file with test data
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Kerala
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Kerala
+What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Kerala
+"""
+    # Create a temporary file
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        # Upload the CSV file
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Created" in data["message"]
+
+        # Check that questions were created
+        response = client.get(
+            f"{settings.API_V1_STR}/questions/?organization_id={org_id}"
+        )
+        questions = response.json()
+        assert len(questions) >= 3
+
+        # Check for specific question content
+        question_texts = [q["question_text"] for q in questions]
+        assert "What is 2+2?" in question_texts
+        assert "What is the capital of France?" in question_texts
+        assert "What is H2O?" in question_texts
+
+        # Check tags were correctly associated
+        for question in questions:
+            if question["question_text"] == "What is 2+2?":
+                assert any(tag["name"] == "Math" for tag in question["tags"])
+            elif question["question_text"] == "What is the capital of France?":
+                assert any(tag["name"] == "Geography" for tag in question["tags"])
+            elif question["question_text"] == "What is H2O?":
+                assert any(tag["name"] == "Chemistry" for tag in question["tags"])
+
+        # Check locations were correctly associated
+        for question in questions:
+            locations = question["locations"]
+            assert len(locations) > 0
+            assert any(loc["state_name"] == "Kerala" for loc in locations)
+
+        # Test upload with non-existent state
+        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geography,NonExistentState
+"""
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(csv_content_bad_state.encode("utf-8"))
+            temp_file_path_bad = temp_file.name
+
+        with open(temp_file_path_bad, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_bad_state.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Failed to create" in data["message"]
+        assert "NonExistentState" in data["message"]
+
+        # Cleanup
+        import os
+
+        os.unlink(temp_file_path_bad)
+
+    finally:
+        # Cleanup
+        import os
+
+        os.unlink(temp_file_path)

@@ -1,7 +1,9 @@
+import csv
 from datetime import datetime
+from io import StringIO
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import desc
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
@@ -12,6 +14,7 @@ from app.models import (
     CandidateTest,
     District,
     Message,
+    Organization,
     Question,
     QuestionCreate,
     QuestionLocation,
@@ -26,7 +29,9 @@ from app.models import (
     State,
     Tag,
     TagPublic,
+    TagType,
     Test,
+    User,
 )
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -165,20 +170,19 @@ def create_question(
     # Prepare data for JSON serialization
     options, marking_scheme, media = prepare_for_db(question_create)
 
-    # Create the revision with serialized data
     revision = QuestionRevision(
         question_id=question.id,
         created_by_id=question_create.created_by_id,
         question_text=question_create.question_text,
         instructions=question_create.instructions,
         question_type=question_create.question_type,
-        options=options,  # Now serialized
+        options=options,
         correct_answer=question_create.correct_answer,
         subjective_answer_limit=question_create.subjective_answer_limit,
         is_mandatory=question_create.is_mandatory,
-        marking_scheme=marking_scheme,  # Now serialized
+        marking_scheme=marking_scheme,
         solution=question_create.solution,
-        media=media,  # Now serialized
+        media=media,
     )
     session.add(revision)
     session.flush()
@@ -984,3 +988,276 @@ def remove_question_tag(
     session.commit()
 
     return Message(message="Tag removed from question successfully")
+
+
+@router.post("/bulk-upload", response_model=Message)
+async def upload_questions_csv(
+    session: SessionDep, file: UploadFile = File(...), user_id: int = Form(...)
+) -> Message:
+    """
+    Bulk upload questions from a CSV file.
+    The CSV should include columns:
+    - Questions: The question text
+    - Option A, Option B, Option C, Option D: The options
+    - Correct Option: Which option is correct (A, B, C, D)
+    - Training Tags: Comma-separated list of tags (optional) of the form tag_type:tag_name
+    - State: State name or comma-separated list of states (optional)
+    """
+    # Verify user exists
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Verify organization exists
+    organization_id = user.organization_id
+    organization = session.get(Organization, organization_id)
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Save the uploaded file to a temporary file
+    content = await file.read()
+
+    try:
+        # Process the CSV content
+        csv_text = content.decode("utf-8")
+        csv_reader = csv.DictReader(StringIO(csv_text))
+
+        # Check required columns
+        required_columns = [
+            "Questions",
+            "Option A",
+            "Option B",
+            "Option C",
+            "Option D",
+            "Correct Option",
+        ]
+        first_row = next(csv_reader, None)
+
+        if not first_row:
+            raise HTTPException(status_code=400, detail="CSV file is empty")
+
+        for column in required_columns:
+            if column not in first_row:
+                raise HTTPException(
+                    status_code=400, detail=f"Missing required column: {column}"
+                )
+
+        # Reset the reader
+        csv_reader = csv.DictReader(StringIO(csv_text))
+
+        # Start processing rows
+        questions_created = 0
+        questions_failed = 0
+        tag_cache: dict[str, int] = {}  # Cache for tag lookups
+        state_cache: dict[str, int] = {}  # Cache for state lookups
+        failed_states = set()
+
+        for row in csv_reader:
+            try:
+                # Skip empty rows
+                if not row.get("Questions", "").strip():
+                    continue
+
+                # Extract data
+                question_text = row.get("Questions", "").strip()
+                options = [
+                    row.get("Option A", "").strip(),
+                    row.get("Option B", "").strip(),
+                    row.get("Option C", "").strip(),
+                    row.get("Option D", "").strip(),
+                ]
+
+                # Convert option letter to index
+                correct_letter = row.get("Correct Option", "A").strip()
+                letter_map = {"A": 0, "B": 1, "C": 2, "D": 3}
+                correct_answer = letter_map.get(correct_letter, 0)
+
+                # Process tags if present
+                tag_ids = []
+                if "Training Tags" in row and row["Training Tags"].strip():
+                    tag_entries = [
+                        t.strip() for t in row["Training Tags"].split(",") if t.strip()
+                    ]
+
+                    for tag_entry in tag_entries:
+                        # Split by colon to get tag_type and tag_name
+                        parts = tag_entry.split(":", 1)
+                        if len(parts) == 2:
+                            tag_type_name = parts[0].strip()
+                            tag_name = parts[1].strip()
+                        else:
+                            # Default tag type if no colon present
+                            tag_type_name = "Training Tag"
+                            tag_name = tag_entry
+
+                        cache_key = f"{tag_type_name}:{tag_name}"
+                        if cache_key in tag_cache:
+                            tag_ids.append(tag_cache[cache_key])
+                            continue
+
+                        tag_type_query = select(TagType).where(
+                            TagType.name == tag_type_name,
+                            TagType.organization_id == organization_id,
+                        )
+
+                        tag_type = session.exec(tag_type_query).first()
+
+                        if not tag_type:
+                            tag_type = TagType(
+                                name="Training Tag",
+                                description="Tag type for training questions",
+                                created_by_id=user_id,
+                                organization_id=organization_id,
+                            )
+                            session.add(tag_type)
+                            session.flush()
+
+                        # Get or create tag
+                        tag_query = select(Tag).where(
+                            Tag.name == tag_name,
+                            Tag.tag_type_id == tag_type.id,
+                            Tag.organization_id == organization_id,
+                        )
+                        tag = session.exec(tag_query).first()
+
+                        if not tag:
+                            tag = Tag(
+                                name=tag_name,
+                                description=f"Tag for {tag_name}",
+                                tag_type_id=tag_type.id,
+                                created_by_id=user_id,
+                                organization_id=organization_id,
+                            )
+                            session.add(tag)
+                            session.flush()
+
+                        if tag and tag.id:
+                            tag_ids.append(tag.id)
+                            tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
+
+                # Process state information if present
+                row_state_ids = []
+                state_error = False
+
+                if "State" in row and row["State"].strip():
+                    state_names = [
+                        s.strip() for s in row["State"].split(",") if s.strip()
+                    ]
+
+                    for state_name in state_names:
+                        if state_name in state_cache:
+                            if state_cache[state_name] not in row_state_ids:
+                                row_state_ids.append(state_cache[state_name])
+                            continue
+
+                        # Get or create state
+                        state_query = select(State).where(State.name == state_name)
+                        state = session.exec(state_query).first()
+
+                        if not state:
+                            failed_states.add(state_name)
+                            state_error = True
+
+                        if state and state.id:
+                            row_state_ids.append(state.id)
+                            state_cache[state_name] = state.id
+
+                # Skip this question if states weren't found
+                if state_error:
+                    questions_failed += 1
+                    continue
+
+                # Filter out empty options
+                valid_options = []
+                for _i, option in enumerate(options):
+                    if option.strip():
+                        valid_options.append({"text": option})
+
+                # Create QuestionCreate object
+                question_create = QuestionCreate(
+                    organization_id=organization_id,
+                    created_by_id=user_id,
+                    question_text=question_text,
+                    question_type="single-choice",  # Assuming single choice questions
+                    options=valid_options,
+                    correct_answer=[correct_answer],
+                    is_mandatory=True,
+                    marking_scheme={"correct": 1, "wrong": 0, "skipped": 0},
+                    state_ids=row_state_ids,
+                    district_ids=[],
+                    block_ids=[],
+                    tag_ids=tag_ids,
+                )
+
+                # Create the question using existing function logic
+                question = Question(
+                    organization_id=question_create.organization_id,
+                )
+                session.add(question)
+                session.flush()
+
+                # Prepare data for JSON serialization
+                options, marking_scheme, media = prepare_for_db(question_create)  # type: ignore
+
+                # Create the revision with serialized data
+                revision = QuestionRevision(
+                    question_id=question.id,
+                    created_by_id=question_create.created_by_id,
+                    question_text=question_create.question_text,
+                    instructions=question_create.instructions,
+                    question_type=question_create.question_type,
+                    options=options,
+                    correct_answer=question_create.correct_answer,
+                    subjective_answer_limit=question_create.subjective_answer_limit,
+                    is_mandatory=question_create.is_mandatory,
+                    marking_scheme=marking_scheme,
+                    solution=question_create.solution,
+                    media=media,
+                )
+                session.add(revision)
+                session.flush()
+
+                question.last_revision_id = revision.id
+
+                # Handle state associations
+                if question_create.state_ids:
+                    for state_id in question_create.state_ids:
+                        state_location = QuestionLocation(
+                            question_id=question.id,
+                            state_id=state_id,
+                            district_id=None,
+                            block_id=None,
+                        )
+                        session.add(state_location)
+
+                if question_create.tag_ids:
+                    for tag_id in question_create.tag_ids:
+                        tag = session.get(Tag, tag_id)
+                        if tag:
+                            question_tag = QuestionTag(
+                                question_id=question.id,
+                                tag_id=tag_id,
+                            )
+                            session.add(question_tag)
+
+                questions_created += 1
+
+            except Exception as e:
+                questions_failed += 1
+                # Optionally log the error
+                print(f"Error processing row: {str(e)}")
+                continue
+
+        # Commit all changes at once
+        session.commit()
+
+        # Include information about failed states in the response
+        message = f"Bulk upload complete. Created {questions_created} questions successfully. Failed to create {questions_failed} questions."
+        if failed_states:
+            message += f" The following states were not found in the system: {', '.join(failed_states)}"
+
+        return Message(message=message)
+
+    except Exception as e:
+        # Handle overall process errors
+        raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
