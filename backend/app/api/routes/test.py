@@ -12,7 +12,6 @@ from app.models import (
     Test,
     TestCreate,
     TestPublic,
-    TestPublicEach,
     TestQuestion,
     TestState,
     TestTag,
@@ -35,7 +34,7 @@ def create_test(
     session: SessionDep,
 ) -> TestPublic:
     test_data = test_create.model_dump(
-        exclude={"tags", "question_revision_ids", "states"}
+        exclude={"tag_ids", "question_revision_ids", "state_ids"}
     )
     test = Test.model_validate(test_data)
 
@@ -53,8 +52,8 @@ def create_test(
     session.commit()
     session.refresh(test)
 
-    if test_create.tags:
-        tag_ids = test_create.tags
+    if test_create.tag_ids:
+        tag_ids = test_create.tag_ids
         tag_links = [TestTag(test_id=test.id, tag_id=tag_id) for tag_id in tag_ids]
         session.add_all(tag_links)
         session.commit()
@@ -77,30 +76,33 @@ def create_test(
         session.add_all(question_links)
         session.commit()
 
-    if test_create.states:
-        state_ids = test_create.states
+    if test_create.state_ids:
+        state_ids = test_create.state_ids
         state_links = [
             TestState(test_id=test.id, state_id=state_id) for state_id in state_ids
         ]
         session.add_all(state_links)
         session.commit()
 
-    stored_revision_ids = session.exec(
-        select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test.id)
-    ).all()
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
 
-    stored_tag_ids = session.exec(
-        select(TestTag.tag_id).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
     )
-    stored_state_ids = session.exec(
-        select(TestState.state_id).where(TestState.test_id == test.id)
-    )
+    question_revisions = session.exec(question_revision_query).all()
+
+    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+    states = session.exec(state_query).all()
 
     return TestPublic(
         **test.model_dump(),
-        tags=stored_tag_ids,
-        question_revision_ids=stored_revision_ids,
-        states=stored_state_ids,
+        tags=tags,
+        question_revisions=question_revisions,
+        states=states,
     )
 
 
@@ -240,27 +242,25 @@ def get_test(
     test_public = []
 
     for test in tests:
-        stored_tag_ids = session.exec(
-            select(TestTag.tag_id).where(TestTag.test_id == test.id)
-        )
+        tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+        tags = session.exec(tags_query).all()
 
-        # Get question_revision_ids instead of question_ids
-        stored_revision_ids = session.exec(
-            select(TestQuestion.question_revision_id).where(
-                TestQuestion.test_id == test.id
-            )
+        question_revision_query = (
+            select(QuestionRevision)
+            .join(TestQuestion)
+            .where(TestQuestion.test_id == test.id)
         )
+        question_revisions = session.exec(question_revision_query).all()
 
-        stored_state_ids = session.exec(
-            select(TestState.state_id).where(TestState.test_id == test.id)
-        )
+        state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+        states = session.exec(state_query).all()
 
         test_public.append(
             TestPublic(
                 **test.model_dump(),
-                tags=stored_tag_ids,
-                question_revision_ids=stored_revision_ids,
-                states=stored_state_ids,
+                tags=tags,
+                question_revisions=question_revisions,
+                states=states,
             )
         )
 
@@ -269,10 +269,10 @@ def get_test(
 
 @router.get(
     "/{test_id}",
-    response_model=TestPublicEach,
+    response_model=TestPublic,
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test_by_id(test_id: int, session: SessionDep) -> TestPublicEach:
+def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     test = session.get(Test, test_id)
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
@@ -290,7 +290,7 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublicEach:
     state_query = select(State).join(TestState).where(TestState.test_id == test_id)
     states = session.exec(state_query).all()
 
-    return TestPublicEach(
+    return TestPublic(
         **test.model_dump(),
         tags=tags,
         question_revisions=question_revisions,
@@ -307,16 +307,17 @@ def update_test(
     test_id: int, test_update: TestUpdate, session: SessionDep
 ) -> TestPublic:
     test = session.get(Test, test_id)
+
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
 
     # Updating Tags
     tags_remove = [
-        tag.id for tag in (test.tags or []) if tag.id not in (test_update.tags or [])
+        tag.id for tag in (test.tags or []) if tag.id not in (test_update.tag_ids or [])
     ]
     tags_add = [
         tag
-        for tag in (test_update.tags or [])
+        for tag in (test_update.tag_ids or [])
         if tag not in [t.id for t in (test.tags or [])]
     ]
 
@@ -335,10 +336,6 @@ def update_test(
         for tag in tags_add:
             session.add(TestTag(test_id=test.id, tag_id=tag))
             session.commit()
-
-    stored_tag_ids = session.exec(
-        select(TestTag.tag_id).where(TestTag.test_id == test.id)
-    )
 
     current_revision_ids = session.exec(
         select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test.id)
@@ -371,19 +368,19 @@ def update_test(
             session.commit()
 
     # Get updated question_revision_ids
-    stored_revision_ids = session.exec(
-        select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test.id)
-    )
+    # stored_revision_ids = session.exec(
+    #     select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test.id)
+    # )
 
     # Updating States
     states_remove = [
         state.id
         for state in (test.states or [])
-        if state.id not in (test_update.states or [])
+        if state.id not in (test_update.state_ids or [])
     ]
     states_add = [
         state
-        for state in (test_update.states or [])
+        for state in (test_update.state_ids or [])
         if state not in [s.id for s in (test.states or [])]
     ]
 
@@ -404,9 +401,9 @@ def update_test(
             session.add(TestState(test_id=test.id, state_id=state))
             session.commit()
 
-    stored_state_ids = session.exec(
-        select(TestState.state_id).where(TestState.test_id == test.id)
-    )
+    # stored_state_ids = session.exec(
+    #     select(TestState.state_id).where(TestState.test_id == test.id)
+    # )
 
     test_data = test_update.model_dump(exclude_unset=True)
     test.sqlmodel_update(test_data)
@@ -414,11 +411,24 @@ def update_test(
     session.commit()
     session.refresh(test)
 
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
+    )
+    question_revisions = session.exec(question_revision_query).all()
+
+    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
+    states = session.exec(state_query).all()
+
     return TestPublic(
         **test.model_dump(),
-        tags=stored_tag_ids,
-        question_revision_ids=stored_revision_ids,
-        states=stored_state_ids,
+        tags=tags,
+        question_revisions=question_revisions,
+        states=states,
     )
 
 
@@ -441,24 +451,37 @@ def visibility_test(
     session.commit()
     session.refresh(test)
 
-    stored_tag_ids = session.exec(
-        select(TestTag.tag_id).where(TestTag.test_id == test_id)
-    )
+    # stored_tag_ids = session.exec(
+    #     select(TestTag.tag_id).where(TestTag.test_id == test_id)
+    # )
+
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
 
     # Get question_revision_ids instead of question_ids
-    stored_revision_ids = session.exec(
-        select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test_id)
-    )
+    # stored_revision_ids = session.exec(
+    #     select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test_id)
+    # )
 
-    stored_state_ids = session.exec(
-        select(TestState.state_id).where(TestState.test_id == test_id)
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
     )
+    question_revisions = session.exec(question_revision_query).all()
+
+    # stored_state_ids = session.exec(
+    #     select(TestState.state_id).where(TestState.test_id == test_id)
+    # )
+
+    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
+    states = session.exec(state_query).all()
 
     return TestPublic(
         **test.model_dump(),
-        tags=stored_tag_ids,
-        question_revision_ids=stored_revision_ids,
-        states=stored_state_ids,
+        tags=tags,
+        question_revisions=question_revisions,
+        states=states,
     )
 
 
