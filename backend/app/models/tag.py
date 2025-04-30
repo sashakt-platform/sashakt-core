@@ -5,10 +5,10 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.location import State
 from app.models.question import QuestionRevision, QuestionTag
-from app.models.test import TestPublicEach, TestTag
+from app.models.test import TestPublic, TestTag
 
 if TYPE_CHECKING:
-    from app.models import Organization, Question, Test, User
+    from app.models import Organization, Question, QuestionRevision, Test, User
 
 
 class TagTypeBase(SQLModel):
@@ -121,7 +121,7 @@ class TagUpdate(TagBase):
     pass
 
 
-# Rebuild the TestPublicEach model to ensure all relationships are set up correctly
+# Rebuild the models to ensure the database schema is up to date
 State.model_rebuild()
 QuestionRevision.model_rebuild()
-TestPublicEach.model_rebuild()
+TestPublic.model_rebuild()

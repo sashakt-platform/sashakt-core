@@ -13,7 +13,8 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, QuestionRevision, State, Tag, User
+    from app.models import Candidate, QuestionRevision, State, User
+    from app.models.tag import Tag
 
 
 class TestTag(SQLModel, table=True):
@@ -183,23 +184,12 @@ class Test(TestBase, table=True):
 
 
 class TestCreate(TestBase):
-    tags: list[int] = []
+    tag_ids: list[int] = []
     question_revision_ids: list[int] = []
-    states: list[int] = []
+    state_ids: list[int] = []
 
 
 class TestPublic(TestBase):
-    id: int
-    created_date: datetime
-    modified_date: datetime
-    is_active: bool | None
-    is_deleted: bool
-    tags: list[int]
-    question_revision_ids: list[int]
-    states: list[int]
-
-
-class TestPublicEach(TestBase):
     id: int
     created_date: datetime
     modified_date: datetime
@@ -210,7 +200,18 @@ class TestPublicEach(TestBase):
     states: list["State"]
 
 
+# class TestPublicEach(TestBase):
+#     id: int
+#     created_date: datetime
+#     modified_date: datetime
+#     is_active: bool | None
+#     is_deleted: bool
+#     tags: list["Tag"]
+#     question_revisions: list["QuestionRevision"]
+#     states: list["State"]
+
+
 class TestUpdate(TestBase):
-    tags: list[int] = []
+    tag_ids: list[int] = []
     question_revision_ids: list[int] = []
-    states: list[int] = []
+    state_ids: list[int] = []
