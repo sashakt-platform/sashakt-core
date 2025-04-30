@@ -163,9 +163,9 @@ def test_create_test(
         "question_pagination": 1,
         "is_template": False,
         "created_by_id": user.id,
-        "tags": [tag_hindi.id, tag_marathi.id],
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
-        "states": [punjab.id],
+        "state_ids": [punjab.id],
     }
 
     response = client.post(
@@ -195,9 +195,10 @@ def test_create_test(
     assert "modified_date" in data
     assert "tags" in data
     assert len(data["tags"]) == 2
-    assert data["tags"][0] == tag_hindi.id
-    assert data["tags"][1] == tag_marathi.id
-    assert data["states"][0] == punjab.id
+    assert [data["tags"][0]["name"], data["tags"][1]["name"]] == [
+        tag_hindi.name,
+        tag_marathi.name,
+    ]
 
     test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
 
@@ -252,9 +253,9 @@ def test_create_test(
         "is_template": False,
         "template_id": sample_test.id,
         "created_by_id": user.id,
-        "tags": [tag_hindi.id, tag_marathi.id],
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
-        "states": [punjab.id, goa.id],
+        "state_ids": [punjab.id, goa.id],
     }
     response = client.post(
         f"{settings.API_V1_STR}/test/",
@@ -286,9 +287,7 @@ def test_create_test(
     assert "states" in data
     assert len(data["tags"]) == 2
     assert len(data["states"]) == 2
-    assert data["tags"][0] == tag_hindi.id
-    assert data["tags"][1] == tag_marathi.id
-    assert data["states"][1] == goa.id
+    assert len(data["question_revisions"]) == 2
 
     test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
 
@@ -350,9 +349,9 @@ def test_create_test(
     assert "created_date" in data
     assert "modified_date" in data
     assert "tags" in data
-    assert "question_revision_ids" in data
+    assert "question_revisions" in data
     assert len(data["tags"]) == 0
-    assert len(data["question_revision_ids"]) == 0
+    assert len(data["question_revisions"]) == 0
     assert len(data["states"]) == 0
 
     test_tag_link = db.exec(select(TestTag).where(TestTag.test_id == data["id"])).all()
@@ -508,9 +507,12 @@ def test_get_tests(
     assert any(item["is_template"] == test.is_template for item in data)
     assert any(item["created_by_id"] == test.created_by_id for item in data)
 
-    assert any(len(item["tags"]) == 1 and item["tags"][0] == tag_a.id for item in data)
     assert any(
-        len(item["states"]) == 1 and item["states"][0] == state_a.id for item in data
+        len(item["tags"]) == 1 and item["tags"][0]["id"] == tag_a.id for item in data
+    )
+    assert any(
+        len(item["states"]) == 1 and item["states"][0]["id"] == state_a.id
+        for item in data
     )
 
 
@@ -1920,9 +1922,9 @@ def test_update_test(
         "is_template": False,
         "template_id": None,
         "created_by_id": user.id,
-        "tags": [tag_a.id, tag_b.id],
+        "tag_ids": [tag_a.id, tag_b.id],
         "question_revision_ids": [question_revision_one.id],
-        "states": [stata_a.id, state_b.id],
+        "state_ids": [stata_a.id, state_b.id],
     }
 
     response = client.put(
@@ -1964,16 +1966,18 @@ def test_update_test(
 
     assert "tags" in data
     assert len(data["tags"]) == 2
-    assert data["tags"] == [tag_a.id, tag_b.id]
+    assert [data["tags"][0]["id"], data["tags"][1]["id"]] == [tag_a.id, tag_b.id]
 
-    assert "question_revision_ids" in data
-    assert len(data["question_revision_ids"]) == 1
-    assert data["question_revision_ids"][0] == question_revision_one.id
+    assert "question_revisions" in data
+    assert len(data["question_revisions"]) == 1
+    assert data["question_revisions"][0]["id"] == question_revision_one.id
 
     assert "states" in data
     assert len(data["states"]) == 2
-    assert data["states"] == [stata_a.id, state_b.id]
-    assert state_c.id not in data["states"]
+    assert [data["states"][0]["id"], data["states"][1]["id"]] == [
+        stata_a.id,
+        state_b.id,
+    ]
 
     # Check test_question_link has the correct question_revision_id
     updated_test_questions = db.exec(
@@ -1986,21 +1990,7 @@ def test_update_test(
 def test_visibility_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    (
-        user,
-        india,
-        stata_a,
-        state_b,
-        organization,
-        tag_type,
-        tag_a,
-        tag_b,
-        question_one,
-        question_two,
-        question_revision_one,
-        question_revision_two,
-    ) = setup_data(db)
-
+    user = create_random_user(db)
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
