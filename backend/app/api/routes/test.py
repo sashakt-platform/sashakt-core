@@ -367,11 +367,6 @@ def update_test(
             session.add(TestQuestion(test_id=test.id, question_revision_id=revision_id))
             session.commit()
 
-    # Get updated question_revision_ids
-    # stored_revision_ids = session.exec(
-    #     select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test.id)
-    # )
-
     # Updating States
     states_remove = [
         state.id
@@ -400,10 +395,6 @@ def update_test(
         for state in states_add:
             session.add(TestState(test_id=test.id, state_id=state))
             session.commit()
-
-    # stored_state_ids = session.exec(
-    #     select(TestState.state_id).where(TestState.test_id == test.id)
-    # )
 
     test_data = test_update.model_dump(exclude_unset=True)
     test.sqlmodel_update(test_data)
@@ -451,17 +442,8 @@ def visibility_test(
     session.commit()
     session.refresh(test)
 
-    # stored_tag_ids = session.exec(
-    #     select(TestTag.tag_id).where(TestTag.test_id == test_id)
-    # )
-
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()
-
-    # Get question_revision_ids instead of question_ids
-    # stored_revision_ids = session.exec(
-    #     select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test_id)
-    # )
 
     question_revision_query = (
         select(QuestionRevision)
@@ -469,10 +451,6 @@ def visibility_test(
         .where(TestQuestion.test_id == test.id)
     )
     question_revisions = session.exec(question_revision_query).all()
-
-    # stored_state_ids = session.exec(
-    #     select(TestState.state_id).where(TestState.test_id == test_id)
-    # )
 
     state_query = select(State).join(TestState).where(TestState.test_id == test_id)
     states = session.exec(state_query).all()
