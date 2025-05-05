@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic.networks import EmailStr
+from sqlmodel import SQLModel
 
 from app.api.deps import get_current_active_superuser
 from app.models import Message
@@ -32,7 +35,7 @@ async def health_check() -> bool:
 
 
 # Helper Function to refine query by applying ordering and pagination
-def get_refined_query(query, Table, filters):
+def get_refined_query(query: Any, Table: type[SQLModel], filters: Any) -> Any:
     for order in filters.order_by:
         is_desc = order.startswith("-")
         order = order.lstrip("-")
