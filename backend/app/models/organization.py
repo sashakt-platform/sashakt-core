@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models.utils import CommonFilters
+
 if TYPE_CHECKING:
     from app.models import Question, Tag, TagType, User
 
@@ -49,3 +51,12 @@ class OrganizationPublic(OrganizationBase):
 
 class OrganizationUpdate(OrganizationBase):
     pass
+
+
+class OrganizationFilters(CommonFilters):
+    name: str = Field(
+        None, title="Organization Name", description="Name of the organization"
+    )
+    description: str = Field(
+        None, title="Description", description="Description of the organization"
+    )
