@@ -189,6 +189,41 @@ def test_read_organization_filter_by_description(
     assert len(data) == 0
 
 
+def test_read_organization_filter_by_active(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = Organization(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        is_active=True,
+    )
+    organization_2 = Organization(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        is_active=False,
+    )
+    db.add_all([organization, organization_2])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?is_active=True",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 1
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/?is_active=False",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 1
+
+
 def test_read_organization_order_by(
     client: TestClient,
     db: SessionDep,
