@@ -1051,6 +1051,7 @@ async def upload_questions_csv(
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
         failed_states = set()
+        failed_tagtypes = set()
 
         for row in csv_reader:
             try:
@@ -1074,6 +1075,7 @@ async def upload_questions_csv(
 
                 # Process tags if present
                 tag_ids = []
+                tagtype_error = False
                 if "Training Tags" in row and row["Training Tags"].strip():
                     tag_entries = [
                         t.strip() for t in row["Training Tags"].split(",") if t.strip()
@@ -1103,37 +1105,36 @@ async def upload_questions_csv(
                         tag_type = session.exec(tag_type_query).first()
 
                         if not tag_type:
-                            tag_type = TagType(
-                                name="Training Tag",
-                                description="Tag type for training questions",
-                                created_by_id=user_id,
-                                organization_id=organization_id,
+                            failed_tagtypes.add(tag_type)
+                            tagtype_error = True
+
+                        if tag_type and tag_type.id:
+                            # Get or create tag
+                            tag_query = select(Tag).where(
+                                Tag.name == tag_name,
+                                Tag.tag_type_id == tag_type.id,
+                                Tag.organization_id == organization_id,
                             )
-                            session.add(tag_type)
-                            session.flush()
+                            tag = session.exec(tag_query).first()
 
-                        # Get or create tag
-                        tag_query = select(Tag).where(
-                            Tag.name == tag_name,
-                            Tag.tag_type_id == tag_type.id,
-                            Tag.organization_id == organization_id,
-                        )
-                        tag = session.exec(tag_query).first()
+                            if not tag:
+                                tag = Tag(
+                                    name=tag_name,
+                                    description=f"Tag for {tag_name}",
+                                    tag_type_id=tag_type.id,
+                                    created_by_id=user_id,
+                                    organization_id=organization_id,
+                                )
+                                session.add(tag)
+                                session.flush()
 
-                        if not tag:
-                            tag = Tag(
-                                name=tag_name,
-                                description=f"Tag for {tag_name}",
-                                tag_type_id=tag_type.id,
-                                created_by_id=user_id,
-                                organization_id=organization_id,
-                            )
-                            session.add(tag)
-                            session.flush()
+                            if tag and tag.id:
+                                tag_ids.append(tag.id)
+                                tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
 
-                        if tag and tag.id:
-                            tag_ids.append(tag.id)
-                            tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
+                if tagtype_error:
+                    questions_failed += 1
+                    continue
 
                 # Process state information if present
                 row_state_ids = []
