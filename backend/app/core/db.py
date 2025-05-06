@@ -12,6 +12,7 @@ from app.core.roles import (
 )
 from app.models import Organization, Role, User, UserCreate
 
+# We can toggle the database URI here to use the test database
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
