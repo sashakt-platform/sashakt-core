@@ -33,6 +33,10 @@ target_metadata = SQLModel.metadata
 def get_url():
     return str(settings.SQLALCHEMY_DATABASE_URI)
 
+def get_test_url():
+    return str(settings.SQLALCHEMY_DATABASE_URI_TEST)
+
+total_urls=[get_url(), get_test_url()]
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
@@ -46,13 +50,14 @@ def run_migrations_offline():
     script output.
 
     """
-    url = get_url()
-    context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
-    )
+    # url = get_url()
+    for url in total_urls:
+        context.configure(
+            url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
+        )
 
-    with context.begin_transaction():
-        context.run_migrations()
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 def run_migrations_online():
@@ -62,21 +67,22 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
-    configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = get_url()
-    connectable = engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata, compare_type=True
+    for url in total_urls:
+        configuration = config.get_section(config.config_ini_section)
+        configuration["sqlalchemy.url"] = url
+        connectable = engine_from_config(
+            configuration,
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection, target_metadata=target_metadata, compare_type=True
+            )
+
+            with context.begin_transaction():
+                context.run_migrations()
 
 
 if context.is_offline_mode():
