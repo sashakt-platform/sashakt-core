@@ -1017,9 +1017,17 @@ async def upload_questions_csv(
     # Save the uploaded file to a temporary file
     content = await file.read()
 
+    if not content:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+
     try:
         # Process the CSV content
         csv_text = content.decode("utf-8")
+
+        # Check if CSV is just whitespace
+        if not csv_text.strip():
+            raise HTTPException(status_code=400, detail="CSV file is empty")
+
         csv_reader = csv.DictReader(StringIO(csv_text))
 
         # Check required columns
@@ -1105,8 +1113,9 @@ async def upload_questions_csv(
                         tag_type = session.exec(tag_type_query).first()
 
                         if not tag_type:
-                            failed_tagtypes.add(tag_type)
+                            failed_tagtypes.add(tag_type_name)
                             tagtype_error = True
+                            continue
 
                         if tag_type and tag_type.id:
                             # Get or create tag
@@ -1158,6 +1167,7 @@ async def upload_questions_csv(
                         if not state:
                             failed_states.add(state_name)
                             state_error = True
+                            continue
 
                         if state and state.id:
                             row_state_ids.append(state.id)
@@ -1256,9 +1266,16 @@ async def upload_questions_csv(
         message = f"Bulk upload complete. Created {questions_created} questions successfully. Failed to create {questions_failed} questions."
         if failed_states:
             message += f" The following states were not found in the system: {', '.join(failed_states)}"
+        if failed_tagtypes:
+            message += (
+                f" The following tag types were not found: {', '.join(failed_tagtypes)}"
+            )
 
         return Message(message=message)
 
+    except HTTPException:
+        # Re-raise any HTTP exceptions we explicitly raised
+        raise
     except Exception as e:
         # Handle overall process errors
         raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
