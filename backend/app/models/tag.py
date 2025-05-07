@@ -3,11 +3,12 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.question import QuestionTag
-from app.models.test import TestTag
+from app.models.location import State
+from app.models.question import QuestionRevision, QuestionTag
+from app.models.test import TestPublic, TestTag
 
 if TYPE_CHECKING:
-    from app.models import Organization, Question, Test, User
+    from app.models import Organization, Question, QuestionRevision, Test, User
 
 
 class TagTypeBase(SQLModel):
@@ -118,3 +119,9 @@ class TagPublic(TagBase):
 
 class TagUpdate(TagBase):
     pass
+
+
+# Rebuild the models to ensure the database schema is up to date
+State.model_rebuild()
+QuestionRevision.model_rebuild()
+TestPublic.model_rebuild()
