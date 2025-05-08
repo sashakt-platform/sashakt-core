@@ -1086,7 +1086,7 @@ async def upload_questions_csv(
                 tagtype_error = False
                 if "Training Tags" in row and row["Training Tags"].strip():
                     tag_entries = [
-                        t.strip() for t in row["Training Tags"].split(",") if t.strip()
+                        t.strip() for t in row["Training Tags"].split("|") if t.strip()
                     ]
 
                     for tag_entry in tag_entries:
