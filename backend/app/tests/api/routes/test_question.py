@@ -982,3 +982,242 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     # Non-existent question
     response = client.get(f"{settings.API_V1_STR}/questions/99999/candidate-tests")
     assert response.status_code == 404
+
+
+def test_bulk_upload_questions(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org_name = random_lower_string()
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": org_name},
+        headers=get_user_superadmin_token,
+    )
+    org_data = org_response.json()
+    org_id = org_data["id"]
+
+    # Create user
+    user = create_random_user(db)
+    user.organization_id = org_id
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    user_id = user.id
+
+    # Create country and state
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    kerala = State(name="Kerala", country_id=india.id)
+    db.add(kerala)
+    db.commit()
+    db.refresh(kerala)
+
+    # Create tag type
+    client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json={
+            "name": "Test Tag Type",
+            "description": "For testing",
+            "created_by_id": user_id,
+            "organization_id": org_id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    # Create a CSV file with test data - add an empty row to test skipping
+    # Also includes duplicate tags to test tag cache
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Kerala
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Kerala
+What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Kerala
+What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Kerala
+,,,,,,,
+"""
+    # Create a temporary file
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        # Test with invalid user ID (test user not found)
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions.csv", file, "text/csv")},
+                data={"user_id": "999999"},  # Non-existent user
+            )
+        assert response.status_code == 404
+        assert "User not found" in response.json()["detail"]
+
+        # Test with completely empty CSV file (line 1015)
+        empty_csv = ""
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(empty_csv.encode("utf-8"))
+            empty_csv_path = temp_file.name
+
+        with open(empty_csv_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("empty.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+        assert response.status_code in [400, 500]
+
+        # Test with whitespace-only CSV (line 1029)
+        whitespace_csv = "   \n  \t  "
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(whitespace_csv.encode("utf-8"))
+            whitespace_csv_path = temp_file.name
+
+        with open(whitespace_csv_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("whitespace.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+        assert response.status_code in [400, 500]
+
+        # Test with headers-only CSV (line 1045)
+        headers_only_csv = "Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State\n"
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(headers_only_csv.encode("utf-8"))
+            headers_only_csv_path = temp_file.name
+
+        with open(headers_only_csv_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("headers_only.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+        assert response.status_code in [400, 500]
+
+        # Test with missing required columns
+        invalid_csv = "Questions,Option A,Option B\n1,2,3"
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(invalid_csv.encode("utf-8"))
+            invalid_csv_path = temp_file.name
+
+        with open(invalid_csv_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("invalid.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+        assert response.status_code in [400, 500]
+
+        # Upload the valid CSV file
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Created" in data["message"]
+
+        # Check that questions were created
+        response = client.get(
+            f"{settings.API_V1_STR}/questions/?organization_id={org_id}"
+        )
+        questions = response.json()
+        assert len(questions) >= 4  # Updated to reflect 4 questions
+
+        # Check for specific question content
+        question_texts = [q["question_text"] for q in questions]
+        assert "What is 2+2?" in question_texts
+        assert "What is the capital of France?" in question_texts
+        assert "What is H2O?" in question_texts
+        assert "What are prime numbers?" in question_texts
+
+        # Check that duplicate tags are handled correctly (Math tag appears twice)
+        math_tag_count = 0
+        for question in questions:
+            if question["question_text"] in ["What is 2+2?", "What are prime numbers?"]:
+                if any(tag["name"] == "Math" for tag in question["tags"]):
+                    math_tag_count += 1
+        assert math_tag_count == 2  # Ensure both questions have Math tag
+
+        # Check tags were correctly associated
+        for question in questions:
+            if question["question_text"] == "What is 2+2?":
+                assert any(tag["name"] == "Math" for tag in question["tags"])
+            elif question["question_text"] == "What is the capital of France?":
+                assert any(tag["name"] == "Geography" for tag in question["tags"])
+            elif question["question_text"] == "What is H2O?":
+                assert any(tag["name"] == "Chemistry" for tag in question["tags"])
+            elif question["question_text"] == "What are prime numbers?":
+                assert any(tag["name"] == "Math" for tag in question["tags"])
+
+        # Check locations were correctly associated
+        for question in questions:
+            locations = question["locations"]
+            assert len(locations) > 0
+            assert any(loc["state_name"] == "Kerala" for loc in locations)
+
+        # Test with non-existent tag type
+        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,NonExistentType:Math,Kerala
+"""
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(csv_content_bad_tag.encode("utf-8"))
+            bad_tag_path = temp_file.name
+
+        with open(bad_tag_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("bad_tag.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert "Failed to create" in data["message"]
+
+        # Test upload with non-existent state
+        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geography,NonExistentState
+"""
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+            temp_file.write(csv_content_bad_state.encode("utf-8"))
+            temp_file_path_bad = temp_file.name
+
+        with open(temp_file_path_bad, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_bad_state.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Failed to create" in data["message"]
+        assert "NonExistentState" in data["message"]
+
+        # Clean up all temp files
+        import os
+
+        for path in [
+            temp_file_path,
+            empty_csv_path,
+            whitespace_csv_path,
+            headers_only_csv_path,
+            invalid_csv_path,
+            bad_tag_path,
+            temp_file_path_bad,
+        ]:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    finally:
+        # Cleanup
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(path)
