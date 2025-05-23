@@ -198,6 +198,7 @@ class TestPublic(TestBase):
     tags: list["Tag"]
     question_revisions: list["QuestionRevision"]
     states: list["State"]
+    total_questions: int | None = None
 
 
 class TestUpdate(TestBase):

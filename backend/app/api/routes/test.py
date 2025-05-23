@@ -23,6 +23,44 @@ from app.models.test import MarksLevelEnum
 router = APIRouter(prefix="/test", tags=["Test"])
 
 
+# Public endpoint to get basic test information (for landing page)
+@router.get("/public/{test_id}", response_model=TestPublic)
+def get_public_test_info(test_id: int, session: SessionDep) -> TestPublic:
+    """
+    Get public information for a test using its ID.
+    This endpoint is for the test landing page before starting the test.
+    No authentication required.
+    """
+    test = session.get(Test, test_id)
+    if not test or test.is_deleted or not test.is_active:
+        raise HTTPException(status_code=404, detail="Test not found or not active")
+
+    # Get associated data
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
+    )
+    question_revisions = session.exec(question_revision_query).all()
+
+    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+    states = session.exec(state_query).all()
+
+    # Calculate total questions
+    total_questions = len(question_revisions)
+
+    return TestPublic(
+        **test.model_dump(),
+        tags=tags,
+        question_revisions=question_revisions,
+        states=states,
+        total_questions=total_questions,
+    )
+
+
 # Create a Test
 @router.post(
     "/",

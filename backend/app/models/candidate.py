@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -121,6 +122,9 @@ class CandidateCreate(CandidateBase):
 
 class Candidate(CandidateBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    candidate_uuid: uuid.UUID | None = Field(
+        default=None, unique=True, index=True, nullable=True
+    )  # Only for anonymous QR code users
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -138,6 +142,7 @@ class Candidate(CandidateBase, table=True):
 
 class CandidatePublic(CandidateBase):
     id: int
+    candidate_uuid: uuid.UUID | None = None  # Include uuid in public response
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
