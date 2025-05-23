@@ -2082,3 +2082,102 @@ def test_delete_test(
     )
     assert response.status_code == 404
     assert "id" not in data
+
+
+def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
+    """Test the public test endpoint that doesn't require authentication."""
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(db)
+
+    # Create a test
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Add questions to test
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    # Test public endpoint - no authentication required
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.id}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["marks"] == test.marks
+    assert data["start_instructions"] == test.start_instructions
+    assert data["total_questions"] == 2  # We added 2 questions
+    assert data["is_active"] is True
+    assert data["is_deleted"] is False
+
+
+def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> None:
+    """Test that inactive tests are not accessible via public endpoint."""
+    user = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        is_active=False,  # Inactive test
+        is_deleted=False,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.id}")
+    assert response.status_code == 404
+    assert "Test not found or not active" in response.json()["detail"]
+
+
+def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> None:
+    """Test that deleted tests are not accessible via public endpoint."""
+    user = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=True,  # Deleted test
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.id}")
+    assert response.status_code == 404
+    assert "Test not found or not active" in response.json()["detail"]
