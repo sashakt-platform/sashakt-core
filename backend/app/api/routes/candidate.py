@@ -61,7 +61,6 @@ def start_test_for_candidate(
 
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
-        user_id=None,  # Anonymous user
         candidate_uuid=uuid.uuid4(),  # Generate UUID for anonymous candidate
     )
     session.add(candidate)
