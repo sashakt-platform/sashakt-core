@@ -428,6 +428,23 @@ class QuestionPublic(SQLModel):
     tags: list[Any] | None = Field(description="Tags associated with this question")
 
 
+class QuestionCandidatePublic(SQLModel):
+    """Candidate-safe representation of a question (no answers or solutions)"""
+
+    id: int = Field(description="ID of the question")
+    question_text: str = Field(description="The question text")
+    instructions: str | None = Field(description="Instructions for answering")
+    question_type: QuestionType = Field(description="Type of question")
+    options: list[OptionDict] | None = Field(
+        description="Available options for choice questions"
+    )
+    subjective_answer_limit: int | None = Field(
+        description="Character limit for subjective answers"
+    )
+    is_mandatory: bool = Field(description="Whether the question must be answered")
+    media: dict[str, Any] | None = Field(description="Associated media")
+
+
 class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 

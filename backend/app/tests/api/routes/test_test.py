@@ -430,6 +430,87 @@ def test_create_test_random_question_field(
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
+def test_create_test_auto_generate_link_uuid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that a UUID is auto-generated for the link field when not provided."""
+    user = create_random_user(db)
+
+    # Test 1: Create test without providing link field
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        # No link field provided
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "link" in data
+    assert data["link"] is not None
+    assert len(data["link"]) == 36  # UUID length
+
+    # Verify it's a valid UUID format
+    import uuid
+
+    try:
+        uuid.UUID(data["link"])
+        uuid_is_valid = True
+    except ValueError:
+        uuid_is_valid = False
+    assert uuid_is_valid
+
+    # Test 2: Create test with empty string link field
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": "",  # Empty string
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "link" in data
+    assert data["link"] is not None
+    assert len(data["link"]) == 36  # UUID length
+
+    # Verify it's a valid UUID format
+    try:
+        uuid.UUID(data["link"])
+        uuid_is_valid = True
+    except ValueError:
+        uuid_is_valid = False
+    assert uuid_is_valid
+
+    # Test 3: Create test with provided link field (should not be overridden)
+    custom_link = "my-custom-test-link"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": custom_link,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["link"] == custom_link  # Should preserve custom link
+
+
 def test_get_tests(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2127,8 +2208,8 @@ def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
     db.add_all([test_question_one, test_question_two])
     db.commit()
 
-    # Test public endpoint - no authentication required
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.id}")
+    # Test public endpoint - no authentication required, uses link UUID
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     data = response.json()
 
     assert response.status_code == 200
@@ -2136,11 +2217,8 @@ def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
     assert data["name"] == test.name
     assert data["description"] == test.description
     assert data["time_limit"] == test.time_limit
-    assert data["marks"] == test.marks
     assert data["start_instructions"] == test.start_instructions
     assert data["total_questions"] == 2  # We added 2 questions
-    assert data["is_active"] is True
-    assert data["is_deleted"] is False
 
 
 def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> None:
@@ -2158,7 +2236,7 @@ def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> No
     db.add(test)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.id}")
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     assert response.status_code == 404
     assert "Test not found or not active" in response.json()["detail"]
 
@@ -2178,6 +2256,6 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
     db.add(test)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.id}")
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     assert response.status_code == 404
     assert "Test not found or not active" in response.json()["detail"]

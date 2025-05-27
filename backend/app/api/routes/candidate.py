@@ -1,7 +1,6 @@
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import SQLModel, not_, select
@@ -21,9 +20,10 @@ from app.models import (
     CandidateTestUpdate,
     CandidateUpdate,
     Message,
-    QuestionPublic,
+    QuestionCandidatePublic,
     QuestionRevision,
     Test,
+    TestCandidatePublic,
     TestQuestion,
 )
 
@@ -36,7 +36,7 @@ router_candidate_test_answer = APIRouter(
 
 # Simple request/response models for start_test
 class StartTestRequest(SQLModel):
-    test_id: int  # Use test_id instead of test_uuid
+    test_id: int
     device_info: str | None = None
 
 
@@ -68,11 +68,8 @@ def start_test_for_candidate(
     session.commit()
     session.refresh(candidate)
 
-    # Calculate end_time based on test time_limit
+    # Set start_time when test begins, end_time will be set when test is submitted
     start_time = datetime.now(timezone.utc)
-    end_time = start_time
-    if test.time_limit:
-        end_time = start_time + timedelta(minutes=test.time_limit)
 
     # Create CandidateTest link
     candidate_test = CandidateTest(
@@ -81,7 +78,7 @@ def start_test_for_candidate(
         device=start_test_request.device_info or "unknown",
         consent=True,
         start_time=start_time,
-        end_time=end_time,  # Now properly set
+        end_time=None,  # Will be set when test is actually submitted
         is_submitted=False,
     )
     session.add(candidate_test)
@@ -94,15 +91,15 @@ def start_test_for_candidate(
     )
 
 
-# Simple endpoint to get test questions after verification
-@router.get("/test_questions/{candidate_test_id}")
+# Get test questions after verification
+@router.get("/test_questions/{candidate_test_id}", response_model=TestCandidatePublic)
 def get_test_questions(
     candidate_test_id: int,
     session: SessionDep,
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> dict[str, Any]:
+) -> TestCandidatePublic:
     """
     Get test questions for a candidate test, verified by candidate UUID.
     """
@@ -120,22 +117,51 @@ def get_test_questions(
             status_code=404, detail="Candidate test not found or invalid UUID"
         )
 
-    # Get test questions
-    questions_statement = (
+    # Get the full test with all relationships
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    from app.models.location import State
+    from app.models.tag import Tag
+    from app.models.test import TestState, TestTag
+
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+
+    question_revision_query = (
         select(QuestionRevision)
         .join(TestQuestion)
-        .where(TestQuestion.test_id == candidate_test.test_id)
+        .where(TestQuestion.test_id == test.id)
     )
-    questions = session.exec(questions_statement).all()
+    question_revisions = session.exec(question_revision_query).all()
 
-    # Return the existing TestPublic response but with questions
-    test = session.get(Test, candidate_test.test_id)
+    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+    states = session.exec(state_query).all()
 
-    return {
-        "test": test,
-        "questions": [QuestionPublic.model_validate(q) for q in questions],
-        "candidate_test": candidate_test,
-    }
+    # Convert questions to candidate-safe format (no answers)
+    candidate_questions = [
+        QuestionCandidatePublic(
+            id=q.id,
+            question_text=q.question_text,
+            instructions=q.instructions,
+            question_type=q.question_type,
+            options=q.options,
+            subjective_answer_limit=q.subjective_answer_limit,
+            is_mandatory=q.is_mandatory,
+            media=q.media,
+        )
+        for q in question_revisions
+    ]
+
+    return TestCandidatePublic(
+        **test.model_dump(),
+        question_revisions=candidate_questions,
+        tags=tags,
+        states=states,
+        total_questions=len(question_revisions),
+        candidate_test=candidate_test,
+    )
 
 
 # Create a Candidate

@@ -12,6 +12,7 @@ from app.models import (
     Test,
     TestCreate,
     TestPublic,
+    TestPublicLimited,
     TestQuestion,
     TestState,
     TestTag,
@@ -24,39 +25,28 @@ router = APIRouter(prefix="/test", tags=["Test"])
 
 
 # Public endpoint to get basic test information (for landing page)
-@router.get("/public/{test_id}", response_model=TestPublic)
-def get_public_test_info(test_id: int, session: SessionDep) -> TestPublic:
+@router.get("/public/{test_uuid}", response_model=TestPublicLimited)
+def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimited:
     """
-    Get public information for a test using its ID.
+    Get public information for a test using its UUID link.
     This endpoint is for the test landing page before starting the test.
     No authentication required.
     """
-    test = session.get(Test, test_id)
+    test = session.exec(select(Test).where(Test.link == test_uuid)).first()
     if not test or test.is_deleted or not test.is_active:
         raise HTTPException(status_code=404, detail="Test not found or not active")
 
-    # Get associated data
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-    tags = session.exec(tags_query).all()
-
+    # Calculate total questions
     question_revision_query = (
         select(QuestionRevision)
         .join(TestQuestion)
         .where(TestQuestion.test_id == test.id)
     )
     question_revisions = session.exec(question_revision_query).all()
-
-    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
-    states = session.exec(state_query).all()
-
-    # Calculate total questions
     total_questions = len(question_revisions)
 
-    return TestPublic(
+    return TestPublicLimited(
         **test.model_dump(),
-        tags=tags,
-        question_revisions=question_revisions,
-        states=states,
         total_questions=total_questions,
     )
 
@@ -74,6 +64,13 @@ def create_test(
     test_data = test_create.model_dump(
         exclude={"tag_ids", "question_revision_ids", "state_ids"}
     )
+
+    # Auto-generate UUID for link if not provided
+    if not test_data.get("link"):
+        import uuid
+
+        test_data["link"] = str(uuid.uuid4())
+
     test = Test.model_validate(test_data)
 
     if (

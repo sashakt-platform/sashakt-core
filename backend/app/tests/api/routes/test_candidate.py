@@ -10,6 +10,7 @@ from app.models import (
     Question,
     QuestionRevision,
     Test,
+    TestCandidatePublic,
 )
 from app.models.question import QuestionType
 from app.tests.utils.user import create_random_user
@@ -1169,6 +1170,10 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
     assert candidate.candidate_uuid is not None
     assert candidate.user_id is None  # Anonymous candidate
 
+    # Verify end_time is None initially (will be set when test is submitted)
+    assert candidate_test.end_time is None
+    assert candidate_test.is_submitted is False
+
 
 def test_start_test_inactive_test(client: TestClient, db: SessionDep) -> None:
     """Test that start_test fails for inactive tests."""
@@ -1229,6 +1234,15 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     db.add(test)
     db.commit()
 
+    # Link question to test
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
     # Create candidate and candidate_test using start_test endpoint
     payload = {"test_id": test.id, "device_info": "Test Device"}
     start_response = client.post(
@@ -1247,12 +1261,26 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     data = response.json()
 
     assert response.status_code == 200
-    assert "test" in data
-    assert "questions" in data
+    assert "id" in data  # Test ID
+    assert "name" in data  # Test name
+    assert "question_revisions" in data  # Questions (safe, no answers)
     assert "candidate_test" in data
-    assert data["test"]["id"] == test.id
-    assert isinstance(data["questions"], list)
+    assert data["id"] == test.id
+    assert isinstance(data["question_revisions"], list)
     assert data["candidate_test"]["id"] == candidate_test_id
+
+    # Verify questions don't contain answers (security check)
+    if data["question_revisions"]:
+        question_data = data["question_revisions"][0]
+        assert "question_text" in question_data
+        assert "options" in question_data
+        assert "correct_answer" not in question_data  # Should not expose answers
+        assert "solution" not in question_data  # Should not expose solutions
+
+    # Verify the response can be validated against TestCandidatePublic model
+    test_candidate_response = TestCandidatePublic.model_validate(data)
+    assert test_candidate_response.id == test.id
+    assert test_candidate_response.candidate_test.id == candidate_test_id
 
 
 def test_get_test_questions_invalid_uuid(client: TestClient, db: SessionDep) -> None:

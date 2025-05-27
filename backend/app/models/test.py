@@ -106,8 +106,10 @@ class TestBase(SQLModel):
         title="Start Instructions",
         description="Instructions to be shown to the candidate before starting the test.",
     )
-    link: str = Field(
-        title="Test Link", description="Link to the test shared with the candidate."
+    link: str | None = Field(
+        default=None,
+        title="Test Link",
+        description="Link to the test shared with the candidate. Auto-generated if not provided.",
     )
     no_of_attempts: int | None = Field(
         nullable=False,
@@ -205,3 +207,10 @@ class TestUpdate(TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
+
+
+class TestPublicLimited(TestBase):
+    """Limited public information for test landing page"""
+
+    id: int
+    total_questions: int
