@@ -73,9 +73,8 @@ def create_test(
 
     test = Test.model_validate(test_data)
 
-    if (
-        test.random_questions is True
-        and test.no_of_random_questions is None
+    if test.random_questions is True and (
+        test.no_of_random_questions is None
         or (test.no_of_random_questions is not None and test.no_of_random_questions < 1)
     ):
         raise HTTPException(
