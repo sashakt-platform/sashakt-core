@@ -1151,7 +1151,6 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     data = response.json()
-
     assert response.status_code == 200
     assert "candidate_uuid" in data
     assert "candidate_test_id" in data
@@ -1167,7 +1166,7 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
     # Verify candidate has UUID
     candidate = db.get(Candidate, candidate_test.candidate_id)
     assert candidate is not None
-    assert candidate.candidate_uuid is not None
+    assert candidate.identity is not None
     assert candidate.user_id is None  # Anonymous candidate
 
     # Verify end_time is None initially (will be set when test is submitted)
@@ -1250,13 +1249,13 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     )
     start_data = start_response.json()
 
-    candidate_uuid = start_data["candidate_uuid"]
+    identity = start_data["candidate_uuid"]
     candidate_test_id = start_data["candidate_test_id"]
 
     # Test get_test_questions endpoint
     response = client.get(
         f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
-        params={"candidate_uuid": candidate_uuid},
+        params={"candidate_uuid": identity},
     )
     data = response.json()
 

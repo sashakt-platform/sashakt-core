@@ -125,7 +125,7 @@ class CandidateCreate(CandidateBase):
 
 class Candidate(CandidateBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    candidate_uuid: uuid.UUID | None = Field(
+    identity: uuid.UUID | None = Field(
         default=None, unique=True, index=True, nullable=True
     )  # Only for anonymous QR code users
     created_date: datetime | None = Field(

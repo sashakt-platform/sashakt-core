@@ -61,7 +61,7 @@ def start_test_for_candidate(
 
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
-        candidate_uuid=uuid.uuid4(),  # Generate UUID for anonymous candidate
+        identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
     )
     session.add(candidate)
     session.commit()
@@ -85,7 +85,7 @@ def start_test_for_candidate(
     session.refresh(candidate_test)
 
     return StartTestResponse(
-        candidate_uuid=candidate.candidate_uuid,
+        candidate_uuid=candidate.identity,
         candidate_test_id=candidate_test.id,
     )
 
@@ -107,7 +107,7 @@ def get_test_questions(
         select(CandidateTest)
         .join(Candidate)
         .where(CandidateTest.id == candidate_test_id)
-        .where(Candidate.candidate_uuid == candidate_uuid)
+        .where(Candidate.identity == candidate_uuid)
     )
     candidate_test = session.exec(candidate_test_statement).first()
 
