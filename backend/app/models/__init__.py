@@ -13,6 +13,7 @@ from .candidate import (
     CandidateTestPublic,
     CandidateTestUpdate,
     CandidateUpdate,
+    TestCandidatePublic,
 )
 from .location import (
     Block,
@@ -47,6 +48,7 @@ from .permission import (
 )
 from .question import (
     Question,
+    QuestionCandidatePublic,
     QuestionCreate,
     QuestionLocation,
     QuestionLocationCreate,
@@ -73,6 +75,7 @@ from .test import (
     Test,
     TestCreate,
     TestPublic,
+    TestPublicLimited,
     TestQuestion,
     TestState,
     TestTag,
@@ -129,11 +132,13 @@ __all__ = [
     "Test",
     "TestCreate",
     "TestPublic",
+    "TestPublicLimited",
     "TestUpdate",
     "TestQuestion",
     "TestTag",
     "TestState",
     "Question",
+    "QuestionCandidatePublic",
     "QuestionCreate",
     "QuestionLocation",
     "QuestionLocationCreate",
@@ -166,6 +171,7 @@ __all__ = [
     "CandidateTestAnswerPublic",
     "CandidateTestAnswerUpdate",
     "CandidateTestAnswerCreate",
+    "TestCandidatePublic",
     "TagCreate",
     "TagUpdate",
     "TagPublic",
@@ -180,3 +186,6 @@ __all__ = [
     "PermissionUpdate",
     "RolePermission",
 ]
+
+# Rebuild models to resolve forward references after all imports are complete
+TestCandidatePublic.model_rebuild()

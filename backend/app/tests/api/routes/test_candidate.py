@@ -10,6 +10,7 @@ from app.models import (
     Question,
     QuestionRevision,
     Test,
+    TestCandidatePublic,
 )
 from app.models.question import QuestionType
 from app.tests.utils.user import create_random_user
@@ -1123,3 +1124,192 @@ def test_update_candidate_test_answer(
     assert data["response"] == response_b
     assert data["visited"] is True
     assert data["time_spent"] == 56
+
+
+def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
+    """Test the start_test endpoint that creates anonymous candidates."""
+    user = create_random_user(db)
+
+    # Create a test
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Test start_test endpoint - no authentication required
+    payload = {"test_id": test.id, "device_info": "Chrome Browser on MacOS"}
+
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "candidate_uuid" in data
+    assert "candidate_test_id" in data
+
+    # Verify candidate was created in database
+    candidate_test_id = data["candidate_test_id"]
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.test_id == test.id
+    assert candidate_test.device == "Chrome Browser on MacOS"
+    assert candidate_test.consent is True
+
+    # Verify candidate has UUID
+    candidate = db.get(Candidate, candidate_test.candidate_id)
+    assert candidate is not None
+    assert candidate.candidate_uuid is not None
+    assert candidate.user_id is None  # Anonymous candidate
+
+    # Verify end_time is None initially (will be set when test is submitted)
+    assert candidate_test.end_time is None
+    assert candidate_test.is_submitted is False
+
+
+def test_start_test_inactive_test(client: TestClient, db: SessionDep) -> None:
+    """Test that start_test fails for inactive tests."""
+    user = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=False,  # Inactive test
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+
+    assert response.status_code == 404
+    assert "Test not found or not active" in response.json()["detail"]
+
+
+def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
+    """Test the test_questions endpoint with candidate UUID verification."""
+    user = create_random_user(db)
+
+    # Create organization and question setup
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    # Create question with revision
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 2+2?",
+        question_type=QuestionType.single_choice,
+        options=[{"text": "3"}, {"text": "4"}, {"text": "5"}],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create test
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    # Link question to test
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Create candidate and candidate_test using start_test endpoint
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Test get_test_questions endpoint
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "id" in data  # Test ID
+    assert "name" in data  # Test name
+    assert "question_revisions" in data  # Questions (safe, no answers)
+    assert "candidate_test" in data
+    assert data["id"] == test.id
+    assert isinstance(data["question_revisions"], list)
+    assert data["candidate_test"]["id"] == candidate_test_id
+
+    # Verify questions don't contain answers (security check)
+    if data["question_revisions"]:
+        question_data = data["question_revisions"][0]
+        assert "question_text" in question_data
+        assert "options" in question_data
+        assert "correct_answer" not in question_data  # Should not expose answers
+        assert "solution" not in question_data  # Should not expose solutions
+
+    # Verify the response can be validated against TestCandidatePublic model
+    test_candidate_response = TestCandidatePublic.model_validate(data)
+    assert test_candidate_response.id == test.id
+    assert test_candidate_response.candidate_test.id == candidate_test_id
+
+
+def test_get_test_questions_invalid_uuid(client: TestClient, db: SessionDep) -> None:
+    """Test that test_questions endpoint fails with invalid candidate UUID."""
+    user = create_random_user(db)
+
+    # Create test and candidate_test normally
+    test = Test(
+        name=random_lower_string(), created_by_id=user.id, link=random_lower_string()
+    )
+    db.add(test)
+    db.commit()
+
+    # Start test to create candidate_test
+    payload = {"test_id": test.id}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    candidate_test_id = start_response.json()["candidate_test_id"]
+
+    # Try with fake UUID
+    import uuid
+
+    fake_uuid = str(uuid.uuid4())
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": fake_uuid},
+    )
+
+    assert response.status_code == 404
+    assert "Candidate test not found or invalid UUID" in response.json()["detail"]

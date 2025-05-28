@@ -1220,4 +1220,4 @@ What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geog
         import os
 
         if os.path.exists(temp_file_path):
-            os.unlink(path)
+            os.unlink(temp_file_path)

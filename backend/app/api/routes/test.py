@@ -12,6 +12,7 @@ from app.models import (
     Test,
     TestCreate,
     TestPublic,
+    TestPublicLimited,
     TestQuestion,
     TestState,
     TestTag,
@@ -21,6 +22,33 @@ from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
 
 router = APIRouter(prefix="/test", tags=["Test"])
+
+
+# Public endpoint to get basic test information (for landing page)
+@router.get("/public/{test_uuid}", response_model=TestPublicLimited)
+def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimited:
+    """
+    Get public information for a test using its UUID link.
+    This endpoint is for the test landing page before starting the test.
+    No authentication required.
+    """
+    test = session.exec(select(Test).where(Test.link == test_uuid)).first()
+    if not test or test.is_deleted or not test.is_active:
+        raise HTTPException(status_code=404, detail="Test not found or not active")
+
+    # Calculate total questions
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
+    )
+    question_revisions = session.exec(question_revision_query).all()
+    total_questions = len(question_revisions)
+
+    return TestPublicLimited(
+        **test.model_dump(),
+        total_questions=total_questions,
+    )
 
 
 # Create a Test
@@ -36,11 +64,17 @@ def create_test(
     test_data = test_create.model_dump(
         exclude={"tag_ids", "question_revision_ids", "state_ids"}
     )
+
+    # Auto-generate UUID for link if not provided
+    if not test_data.get("link"):
+        import uuid
+
+        test_data["link"] = str(uuid.uuid4())
+
     test = Test.model_validate(test_data)
 
-    if (
-        test.random_questions is True
-        and test.no_of_random_questions is None
+    if test.random_questions is True and (
+        test.no_of_random_questions is None
         or (test.no_of_random_questions is not None and test.no_of_random_questions < 1)
     ):
         raise HTTPException(

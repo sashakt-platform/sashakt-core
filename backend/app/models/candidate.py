@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -5,6 +6,9 @@ from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
+    from app.models.location import State
+    from app.models.question import QuestionCandidatePublic
+    from app.models.tag import Tag
 
 
 # Storing Answers for a question in a test by a candidate
@@ -65,7 +69,7 @@ class CandidateTestBase(SQLModel):
     device: str = Field(nullable=False)
     consent: bool = Field(default=False, nullable=False)
     start_time: datetime = Field(nullable=False)
-    end_time: datetime | None = Field(nullable=False, default=None)
+    end_time: datetime | None = Field(nullable=True, default=None)
     is_submitted: bool = Field(default=False, nullable=False)
 
 
@@ -121,6 +125,9 @@ class CandidateCreate(CandidateBase):
 
 class Candidate(CandidateBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    candidate_uuid: uuid.UUID | None = Field(
+        default=None, unique=True, index=True, nullable=True
+    )  # Only for anonymous QR code users
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -138,6 +145,7 @@ class Candidate(CandidateBase, table=True):
 
 class CandidatePublic(CandidateBase):
     id: int
+    candidate_uuid: uuid.UUID | None = None  # Include uuid in public response
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
@@ -146,3 +154,43 @@ class CandidatePublic(CandidateBase):
 
 class CandidateUpdate(CandidateBase):
     pass
+
+
+class TestCandidatePublic(SQLModel):
+    """Test information for candidates with safe questions (no answers)"""
+
+    # Test info (all fields from TestBase)
+    id: int
+    name: str
+    description: str | None
+    start_time: datetime | None
+    end_time: datetime | None
+    time_limit: int | None
+    marks_level: str | None
+    marks: int | None
+    completion_message: str | None
+    start_instructions: str | None
+    link: str
+    no_of_attempts: int | None
+    shuffle: bool
+    random_questions: bool
+    no_of_random_questions: int | None
+    question_pagination: int
+    is_template: bool
+    template_id: int | None
+    created_by_id: int
+    created_date: datetime
+    modified_date: datetime
+    is_active: bool | None
+    is_deleted: bool
+
+    # Safe questions (no answers)
+    question_revisions: list["QuestionCandidatePublic"]
+
+    # Other test data
+    tags: list["Tag"]
+    states: list["State"]
+    total_questions: int
+
+    # Candidate test info
+    candidate_test: "CandidateTestPublic"
