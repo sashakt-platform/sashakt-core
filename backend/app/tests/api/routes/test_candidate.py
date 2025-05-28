@@ -1151,7 +1151,6 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     data = response.json()
-    print("candidate start_test response:", data)
     assert response.status_code == 200
     assert "candidate_uuid" in data
     assert "candidate_test_id" in data
