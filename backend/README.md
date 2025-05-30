@@ -127,7 +127,7 @@ As during local development your app directory is mounted as a volume inside the
 
 Make sure you create a "revision" of your models and that you "upgrade" your database with that revision every time you change them. As this is what will update the tables in your database. Otherwise, your application will have errors.
 
-- Start an interactive session in the backend container:
+### Start an interactive session in the backend container:
 
 ```console
 $ docker compose exec backend bash
@@ -147,6 +147,20 @@ $ alembic revision --autogenerate -m "Add column last_name to User model"
 $ alembic upgrade head
 ```
 
+### Alternatively you can use below helper scripts which can be run from the host machine
+
+If you want to create new migration revision
+
+```console
+$ bash scripts/create-migrations.sh -m "your message"
+```
+
+Run the migrations
+
+```console
+$ bash scripts/run-migrations.sh
+```
+
 As we using docker setup files generated inside the container are not sync to host machine. You can do so by running following script from root of host.
 
 ```console
@@ -158,13 +172,11 @@ $ bash scripts/sync-migrations.sh
 If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision.
 
 - Drop all tables from the db.
-- Run below script that we delete all previous revisions and create first revision.
+- Run below script that will delete all previous revisions and create initial revision.
 
 ```console
 $ bash scripts/reset-migrations.sh
 ```
-
-Runs this above script from host machine.
 
 ## Email Templates
 
