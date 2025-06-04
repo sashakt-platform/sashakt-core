@@ -33,7 +33,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     No authentication required.
     """
     test = session.exec(select(Test).where(Test.link == test_uuid)).first()
-    if not test or test.is_deleted or not test.is_active:
+    if not test or test.is_deleted or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
 
     # Calculate total questions
