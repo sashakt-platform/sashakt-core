@@ -1221,3 +1221,121 @@ What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geog
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+# Test Case to check if the latest question revision is returned when fetching questions
+def test_latest_question_revision(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    organization = Organization(name=random_lower_string())
+    db.add(organization)
+    db.commit()
+    db.refresh(organization)
+
+    # Create user for test
+    user = create_random_user(db)
+    db.refresh(user)
+
+    question_text = random_lower_string()
+    question_data = {
+        "organization_id": organization.id,
+        "created_by_id": user.id,
+        "question_text": question_text,
+        "question_type": QuestionType.single_choice,
+        "options": [{"A": "Option 1"}, {"B": "Option 2"}, {"C": "Option 3"}],
+        "correct_answer": [0],  # First option is correct
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+    )
+    data_main_question = response.json()
+
+    assert response.status_code == 200
+    assert data_main_question["question_text"] == question_text
+    assert data_main_question["question_type"] == QuestionType.single_choice
+    assert len(data_main_question["options"]) == 3
+    assert data_main_question["correct_answer"] == [0]  # First option is correct
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
+        headers=get_user_superadmin_token,
+    )
+
+    data_revision_1 = response.json()
+
+    assert response.status_code == 200
+    assert len(data_revision_1) == 1
+    assert data_main_question["latest_question_revision_id"] == data_revision_1[0]["id"]
+    assert data_main_question["question_text"] == data_revision_1[0]["text"]
+    assert data_main_question["question_type"] == data_revision_1[0]["type"]
+    assert data_main_question["created_by_id"] == data_revision_1[0]["created_by_id"]
+
+    # Create a new revision with a different user
+    user2 = create_random_user(db)
+    new_text = random_lower_string()
+    new_revision_data = {
+        "created_by_id": user2.id,
+        "question_text": new_text,
+        "question_type": QuestionType.multi_choice,
+        "options": [
+            {"1": "New Option 1"},
+            {"2": "New Option 2"},
+            {"3": "New Option 3"},
+        ],
+        "correct_answer": [0, 1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
+        json=new_revision_data,
+    )
+
+    user3 = create_random_user(db)
+    new_text = random_lower_string()
+    new_revision_data = {
+        "created_by_id": user3.id,
+        "question_text": new_text,
+        "question_type": QuestionType.multi_choice,
+        "options": [
+            {"4": "New Option 1"},
+            {"5": "New Option 2"},
+            {"6": "New Option 3"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
+        json=new_revision_data,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
+        headers=get_user_superadmin_token,
+    )
+
+    data_revision_3 = response.json()
+
+    assert response.status_code == 200
+    assert len(data_revision_3) == 3
+
+    max_revision_id = max(rev["id"] for rev in data_revision_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{data_main_question['id']}",
+        headers=get_user_superadmin_token,
+    )
+    data_latest_question = response.json()
+    assert response.status_code == 200
+    assert data_latest_question["latest_question_revision_id"] == max_revision_id
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/revisions/{max_revision_id}",
+        headers=get_user_superadmin_token,
+    )
+    data_latest_revision = response.json()
+    assert response.status_code == 200
+    assert data_latest_revision["question_id"] == data_main_question["id"]
