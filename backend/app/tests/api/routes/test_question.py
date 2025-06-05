@@ -1275,15 +1275,14 @@ def test_latest_question_revision(
 
     # Create a new revision with a different user
     user2 = create_random_user(db)
-    new_text = random_lower_string()
     new_revision_data = {
         "created_by_id": user2.id,
-        "question_text": new_text,
+        "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"1": "New Option 1"},
-            {"2": "New Option 2"},
-            {"3": "New Option 3"},
+            {"text": "New Option 1"},
+            {"text": "New Option 2"},
+            {"text": "New Option 3"},
         ],
         "correct_answer": [0, 1],
     }
@@ -1294,15 +1293,14 @@ def test_latest_question_revision(
     )
 
     user3 = create_random_user(db)
-    new_text = random_lower_string()
     new_revision_data = {
         "created_by_id": user3.id,
-        "question_text": new_text,
+        "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"4": "New Option 1"},
-            {"5": "New Option 2"},
-            {"6": "New Option 3"},
+            {"text": "New Option 1"},
+            {"text": "New Option 2"},
+            {"text": "New Option 3"},
         ],
         "correct_answer": [1],
     }
