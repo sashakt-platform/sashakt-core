@@ -417,6 +417,9 @@ class QuestionPublic(SQLModel):
     marking_scheme: MarkingSchemeDict | None = Field(description="Scoring rules")
     solution: str | None = Field(description="Explanation of the answer")
     media: dict[str, Any] | None = Field(description="Associated media")
+    latest_question_revision_id: int = Field(
+        description="ID of the latest revision of this question"
+    )
     created_by_id: int = Field(
         description="ID of the user who created the current revision"
     )
