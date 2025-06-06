@@ -126,31 +126,23 @@ def build_question_response(
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
 ) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
-    """Helper function to prepare data for database by converting objects to dicts"""
-    # Handle options
+
     options: list[dict[str, Any]] | None = None
+
     if data.options:
-        options = [
-            opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
-            for opt in data.options
-        ]
+        options = []
+        for idx, opt in enumerate(data.options):
+            # Convert to dict if needed
+            opt_dict = opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
 
-    marking_scheme: dict[str, float] | None = None
-    if (
-        data.marking_scheme
-        and hasattr(data.marking_scheme, "dict")
-        and callable(data.marking_scheme.dict)
-    ):
-        marking_scheme = data.marking_scheme.dict()
-    else:
-        marking_scheme = data.marking_scheme
+            # Add 'id' if it's missing or None
+            if "id" not in opt_dict or opt_dict["id"] is None:
+                opt_dict["id"] = idx + 1
 
-    # Handle media
-    media: dict[str, Any] | None = None
-    if data.media and hasattr(data.media, "dict") and callable(data.media.dict):
-        media = data.media.dict()
-    else:
-        media = data.media
+            options.append(opt_dict)
+
+    marking_scheme = data.marking_scheme or None
+    media = data.media or None
 
     return options, marking_scheme, media
 
@@ -707,6 +699,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         if revision.media and hasattr(revision.media, "dict")
         else revision.media
     )
+    
 
     # Return as dict instead of model to add dynamic is_current attribute
     return RevisionDetailDict(
@@ -766,6 +759,7 @@ def add_question_location(
             district_id=None,
             block_id=None,
         )
+    
     elif location_data.district_id:
         # Check if this district is already associated
         existing_query = select(QuestionLocation).where(
@@ -902,7 +896,7 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     ]
 
     return result
-
+#this is the comment
 
 @router.post("/{question_id}/tags", response_model=QuestionTagResponse)
 def add_question_tag(

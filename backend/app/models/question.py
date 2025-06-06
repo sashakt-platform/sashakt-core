@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, List  # Correct
+
 
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 
@@ -43,7 +44,9 @@ class ImageBase:
 
 class OptionBase:
     """Represents a single option in a choice-based question"""
-
+    id: Optional[int] = None
+    
+    key: str 
     text: str
     image: dict[str, Any] | None = None
 
@@ -70,7 +73,9 @@ class Image(SQLModel):
 
 class Option(SQLModel):
     """Represents a single option in a choice-based question"""
-
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key: str = Field(description="Option label like 'A', 'B', etc.")
+    
     text: str = Field(description="Text content of the option")
     image: dict[str, Any] | None = Field(
         default=None, description="Optional image associated with this option"
@@ -97,7 +102,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
-    options: list[OptionDict] | None = Field(
+    options: Optional[list[Option]] = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -365,8 +370,9 @@ class QuestionLocationCreate(SQLModel):
     district_id: int | None = Field(
         default=None, description="ID of the district to associate"
     )
-    block_id: int | None = Field(
-        default=None, description="ID of the block to associate"
+    block_id: Optional[int] = Field(
+        default=None,
+        description="ID of the block to associate"
     )
 
 
