@@ -116,6 +116,7 @@ def build_question_response(
         marking_scheme=marking_scheme_dict,
         solution=revision.solution,
         media=media_dict,
+        latest_question_revision_id=revision.id,
         created_by_id=revision.created_by_id,
         # Location data
         locations=location_list,
