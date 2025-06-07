@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime
 from io import StringIO
-from typing import Any
+from typing import Any ,cast
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import desc
@@ -33,6 +33,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.question import Option
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -127,20 +128,23 @@ def build_question_response(
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
 ) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
-
     options: list[dict[str, Any]] | None = None
 
     if data.options:
         options = []
         for idx, opt in enumerate(data.options):
-            # Convert to dict if needed
-            opt_dict = opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
+            # Force conversion to dict explicitly to avoid Option types slipping in
+            if hasattr(opt, "dict") and callable(opt.dict):
+                opt_dict = opt.dict()
+            else:
+                opt_dict = dict(opt)  # in case opt is already a dict-like
 
-            # Add 'id' if it's missing or None
             if "id" not in opt_dict or opt_dict["id"] is None:
                 opt_dict["id"] = idx + 1
+            opt_dict = opt.dict()
 
-            options.append(opt_dict)
+
+            options.append(opt_dict)  # append only dicts here
 
     marking_scheme = data.marking_scheme or None
     media = data.media or None
@@ -684,10 +688,11 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
 
     # Convert complex objects to dicts for serialization
     options_dict = None
-    if revision.options:
+    if options_dict is not None:
         options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
-        ]
+            opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
+            for opt in options_dict
+    ]
 
     marking_scheme_dict = (
         revision.marking_scheme.dict()
@@ -700,8 +705,11 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         if revision.media and hasattr(revision.media, "dict")
         else revision.media
     )
-    
-
+    if options_dict is not None:
+        options_dict = [
+            opt.dict() if isinstance(opt, Option) else opt
+            for opt in options_dict
+    ]
     # Return as dict instead of model to add dynamic is_current attribute
     return RevisionDetailDict(
         id=revision.id,
@@ -760,7 +768,7 @@ def add_question_location(
             district_id=None,
             block_id=None,
         )
-    
+
     elif location_data.district_id:
         # Check if this district is already associated
         existing_query = select(QuestionLocation).where(
@@ -897,7 +905,10 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     ]
 
     return result
-#this is the comment
+
+
+# this is the comment
+
 
 @router.post("/{question_id}/tags", response_model=QuestionTagResponse)
 def add_question_tag(
