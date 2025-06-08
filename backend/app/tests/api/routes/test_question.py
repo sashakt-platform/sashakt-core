@@ -258,6 +258,12 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
+    """
+    Test the bulk upload of questions from CSV.
+
+    This function tests various scenarios including
+    valid uploads, invalid data, missing users, and empty files.
+    """
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -1273,8 +1279,10 @@ def test_latest_question_revision(
         "created_by_id": user.id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
-        "options": [{"A": "Option 1"}, {"B": "Option 2"}, {"C": "Option 3"}],
-        "correct_answer": [0],  # First option is correct
+        "options": [ {"id": 1, "key": "A", "text": "Option 1"},
+    {"id": 2, "key": "B", "text": "Option 2"},
+    {"id": 3, "key": "C", "text": "Option 3"}],
+        "correct_answer": [1],  # First option is correct
         "is_mandatory": True,
     }
 
@@ -1288,7 +1296,7 @@ def test_latest_question_revision(
     assert data_main_question["question_text"] == question_text
     assert data_main_question["question_type"] == QuestionType.single_choice
     assert len(data_main_question["options"]) == 3
-    assert data_main_question["correct_answer"] == [0]  # First option is correct
+    assert data_main_question["correct_answer"] == [1]  # First option is correct
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
@@ -1311,11 +1319,11 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            { "id": 1,"text": "New Option 1"},
+            { "id": 2,"text": "New Option 2"},
+            { "id": 3,"text": "New Option 3"},
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 2],
     }
 
     response = client.post(
@@ -1329,9 +1337,9 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            {"id": 1,"text": "New Option 1"},
+            {"id": 2,"text": "New Option 2"},
+            {"id": 3,"text": "New Option 3"},
         ],
         "correct_answer": [1],
     }

@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime
 from io import StringIO
-from typing import Any ,cast
+from typing import Any 
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import desc
@@ -1074,6 +1074,9 @@ async def upload_questions_csv(
                     continue
 
                 # Extract data
+                option_keys = ["A", "B", "C", "D"]
+                valid_options = []
+                option_id_counter = 1  
                 question_text = row.get("Questions", "").strip()
                 options = [
                     row.get("Option A", "").strip(),
@@ -1083,9 +1086,24 @@ async def upload_questions_csv(
                 ]
 
                 # Convert option letter to index
+                
+                
+                for key, text in zip(option_keys, options):
+                    if text:
+                        valid_options.append({
+                            "id": option_id_counter,  # assign unique id
+                            "key": key,
+                            "text": text
+                    })
+                        option_id_counter += 1
+
                 correct_letter = row.get("Correct Option", "A").strip()
-                letter_map = {"A": 0, "B": 1, "C": 2, "D": 3}
-                correct_answer = letter_map.get(correct_letter, 0)
+                correct_option = next(
+    (opt for opt in valid_options if opt["key"] == correct_letter),
+    valid_options[0]  # fallback to first option if not found
+)
+
+                correct_answer = [correct_option["id"]] 
 
                 # Process tags if present
                 tag_ids = []
