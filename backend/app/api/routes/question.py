@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime
 from io import StringIO
-from typing import Any 
+from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import desc
@@ -142,7 +142,6 @@ def prepare_for_db(
             if "id" not in opt_dict or opt_dict["id"] is None:
                 opt_dict["id"] = idx + 1
             opt_dict = opt.dict()
-
 
             options.append(opt_dict)  # append only dicts here
 
@@ -692,7 +691,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         options_dict = [
             opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
             for opt in options_dict
-    ]
+        ]
 
     marking_scheme_dict = (
         revision.marking_scheme.dict()
@@ -707,9 +706,8 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     )
     if options_dict is not None:
         options_dict = [
-            opt.dict() if isinstance(opt, Option) else opt
-            for opt in options_dict
-    ]
+            opt.dict() if isinstance(opt, Option) else opt for opt in options_dict
+        ]
     # Return as dict instead of model to add dynamic is_current attribute
     return RevisionDetailDict(
         id=revision.id,
@@ -1076,7 +1074,7 @@ async def upload_questions_csv(
                 # Extract data
                 option_keys = ["A", "B", "C", "D"]
                 valid_options = []
-                option_id_counter = 1  
+                option_id_counter = 1
                 question_text = row.get("Questions", "").strip()
                 options = [
                     row.get("Option A", "").strip(),
@@ -1086,24 +1084,24 @@ async def upload_questions_csv(
                 ]
 
                 # Convert option letter to index
-                
-                
-                for key, text in zip(option_keys, options):
+                for key, text in zip(option_keys, options, strict=True):
                     if text:
-                        valid_options.append({
-                            "id": option_id_counter,  # assign unique id
-                            "key": key,
-                            "text": text
-                    })
+                        valid_options.append(
+                            {
+                                "id": option_id_counter,  # assign unique id
+                                "key": key,
+                                "text": text,
+                            }
+                        )
                         option_id_counter += 1
 
                 correct_letter = row.get("Correct Option", "A").strip()
                 correct_option = next(
-    (opt for opt in valid_options if opt["key"] == correct_letter),
-    valid_options[0]  # fallback to first option if not found
-)
+                    (opt for opt in valid_options if opt["key"] == correct_letter),
+                    valid_options[0],  # fallback to first option if not found
+                )
 
-                correct_answer = [correct_option["id"]] 
+                correct_answer = [correct_option["id"]]
 
                 # Process tags if present
                 tag_ids = []
