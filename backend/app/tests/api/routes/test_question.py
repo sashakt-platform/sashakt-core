@@ -1279,9 +1279,11 @@ def test_latest_question_revision(
         "created_by_id": user.id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
-        "options": [ {"id": 1, "key": "A", "text": "Option 1"},
-    {"id": 2, "key": "B", "text": "Option 2"},
-    {"id": 3, "key": "C", "text": "Option 3"}],
+        "options": [
+            {"id": 1, "key": "A", "text": "Option 1"},
+            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 3, "key": "C", "text": "Option 3"},
+        ],
         "correct_answer": [1],  # First option is correct
         "is_mandatory": True,
     }
@@ -1319,9 +1321,9 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            { "id": 1,"text": "New Option 1"},
-            { "id": 2,"text": "New Option 2"},
-            { "id": 3,"text": "New Option 3"},
+            {"id": 1, "text": "New Option 1"},
+            {"id": 2, "text": "New Option 2"},
+            {"id": 3, "text": "New Option 3"},
         ],
         "correct_answer": [1, 2],
     }
@@ -1337,9 +1339,9 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"id": 1,"text": "New Option 1"},
-            {"id": 2,"text": "New Option 2"},
-            {"id": 3,"text": "New Option 3"},
+            {"id": 1, "text": "New Option 1"},
+            {"id": 2, "text": "New Option 2"},
+            {"id": 3, "text": "New Option 3"},
         ],
         "correct_answer": [1],
     }
