@@ -120,9 +120,7 @@ def test_create_question(
 
 
 def test_read_questions(
-    client: TestClient,
-    db: SessionDep,
-    get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     # Create test organization
     org = Organization(name=random_lower_string())
@@ -158,8 +156,7 @@ def test_read_questions(
 
     # Check empty list first
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
-        headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/questions/", headers=get_user_superadmin_token
     )
     data = response.json()
     assert response.status_code == 200
@@ -220,8 +217,7 @@ def test_read_questions(
 
     # Get all questions
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
-        headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/questions/", headers=get_user_superadmin_token
     )
     data = response.json()
 
@@ -244,7 +240,7 @@ def test_read_questions(
     # Test filtering by tag
     response = client.get(
         f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}",
-        headers=get_user_superadmin_token
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -254,7 +250,7 @@ def test_read_questions(
     # Test filtering by created_by
     response = client.get(
         f"{settings.API_V1_STR}/questions/?created_by_id={user.id}",
-        headers=get_user_superadmin_token
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -263,7 +259,7 @@ def test_read_questions(
     # Verify that filtering works
     response = client.get(
         f"{settings.API_V1_STR}/questions/?organization_id={org.id}",
-        headers=get_user_superadmin_token
+        headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -271,8 +267,7 @@ def test_read_questions(
 
     # Check pagination
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?limit=1",
-        headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/questions/?limit=1", headers=get_user_superadmin_token
     )
     data = response.json()
     assert response.status_code == 200
@@ -1192,9 +1187,15 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         # Verify each question has its own set of option IDs starting from 1
         for question in questions:
             option_ids = [opt["id"] for opt in question["options"]]
-            assert min(option_ids) == 1, f"Question {question['id']} does not start with option ID 1"
-            assert max(option_ids) == len(option_ids), f"Question {question['id']} has non-sequential option IDs"
-            assert len(set(option_ids)) == len(option_ids), f"Question {question['id']} has duplicate option IDs"
+            assert min(option_ids) == 1, (
+                f"Question {question['id']} does not start with option ID 1"
+            )
+            assert max(option_ids) == len(option_ids), (
+                f"Question {question['id']} has non-sequential option IDs"
+            )
+            assert len(set(option_ids)) == len(option_ids), (
+                f"Question {question['id']} has duplicate option IDs"
+            )
 
         # Check for specific question content
         question_texts = [q["question_text"] for q in questions]
@@ -1409,3 +1410,178 @@ def test_latest_question_revision(
     data_latest_revision = response.json()
     assert response.status_code == 200
     assert data_latest_revision["question_id"] == data_main_question["id"]
+
+
+def test_prepare_for_db_with_different_option_types(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test prepare_for_db function with different option types and data structures."""
+    from app.api.routes.question import prepare_for_db
+    from app.models.question import QuestionCreate, Option
+
+    # Test with dict-like options
+    data1 = QuestionCreate(
+        organization_id=1,
+        created_by_id=1,
+        question_text="Test question",
+        question_type="single_choice",
+        options=[
+            {"id": 1, "key": "A", "text": "Option 1"},
+            {"id": 2, "key": "B", "text": "Option 2"},
+        ],
+        correct_answer=[1],
+        marking_scheme={"correct": 1, "wrong": 0},
+        media={"type": "image", "url": "test.jpg"},
+    )
+    options1, marking_scheme1, media1 = prepare_for_db(data1)
+    assert len(options1) == 2
+    assert marking_scheme1 == {"correct": 1, "wrong": 0}
+    assert media1 == {"type": "image", "url": "test.jpg"}
+
+    # Test with Option model instances
+    data2 = QuestionCreate(
+        organization_id=1,
+        created_by_id=1,
+        question_text="Test question 2",
+        question_type="single_choice",
+        options=[
+            Option(id=1, key="A", text="Option 1"),
+            Option(id=2, key="B", text="Option 2"),
+        ],
+        correct_answer=[1],
+        marking_scheme=None,
+        media=None,
+    )
+    options2, marking_scheme2, media2 = prepare_for_db(data2)
+    assert len(options2) == 2
+    assert marking_scheme2 is None
+    assert media2 is None
+
+    # Test with options without IDs
+    data3 = QuestionCreate(
+        organization_id=1,
+        created_by_id=1,
+        question_text="Test question 3",
+        question_type="single_choice",
+        options=[{"key": "A", "text": "Option 1"}, {"key": "B", "text": "Option 2"}],
+        correct_answer=[1],
+    )
+    options3, marking_scheme3, media3 = prepare_for_db(data3)
+    assert len(options3) == 2
+    assert options3[0]["id"] == 1
+    assert options3[1]["id"] == 2
+
+
+def test_get_revision_with_media(client: TestClient, db: SessionDep) -> None:
+    """Test get_revision endpoint with media handling."""
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user
+    user = create_random_user(db)
+    db.refresh(user)
+
+    # Create question with revision containing media
+    q1 = Question(organization_id=org.id)
+    db.add(q1)
+    db.flush()
+
+    media_data = {"type": "image", "url": "test.jpg", "alt_text": "Test image"}
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "text": "Option 1"},
+            {"id": 2, "key": "B", "text": "Option 2"},
+        ],
+        correct_answer=[1],
+        media=media_data,
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    db.commit()
+    db.refresh(q1)
+    db.refresh(rev1)
+
+    # Get revision
+    response = client.get(f"{settings.API_V1_STR}/questions/revisions/{rev1.id}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == rev1.id
+    assert data["media"] == media_data
+
+
+def test_bulk_upload_with_tag_type_errors(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    """Test bulk upload with tag type errors."""
+    # Create organization
+    org_name = random_lower_string()
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": org_name},
+        headers=get_user_superadmin_token,
+    )
+    org_data = org_response.json()
+    org_id = org_data["id"]
+
+    # Create user
+    user = create_random_user(db)
+    user.organization_id = org_id
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    user_id = user.id
+
+    # Create country and state
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    kerala = State(name="Kerala", country_id=india.id)
+    db.add(kerala)
+    db.commit()
+    db.refresh(kerala)
+
+    # Create CSV with non-existent tag type
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is 2+2?,4,3,5,6,A,NonExistentType:Math,Kerala
+What is the capital of France?,Paris,London,Berlin,Madrid,A,AnotherNonExistentType:Geography,Kerala
+"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        # Upload the CSV file
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions.csv", file, "text/csv")},
+                data={"user_id": str(user_id)},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Failed to create" in data["message"]
+        assert "NonExistentType" in data["message"]
+        assert "AnotherNonExistentType" in data["message"]
+
+    finally:
+        # Clean up
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)

@@ -1092,7 +1092,7 @@ async def upload_questions_csv(
                             {
                                 "id": option_id,  # Use local counter for each question
                                 "key": key,
-                                "text": text
+                                "text": text,
                             }
                         )
                         option_id += 1  # Increment local counter
