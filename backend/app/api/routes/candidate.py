@@ -8,6 +8,7 @@ from sqlmodel import SQLModel, not_, select
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Candidate,
+    CandidateAnswerSubmitRequest,
     CandidateCreate,
     CandidatePublic,
     CandidateTest,
@@ -43,20 +44,6 @@ class StartTestRequest(SQLModel):
 class StartTestResponse(SQLModel):
     candidate_uuid: uuid.UUID
     candidate_test_id: int
-
-
-# Request models for candidate answer submission
-class CandidateAnswerSubmitRequest(SQLModel):
-    question_revision_id: int
-    response: str | None = None
-    visited: bool = False
-    time_spent: int = 0
-
-
-class CandidateAnswerUpdateRequest(SQLModel):
-    response: str | None = None
-    visited: bool | None = None
-    time_spent: int | None = None
 
 
 @router.post("/start_test", response_model=StartTestResponse)
