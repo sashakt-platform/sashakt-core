@@ -4,11 +4,19 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
+from app.api.routes.question import prepare_for_db
 from app.core.config import settings
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
-from app.models.question import Question, QuestionRevision, QuestionTag, QuestionType
+from app.models.question import (
+    Option,
+    Question,
+    QuestionCreate,
+    QuestionRevision,
+    QuestionTag,
+    QuestionType,
+)
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.tests.utils.user import create_random_user
@@ -1412,19 +1420,14 @@ def test_latest_question_revision(
     assert data_latest_revision["question_id"] == data_main_question["id"]
 
 
-def test_prepare_for_db_with_different_option_types(
-    client: TestClient, db: SessionDep
-) -> None:
+def test_prepare_for_db_with_different_option_types() -> None:
     """Test prepare_for_db function with different option types and data structures."""
-    from app.api.routes.question import prepare_for_db
-    from app.models.question import QuestionCreate, Option
-
     # Test with dict-like options
     data1 = QuestionCreate(
         organization_id=1,
         created_by_id=1,
         question_text="Test question",
-        question_type="single_choice",
+        question_type="single-choice",
         options=[
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
@@ -1443,7 +1446,7 @@ def test_prepare_for_db_with_different_option_types(
         organization_id=1,
         created_by_id=1,
         question_text="Test question 2",
-        question_type="single_choice",
+        question_type="single-choice",
         options=[
             Option(id=1, key="A", text="Option 1"),
             Option(id=2, key="B", text="Option 2"),
@@ -1462,7 +1465,7 @@ def test_prepare_for_db_with_different_option_types(
         organization_id=1,
         created_by_id=1,
         question_text="Test question 3",
-        question_type="single_choice",
+        question_type="single-choice",
         options=[{"key": "A", "text": "Option 1"}, {"key": "B", "text": "Option 2"}],
         correct_answer=[1],
     )
