@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -1310,7 +1311,7 @@ def test_latest_question_revision(
     # Create user for test
     user = create_random_user(db)
     db.refresh(user)
-#changes made here
+
     question_text = random_lower_string()
     question_data = {
         "organization_id": organization.id,
@@ -1438,7 +1439,8 @@ def test_prepare_for_db_with_different_option_types() -> None:
     )
     options1, marking_scheme1, media1 = prepare_for_db(data1)
     assert options1 is not None
-    assert len(options1) == 2
+    options1_list: list[dict[str, Any]] = options1
+    assert len(options1_list) == 2
     assert marking_scheme1 == {"correct": 1, "wrong": 0}
     assert media1 == {"type": "image", "url": "test.jpg"}
 
@@ -1458,7 +1460,8 @@ def test_prepare_for_db_with_different_option_types() -> None:
     )
     options2, marking_scheme2, media2 = prepare_for_db(data2)
     assert options2 is not None
-    assert len(options2) == 2
+    options2_list: list[dict[str, Any]] = options2
+    assert len(options2_list) == 2
     assert marking_scheme2 is None
     assert media2 is None
 
@@ -1473,9 +1476,10 @@ def test_prepare_for_db_with_different_option_types() -> None:
     )
     options3, marking_scheme3, media3 = prepare_for_db(data3)
     assert options3 is not None
-    assert len(options3) == 2
-    assert options3[0]["id"] == 1
-    assert options3[1]["id"] == 2
+    options3_list: list[dict[str, Any]] = options3
+    assert len(options3_list) == 2
+    assert options3_list[0]["id"] == 1
+    assert options3_list[1]["id"] == 2
 
 
 def test_get_revision_with_media(client: TestClient, db: SessionDep) -> None:
