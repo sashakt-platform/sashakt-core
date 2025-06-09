@@ -1427,7 +1427,7 @@ def test_prepare_for_db_with_different_option_types() -> None:
         organization_id=1,
         created_by_id=1,
         question_text="Test question",
-        question_type="single-choice",
+        question_type=QuestionType.single_choice,
         options=[
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
@@ -1446,7 +1446,7 @@ def test_prepare_for_db_with_different_option_types() -> None:
         organization_id=1,
         created_by_id=1,
         question_text="Test question 2",
-        question_type="single-choice",
+        question_type=QuestionType.single_choice,
         options=[
             Option(id=1, key="A", text="Option 1"),
             Option(id=2, key="B", text="Option 2"),
@@ -1465,7 +1465,7 @@ def test_prepare_for_db_with_different_option_types() -> None:
         organization_id=1,
         created_by_id=1,
         question_text="Test question 3",
-        question_type="single-choice",
+        question_type=QuestionType.single_choice,
         options=[{"key": "A", "text": "Option 1"}, {"key": "B", "text": "Option 2"}],
         correct_answer=[1],
     )
