@@ -1074,7 +1074,7 @@ What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Kerala
 What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Kerala
 ,,,,,,,
 """
-    # Create a temporary file
+    # Create  temporary file  
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
