@@ -1310,7 +1310,7 @@ def test_latest_question_revision(
     # Create user for test
     user = create_random_user(db)
     db.refresh(user)
-
+#changes made here
     question_text = random_lower_string()
     question_data = {
         "organization_id": organization.id,
