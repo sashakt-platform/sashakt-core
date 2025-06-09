@@ -1164,7 +1164,11 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         response = client.get(
             f"{settings.API_V1_STR}/questions/?organization_id={org_id}"
         )
+        print(csv_content)
+
         questions = response.json()
+        print("Fetched questions:", questions)
+        print("Fetched count:", len(questions))
         assert len(questions) >= 4  # Updated to reflect 4 questions
 
         # Check for specific question content
@@ -1292,6 +1296,7 @@ def test_latest_question_revision(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
     )
+    assert response.status_code == 200, response.json()
     data_main_question = response.json()
 
     assert response.status_code == 200
@@ -1321,9 +1326,9 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"id": 1, "text": "New Option 1"},
-            {"id": 2, "text": "New Option 2"},
-            {"id": 3, "text": "New Option 3"},
+            {"id": 1, "key": "A", "text": "New Option 1"},
+            {"id": 2, "key": "B", "text": "New Option 2"},
+            {"id": 3, "key": "C", "text": "New Option 3"},
         ],
         "correct_answer": [1, 2],
     }
@@ -1332,6 +1337,7 @@ def test_latest_question_revision(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
         json=new_revision_data,
     )
+    assert response.status_code == 200, response.json()
 
     user3 = create_random_user(db)
     new_revision_data = {
@@ -1339,9 +1345,9 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"id": 1, "text": "New Option 1"},
-            {"id": 2, "text": "New Option 2"},
-            {"id": 3, "text": "New Option 3"},
+            {"id": 1, "key": "A", "text": "New Option 1"},
+            {"id": 2, "key": "B", "text": "New Option 2"},
+            {"id": 3, "key": "C", "text": "New Option 3"},
         ],
         "correct_answer": [1],
     }
@@ -1350,7 +1356,7 @@ def test_latest_question_revision(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
         json=new_revision_data,
     )
-
+    assert response.status_code == 200, response.json()
     response = client.get(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
         headers=get_user_superadmin_token,

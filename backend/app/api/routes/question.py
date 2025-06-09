@@ -132,7 +132,7 @@ def prepare_for_db(
 
     if data.options:
         options = []
-        for idx, opt in enumerate(data.options):
+        for index, opt in enumerate(data.options):
             # Force conversion to dict explicitly to avoid Option types slipping in
             if hasattr(opt, "dict") and callable(opt.dict):
                 opt_dict = opt.dict()
@@ -140,8 +140,8 @@ def prepare_for_db(
                 opt_dict = dict(opt)  # in case opt is already a dict-like
 
             if "id" not in opt_dict or opt_dict["id"] is None:
-                opt_dict["id"] = idx + 1
-            opt_dict = opt.dict()
+                opt_dict["id"] = index + 1
+            opt_dict = opt.model_dump()
 
             options.append(opt_dict)  # append only dicts here
 
@@ -609,6 +609,7 @@ def create_question_revision(
     question.last_revision_id = new_revision.id
     # No need to set modified_date manually
     session.add(question)
+
     session.commit()
     session.refresh(question)
     session.refresh(new_revision)
@@ -1076,6 +1077,7 @@ async def upload_questions_csv(
                 valid_options = []
                 option_id_counter = 1
                 question_text = row.get("Questions", "").strip()
+
                 options = [
                     row.get("Option A", "").strip(),
                     row.get("Option B", "").strip(),
@@ -1084,7 +1086,7 @@ async def upload_questions_csv(
                 ]
 
                 # Convert option letter to index
-                for key, text in zip(option_keys, options, strict=True):
+                for key, text in zip(option_keys, options, strict=False):
                     if text:
                         valid_options.append(
                             {
@@ -1094,6 +1096,10 @@ async def upload_questions_csv(
                             }
                         )
                         option_id_counter += 1
+                if not valid_options:
+                    # Skip question if no options
+                    questions_failed += 1
+                    continue
 
                 correct_letter = row.get("Correct Option", "A").strip()
                 correct_option = next(
@@ -1102,6 +1108,10 @@ async def upload_questions_csv(
                 )
 
                 correct_answer = [correct_option["id"]]
+                if not valid_options:
+                    # Skip question if no options
+                    questions_failed += 1
+                    continue
 
                 # Process tags if present
                 tag_ids = []
@@ -1204,7 +1214,13 @@ async def upload_questions_csv(
                 valid_options = []
                 for _i, option in enumerate(options):
                     if option.strip():
-                        valid_options.append({"text": option})
+                        valid_options.append(
+                            {
+                                "id": option_id_counter,  # assign unique id
+                                "key": key,
+                                "text": text,
+                            }
+                        )
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
@@ -1213,7 +1229,7 @@ async def upload_questions_csv(
                     question_text=question_text,
                     question_type="single-choice",  # Assuming single choice questions
                     options=valid_options,
-                    correct_answer=[correct_answer],
+                    correct_answer=correct_answer,
                     is_mandatory=True,
                     marking_scheme={"correct": 1, "wrong": 0, "skipped": 0},
                     state_ids=row_state_ids,
