@@ -119,7 +119,11 @@ def test_create_question(
     assert question_tags[0].tag_id == tag_id
 
 
-def test_read_questions(client: TestClient, db: SessionDep) -> None:
+def test_read_questions(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create test organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -153,7 +157,10 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     db.refresh(tag)
 
     # Check empty list first
-    response = client.get(f"{settings.API_V1_STR}/questions/")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token
+    )
     data = response.json()
     assert response.status_code == 200
 
@@ -212,7 +219,10 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     db.refresh(q2)
 
     # Get all questions
-    response = client.get(f"{settings.API_V1_STR}/questions/")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -232,26 +242,38 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     assert q1_data["tags"][0]["id"] == tag.id
 
     # Test filtering by tag
-    response = client.get(f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}",
+        headers=get_user_superadmin_token
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 1
     assert data[0]["id"] == q1.id
 
     # Test filtering by created_by
-    response = client.get(f"{settings.API_V1_STR}/questions/?created_by_id={user.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?created_by_id={user.id}",
+        headers=get_user_superadmin_token
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 2
 
     # Verify that filtering works
-    response = client.get(f"{settings.API_V1_STR}/questions/?organization_id={org.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?organization_id={org.id}",
+        headers=get_user_superadmin_token
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 2
 
     # Check pagination
-    response = client.get(f"{settings.API_V1_STR}/questions/?limit=1")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?limit=1",
+        headers=get_user_superadmin_token
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) <= 1
@@ -1074,7 +1096,7 @@ What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Kerala
 What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Kerala
 ,,,,,,,
 """
-    # Create  temporary file  
+    # Create temporary file
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -1164,12 +1186,15 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         response = client.get(
             f"{settings.API_V1_STR}/questions/?organization_id={org_id}"
         )
-        print(csv_content)
-
         questions = response.json()
-        print("Fetched questions:", questions)
-        print("Fetched count:", len(questions))
-        assert len(questions) >= 4  # Updated to reflect 4 questions
+        assert len(questions) >= 4
+
+        # Verify each question has its own set of option IDs starting from 1
+        for question in questions:
+            option_ids = [opt["id"] for opt in question["options"]]
+            assert min(option_ids) == 1, f"Question {question['id']} does not start with option ID 1"
+            assert max(option_ids) == len(option_ids), f"Question {question['id']} has non-sequential option IDs"
+            assert len(set(option_ids)) == len(option_ids), f"Question {question['id']} has duplicate option IDs"
 
         # Check for specific question content
         question_texts = [q["question_text"] for q in questions]

@@ -33,7 +33,7 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import Option
+from app.models.question import Option, QuestionType
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -135,13 +135,13 @@ def prepare_for_db(
         for index, opt in enumerate(data.options):
             # Force conversion to dict explicitly to avoid Option types slipping in
             if hasattr(opt, "dict") and callable(opt.dict):
-                opt_dict = opt.dict()
+                opt_dict = opt.model_dump()
             else:
                 opt_dict = dict(opt)  # in case opt is already a dict-like
 
+            # Always use the provided ID if it exists, otherwise use index + 1
             if "id" not in opt_dict or opt_dict["id"] is None:
                 opt_dict["id"] = index + 1
-            opt_dict = opt.model_dump()
 
             options.append(opt_dict)  # append only dicts here
 
@@ -1075,8 +1075,8 @@ async def upload_questions_csv(
                 # Extract data
                 option_keys = ["A", "B", "C", "D"]
                 valid_options = []
-                option_id_counter = 1
                 question_text = row.get("Questions", "").strip()
+                option_id = 1  # Start from 1 for each question
 
                 options = [
                     row.get("Option A", "").strip(),
@@ -1090,12 +1090,13 @@ async def upload_questions_csv(
                     if text:
                         valid_options.append(
                             {
-                                "id": option_id_counter,  # assign unique id
+                                "id": option_id,  # Use local counter for each question
                                 "key": key,
-                                "text": text,
+                                "text": text
                             }
                         )
-                        option_id_counter += 1
+                        option_id += 1  # Increment local counter
+
                 if not valid_options:
                     # Skip question if no options
                     questions_failed += 1
@@ -1108,10 +1109,6 @@ async def upload_questions_csv(
                 )
 
                 correct_answer = [correct_option["id"]]
-                if not valid_options:
-                    # Skip question if no options
-                    questions_failed += 1
-                    continue
 
                 # Process tags if present
                 tag_ids = []
@@ -1210,24 +1207,12 @@ async def upload_questions_csv(
                     questions_failed += 1
                     continue
 
-                # Filter out empty options
-                valid_options = []
-                for _i, option in enumerate(options):
-                    if option.strip():
-                        valid_options.append(
-                            {
-                                "id": option_id_counter,  # assign unique id
-                                "key": key,
-                                "text": text,
-                            }
-                        )
-
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
                     organization_id=organization_id,
                     created_by_id=user_id,
                     question_text=question_text,
-                    question_type="single-choice",  # Assuming single choice questions
+                    question_type=QuestionType.single_choice,  # Use enum value
                     options=valid_options,
                     correct_answer=correct_answer,
                     is_mandatory=True,
@@ -1245,23 +1230,20 @@ async def upload_questions_csv(
                 session.add(question)
                 session.flush()
 
-                # Prepare data for JSON serialization
-                options, marking_scheme, media = prepare_for_db(question_create)  # type: ignore
-
-                # Create the revision with serialized data
+                # Create the revision with the options directly
                 revision = QuestionRevision(
                     question_id=question.id,
                     created_by_id=question_create.created_by_id,
                     question_text=question_create.question_text,
                     instructions=question_create.instructions,
                     question_type=question_create.question_type,
-                    options=options,
+                    options=valid_options,  # Use the options directly
                     correct_answer=question_create.correct_answer,
                     subjective_answer_limit=question_create.subjective_answer_limit,
                     is_mandatory=question_create.is_mandatory,
-                    marking_scheme=marking_scheme,
+                    marking_scheme={"correct": 1, "wrong": 0, "skipped": 0},
                     solution=question_create.solution,
-                    media=media,
+                    media=None,
                 )
                 session.add(revision)
                 session.flush()

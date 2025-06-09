@@ -378,8 +378,8 @@ def update_block(
     return block_db
 
 
-# Include all routers
-router.include_router(country_router, prefix="/country", tags=["Country"])
-router.include_router(state_router, prefix="/state", tags=["State"])
-router.include_router(district_router, prefix="/district", tags=["District"])
-router.include_router(block_router, prefix="/block", tags=["Block"])
+# Register routers
+router.include_router(country_router, prefix="/country")
+router.include_router(state_router, prefix="/state")
+router.include_router(district_router, prefix="/district")
+router.include_router(block_router, prefix="/block")
