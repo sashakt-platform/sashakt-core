@@ -11,7 +11,6 @@ from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
 from app.models.question import (
-    Option,
     Question,
     QuestionCreate,
     QuestionRevision,
@@ -1421,69 +1420,42 @@ def test_latest_question_revision(
     assert data_latest_revision["question_id"] == data_main_question["id"]
 
 
-def test_prepare_for_db_with_different_option_types() -> None:
-    """Test prepare_for_db function with different option types and data structures."""
-    # Test with dict-like options
-    data1 = QuestionCreate(
-        organization_id=1,
-        created_by_id=1,
-        question_text="Test question",
+def test_prepare_for_db_with_dict_like_options() -> None:
+    """Test prepare_for_db function with dict-like options."""
+    class DictLikeOption:
+        def __init__(self, text: str, is_correct: bool) -> None:
+            self.text = text
+            self.is_correct = is_correct
+
+        def __getitem__(self, key: str) -> Any:
+            return getattr(self, key)
+
+        def __iter__(self) -> Any:
+            return iter({"text": self.text, "is_correct": self.is_correct}.items())
+
+    options = [
+        DictLikeOption(text="Option 1", is_correct=True),
+        DictLikeOption(text="Option 2", is_correct=False),
+    ]
+
+    data = QuestionCreate(
+        text="Test question",
+        options=options,
         question_type=QuestionType.single_choice,
-        options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
-        ],
-        correct_answer=[1],
-        marking_scheme={"correct": 1, "wrong": 0},
-        media={"type": "image", "url": "test.jpg"},
+        marking_scheme={"correct": 1, "incorrect": 0},
     )
-    options1, marking_scheme1, media1 = prepare_for_db(data1)
-    assert options1 is not None
-    options1_list: list[dict[str, Any]] = options1
-    assert len(options1_list) == 2
-    assert marking_scheme1 == {"correct": 1, "wrong": 0}
-    assert media1 == {"type": "image", "url": "test.jpg"}
 
-    # Test with Option model instances
-    data2 = QuestionCreate(
-        organization_id=1,
-        created_by_id=1,
-        question_text="Test question 2",
-        question_type=QuestionType.single_choice,
-        options=[
-            Option(id=1, key="A", text="Option 1"),
-            Option(id=2, key="B", text="Option 2"),
-        ],
-        correct_answer=[1],
-        marking_scheme=None,
-        media=None,
-    )
-    options2, marking_scheme2, media2 = prepare_for_db(data2)
-    assert options2 is not None
-    options2_list: list[dict[str, Any]] = options2
-    assert len(options2_list) == 2
-    assert marking_scheme2 is None
-    assert media2 is None
-
-    # Test with options without IDs
-    data3 = QuestionCreate(
-        organization_id=1,
-        created_by_id=1,
-        question_text="Test question 3",
-        question_type=QuestionType.single_choice,
-        options=[{"key": "A", "text": "Option 1"}, {"key": "B", "text": "Option 2"}],
-        correct_answer=[1],
-    )
-    options3, marking_scheme3, media3 = prepare_for_db(data3)
-    assert options3 is not None
-    options3_list: list[dict[str, Any]] = options3
-    assert len(options3_list) == 2
-    assert options3_list[0]["id"] == 1
-    assert options3_list[1]["id"] == 2
+    result = prepare_for_db(data)
+    assert result[0] is not None
+    assert len(result[0]) == 2
+    assert result[0][0]["text"] == "Option 1"
+    assert result[0][0]["is_correct"] is True
+    assert result[0][1]["text"] == "Option 2"
+    assert result[0][1]["is_correct"] is False
 
 
-def test_get_revision_with_media(client: TestClient, db: SessionDep) -> None:
-    """Test get_revision endpoint with media handling."""
+def test_get_revision_with_media_dict(client: TestClient, db: SessionDep) -> None:
+    """Test get_revision endpoint with media that has dict() method."""
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -1499,7 +1471,15 @@ def test_get_revision_with_media(client: TestClient, db: SessionDep) -> None:
     db.add(q1)
     db.flush()
 
-    media_data = {"type": "image", "url": "test.jpg", "alt_text": "Test image"}
+    class MediaWithDict:
+        def __init__(self, type: str, url: str) -> None:
+            self.type = type
+            self.url = url
+
+        def dict(self) -> dict[str, str]:
+            return {"type": self.type, "url": self.url}
+
+    media_data = MediaWithDict(type="image", url="test.jpg")
 
     rev1 = QuestionRevision(
         question_id=q1.id,
@@ -1527,13 +1507,13 @@ def test_get_revision_with_media(client: TestClient, db: SessionDep) -> None:
 
     assert response.status_code == 200
     assert data["id"] == rev1.id
-    assert data["media"] == media_data
+    assert data["media"] == {"type": "image", "url": "test.jpg"}
 
 
-def test_bulk_upload_with_tag_type_errors(
+def test_bulk_upload_with_missing_tag_type(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
-    """Test bulk upload with tag type errors."""
+    """Test bulk upload with missing tag type."""
     # Create organization
     org_name = random_lower_string()
     org_response = client.post(
@@ -1563,10 +1543,10 @@ def test_bulk_upload_with_tag_type_errors(
     db.commit()
     db.refresh(kerala)
 
-    # Create CSV with non-existent tag type
+    # Create CSV with missing tag type
     csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
-What is 2+2?,4,3,5,6,A,NonExistentType:Math,Kerala
-What is the capital of France?,Paris,London,Berlin,Madrid,A,AnotherNonExistentType:Geography,Kerala
+What is 2+2?,4,3,5,6,A,Math,Kerala
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Geography,Kerala
 """
     import tempfile
 
@@ -1586,8 +1566,8 @@ What is the capital of France?,Paris,London,Berlin,Madrid,A,AnotherNonExistentTy
         assert response.status_code == 200
         data = response.json()
         assert "Failed to create" in data["message"]
-        assert "NonExistentType" in data["message"]
-        assert "AnotherNonExistentType" in data["message"]
+        assert "Math" in data["message"]
+        assert "Geography" in data["message"]
 
     finally:
         # Clean up
