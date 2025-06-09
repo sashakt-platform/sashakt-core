@@ -21,28 +21,28 @@ engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
 def init_db(session: Session) -> None:
-    # Creating Initial Location Data
-    init_location(session)
-
-    # Creating Initial Permissions
-    init_permissions(session)
-
-    # Creating Initial Roles
-    init_roles(session)
-
-    initial_organization = Organization(name="T4D", description="T4D Organization")
-    session.add(initial_organization)
-    session.commit()
-
-    super_admin_role = session.exec(
-        select(Role.id).where(Role.name == super_admin.name)
-    ).first()
-
     user = session.exec(
         select(User).where(User.email == settings.FIRST_SUPERUSER)
     ).first()
 
     if not user:
+        # Creating Initial Location Data
+        init_location(session)
+
+        # Creating Initial Permissions
+        init_permissions(session)
+
+        # Creating Initial Roles
+        init_roles(session)
+
+        initial_organization = Organization(name="T4D", description="T4D Organization")
+        session.add(initial_organization)
+        session.commit()
+
+        super_admin_role = session.exec(
+            select(Role.id).where(Role.name == super_admin.name)
+        ).first()
+
         user_in = UserCreate(
             full_name=settings.FIRST_SUPERUSER_FULLNAME,
             email=settings.FIRST_SUPERUSER,
