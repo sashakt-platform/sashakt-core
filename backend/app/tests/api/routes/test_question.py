@@ -1437,6 +1437,7 @@ def test_prepare_for_db_with_different_option_types() -> None:
         media={"type": "image", "url": "test.jpg"},
     )
     options1, marking_scheme1, media1 = prepare_for_db(data1)
+    assert options1 is not None
     assert len(options1) == 2
     assert marking_scheme1 == {"correct": 1, "wrong": 0}
     assert media1 == {"type": "image", "url": "test.jpg"}
@@ -1456,6 +1457,7 @@ def test_prepare_for_db_with_different_option_types() -> None:
         media=None,
     )
     options2, marking_scheme2, media2 = prepare_for_db(data2)
+    assert options2 is not None
     assert len(options2) == 2
     assert marking_scheme2 is None
     assert media2 is None
@@ -1470,6 +1472,7 @@ def test_prepare_for_db_with_different_option_types() -> None:
         correct_answer=[1],
     )
     options3, marking_scheme3, media3 = prepare_for_db(data3)
+    assert options3 is not None
     assert len(options3) == 2
     assert options3[0]["id"] == 1
     assert options3[1]["id"] == 2
