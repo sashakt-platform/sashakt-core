@@ -70,7 +70,7 @@ def build_question_response(
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type_id=tag.tag_type_id,
+                tag_type=TagType(id=tag.tag_type_id),
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -890,7 +890,7 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
         TagPublic(
             id=tag.id,
             name=tag.name,
-            tag_type_id=tag.tag_type_id,
+            tag_type=TagType(id=tag.tag_type_id),
             description=tag.description,
             created_by_id=tag.created_by_id,
             organization_id=tag.organization_id,
