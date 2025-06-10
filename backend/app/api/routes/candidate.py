@@ -8,6 +8,7 @@ from sqlmodel import SQLModel, not_, select
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
     Candidate,
+    CandidateAnswerSubmitRequest,
     CandidateCreate,
     CandidatePublic,
     CandidateTest,
@@ -88,6 +89,106 @@ def start_test_for_candidate(
         candidate_uuid=candidate.identity,
         candidate_test_id=candidate_test.id,
     )
+
+
+def verify_candidate_uuid_access(
+    session: SessionDep, candidate_test_id: int, candidate_uuid: uuid.UUID
+) -> CandidateTest:
+    """Helper function to verify UUID-based access to candidate test."""
+    candidate_test_statement = (
+        select(CandidateTest)
+        .join(Candidate)
+        .where(CandidateTest.id == candidate_test_id)
+        .where(Candidate.identity == candidate_uuid)
+    )
+    candidate_test = session.exec(candidate_test_statement).first()
+
+    if not candidate_test:
+        raise HTTPException(
+            status_code=404, detail="Candidate test not found or invalid UUID"
+        )
+    return candidate_test
+
+
+@router.post(
+    "/submit_answer/{candidate_test_id}", response_model=CandidateTestAnswerPublic
+)
+def submit_answer_for_qr_candidate(
+    candidate_test_id: int,
+    session: SessionDep,
+    answer_request: CandidateAnswerSubmitRequest = Body(...),
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> CandidateTestAnswer:
+    """
+    Submit answer for QR code candidates using UUID authentication.
+    Creates new answer or updates existing one.
+    """
+    # Verify UUID access
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+
+    # Check if answer already exists for this question
+    existing_answer = session.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(
+            CandidateTestAnswer.question_revision_id
+            == answer_request.question_revision_id
+        )
+    ).first()
+
+    if existing_answer:
+        # Update existing answer
+        existing_answer.response = answer_request.response
+        existing_answer.visited = answer_request.visited
+        existing_answer.time_spent = answer_request.time_spent
+        session.add(existing_answer)
+        session.commit()
+        session.refresh(existing_answer)
+        return existing_answer
+    else:
+        # Create new answer
+        candidate_test_answer = CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=answer_request.question_revision_id,
+            response=answer_request.response,
+            visited=answer_request.visited,
+            time_spent=answer_request.time_spent,
+        )
+        session.add(candidate_test_answer)
+        session.commit()
+        session.refresh(candidate_test_answer)
+        return candidate_test_answer
+
+
+@router.post("/submit_test/{candidate_test_id}", response_model=CandidateTestPublic)
+def submit_test_for_qr_candidate(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> CandidateTest:
+    """
+    Submit/finish test for QR code candidates using UUID authentication.
+    """
+    # Verify UUID access
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+
+    if candidate_test.is_submitted:
+        raise HTTPException(status_code=400, detail="Test already submitted")
+
+    # Mark test as submitted and set end time
+    candidate_test.is_submitted = True
+    candidate_test.end_time = datetime.now(timezone.utc)
+
+    session.add(candidate_test)
+    session.commit()
+    session.refresh(candidate_test)
+    return candidate_test
 
 
 # Get test questions after verification

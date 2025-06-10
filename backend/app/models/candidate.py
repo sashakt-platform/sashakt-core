@@ -59,6 +59,24 @@ class CandidateTestAnswerUpdate(SQLModel):
     time_spent: int
 
 
+# QR Code Candidate Request Models
+class CandidateAnswerSubmitRequest(SQLModel):
+    """Request model for QR code candidates to submit answers"""
+
+    question_revision_id: int
+    response: str | None = None
+    visited: bool = False
+    time_spent: int = 0
+
+
+class CandidateAnswerUpdateRequest(SQLModel):
+    """Request model for QR code candidates to update answers"""
+
+    response: str | None = None
+    visited: bool | None = None
+    time_spent: int | None = None
+
+
 # Linking Tables between Candidate and Test
 
 

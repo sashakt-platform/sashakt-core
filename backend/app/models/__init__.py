@@ -1,6 +1,8 @@
 from .auth import NewPassword, Token, TokenPayload
 from .candidate import (
     Candidate,
+    CandidateAnswerSubmitRequest,
+    CandidateAnswerUpdateRequest,
     CandidateCreate,
     CandidatePublic,
     CandidateTest,
@@ -158,6 +160,8 @@ __all__ = [
     "TagTypeUpdate",
     "TagTypePublic",
     "Candidate",
+    "CandidateAnswerSubmitRequest",
+    "CandidateAnswerUpdateRequest",
     "CandidateCreate",
     "CandidatePublic",
     "CandidateUpdate",
@@ -166,7 +170,6 @@ __all__ = [
     "CandidateTestCreate",
     "CandidateTestPublic",
     "CandidateTestUpdate",
-    "CandidateUpdate",
     "CandidateTestAnswer",
     "CandidateTestAnswerPublic",
     "CandidateTestAnswerUpdate",

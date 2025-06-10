@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
@@ -1312,3 +1313,386 @@ def test_get_test_questions_invalid_uuid(client: TestClient, db: SessionDep) -> 
 
     assert response.status_code == 404
     assert "Candidate test not found or invalid UUID" in response.json()["detail"]
+
+
+def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> None:
+    """Test QR code candidate can submit answers using UUID authentication."""
+    user = create_random_user(db)
+
+    # Create organization and question setup
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    # Create question with revision
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 3+3?",
+        question_type=QuestionType.single_choice,
+        options=[{"text": "5"}, {"text": "6"}, {"text": "7"}],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create test
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    # Link question to test
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test (creates candidate with UUID)
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Submit answer using new endpoint (no authentication required, just UUID)
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "6",  # Answer choice
+        "visited": True,
+        "time_spent": 30,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["candidate_test_id"] == candidate_test_id
+    assert data["question_revision_id"] == question_revision.id
+    assert data["response"] == "6"
+    assert data["visited"] is True
+    assert data["time_spent"] == 30
+
+    # Verify answer was saved in database
+    answer = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == question_revision.id)
+    ).first()
+    assert answer is not None
+    assert answer.response == "6"
+
+
+def test_submit_answer_invalid_uuid(client: TestClient, db: SessionDep) -> None:
+    """Test that answer submission fails with invalid candidate UUID."""
+    user = create_random_user(db)
+
+    # Create basic test setup
+    test = Test(
+        name=random_lower_string(), created_by_id=user.id, link=random_lower_string()
+    )
+    db.add(test)
+    db.commit()
+
+    # Start test to get candidate_test_id
+    payload = {"test_id": test.id}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    candidate_test_id = start_response.json()["candidate_test_id"]
+
+    # Try to submit answer with fake UUID
+    import uuid
+
+    fake_uuid = str(uuid.uuid4())
+    answer_payload = {
+        "question_revision_id": 1,
+        "response": "test answer",
+        "visited": True,
+        "time_spent": 10,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": fake_uuid},
+    )
+
+    assert response.status_code == 404
+    assert "Candidate test not found or invalid UUID" in response.json()["detail"]
+
+
+def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> None:
+    """Test QR code candidate can update existing answers using submit_answer endpoint."""
+    user = create_random_user(db)
+
+    # Setup similar to submit_answer test
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 4+4?",
+        question_type=QuestionType.single_choice,
+        options=[{"text": "7"}, {"text": "8"}, {"text": "9"}],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id, "device_info": "Update Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # First, submit an initial answer
+    initial_answer = {
+        "question_revision_id": question_revision.id,
+        "response": "7",  # Initial wrong answer
+        "visited": True,
+        "time_spent": 15,
+    }
+
+    client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=initial_answer,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    # Now update the answer using the same submit_answer endpoint (it will update existing)
+    update_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "8",  # Correct answer
+        "visited": True,
+        "time_spent": 45,  # More time spent
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=update_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response"] == "8"
+    assert data["time_spent"] == 45
+    assert data["visited"] is True
+
+    # Verify update in database
+    answer = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == question_revision.id)
+    ).first()
+    assert answer is not None
+    assert answer.response == "8"
+    assert answer.time_spent == 45
+
+
+def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> None:
+    """Test QR code candidate can submit/finish the test."""
+    user = create_random_user(db)
+
+    # Create test
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id, "device_info": "Submit Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Verify test is not submitted initially
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.is_submitted is False
+    assert candidate_test.end_time is None
+
+    # Submit the test
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_submitted"] is True
+    assert data["end_time"] is not None
+
+    # Verify in database
+    db.refresh(candidate_test)
+    assert candidate_test is not None
+    assert candidate_test.is_submitted is True
+    assert candidate_test.end_time is not None
+
+    # Try to submit again (should fail)
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    assert "Test already submitted" in response.json()["detail"]
+
+
+def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> None:
+    """Test that submitting answer to same question updates existing answer."""
+    user = create_random_user(db)
+
+    # Setup test and question
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 5+5?",
+        question_type=QuestionType.single_choice,
+        options=[{"text": "9"}, {"text": "10"}, {"text": "11"}],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Submit first answer
+    first_answer = {
+        "question_revision_id": question_revision.id,
+        "response": "9",
+        "visited": True,
+        "time_spent": 20,
+    }
+
+    response1 = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=first_answer,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response1.status_code == 200
+    first_answer_id = response1.json()["id"]
+
+    # Submit second answer for same question (should update, not create new)
+    second_answer = {
+        "question_revision_id": question_revision.id,
+        "response": "10",
+        "visited": True,
+        "time_spent": 40,
+    }
+
+    response2 = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=second_answer,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response2.status_code == 200
+    assert response2.json()["id"] == first_answer_id  # Same answer ID
+    assert response2.json()["response"] == "10"  # Updated response
+    assert response2.json()["time_spent"] == 40  # Updated time
+
+    # Verify only one answer exists in database
+    answers = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == question_revision.id)
+    ).all()
+    assert len(answers) == 1
+    assert answers[0].response == "10"
