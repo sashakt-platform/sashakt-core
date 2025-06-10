@@ -309,7 +309,11 @@ def test_create_tag(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
-    assert response_data["tag_type_id"] == data["tag_type_id"]
+    assert response_data["tag_type"]["name"] == tagtype.name
+    assert response_data["tag_type"]["id"] == tagtype.id
+    assert response_data["tag_type"]["description"] == tagtype.description
+    assert response_data["tag_type"]["organization_id"] == tagtype.organization_id
+    assert response_data["tag_type"]["created_by_id"] == tagtype.created_by_id
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["is_deleted"] is False
     assert "created_date" in response_data
@@ -329,7 +333,12 @@ def test_create_tag(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] is None
-    assert response_data["tag_type_id"] == data["tag_type_id"]
+
+    assert response_data["tag_type"]["id"] == tagtype.id
+    assert response_data["tag_type"]["description"] == tagtype.description
+    assert response_data["tag_type"]["organization_id"] == tagtype.organization_id
+    assert response_data["tag_type"]["created_by_id"] == tagtype.created_by_id
+
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["is_deleted"] is False
     assert "created_date" in response_data
@@ -379,7 +388,7 @@ def test_read_tag(
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
-    assert any(item["tag_type_id"] == tag.tag_type_id for item in response_data)
+    assert any(item["tag_type"]["id"] == tag.tag_type.id for item in response_data)
     assert any(item["organization_id"] == tag.organization_id for item in response_data)
     assert any(item["created_by_id"] == tag.created_by_id for item in response_data)
     assert any(item["is_deleted"] == tag.is_deleted for item in response_data)
@@ -422,7 +431,9 @@ def test_read_tag_by_id(
     assert response.status_code == 200
     assert response_data["name"] == tag.name
     assert response_data["description"] == tag.description
-    assert response_data["tag_type_id"] == tag.tag_type_id
+    assert response_data["tag_type"]["id"] == tag.tag_type.id
+    assert response_data["tag_type"]["name"] == tag.tag_type.name
+    assert response_data["tag_type"]["description"] == tag.tag_type.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
     assert response_data["is_deleted"] is False
@@ -480,7 +491,9 @@ def test_update_tag_by_id(
     assert response.status_code == 200
     assert response_data["name"] == data_a["name"]
     assert response_data["description"] == data_a["description"]
-    assert response_data["tag_type_id"] == data_a["tag_type_id"]
+    assert response_data["tag_type"]["id"] == data_a["tag_type_id"]
+    assert response_data["tag_type"]["name"] == tagtype.name
+    assert response_data["tag_type"]["description"] == tagtype.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
     assert response_data["is_deleted"] is False
@@ -496,7 +509,7 @@ def test_update_tag_by_id(
     assert response.status_code == 200
     assert response_data["name"] == data_b["name"]
     assert response_data["description"] == data_b["description"]
-    assert response_data["tag_type_id"] == data_b["tag_type_id"]
+    assert response_data["tag_type"]["id"] == data_b["tag_type_id"]
     assert response_data["organization_id"] == tagtype.organization_id
 
 
@@ -541,7 +554,9 @@ def test_visibility_tag_by_id(
     assert "modified_date" in response_data
     assert response_data["name"] == tag.name
     assert response_data["description"] == tag.description
-    assert response_data["tag_type_id"] == tag.tag_type_id
+    assert response_data["tag_type"]["id"] == tag.tag_type.id
+    assert response_data["tag_type"]["name"] == tag.tag_type.name
+    assert response_data["tag_type"]["description"] == tag.tag_type.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
 
@@ -558,7 +573,9 @@ def test_visibility_tag_by_id(
     assert "modified_date" in response_data
     assert response_data["name"] == tag.name
     assert response_data["description"] == tag.description
-    assert response_data["tag_type_id"] == tag.tag_type_id
+    assert response_data["tag_type"]["id"] == tag.tag_type.id
+    assert response_data["tag_type"]["name"] == tag.tag_type.name
+    assert response_data["tag_type"]["description"] == tag.tag_type.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
 
