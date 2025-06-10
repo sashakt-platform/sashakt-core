@@ -104,7 +104,7 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
 
 # Create a Tag
 @router_tag.post("/", response_model=TagPublic)
-def create_tag(tag_create: TagCreate, session: SessionDep) -> Tag:
+def create_tag(tag_create: TagCreate, session: SessionDep) -> TagPublic:
     tag_type_id = tag_create.tag_type_id
     tag_type = session.get(TagType, tag_type_id)
     if not tag_type or tag_type.is_deleted is True:
@@ -124,7 +124,7 @@ def create_tag(tag_create: TagCreate, session: SessionDep) -> Tag:
 
 # Get all Tags
 @router_tag.get("/", response_model=list[TagPublic])
-def get_tags(session: SessionDep) -> Sequence[Tag]:
+def get_tags(session: SessionDep) -> Sequence[TagPublic]:
     tags = session.exec(select(Tag).where(not_(Tag.is_deleted))).all()
     tag_public = []
     for tag in tags:
@@ -138,7 +138,7 @@ def get_tags(session: SessionDep) -> Sequence[Tag]:
 
 # Get Tag by ID
 @router_tag.get("/{tag_id}", response_model=TagPublic)
-def get_tag_by_id(tag_id: int, session: SessionDep) -> Tag:
+def get_tag_by_id(tag_id: int, session: SessionDep) -> TagPublic:
     tag = session.get(Tag, tag_id)
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -154,7 +154,7 @@ def update_tag(
     tag_id: int,
     updated_data: TagUpdate,
     session: SessionDep,
-) -> Tag:
+) -> TagPublic:
     tag = session.get(Tag, tag_id)
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -178,7 +178,7 @@ def visibility_tag(
     tag_id: int,
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of Tag"),
-) -> Tag:
+) -> TagPublic:
     tag = session.get(Tag, tag_id)
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
