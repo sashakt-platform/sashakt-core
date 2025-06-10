@@ -117,14 +117,23 @@ def create_tag(tag_create: TagCreate, session: SessionDep) -> Tag:
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    return tag
+    session.refresh(tag_type)
+
+    return TagPublic(**tag.model_dump(), tag_type=tag_type)
 
 
 # Get all Tags
 @router_tag.get("/", response_model=list[TagPublic])
 def get_tags(session: SessionDep) -> Sequence[Tag]:
     tags = session.exec(select(Tag).where(not_(Tag.is_deleted))).all()
-    return tags
+    tag_public = []
+    for tag in tags:
+        tag_type = session.get(TagType, tag.tag_type_id)
+        if not tag_type or tag_type.is_deleted is True:
+            continue
+        tag_public.append(TagPublic(**tag.model_dump(), tag_type=tag_type))
+
+    return tag_public
 
 
 # Get Tag by ID
@@ -133,7 +142,10 @@ def get_tag_by_id(tag_id: int, session: SessionDep) -> Tag:
     tag = session.get(Tag, tag_id)
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
-    return tag
+    tag_type = session.get(TagType, tag.tag_type_id)
+    if not tag_type or tag_type.is_deleted is True:
+        raise HTTPException(status_code=404, detail="Tag Type not found")
+    return TagPublic(**tag.model_dump(), tag_type=tag_type)
 
 
 # Update a Tag
@@ -151,7 +163,11 @@ def update_tag(
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    return tag
+    tag_type = session.get(TagType, tag.tag_type_id)
+    if not tag_type or tag_type.is_deleted is True:
+        raise HTTPException(status_code=404, detail="Tag Type not found")
+
+    return TagPublic(**tag.model_dump(), tag_type=tag_type)
 
 
 # Set visibility of Tag
@@ -170,7 +186,11 @@ def visibility_tag(
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    return tag
+    tag_type = session.get(TagType, tag.tag_type_id)
+    if not tag_type or tag_type.is_deleted is True:
+        raise HTTPException(status_code=404, detail="Tag Type not found")
+
+    return TagPublic(**tag.model_dump(), tag_type=tag_type)
 
 
 # Delete a Tag
