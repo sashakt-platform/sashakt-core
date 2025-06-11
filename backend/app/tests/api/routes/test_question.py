@@ -1422,6 +1422,7 @@ def test_latest_question_revision(
 
 def test_prepare_for_db_with_dict_like_options() -> None:
     """Test prepare_for_db function with dict-like options."""
+
     class DictLikeOption:
         def __init__(self, text: str, is_correct: bool) -> None:
             self.text = text
