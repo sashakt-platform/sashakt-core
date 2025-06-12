@@ -449,8 +449,8 @@ def test_read_tag(
     )
     response_data = response.json()
     print("Complete Response Data:", response_data)
-    assert any(item["name"] != tag_2.name for item in response_data)
-    assert any(item["description"] != tag_2.description for item in response_data)
+    assert all(item["name"] != tag_2.name for item in response_data)
+    assert all(item["description"] != tag_2.description for item in response_data)
 
 
 def test_read_tag_by_id(
@@ -662,6 +662,23 @@ def test_visibility_tag_by_id(
     response = client.patch(
         f"{settings.API_V1_STR}/tag/-1",
         params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert "not found" in response_data["detail"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert "delete" in response_data["message"]
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json={"is_active": False},
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
