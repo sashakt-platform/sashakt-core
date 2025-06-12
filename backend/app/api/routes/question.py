@@ -37,7 +37,7 @@ from app.models import (
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
-def get_tag_type_by_id(session: SessionDep, tag_type_id: int) -> TagType:
+def get_tag_type_by_id(session: SessionDep, tag_type_id: int) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
     if not tag_type or tag_type.is_deleted:
