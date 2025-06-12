@@ -61,11 +61,6 @@ class TagTypeUpdate(TagTypeBase):
 
 
 class TagBase(SQLModel):
-    tag_type_id: int = Field(
-        foreign_key="tagtype.id",
-        nullable=False,
-        description="ID of the Tag Type to which the Tag should belong to",
-    )
     name: str = Field(nullable=False, index=True, description="Name of the Tag")
     description: str | None = Field(
         default=None, nullable=True, description="Description of the Tag"
@@ -86,6 +81,11 @@ class Tag(TagBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
+    tag_type_id: int = Field(
+        foreign_key="tagtype.id",
+        nullable=False,
+        description="ID of the Tag Type to which the Tag should belong to",
+    )
     is_active: bool | None = Field(default=None, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
     tag_type: "TagType" = Relationship(back_populates="tags")
@@ -103,7 +103,7 @@ class Tag(TagBase, table=True):
 
 
 class TagCreate(TagBase):
-    pass
+    tag_type_id: int
 
 
 class TagPublic(TagBase):
@@ -112,13 +112,13 @@ class TagPublic(TagBase):
     modified_date: datetime
     is_active: bool | None
     is_deleted: bool
-    tag_type_id: int
+    tag_type: TagType
     organization_id: int
     created_by_id: int
 
 
 class TagUpdate(TagBase):
-    pass
+    tag_type_id: int
 
 
 # Rebuild the models to ensure the database schema is up to date
