@@ -413,8 +413,8 @@ def test_read_tag(
     assert any(item["created_by_id"] == tag.created_by_id for item in response_data)
     assert any(item["is_deleted"] == tag.is_deleted for item in response_data)
 
-    assert any(item["created_date"] for item in response_data)
-    assert any(item["modified_date"] for item in response_data)
+    assert all(item["created_date"] for item in response_data)
+    assert all(item["modified_date"] for item in response_data)
 
     tagtype_2 = TagType(
         name=random_lower_string(),
