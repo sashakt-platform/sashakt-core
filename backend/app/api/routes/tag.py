@@ -119,7 +119,7 @@ def create_tag(tag_create: TagCreate, session: SessionDep) -> TagPublic:
     session.refresh(tag)
     session.refresh(tag_type)
 
-    return TagPublic(**tag.model_dump(), tag_type=tag_type)
+    return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
 
 # Get all Tags
@@ -131,7 +131,9 @@ def get_tags(session: SessionDep) -> Sequence[TagPublic]:
         tag_type = session.get(TagType, tag.tag_type_id)
         if not tag_type or tag_type.is_deleted is True:
             continue
-        tag_public.append(TagPublic(**tag.model_dump(), tag_type=tag_type))
+        tag_public.append(
+            TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
+        )
 
     return tag_public
 
@@ -145,7 +147,7 @@ def get_tag_by_id(tag_id: int, session: SessionDep) -> TagPublic:
     tag_type = session.get(TagType, tag.tag_type_id)
     if not tag_type or tag_type.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag Type not found")
-    return TagPublic(**tag.model_dump(), tag_type=tag_type)
+    return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
 
 # Update a Tag
@@ -167,7 +169,7 @@ def update_tag(
     if not tag_type or tag_type.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag Type not found")
 
-    return TagPublic(**tag.model_dump(), tag_type=tag_type)
+    return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
 
 # Set visibility of Tag
@@ -190,7 +192,7 @@ def visibility_tag(
     if not tag_type or tag_type.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag Type not found")
 
-    return TagPublic(**tag.model_dump(), tag_type=tag_type)
+    return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
 
 # Delete a Tag
