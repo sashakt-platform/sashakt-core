@@ -41,7 +41,7 @@ def get_tag_type_by_id(session: SessionDep, tag_type_id: int) -> TagType:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
     if not tag_type or tag_type.is_deleted:
-        raise HTTPException(status_code=404, detail="Tag Type not found")
+        return None
     return tag_type
 
 
@@ -73,13 +73,13 @@ def build_question_response(
     )
 
     # Prepare tag information
-    tag_list = []
+    tag_list: list[TagPublic] = []
     if tags:
         tag_list = [
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type=get_tag_type_by_id(session, tag_type_id=tag.tag_type_id),
+                tag_type=tag_type,
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -89,6 +89,7 @@ def build_question_response(
                 is_deleted=tag.is_deleted,
             )
             for tag in tags
+            if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
         ]
 
     # Prepare location information
@@ -901,7 +902,7 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
         TagPublic(
             id=tag.id,
             name=tag.name,
-            tag_type=get_tag_type_by_id(session, tag_type_id=tag.tag_type_id),
+            tag_type=tag_type,
             description=tag.description,
             created_by_id=tag.created_by_id,
             organization_id=tag.organization_id,
@@ -911,6 +912,7 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
             is_deleted=tag.is_deleted,
         )
         for tag in tags
+        if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
     ]
 
     return result
