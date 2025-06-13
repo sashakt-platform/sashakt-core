@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFil
 from sqlalchemy import desc
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
+from app.models.question import Option
 
 from app.api.deps import SessionDep
 from app.models import (
@@ -57,7 +58,7 @@ def build_question_response(
     options_dict = None
     if revision.options:
         options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+            opt.model_dump() if hasattr(opt, "dict") else opt for opt in revision.options
         ]
 
     marking_scheme_dict = (
@@ -136,15 +137,17 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[dict[str, Any]] | None = None
+    options: list[Option] | None = None
     if data.options:
         options = [
-            opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
+
+            opt.model_dump() if hasattr(opt, "dict") and callable(opt.model_dump) else opt
             for opt in data.options
         ]
+
 
     marking_scheme: dict[str, float] | None = None
     if (
@@ -706,7 +709,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     options_dict = None
     if revision.options:
         options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+            opt.model_dump() if hasattr(opt, "dict") else opt for opt in revision.options
         ]
 
     marking_scheme_dict = (
@@ -1092,7 +1095,7 @@ async def upload_questions_csv(
 
                 # Convert option letter to index
                 correct_letter = row.get("Correct Option", "A").strip()
-                letter_map = {"A": 0, "B": 1, "C": 2, "D": 3}
+                letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
                 correct_answer = letter_map.get(correct_letter, 0)
 
                 # Process tags if present
@@ -1196,7 +1199,7 @@ async def upload_questions_csv(
                 valid_options = []
                 for _i, option in enumerate(options):
                     if option.strip():
-                        valid_options.append({"text": option})
+                        valid_options.append({ "id":1, "key":"A","text": "Option 1"})
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(

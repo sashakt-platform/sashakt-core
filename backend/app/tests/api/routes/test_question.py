@@ -9,6 +9,7 @@ from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
 from app.models.question import Question, QuestionRevision, QuestionTag, QuestionType
+from app.models.question import QuestionCreate, QuestionRevisionCreate
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.tests.utils.user import create_random_user
@@ -66,8 +67,8 @@ def test_create_question(
         "created_by_id": user_id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
-        "options": [{"text": "Option 1"}, {"text": "Option 2"}, {"text": "Option 3"}],
-        "correct_answer": [0],  # First option is correct
+        "options": [{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}, {"id":3, "key":"C","text": "Option 3"}],
+        "correct_answer": [1],  # First option is correct
         "is_mandatory": True,
         "tag_ids": [tag_id],
     }
@@ -77,6 +78,7 @@ def test_create_question(
         json=question_data,
     )
     data = response.json()
+    
 
     assert response.status_code == 200
     assert data["question_text"] == question_text
@@ -146,8 +148,10 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
 
     # Check empty list first
     response = client.get(f"{settings.API_V1_STR}/questions/")
+    print("this is response ->", client.get(f"{settings.API_V1_STR}/questions/"))
     data = response.json()
     assert response.status_code == 200
+    
 
     # Create two questions
     # First question
@@ -161,10 +165,9 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
-            {"text": "Option 1"},
-            {"text": "Option 2"},
+           { "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}, {"id":3, "key":"C","text": "Option 3"}
         ],  # Use dict format directly
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -189,11 +192,9 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
         options=[
-            {"text": "Option A"},
-            {"text": "Option B"},
-            {"text": "Option C"},
+            { "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}, {"id":3, "key":"C","text": "Option 3"}
         ],  # Use dict format directly
-        correct_answer=[0, 1],
+        correct_answer=[1, 2],
     )
     db.add(rev2)
     db.flush()
@@ -248,7 +249,26 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     data = response.json()
     assert response.status_code == 200
     assert len(data) <= 1
-
+def test_question_create_valid_correct_answer():
+    question = QuestionCreate(
+        question_text="What is 2+2?",
+        question_type="single-choice",
+        options=[
+            {"id": 1, "key": "A", "text": "4"},
+            {"id": 2, "key": "B", "text": "3"},
+        ],
+        correct_answer=[8],
+        organization_id=1,
+        created_by_id=1,
+    )
+    assert question.question_text == "What is 2+2?"
+    assert question.question_type == "single-choice"
+    assert len(question.options) == 2
+    assert question.options[0].id== 1
+    assert question.options[0].text== "4"
+    assert question.correct_answer == [1]
+    assert question.organization_id == 1
+    assert question.created_by_id == 1
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     # Create organization
@@ -293,8 +313,8 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=question_text,
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -354,8 +374,8 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -484,8 +504,8 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
         created_by_id=user1.id,
         question_text=initial_text,
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -501,11 +521,9 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
         "question_text": new_text,
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            { "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}, {"id":3, "key":"C","text": "Option 3"}
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 2],
     }
 
     response = client.post(
@@ -565,8 +583,8 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -641,8 +659,8 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
         "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
-        "options": [{"text": "Option 1"}, {"text": "Option 2"}],
-        "correct_answer": [0],
+        "options": [{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        "correct_answer": [1],
         "tag_ids": [tag1.id],
     }
 
@@ -743,8 +761,8 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
         "created_by_id": user.id,  # Add created_by_id
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
-        "options": [{"text": "Option 1"}, {"text": "Option 2"}],
-        "correct_answer": [0],
+        "options": [{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        "correct_answer": [1],
         # Add location data with real IDs
         "state_ids": [kerala.id],  # remove district, block for now
     }
@@ -854,8 +872,8 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"}],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -907,7 +925,7 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -1242,8 +1260,8 @@ def test_latest_question_revision(
         "created_by_id": user.id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
-        "options": [{"A": "Option 1"}, {"B": "Option 2"}, {"C": "Option 3"}],
-        "correct_answer": [0],  # First option is correct
+        "options": [{ "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"},{ "id":3, "key":"C","text": "Option C"} ],
+        "correct_answer": [1],  # First option is correct
         "is_mandatory": True,
     }
 
@@ -1257,7 +1275,7 @@ def test_latest_question_revision(
     assert data_main_question["question_text"] == question_text
     assert data_main_question["question_type"] == QuestionType.single_choice
     assert len(data_main_question["options"]) == 3
-    assert data_main_question["correct_answer"] == [0]  # First option is correct
+    assert data_main_question["correct_answer"] == [1]  # First option is correct
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
@@ -1280,11 +1298,9 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            { "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"},{ "id":3, "key":"C","text": "Option C"}
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 2],
     }
 
     response = client.post(
@@ -1298,9 +1314,7 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+           { "id":1, "key":"A","text": "Option 1"}, {"id":2, "key":"B","text": "Option 2"},{ "id":3, "key":"C","text": "Option C"}
         ],
         "correct_answer": [1],
     }

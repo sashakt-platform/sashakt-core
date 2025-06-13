@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
+from pydantic import model_validator
 
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 
@@ -70,7 +71,8 @@ class Image(SQLModel):
 
 class Option(SQLModel):
     """Represents a single option in a choice-based question"""
-
+    id:int = Field(unique=True, description="Unique identifier for the option")
+    key : str = Field(description="Unique key for this option, used in answers")
     text: str = Field(description="Text content of the option")
     image: dict[str, Any] | None = Field(
         default=None, description="Optional image associated with this option"
@@ -85,6 +87,18 @@ CorrectAnswerType = list[int] | list[str] | float | int | None
 
 
 class QuestionBase(SQLModel):
+    @model_validator(mode="after")
+    def validate_correct_answer_ids(self):
+        question_type = self.question_type
+        options = self.options
+        correct_answer = self.correct_answer
+        if question_type in ["single-choice", "multi-choice"] and options and correct_answer is not None:
+            option_ids = [opt.id if hasattr(opt, "id") else opt["id"] for opt in options]
+            answer_ids = correct_answer if isinstance(correct_answer, list) else [correct_answer]
+            for ans_id in answer_ids:
+                if ans_id not in option_ids:
+                    raise ValueError(f"Correct answer ID {ans_id} does not match any option ID.")
+        return self
     """Base model with common fields for questions"""
 
     question_text: str = Field(nullable=False, description="The actual question text")
@@ -97,7 +111,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -325,6 +339,7 @@ class QuestionLocation(SQLModel, table=True):
 
 # Use inheritance to avoid field duplication
 class QuestionCreate(QuestionBase):
+    
     """Data needed to create a new question with initial revision"""
 
     organization_id: int = Field(
@@ -348,6 +363,7 @@ class QuestionCreate(QuestionBase):
 
 class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
+   
 
     created_by_id: int = Field(description="ID of the user creating this revision")
 
@@ -406,7 +422,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -438,7 +454,7 @@ class QuestionCandidatePublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         description="Available options for choice questions"
     )
     subjective_answer_limit: int | None = Field(
