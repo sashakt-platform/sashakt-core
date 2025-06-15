@@ -74,9 +74,6 @@ class Option(SQLModel):
     id: int = Field(unique=True, description="Primary key to identify the option")
     key: str = Field(description="Unique key for the option")
     text: str = Field(description="Text content of the option")
-    image: dict[str, Any] | None = Field(
-        default=None, description="Optional image associated with this option"
-    )
 
 
 # Type aliases for cleaner annotations
