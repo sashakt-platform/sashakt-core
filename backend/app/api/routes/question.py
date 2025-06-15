@@ -1021,7 +1021,6 @@ async def upload_questions_csv(
 
     # Save the uploaded file to a temporary file
     content = await file.read()
-
     if not content:
         raise HTTPException(status_code=400, detail="CSV file is empty")
 
@@ -1083,9 +1082,14 @@ async def upload_questions_csv(
 
                 # Convert option letter to index
                 correct_letter = row.get("Correct Option", "A").strip()
-                letter_map = {"A": 0, "B": 1, "C": 2, "D": 3}
-                correct_answer = letter_map.get(correct_letter, 0)
+                letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
+                correct_answer = letter_map.get(correct_letter, 1)
 
+                valid_options = [
+                    {"id": letter_map[key], "key": key, "text": value}
+                    for key, value in zip(letter_map.keys(), options, strict=True)
+                ]
+                print("The valid options are:", valid_options)
                 # Process tags if present
                 tag_ids = []
                 tagtype_error = False
@@ -1182,12 +1186,6 @@ async def upload_questions_csv(
                 if state_error:
                     questions_failed += 1
                     continue
-
-                # Filter out empty options
-                valid_options = []
-                for _i, option in enumerate(options):
-                    if option.strip():
-                        valid_options.append({"text": option})
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
