@@ -33,6 +33,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.question import Option
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -48,7 +49,8 @@ def build_question_response(
     options_dict = None
     if revision.options:
         options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+            opt.model_dump() if hasattr(opt, "dict") else opt
+            for opt in revision.options
         ]
 
     marking_scheme_dict = (
@@ -126,13 +128,15 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[dict[str, Any]] | None = None
+    options: list[Option] | None = None
     if data.options:
         options = [
-            opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
+            opt.model_dump()
+            if hasattr(opt, "dict") and callable(opt.model_dump)
+            else opt
             for opt in data.options
         ]
 

@@ -71,6 +71,8 @@ class Image(SQLModel):
 class Option(SQLModel):
     """Represents a single option in a choice-based question"""
 
+    id: int = Field(unique=True, description="Primary key to identify the option")
+    key: str = Field(description="Unique key for the option")
     text: str = Field(description="Text content of the option")
     image: dict[str, Any] | None = Field(
         default=None, description="Optional image associated with this option"
@@ -97,7 +99,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -406,7 +408,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -438,7 +440,7 @@ class QuestionCandidatePublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         description="Available options for choice questions"
     )
     subjective_answer_limit: int | None = Field(
