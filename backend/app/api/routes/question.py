@@ -49,7 +49,13 @@ def build_question_response(
     options_dict = None
     if revision.options:
         options_dict = [
-            opt.model_dump() if hasattr(opt, "dict") else opt
+            opt
+            if isinstance(opt, dict)
+            else opt.dict()
+            if hasattr(opt, "dict") and callable(opt.dict)
+            else vars(opt)
+            if hasattr(opt, "__dict__")
+            else opt
             for opt in revision.options
         ]
 
@@ -128,12 +134,21 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[dict[str, Any]] | None = None
+    options: list[Option] | None = None
     if data.options:
-        options = [opt.model_dump() for opt in data.options]
+        options = [
+            opt
+            if isinstance(opt, dict)
+            else opt.dict()
+            if hasattr(opt, "dict") and callable(opt.dict)
+            else vars(opt)
+            if hasattr(opt, "__dict__")
+            else opt
+            for opt in data.options
+        ]
 
     marking_scheme: dict[str, float] | None = None
     if (
@@ -692,7 +707,16 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     # Convert complex objects to dicts for serialization
     options_dict = None
     if revision.options:
-        options_dict = list(revision.options)
+        options_dict = [
+            opt
+            if isinstance(opt, dict)
+            else opt.dict()
+            if hasattr(opt, "dict") and callable(opt.dict)
+            else vars(opt)
+            if hasattr(opt, "__dict__")
+            else opt
+            for opt in revision.options
+        ]
 
     marking_scheme_dict = (
         revision.marking_scheme.dict()
