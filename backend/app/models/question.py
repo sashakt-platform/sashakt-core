@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
+from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 
 from app.models.candidate import CandidateTestAnswer
@@ -84,6 +85,31 @@ CorrectAnswerType = list[int] | list[str] | float | int | None
 
 
 class QuestionBase(SQLModel):
+    """Base model with common fields for questions"""
+
+    @model_validator(mode="after")
+    def validate_correct_answer_ids(self):
+        question_type = self.question_type
+        options = self.options
+        correct_answer = self.correct_answer
+        if (
+            question_type in ["single-choice", "multi-choice"]
+            and options
+            and correct_answer is not None
+        ):
+            option_ids = [
+                opt.id if hasattr(opt, "id") else opt["id"] for opt in options
+            ]
+            answer_ids = (
+                correct_answer if isinstance(correct_answer, list) else [correct_answer]
+            )
+            for ans_id in answer_ids:
+                if ans_id not in option_ids:
+                    raise ValueError(
+                        f"Correct answer ID {ans_id} does not match any option ID."
+                    )
+        return self
+
     """Base model with common fields for questions"""
 
     question_text: str = Field(nullable=False, description="The actual question text")
