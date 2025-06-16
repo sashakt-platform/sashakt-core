@@ -38,7 +38,16 @@ from app.models.question import Option
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
+def get_tag_type_by_id(session: SessionDep, tag_type_id: int) -> TagType | None:
+    """Helper function to get TagType by ID."""
+    tag_type = session.get(TagType, tag_type_id)
+    if not tag_type or tag_type.is_deleted:
+        return None
+    return tag_type
+
+
 def build_question_response(
+    session: SessionDep,
     question: Question,
     revision: QuestionRevision,
     locations: list[QuestionLocation],
@@ -72,13 +81,13 @@ def build_question_response(
     )
 
     # Prepare tag information
-    tag_list = []
+    tag_list: list[TagPublic] = []
     if tags:
         tag_list = [
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type_id=tag.tag_type_id,
+                tag_type=tag_type,
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -88,6 +97,7 @@ def build_question_response(
                 is_deleted=tag.is_deleted,
             )
             for tag in tags
+            if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
         ]
 
     # Prepare location information
@@ -260,7 +270,7 @@ def create_question(
     session.commit()
     # No need to set modified_date manually, as SQLModel will handle it via onupdate
 
-    return build_question_response(question, revision, locations, tags)
+    return build_question_response(session, question, revision, locations, tags)
 
 
 # TypedDict classes with all required fields
@@ -422,7 +432,7 @@ def get_questions(
         tags = session.exec(tags_query).all()
 
         question_data = build_question_response(
-            question, latest_revision, list(locations), list(tags)
+            session, question, latest_revision, list(locations), list(tags)
         )
         result.append(question_data)
 
@@ -550,7 +560,7 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     tags = session.exec(tags_query).all()
 
     return build_question_response(
-        question, latest_revision, list(locations), list(tags)
+        session, question, latest_revision, list(locations), list(tags)
     )
 
 
@@ -590,7 +600,7 @@ def update_question(
     tags = session.exec(tags_query).all()
 
     return build_question_response(
-        question, latest_revision, list(locations), list(tags)
+        session, question, latest_revision, list(locations), list(tags)
     )
 
 
@@ -642,7 +652,9 @@ def create_question_revision(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(question, new_revision, list(locations), list(tags))
+    return build_question_response(
+        session, question, new_revision, list(locations), list(tags)
+    )
 
 
 @router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])
@@ -911,7 +923,7 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
         TagPublic(
             id=tag.id,
             name=tag.name,
-            tag_type_id=tag.tag_type_id,
+            tag_type=tag_type,
             description=tag.description,
             created_by_id=tag.created_by_id,
             organization_id=tag.organization_id,
@@ -921,6 +933,7 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
             is_deleted=tag.is_deleted,
         )
         for tag in tags
+        if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
     ]
 
     return result

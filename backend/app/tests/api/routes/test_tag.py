@@ -309,7 +309,11 @@ def test_create_tag(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
-    assert response_data["tag_type_id"] == data["tag_type_id"]
+    assert response_data["tag_type"]["name"] == tagtype.name
+    assert response_data["tag_type"]["id"] == tagtype.id
+    assert response_data["tag_type"]["description"] == tagtype.description
+    assert response_data["tag_type"]["organization_id"] == tagtype.organization_id
+    assert response_data["tag_type"]["created_by_id"] == tagtype.created_by_id
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["is_deleted"] is False
     assert "created_date" in response_data
@@ -329,11 +333,35 @@ def test_create_tag(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] is None
-    assert response_data["tag_type_id"] == data["tag_type_id"]
+
+    assert response_data["tag_type"]["id"] == tagtype.id
+    assert response_data["tag_type"]["description"] == tagtype.description
+    assert response_data["tag_type"]["organization_id"] == tagtype.organization_id
+    assert response_data["tag_type"]["created_by_id"] == tagtype.created_by_id
+
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["is_deleted"] is False
     assert "created_date" in response_data
     assert "modified_date" in response_data
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+
+    response_data = response.json()
+    print(response_data)
+    assert response.status_code == 200
+    assert "delete" in response_data["message"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert "not found" in response_data["detail"]
 
 
 def test_read_tag(
@@ -376,16 +404,53 @@ def test_read_tag(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
+    print("Response Data:", response_data)
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
-    assert any(item["tag_type_id"] == tag.tag_type_id for item in response_data)
+    assert any(item["tag_type"]["id"] == tag.tag_type.id for item in response_data)
     assert any(item["organization_id"] == tag.organization_id for item in response_data)
     assert any(item["created_by_id"] == tag.created_by_id for item in response_data)
     assert any(item["is_deleted"] == tag.is_deleted for item in response_data)
 
-    assert "created_date" in response_data[1]
-    assert "modified_date" in response_data[1]
+    assert all(item["created_date"] for item in response_data)
+    assert all(item["modified_date"] for item in response_data)
+
+    tagtype_2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype_2)
+    db.commit()
+    tag_2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype_2.id,
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag_2)
+    db.commit()
+    db.refresh(tag_2)
+    db.flush()
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert "delete" in response_data["message"]
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    print("Complete Response Data:", response_data)
+    assert all(item["name"] != tag_2.name for item in response_data)
+    assert all(item["description"] != tag_2.description for item in response_data)
 
 
 def test_read_tag_by_id(
@@ -422,12 +487,38 @@ def test_read_tag_by_id(
     assert response.status_code == 200
     assert response_data["name"] == tag.name
     assert response_data["description"] == tag.description
-    assert response_data["tag_type_id"] == tag.tag_type_id
+    assert response_data["tag_type"]["id"] == tag.tag_type.id
+    assert response_data["tag_type"]["name"] == tag.tag_type.name
+    assert response_data["tag_type"]["description"] == tag.tag_type.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
     assert response_data["is_deleted"] is False
     assert "created_date" in response_data
     assert "modified_date" in response_data
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/-1",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert response_data["detail"] == "Tag not found"
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert "delete" in response_data["message"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert "not found" in response_data["detail"]
 
 
 def test_update_tag_by_id(
@@ -480,7 +571,9 @@ def test_update_tag_by_id(
     assert response.status_code == 200
     assert response_data["name"] == data_a["name"]
     assert response_data["description"] == data_a["description"]
-    assert response_data["tag_type_id"] == data_a["tag_type_id"]
+    assert response_data["tag_type"]["id"] == data_a["tag_type_id"]
+    assert response_data["tag_type"]["name"] == tagtype.name
+    assert response_data["tag_type"]["description"] == tagtype.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
     assert response_data["is_deleted"] is False
@@ -496,7 +589,7 @@ def test_update_tag_by_id(
     assert response.status_code == 200
     assert response_data["name"] == data_b["name"]
     assert response_data["description"] == data_b["description"]
-    assert response_data["tag_type_id"] == data_b["tag_type_id"]
+    assert response_data["tag_type"]["id"] == data_b["tag_type_id"]
     assert response_data["organization_id"] == tagtype.organization_id
 
 
@@ -541,7 +634,9 @@ def test_visibility_tag_by_id(
     assert "modified_date" in response_data
     assert response_data["name"] == tag.name
     assert response_data["description"] == tag.description
-    assert response_data["tag_type_id"] == tag.tag_type_id
+    assert response_data["tag_type"]["id"] == tag.tag_type.id
+    assert response_data["tag_type"]["name"] == tag.tag_type.name
+    assert response_data["tag_type"]["description"] == tag.tag_type.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
 
@@ -558,9 +653,37 @@ def test_visibility_tag_by_id(
     assert "modified_date" in response_data
     assert response_data["name"] == tag.name
     assert response_data["description"] == tag.description
-    assert response_data["tag_type_id"] == tag.tag_type_id
+    assert response_data["tag_type"]["id"] == tag.tag_type.id
+    assert response_data["tag_type"]["name"] == tag.tag_type.name
+    assert response_data["tag_type"]["description"] == tag.tag_type.description
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == user_b.id
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/tag/-1",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert "not found" in response_data["detail"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert "delete" in response_data["message"]
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json={"is_active": False},
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert "not found" in response_data["detail"]
 
 
 def test_delete_tag_by_id(
