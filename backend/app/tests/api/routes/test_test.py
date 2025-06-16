@@ -20,7 +20,7 @@ from app.models import (
     TestState,
     TestTag,
 )
-from app.models.question import Option, QuestionType
+from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
@@ -79,17 +79,19 @@ def setup_data(db: SessionDep) -> Any:
     question_two = Question(organization_id=org.id)
     db.add(question_one)
     db.add(question_two)
-    db.flush()
+    db.commit()
+    # db.flush()
 
-    option_1 = Option(id=1, key="A", text="Option 1")
-    option_2 = Option(id=2, key="B", text="Option 2")
     # Create question revisions
     question_revision_one = QuestionRevision(
         question_id=question_one.id,
         created_by_id=user.id,
         question_text="What is the size of Sun",
         question_type=QuestionType.single_choice,
-        options=[option_1.model_dump(), option_2.model_dump()],
+        options=[
+            {"id": 1, "key": "A", "text": "Option 1"},
+            {"id": 2, "key": "B", "text": "Option 2"},
+        ],
         correct_answer=[1],
     )
 
@@ -98,12 +100,16 @@ def setup_data(db: SessionDep) -> Any:
         created_by_id=user.id,
         question_text="What is the speed of light",
         question_type=QuestionType.single_choice,
-        options=[option_1.model_dump(), option_2.model_dump()],
+        options=[
+            {"id": 1, "key": "A", "text": "Option 1"},
+            {"id": 2, "key": "B", "text": "Option 2"},
+        ],
         correct_answer=[1],
     )
 
     db.add(question_revision_one)
     db.add(question_revision_two)
+    db.commit()
     db.flush()
 
     # Set last_revision_id on questions
