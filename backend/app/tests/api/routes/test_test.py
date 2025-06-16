@@ -91,7 +91,7 @@ def setup_data(db: SessionDep) -> Any:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
 
     question_revision_two = QuestionRevision(
@@ -103,7 +103,7 @@ def setup_data(db: SessionDep) -> Any:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
 
     db.add(question_revision_one)

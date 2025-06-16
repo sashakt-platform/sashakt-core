@@ -705,7 +705,7 @@ def test_create_candidate_test_answers(
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(question_revision_a)
     db.flush()
@@ -807,7 +807,7 @@ def test_read_candidate_test_answer(
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
 
     question_revision_b = QuestionRevision(
@@ -820,7 +820,7 @@ def test_read_candidate_test_answer(
             {"id": 2, "key": "B", "text": "Option 2"},
             {"id": 3, "key": "C", "text": "Option 3"},
         ],
-        correct_answer=[0, 1],
+        correct_answer=[1, 2],
     )
 
     db.add_all([question_revision_a, question_revision_b])
@@ -951,7 +951,7 @@ def test_read_candidate_test_answer_by_id(
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
 
     question_revision_b = QuestionRevision(
@@ -964,7 +964,7 @@ def test_read_candidate_test_answer_by_id(
             {"id": 2, "key": "B", "text": "Option B"},
             {"id": 3, "key": "C", "text": "Option C"},
         ],
-        correct_answer=[0, 1],
+        correct_answer=[2, 3],
     )
 
     db.add_all([question_revision_a, question_revision_b])
@@ -1085,7 +1085,7 @@ def test_update_candidate_test_answer(
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
 
     question_revision_b = QuestionRevision(
@@ -1098,7 +1098,7 @@ def test_update_candidate_test_answer(
             {"id": 2, "key": "B", "text": "Option B"},
             {"id": 3, "key": "C", "text": "Option C"},
         ],
-        correct_answer=[0, 1],
+        correct_answer=[1, 2],
     )
 
     db.add_all([question_revision_a, question_revision_b])

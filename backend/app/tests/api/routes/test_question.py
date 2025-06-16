@@ -71,7 +71,7 @@ def test_create_question(
             {"id": 2, "key": "B", "text": "Option 2"},
             {"id": 3, "key": "C", "text": "Option 3"},
         ],
-        "correct_answer": [0],  # First option is correct
+        "correct_answer": [1],  # First option is correct
         "is_mandatory": True,
         "tag_ids": [tag_id],
     }
@@ -168,7 +168,7 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],  # Use dict format directly
-        correct_answer=[0],
+        correct_answer=[2],
     )
     db.add(rev1)
     db.flush()
@@ -197,7 +197,7 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
             {"id": 2, "key": "B", "text": "Option 2"},
             {"id": 3, "key": "C", "text": "Option 3"},
         ],  # Use dict format directly
-        correct_answer=[0, 1],
+        correct_answer=[1, 2],
     )
     db.add(rev2)
     db.flush()
@@ -301,7 +301,7 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -365,7 +365,7 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -498,7 +498,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[2],
     )
     db.add(rev1)
     db.flush()
@@ -518,7 +518,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
             {"id": 2, "key": "B", "text": "Option 2"},
             {"id": 3, "key": "C", "text": "Option 3"},
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 3],
     }
 
     response = client.post(
@@ -582,7 +582,7 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -661,7 +661,7 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        "correct_answer": [0],
+        "correct_answer": [2],
         "tag_ids": [tag1.id],
     }
 
@@ -766,7 +766,7 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        "correct_answer": [0],
+        "correct_answer": [2],
         # Add location data with real IDs
         "state_ids": [kerala.id],  # remove district, block for now
     }
@@ -880,7 +880,7 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[2],
     )
     db.add(rev1)
     db.flush()
@@ -935,7 +935,7 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
             {"id": 1, "key": "A", "text": "Option 1"},
             {"id": 2, "key": "B", "text": "Option 2"},
         ],
-        correct_answer=[0],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -1275,7 +1275,7 @@ def test_latest_question_revision(
             {"id": 2, "key": "B", "text": "Option 2"},
             {"id": 3, "key": "C", "text": "Option 3"},
         ],
-        "correct_answer": [0],  # First option is correct
+        "correct_answer": [2],  # First option is correct
         "is_mandatory": True,
     }
 
@@ -1289,7 +1289,7 @@ def test_latest_question_revision(
     assert data_main_question["question_text"] == question_text
     assert data_main_question["question_type"] == QuestionType.single_choice
     assert len(data_main_question["options"]) == 3
-    assert data_main_question["correct_answer"] == [0]  # First option is correct
+    assert data_main_question["correct_answer"] == [2]  # First option is correct
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
@@ -1316,7 +1316,7 @@ def test_latest_question_revision(
             {"id": 2, "key": "B", "text": "Option 2"},
             {"id": 3, "key": "C", "text": "Option 3"},
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 2],
     }
 
     response = client.post(
@@ -1369,3 +1369,39 @@ def test_latest_question_revision(
     data_latest_revision = response.json()
     assert response.status_code == 200
     assert data_latest_revision["question_id"] == data_main_question["id"]
+
+
+def test_invalid_correct_option(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user for test
+    user = create_random_user(db)
+    db.refresh(user)
+
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "text": "Option 1"},
+            {"id": 2, "key": "B", "text": "Option 2"},
+        ],
+        # Invalid correct answer index
+        "correct_answer": [3],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert "does not match" in response.json()["detail"][0]["msg"]
