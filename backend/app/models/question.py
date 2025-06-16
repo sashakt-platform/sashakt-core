@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
+from typing_extensions import TypedDict
 
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
@@ -69,12 +70,12 @@ class Image(SQLModel):
     )
 
 
-class Option(SQLModel):
+class Option(TypedDict):
     """Represents a single option in a choice-based question"""
 
-    id: int = Field(unique=True, description="Primary key to identify the option")
-    key: str = Field(description="Unique key for the option")
-    text: str = Field(description="Text content of the option")
+    id: int
+    key: str
+    text: str
 
 
 # Type aliases for cleaner annotations
@@ -98,7 +99,8 @@ class QuestionBase(SQLModel):
             and correct_answer is not None
         ):
             option_ids = [
-                opt.id if isinstance(opt, Option) else opt.get("id") for opt in options
+                opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
+                for opt in options
             ]
             answer_ids = (
                 correct_answer if isinstance(correct_answer, list) else [correct_answer]
