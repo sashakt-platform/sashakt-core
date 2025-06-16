@@ -1116,7 +1116,7 @@ async def upload_questions_csv(
                 correct_answer = letter_map.get(correct_letter, 1)
 
                 valid_options = [
-                    {"id": letter_map[key], "key": key, "text": value}
+                    {"id": letter_map[key], "key": key, "value": value}
                     for key, value in zip(letter_map.keys(), options, strict=True)
                 ]
                 print("The valid options are:", valid_options)

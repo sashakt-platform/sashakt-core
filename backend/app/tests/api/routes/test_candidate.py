@@ -702,8 +702,8 @@ def test_create_candidate_test_answers(
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
     )
@@ -804,8 +804,8 @@ def test_read_candidate_test_answer(
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
     )
@@ -816,9 +816,9 @@ def test_read_candidate_test_answer(
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
-            {"id": 3, "key": "C", "text": "Option 3"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
         ],
         correct_answer=[1, 2],
     )
@@ -948,8 +948,8 @@ def test_read_candidate_test_answer_by_id(
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
     )
@@ -960,9 +960,9 @@ def test_read_candidate_test_answer_by_id(
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option A"},
-            {"id": 2, "key": "B", "text": "Option B"},
-            {"id": 3, "key": "C", "text": "Option C"},
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
         ],
         correct_answer=[2, 3],
     )
@@ -1082,8 +1082,8 @@ def test_update_candidate_test_answer(
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
     )
@@ -1094,9 +1094,9 @@ def test_update_candidate_test_answer(
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option A"},
-            {"id": 2, "key": "B", "text": "Option B"},
-            {"id": 3, "key": "C", "text": "Option C"},
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
         ],
         correct_answer=[1, 2],
     )
@@ -1239,9 +1239,9 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
         question_text="What is 2+2?",
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "3"},
-            {"id": 2, "key": "B", "text": "4"},
-            {"id": 3, "key": "C", "text": "5"},
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
         ],
         correct_answer=[1],
     )
@@ -1363,9 +1363,9 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         question_text="What is 3+3?",
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "5"},
-            {"id": 2, "key": "B", "text": "6"},
-            {"id": 3, "key": "C", "text": "7"},
+            {"id": 1, "key": "A", "value": "5"},
+            {"id": 2, "key": "B", "value": "6"},
+            {"id": 3, "key": "C", "value": "7"},
         ],
         correct_answer=[1],
     )
@@ -1494,9 +1494,9 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         question_text="What is 4+4?",
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "7"},
-            {"id": 2, "key": "B", "text": "8"},
-            {"id": 3, "key": "C", "text": "9"},
+            {"id": 1, "key": "A", "value": "7"},
+            {"id": 2, "key": "B", "value": "8"},
+            {"id": 3, "key": "C", "value": "9"},
         ],
         correct_answer=[1],
     )
@@ -1653,9 +1653,9 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
         question_text="What is 5+5?",
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
-            {"id": 3, "key": "C", "text": "Option 3"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
         ],
         correct_answer=[1],
     )

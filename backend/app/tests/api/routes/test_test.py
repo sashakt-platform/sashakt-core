@@ -89,8 +89,8 @@ def setup_data(db: SessionDep) -> Any:
         question_text="What is the size of Sun",
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
     )
@@ -101,8 +101,8 @@ def setup_data(db: SessionDep) -> Any:
         question_text="What is the speed of light",
         question_type=QuestionType.single_choice,
         options=[
-            {"id": 1, "key": "A", "text": "Option 1"},
-            {"id": 2, "key": "B", "text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
     )

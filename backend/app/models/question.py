@@ -46,7 +46,7 @@ class ImageBase:
 class OptionBase:
     """Represents a single option in a choice-based question"""
 
-    text: str
+    value: str
     image: dict[str, Any] | None = None
 
 
@@ -75,7 +75,7 @@ class Option(TypedDict):
 
     id: int
     key: str
-    text: str
+    value: str
 
 
 # Type aliases for cleaner annotations
@@ -102,6 +102,8 @@ class QuestionBase(SQLModel):
                 opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
                 for opt in options
             ]
+            if len(option_ids) != len(set(option_ids)):
+                raise ValueError("Option IDs must be unique.")
             answer_ids = (
                 correct_answer if isinstance(correct_answer, list) else [correct_answer]
             )
@@ -129,6 +131,7 @@ class QuestionBase(SQLModel):
         default=None,
         description="Available options for choice-based questions",
     )
+
     correct_answer: CorrectAnswerType = Field(
         sa_type=JSON,
         default=None,
