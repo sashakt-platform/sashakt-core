@@ -128,17 +128,12 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[Option] | None = None
+    options: list[dict[str, Any]] | None = None
     if data.options:
-        options = [
-            opt.model_dump()
-            if hasattr(opt, "dict") and callable(opt.model_dump)
-            else opt
-            for opt in data.options
-        ]
+        options = [opt.model_dump() for opt in data.options]
 
     marking_scheme: dict[str, float] | None = None
     if (
@@ -273,7 +268,7 @@ class RevisionDetailDict(TypedDict):
     question_text: str
     instructions: str | None
     question_type: str
-    options: list[dict[str, Any]] | None
+    options: list[Option] | None
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
@@ -697,9 +692,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     # Convert complex objects to dicts for serialization
     options_dict = None
     if revision.options:
-        options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
-        ]
+        options_dict = list(revision.options)
 
     marking_scheme_dict = (
         revision.marking_scheme.dict()

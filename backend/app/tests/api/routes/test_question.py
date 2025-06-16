@@ -8,7 +8,12 @@ from app.core.config import settings
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
-from app.models.question import Question, QuestionRevision, QuestionTag, QuestionType
+from app.models.question import (
+    Question,
+    QuestionRevision,
+    QuestionTag,
+    QuestionType,
+)
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.tests.utils.user import create_random_user

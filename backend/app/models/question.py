@@ -88,7 +88,7 @@ class QuestionBase(SQLModel):
     """Base model with common fields for questions"""
 
     @model_validator(mode="after")
-    def validate_correct_answer_ids(self):
+    def validate_correct_answer_ids(self) -> "QuestionBase":
         question_type = self.question_type
         options = self.options
         correct_answer = self.correct_answer
@@ -98,7 +98,7 @@ class QuestionBase(SQLModel):
             and correct_answer is not None
         ):
             option_ids = [
-                opt.id if hasattr(opt, "id") else opt["id"] for opt in options
+                opt.id if isinstance(opt, Option) else opt.get("id") for opt in options
             ]
             answer_ids = (
                 correct_answer if isinstance(correct_answer, list) else [correct_answer]
