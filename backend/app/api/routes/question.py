@@ -33,6 +33,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.question import Option
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -57,7 +58,14 @@ def build_question_response(
     options_dict = None
     if revision.options:
         options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+            opt
+            if isinstance(opt, dict)
+            else opt.dict()
+            if hasattr(opt, "dict") and callable(opt.dict)
+            else vars(opt)
+            if hasattr(opt, "__dict__")
+            else opt
+            for opt in revision.options
         ]
 
     marking_scheme_dict = (
@@ -136,13 +144,19 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[dict[str, Any]] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[dict[str, Any]] | None = None
+    options: list[Option] | None = None
     if data.options:
         options = [
-            opt.dict() if hasattr(opt, "dict") and callable(opt.dict) else opt
+            opt
+            if isinstance(opt, dict)
+            else opt.dict()
+            if hasattr(opt, "dict") and callable(opt.dict)
+            else vars(opt)
+            if hasattr(opt, "__dict__")
+            else opt
             for opt in data.options
         ]
 
@@ -279,7 +293,7 @@ class RevisionDetailDict(TypedDict):
     question_text: str
     instructions: str | None
     question_type: str
-    options: list[dict[str, Any]] | None
+    options: list[Option] | None
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
@@ -706,7 +720,14 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     options_dict = None
     if revision.options:
         options_dict = [
-            opt.dict() if hasattr(opt, "dict") else opt for opt in revision.options
+            opt
+            if isinstance(opt, dict)
+            else opt.dict()
+            if hasattr(opt, "dict") and callable(opt.dict)
+            else vars(opt)
+            if hasattr(opt, "__dict__")
+            else opt
+            for opt in revision.options
         ]
 
     marking_scheme_dict = (
@@ -1030,7 +1051,6 @@ async def upload_questions_csv(
 
     # Save the uploaded file to a temporary file
     content = await file.read()
-
     if not content:
         raise HTTPException(status_code=400, detail="CSV file is empty")
 
@@ -1092,9 +1112,14 @@ async def upload_questions_csv(
 
                 # Convert option letter to index
                 correct_letter = row.get("Correct Option", "A").strip()
-                letter_map = {"A": 0, "B": 1, "C": 2, "D": 3}
-                correct_answer = letter_map.get(correct_letter, 0)
+                letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
+                correct_answer = letter_map.get(correct_letter, 1)
 
+                valid_options = [
+                    {"id": letter_map[key], "key": key, "value": value}
+                    for key, value in zip(letter_map.keys(), options, strict=True)
+                ]
+                print("The valid options are:", valid_options)
                 # Process tags if present
                 tag_ids = []
                 tagtype_error = False
@@ -1191,12 +1216,6 @@ async def upload_questions_csv(
                 if state_error:
                     questions_failed += 1
                     continue
-
-                # Filter out empty options
-                valid_options = []
-                for _i, option in enumerate(options):
-                    if option.strip():
-                        valid_options.append({"text": option})
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(

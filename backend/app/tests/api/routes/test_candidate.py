@@ -701,8 +701,11 @@ def test_create_candidate_test_answers(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
     db.add(question_revision_a)
     db.flush()
@@ -800,8 +803,11 @@ def test_read_candidate_test_answer(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
 
     question_revision_b = QuestionRevision(
@@ -809,8 +815,12 @@ def test_read_candidate_test_answer(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
-        options=[{"text": "Option A"}, {"text": "Option B"}, {"text": "Option C"}],
-        correct_answer=[0, 1],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
     )
 
     db.add_all([question_revision_a, question_revision_b])
@@ -937,8 +947,11 @@ def test_read_candidate_test_answer_by_id(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
 
     question_revision_b = QuestionRevision(
@@ -946,8 +959,12 @@ def test_read_candidate_test_answer_by_id(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
-        options=[{"text": "Option A"}, {"text": "Option B"}, {"text": "Option C"}],
-        correct_answer=[0, 1],
+        options=[
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
+        ],
+        correct_answer=[2, 3],
     )
 
     db.add_all([question_revision_a, question_revision_b])
@@ -1064,8 +1081,11 @@ def test_update_candidate_test_answer(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
 
     question_revision_b = QuestionRevision(
@@ -1073,8 +1093,12 @@ def test_update_candidate_test_answer(
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
-        options=[{"text": "Option A"}, {"text": "Option B"}, {"text": "Option C"}],
-        correct_answer=[0, 1],
+        options=[
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
+        ],
+        correct_answer=[1, 2],
     )
 
     db.add_all([question_revision_a, question_revision_b])
@@ -1214,7 +1238,11 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text="What is 2+2?",
         question_type=QuestionType.single_choice,
-        options=[{"text": "3"}, {"text": "4"}, {"text": "5"}],
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
         correct_answer=[1],
     )
     db.add(question_revision)
@@ -1334,7 +1362,11 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         created_by_id=user.id,
         question_text="What is 3+3?",
         question_type=QuestionType.single_choice,
-        options=[{"text": "5"}, {"text": "6"}, {"text": "7"}],
+        options=[
+            {"id": 1, "key": "A", "value": "5"},
+            {"id": 2, "key": "B", "value": "6"},
+            {"id": 3, "key": "C", "value": "7"},
+        ],
         correct_answer=[1],
     )
     db.add(question_revision)
@@ -1461,7 +1493,11 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         created_by_id=user.id,
         question_text="What is 4+4?",
         question_type=QuestionType.single_choice,
-        options=[{"text": "7"}, {"text": "8"}, {"text": "9"}],
+        options=[
+            {"id": 1, "key": "A", "value": "7"},
+            {"id": 2, "key": "B", "value": "8"},
+            {"id": 3, "key": "C", "value": "9"},
+        ],
         correct_answer=[1],
     )
     db.add(question_revision)
@@ -1616,7 +1652,11 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
         created_by_id=user.id,
         question_text="What is 5+5?",
         question_type=QuestionType.single_choice,
-        options=[{"text": "9"}, {"text": "10"}, {"text": "11"}],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
         correct_answer=[1],
     )
     db.add(question_revision)
