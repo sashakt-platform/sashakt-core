@@ -2,7 +2,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
+from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
+from typing_extensions import TypedDict
 
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
@@ -44,7 +46,7 @@ class ImageBase:
 class OptionBase:
     """Represents a single option in a choice-based question"""
 
-    text: str
+    value: str
     image: dict[str, Any] | None = None
 
 
@@ -68,13 +70,12 @@ class Image(SQLModel):
     )
 
 
-class Option(SQLModel):
+class Option(TypedDict):
     """Represents a single option in a choice-based question"""
 
-    text: str = Field(description="Text content of the option")
-    image: dict[str, Any] | None = Field(
-        default=None, description="Optional image associated with this option"
-    )
+    id: int
+    key: str
+    value: str
 
 
 # Type aliases for cleaner annotations
@@ -87,6 +88,34 @@ CorrectAnswerType = list[int] | list[str] | float | int | None
 class QuestionBase(SQLModel):
     """Base model with common fields for questions"""
 
+    @model_validator(mode="after")
+    def validate_correct_answer_ids(self) -> "QuestionBase":
+        question_type = self.question_type
+        options = self.options
+        correct_answer = self.correct_answer
+        if (
+            question_type in ["single-choice", "multi-choice"]
+            and options
+            and correct_answer is not None
+        ):
+            option_ids = [
+                opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
+                for opt in options
+            ]
+            if len(option_ids) != len(set(option_ids)):
+                raise ValueError("Option IDs must be unique.")
+            answer_ids = (
+                correct_answer if isinstance(correct_answer, list) else [correct_answer]
+            )
+            for ans_id in answer_ids:
+                if ans_id not in option_ids:
+                    raise ValueError(
+                        f"Correct answer ID {ans_id} does not match any option ID."
+                    )
+        return self
+
+    """Base model with common fields for questions"""
+
     question_text: str = Field(nullable=False, description="The actual question text")
     instructions: str | None = Field(
         default=None,
@@ -97,11 +126,12 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
     )
+
     correct_answer: CorrectAnswerType = Field(
         sa_type=JSON,
         default=None,
@@ -406,7 +436,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -438,7 +468,7 @@ class QuestionCandidatePublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[OptionDict] | None = Field(
+    options: list[Option] | None = Field(
         description="Available options for choice questions"
     )
     subjective_answer_limit: int | None = Field(

@@ -8,7 +8,12 @@ from app.core.config import settings
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
-from app.models.question import Question, QuestionRevision, QuestionTag, QuestionType
+from app.models.question import (
+    Question,
+    QuestionRevision,
+    QuestionTag,
+    QuestionType,
+)
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.tests.utils.user import create_random_user
@@ -66,8 +71,12 @@ def test_create_question(
         "created_by_id": user_id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
-        "options": [{"text": "Option 1"}, {"text": "Option 2"}, {"text": "Option 3"}],
-        "correct_answer": [0],  # First option is correct
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],  # First option is correct
         "is_mandatory": True,
         "tag_ids": [tag_id],
     }
@@ -161,10 +170,10 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
-            {"text": "Option 1"},
-            {"text": "Option 2"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
         ],  # Use dict format directly
-        correct_answer=[0],
+        correct_answer=[2],
     )
     db.add(rev1)
     db.flush()
@@ -189,11 +198,11 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
         options=[
-            {"text": "Option A"},
-            {"text": "Option B"},
-            {"text": "Option C"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
         ],  # Use dict format directly
-        correct_answer=[0, 1],
+        correct_answer=[1, 2],
     )
     db.add(rev2)
     db.flush()
@@ -293,8 +302,11 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=question_text,
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -354,8 +366,11 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -484,8 +499,11 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
         created_by_id=user1.id,
         question_text=initial_text,
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
     )
     db.add(rev1)
     db.flush()
@@ -501,11 +519,11 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
         "question_text": new_text,
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 3],
     }
 
     response = client.post(
@@ -565,8 +583,11 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -641,8 +662,11 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
         "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
-        "options": [{"text": "Option 1"}, {"text": "Option 2"}],
-        "correct_answer": [0],
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
         "tag_ids": [tag1.id],
     }
 
@@ -743,8 +767,11 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
         "created_by_id": user.id,  # Add created_by_id
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
-        "options": [{"text": "Option 1"}, {"text": "Option 2"}],
-        "correct_answer": [0],
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
         # Add location data with real IDs
         "state_ids": [kerala.id],  # remove district, block for now
     }
@@ -854,8 +881,11 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
     )
     db.add(rev1)
     db.flush()
@@ -906,8 +936,11 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
         created_by_id=user.id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
-        options=[{"text": "Option 1"}, {"text": "Option 2"}],
-        correct_answer=[0],
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
     )
     db.add(rev1)
     db.flush()
@@ -1242,8 +1275,12 @@ def test_latest_question_revision(
         "created_by_id": user.id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
-        "options": [{"A": "Option 1"}, {"B": "Option 2"}, {"C": "Option 3"}],
-        "correct_answer": [0],  # First option is correct
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [2],  # First option is correct
         "is_mandatory": True,
     }
 
@@ -1257,7 +1294,7 @@ def test_latest_question_revision(
     assert data_main_question["question_text"] == question_text
     assert data_main_question["question_type"] == QuestionType.single_choice
     assert len(data_main_question["options"]) == 3
-    assert data_main_question["correct_answer"] == [0]  # First option is correct
+    assert data_main_question["correct_answer"] == [2]  # First option is correct
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
@@ -1280,11 +1317,11 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
         ],
-        "correct_answer": [0, 1],
+        "correct_answer": [1, 2],
     }
 
     response = client.post(
@@ -1298,11 +1335,11 @@ def test_latest_question_revision(
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
-            {"text": "New Option 1"},
-            {"text": "New Option 2"},
-            {"text": "New Option 3"},
+            {"id": 1, "key": "A", "value": "New Option 1"},
+            {"id": 2, "key": "B", "value": "New Option 2"},
+            {"id": 3, "key": "C", "value": "New Option 3"},
         ],
-        "correct_answer": [1],
+        "correct_answer": [2],
     }
 
     response = client.post(
@@ -1337,3 +1374,119 @@ def test_latest_question_revision(
     data_latest_revision = response.json()
     assert response.status_code == 200
     assert data_latest_revision["question_id"] == data_main_question["id"]
+
+
+def test_invalid_correct_option(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user for test
+    user = create_random_user(db)
+    db.refresh(user)
+
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        # Invalid correct answer index
+        "correct_answer": [3],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert "does not match" in response.json()["detail"][0]["msg"]
+
+
+def test_valid_correct_option(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user for test
+    user = create_random_user(db)
+    db.refresh(user)
+
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        # Invalid correct answer index
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "correct_answer" in data
+
+    assert isinstance(data["correct_answer"], list)
+    assert len(data["correct_answer"]) == 1
+    assert data["correct_answer"][0] == 1
+    option_ids = [opt["id"] for opt in data["options"]]
+    assert data["correct_answer"][0] in option_ids, (
+        "Correct answer must be one of the option IDs"
+    )
+
+
+def test_valid_ids_option(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user for test
+    user = create_random_user(db)
+    db.refresh(user)
+
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 1, "key": "B", "value": "Option 2"},
+            {"id": 1, "key": "B", "value": "Option 2"},
+        ],
+        # Invalid correct answer index
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
