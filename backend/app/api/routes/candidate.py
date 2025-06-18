@@ -27,6 +27,7 @@ from app.models import (
     TestCandidatePublic,
     TestQuestion,
 )
+from app.models.candidate import Result
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -506,3 +507,67 @@ def update_candidate_answer_test(
     session.commit()
     session.refresh(candidate_test_answer)
     return candidate_test_answer
+
+
+def convert_to_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value]
+    if isinstance(value, str):
+        if value.startswith("{") and value.endswith("}"):
+            return value[1:-1].split(",")
+        if value.startswith("[") and value.endswith("]"):
+            value = value[1:-1]
+            return [v.strip() for v in value.split(",")]
+
+        return [value.strip()]
+
+    return [str(value)]
+
+
+@router.get("/result/{candidate_test_id}", response_model=Result)
+def get_test_result(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> Result:
+    candidate_test = (session.get(CandidateTest, candidate_test_id),)
+
+    if not candidate_test:
+        raise HTTPException(status_code=404, detail="Candidate test not found")
+
+    joined_data = session.exec(
+        select(CandidateTestAnswer, QuestionRevision)
+        .join(QuestionRevision)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(Candidate.identity == candidate_uuid)
+    ).all()
+
+    correct = 0
+    incorrect = 0
+    mandatory_not_attempted = 0
+    optional_not_attempted = 0
+
+    for answer, revision in joined_data:
+        if not answer.response:
+            if revision.is_mandatory:
+                mandatory_not_attempted += 1
+            else:
+                optional_not_attempted += 1
+        else:
+            response_list = convert_to_list(answer.response)
+            correct_list = convert_to_list(revision.correct_answer)
+
+            if set(response_list) == set(correct_list):
+                correct += 1
+            else:
+                incorrect += 1
+    return Result(
+        correct_answer=correct,
+        incorrect_answer=incorrect,
+        mandatory_not_attempted=mandatory_not_attempted,
+        optional_not_attempted=optional_not_attempted,
+    )
