@@ -534,16 +534,15 @@ def get_test_result(
         ..., description="Candidate UUID for verification"
     ),
 ) -> Result:
-    candidate_test = (session.get(CandidateTest, candidate_test_id),)
+    candidate_test = session.get(CandidateTest, candidate_test_id)
 
     if not candidate_test:
         raise HTTPException(status_code=404, detail="Candidate test not found")
-
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
     joined_data = session.exec(
         select(CandidateTestAnswer, QuestionRevision)
         .join(QuestionRevision)
         .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
-        .where(Candidate.identity == candidate_uuid)
     ).all()
 
     correct = 0
