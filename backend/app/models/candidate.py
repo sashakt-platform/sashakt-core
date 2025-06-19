@@ -69,6 +69,12 @@ class CandidateAnswerSubmitRequest(SQLModel):
     time_spent: int = 0
 
 
+class BatchAnswerSubmitRequest(SQLModel):
+    """Request model for submitting multiple answers at once"""
+
+    answers: list[CandidateAnswerSubmitRequest]
+
+
 class CandidateAnswerUpdateRequest(SQLModel):
     """Request model for QR code candidates to update answers"""
 
