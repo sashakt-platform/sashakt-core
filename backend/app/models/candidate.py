@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
@@ -215,7 +214,7 @@ class TestCandidatePublic(SQLModel):
     candidate_test: "CandidateTestPublic"
 
 
-class Result(BaseModel):
+class Result(SQLModel):
     correct_answer: int
     incorrect_answer: int
     mandatory_not_attempted: int

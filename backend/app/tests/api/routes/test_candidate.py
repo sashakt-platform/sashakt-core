@@ -1782,7 +1782,7 @@ def test_get_test_result(
     db.add(candidate_test)
     db.commit()
     db.refresh(candidate_test)
-    print("CandidateTest in DB:", db.get(CandidateTest, candidate_test.id))
+
     questions = [
         create_random_question_revision(db),
         create_random_question_revision(db),
@@ -1892,7 +1892,7 @@ def test_get_test_result(
         headers=get_user_superadmin_token,
         params={"candidate_uuid": str(candidate.identity)},
     )
-    print(response.json())
+
     assert response.status_code == 200
     data = response.json()
 
@@ -2002,8 +2002,6 @@ def test_result_with_no_answers(
     db.add(candidate_test_answer)
     db.commit()
     db.refresh(candidate_test_answer)
-    print("-------------")
-    print(candidate_test_answer)
 
     candidate_test_answer2 = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
@@ -2015,8 +2013,6 @@ def test_result_with_no_answers(
     db.add(candidate_test_answer2)
     db.commit()
     db.refresh(candidate_test_answer2)
-    print("-------------")
-    print(candidate_test_answer2)
 
     response = client.get(
         f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
@@ -2025,7 +2021,6 @@ def test_result_with_no_answers(
     )
     assert response.status_code == 200
     data = response.json()
-    print(response.json())
 
     assert data["correct_answer"] == 1
     assert data["incorrect_answer"] == 0
@@ -2157,7 +2152,7 @@ def test_convert_to_list_with_int_reponse(
     )
     assert response.status_code == 200
     data = response.json()
-    print(response.json())
+
     assert data["correct_answer"] == 0  # Assuming correct answer is option B (2)
     assert data["incorrect_answer"] == 1
     assert data["mandatory_not_attempted"] == 0

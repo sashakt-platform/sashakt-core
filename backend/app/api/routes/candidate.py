@@ -557,13 +557,14 @@ def get_test_result(
             else:
                 optional_not_attempted += 1
         else:
-            response_list = convert_to_list(answer.response)
-            correct_list = convert_to_list(revision.correct_answer)
+            if revision.question_type.value in ["single-choice", "multi-choice"]:
+                response_list = convert_to_list(answer.response)
+                correct_list = convert_to_list(revision.correct_answer)
 
-            if set(response_list) == set(correct_list):
-                correct += 1
-            else:
-                incorrect += 1
+                if set(response_list) == set(correct_list):
+                    correct += 1
+                else:
+                    incorrect += 1
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
