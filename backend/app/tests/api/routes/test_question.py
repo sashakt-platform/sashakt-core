@@ -130,7 +130,6 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     # Create test user
     user = create_random_user(db)
     db.refresh(user)
-    db.refresh(user)
 
     # Create tag type and tag
     tag_type = TagType(
@@ -687,12 +686,15 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={
-            "tag_id": tag2.id,
+            "tag_ids": [tag2.id],
         },
     )
 
     assert response.status_code == 200
-    tag_data = response.json()
+    tag_data_list = response.json()
+    assert isinstance(tag_data_list, list)
+    assert len(tag_data_list) == 1
+    tag_data = tag_data_list[0]
     assert tag_data["question_id"] == question_id
     assert tag_data["tag_id"] == tag2.id
 
@@ -792,10 +794,13 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
 
     # Test adding another location to the same question
     location_data = {
-        "question_id": data["id"],  # Include the question_id field
-        "state_id": None,
-        "district_id": thrissur.id,
-        "block_id": None,  # Test with a null block_id
+        "locations": [
+            {
+                "state_id": None,
+                "district_id": thrissur.id,
+                "block_id": None,
+            }
+        ]
     }
 
     response = client.post(
@@ -804,17 +809,23 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     )
 
     assert response.status_code == 200, response.text
-    location = response.json()
+    location_list = response.json()
+    assert isinstance(location_list, list)
+    assert len(location_list) == 1
+    location = location_list[0]
     assert location["state_id"] is None
     assert location["district_id"] == thrissur.id
     assert location["block_id"] is None
 
     # check for block location as well
     block_location_data = {
-        "question_id": data["id"],
-        "state_id": None,
-        "district_id": None,
-        "block_id": kovil.id,
+        "locations": [
+            {
+                "state_id": None,
+                "district_id": None,
+                "block_id": kovil.id,
+            }
+        ]
     }
 
     response = client.post(
@@ -823,7 +834,10 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     )
 
     assert response.status_code == 200, response.text
-    location = response.json()
+    location_list = response.json()
+    assert isinstance(location_list, list)
+    assert len(location_list) == 1
+    location = location_list[0]
     assert location["state_id"] is None
     assert location["district_id"] is None
     assert location["block_id"] == kovil.id
@@ -1526,3 +1540,405 @@ def test_duplicate_option_ids_error_message(
 
     assert response.status_code == 422
     assert "Option IDs must be unique" in response.json()["detail"][0]["msg"]
+
+
+def test_bulk_tag_operations(client: TestClient, db: SessionDep) -> None:
+    """Test bulk adding and removing tags."""
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user
+    user = create_random_user(db)
+    db.refresh(user)
+
+    # Create tag type and multiple tags
+    tag_type = TagType(
+        name="Bulk Test Category",
+        description="Categories for bulk testing",
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tags = []
+    for i in range(5):
+        tag = Tag(
+            name=f"BulkTag{i}",
+            description=f"Bulk test tag {i}",
+            tag_type_id=tag_type.id,
+            created_by_id=user.id,
+            organization_id=org.id,
+        )
+        db.add(tag)
+        tags.append(tag)
+
+    db.commit()
+    for tag in tags:
+        db.refresh(tag)
+
+    # Create question
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    # Test bulk add tags
+    bulk_tag_data = {"tag_ids": [tags[0].id, tags[1].id, tags[2].id]}
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        json=bulk_tag_data,
+    )
+
+    assert response.status_code == 200
+    tag_results = response.json()
+    assert isinstance(tag_results, list)
+    assert len(tag_results) == 3
+
+    # Verify all tags were added
+    for _, tag_result in enumerate(tag_results):
+        assert tag_result["question_id"] == question_id
+        assert tag_result["tag_id"] in [tags[0].id, tags[1].id, tags[2].id]
+
+    # Verify question has all the tags
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    current_tags = response.json()
+    assert len(current_tags) == 3
+
+    # Test adding duplicate tags (should be skipped)
+    duplicate_tag_data = {
+        "tag_ids": [tags[0].id, tags[3].id]  # tags[0] already exists
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        json=duplicate_tag_data,
+    )
+
+    assert response.status_code == 200
+    tag_results = response.json()
+    # Should return 2 results: existing one for tags[0] and new one for tags[3]
+    assert len(tag_results) == 2
+
+    # Verify we now have 4 tags total
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    current_tags = response.json()
+    assert len(current_tags) == 4
+
+    # Test bulk remove tags
+    tag_ids_to_remove = [tags[0].id, tags[1].id]
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        params={"tag_ids": tag_ids_to_remove},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert "Removed 2 tag(s)" in result["message"]
+
+    # Verify tags were removed
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    current_tags = response.json()
+    assert len(current_tags) == 2
+
+    remaining_tag_ids = [tag["id"] for tag in current_tags]
+    assert tags[0].id not in remaining_tag_ids
+    assert tags[1].id not in remaining_tag_ids
+    assert tags[2].id in remaining_tag_ids
+    assert tags[3].id in remaining_tag_ids
+
+
+def test_bulk_location_operations(client: TestClient, db: SessionDep) -> None:
+    """Test bulk adding and removing locations."""
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user
+    user = create_random_user(db)
+    db.refresh(user)
+
+    # Set up location hierarchy
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+
+    states = []
+    districts = []
+    blocks = []
+
+    # Create multiple states
+    for i in range(3):
+        state = State(name=f"State{i}", country_id=india.id)
+        db.add(state)
+        states.append(state)
+
+    db.commit()
+    for state in states:
+        db.refresh(state)
+
+    # Create multiple districts for the first state
+    for i in range(3):
+        district = District(name=f"District{i}", state_id=states[0].id)
+        db.add(district)
+        districts.append(district)
+
+    db.commit()
+    for district in districts:
+        db.refresh(district)
+
+    # Create multiple blocks for the first district
+    for i in range(3):
+        block = Block(name=f"Block{i}", district_id=districts[0].id)
+        db.add(block)
+        blocks.append(block)
+
+    db.commit()
+    for block in blocks:
+        db.refresh(block)
+
+    # Create question
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    # Test bulk add locations
+    bulk_location_data = {
+        "locations": [
+            {
+                "state_id": states[0].id,
+                "district_id": None,
+                "block_id": None,
+            },
+            {
+                "state_id": states[1].id,
+                "district_id": None,
+                "block_id": None,
+            },
+            {
+                "state_id": None,
+                "district_id": districts[0].id,
+                "block_id": None,
+            },
+            {
+                "state_id": None,
+                "district_id": None,
+                "block_id": blocks[0].id,
+            },
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/locations",
+        json=bulk_location_data,
+    )
+
+    assert response.status_code == 200
+    location_results = response.json()
+    assert isinstance(location_results, list)
+    assert len(location_results) == 4
+
+    # Verify all location types were added
+    has_state0 = any(loc["state_id"] == states[0].id for loc in location_results)
+    has_state1 = any(loc["state_id"] == states[1].id for loc in location_results)
+    has_district0 = any(
+        loc["district_id"] == districts[0].id for loc in location_results
+    )
+    has_block0 = any(loc["block_id"] == blocks[0].id for loc in location_results)
+
+    assert has_state0
+    assert has_state1
+    assert has_district0
+    assert has_block0
+
+    # Get question to verify locations were added
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    question = response.json()
+    assert len(question["locations"]) == 4
+
+    # Test adding duplicate locations (should be skipped)
+    duplicate_location_data = {
+        "locations": [
+            {
+                "state_id": states[0].id,  # Already exists
+                "district_id": None,
+                "block_id": None,
+            },
+            {
+                "state_id": states[2].id,  # New one
+                "district_id": None,
+                "block_id": None,
+            },
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/locations",
+        json=duplicate_location_data,
+    )
+
+    assert response.status_code == 200
+    location_results = response.json()
+    # Should only return 1 result for the new state, duplicate should be skipped
+    assert len(location_results) == 1
+    assert location_results[0]["state_id"] == states[2].id
+
+    # Verify we now have 5 locations total
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    question = response.json()
+    assert len(question["locations"]) == 5
+
+    # Test bulk remove locations
+    location_ids_to_remove = [
+        question["locations"][0]["id"],
+        question["locations"][1]["id"],
+    ]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}/locations",
+        params={"location_ids": location_ids_to_remove},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert "Removed 2 location(s)" in result["message"]
+
+    # Verify locations were removed
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    question = response.json()
+    assert len(question["locations"]) == 3
+
+
+def test_mixed_single_and_bulk_operations(client: TestClient, db: SessionDep) -> None:
+    """Test that single and bulk operations work together seamlessly."""
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user
+    user = create_random_user(db)
+    db.refresh(user)
+
+    # Create tag type and tags
+    tag_type = TagType(
+        name="Mixed Test Category",
+        description="Categories for mixed testing",
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tags = []
+    for i in range(3):
+        tag = Tag(
+            name=f"MixedTag{i}",
+            description=f"Mixed test tag {i}",
+            tag_type_id=tag_type.id,
+            created_by_id=user.id,
+            organization_id=org.id,
+        )
+        db.add(tag)
+        tags.append(tag)
+
+    db.commit()
+    for tag in tags:
+        db.refresh(tag)
+
+    # Create question
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    # Add a single tag
+    single_tag_data = {"tag_ids": [tags[0].id]}
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        json=single_tag_data,
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+    # Add multiple tags
+    bulk_tag_data = {"tag_ids": [tags[1].id, tags[2].id]}
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        json=bulk_tag_data,
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+    # Verify all tags are present
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    current_tags = response.json()
+    assert len(current_tags) == 3
+
+    # Remove single tag
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags/{tags[0].id}"
+    )
+    assert response.status_code == 200
+
+    # Remove multiple tags
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        params={"tag_ids": [tags[1].id, tags[2].id]},
+    )
+    assert response.status_code == 200
+
+    # Verify all tags are removed
+    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    current_tags = response.json()
+    assert len(current_tags) == 0
