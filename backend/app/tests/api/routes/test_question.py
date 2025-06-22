@@ -16,8 +16,10 @@ from app.models.question import (
 )
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
+
+# from app.models.user import User
 from app.tests.utils.user import create_random_user
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import get_user_data_from_me_route, random_lower_string
 
 
 def test_create_question(
@@ -32,17 +34,14 @@ def test_create_question(
     )
     org_data = org_response.json()
     org_id = org_data["id"]
-
-    user = create_random_user(db)
-    user_id = user.id
-
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     # Create a tag type
     tag_type_response = client.post(
         f"{settings.API_V1_STR}/tagtype/",
         json={
             "name": "Test Tag Type",
             "description": "For testing",
-            "created_by_id": user_id,
             "organization_id": org_id,
         },
         headers=get_user_superadmin_token,
@@ -57,7 +56,6 @@ def test_create_question(
             "name": "Test Tag",
             "description": "For testing questions",
             "tag_type_id": tag_type_id,
-            "created_by_id": user_id,
             "organization_id": org_id,
         },
         headers=get_user_superadmin_token,
@@ -68,7 +66,6 @@ def test_create_question(
     question_text = random_lower_string()
     question_data = {
         "organization_id": org_id,
-        "created_by_id": user_id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
         "options": [
@@ -84,6 +81,7 @@ def test_create_question(
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
     data = response.json()
 
@@ -120,24 +118,23 @@ def test_create_question(
     assert question_tags[0].tag_id == tag_id
 
 
-def test_read_questions(client: TestClient, db: SessionDep) -> None:
+def test_read_questions(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     # Create test organization
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
 
-    # Create test user
-    user = create_random_user(db)
-    db.refresh(user)
-    db.refresh(user)
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
 
     # Create tag type and tag
     tag_type = TagType(
         name="Question Category",
         description="Categories for questions",
-        created_by_id=user.id,
-        organization_id=org.id,
+        created_by_id=user_id,
+        organization_id=org_id,
     )
     db.add(tag_type)
     db.flush()
@@ -146,27 +143,30 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
         name="Math",
         description="Mathematics questions",
         tag_type_id=tag_type.id,
-        created_by_id=user.id,
-        organization_id=org.id,
+        created_by_id=user_id,
+        organization_id=org_id,
     )
     db.add(tag)
     db.commit()
     db.refresh(tag)
 
     # Check empty list first
-    response = client.get(f"{settings.API_V1_STR}/questions/")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
 
     # Create two questions
     # First question
-    q1 = Question(organization_id=org.id)
+    q1 = Question(organization_id=org_id)
     db.add(q1)
     db.flush()
 
     rev1 = QuestionRevision(
         question_id=q1.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
@@ -188,13 +188,13 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     db.add(q1_tag)
 
     # Second question
-    q2 = Question(organization_id=org.id)
+    q2 = Question(organization_id=org_id)
     db.add(q2)
     db.flush()
 
     rev2 = QuestionRevision(
         question_id=q2.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.multi_choice,
         options=[
@@ -214,7 +214,10 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     db.refresh(q2)
 
     # Get all questions
-    response = client.get(f"{settings.API_V1_STR}/questions/")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -228,32 +231,43 @@ def test_read_questions(client: TestClient, db: SessionDep) -> None:
     # Find q1 in response
     q1_data = next(q for q in data if q["id"] == q1.id)
     # Check created_by_id
-    assert q1_data["created_by_id"] == user.id
+    assert q1_data["created_by_id"] == user_id
     # Check tag information
     assert len(q1_data["tags"]) == 1
     assert q1_data["tags"][0]["id"] == tag.id
 
     # Test filtering by tag
-    response = client.get(f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 1
     assert data[0]["id"] == q1.id
 
     # Test filtering by created_by
-    response = client.get(f"{settings.API_V1_STR}/questions/?created_by_id={user.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?created_by_id={user_id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 2
 
     # Verify that filtering works
-    response = client.get(f"{settings.API_V1_STR}/questions/?organization_id={org.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?organization_id={org_id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) == 2
 
     # Check pagination
-    response = client.get(f"{settings.API_V1_STR}/questions/?limit=1")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?limit=1", headers=get_user_superadmin_token
+    )
     data = response.json()
     assert response.status_code == 200
     assert len(data) <= 1
@@ -345,7 +359,11 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 404
 
 
-def test_update_question(client: TestClient, db: SessionDep) -> None:
+def test_update_question(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -454,6 +472,7 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{q1.id}",
         json={"is_active": False},
+        headers=get_user_superadmin_token,
     )
     data = response.json()
 
@@ -472,7 +491,9 @@ def test_update_question(client: TestClient, db: SessionDep) -> None:
     assert q1.is_active is False
 
 
-def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
+def test_create_question_revision(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -480,13 +501,8 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create users - original creator and revision creator
-    user1 = create_random_user(db)
-    user2 = create_random_user(db)
-    db.add(user1)
-    db.add(user2)
-    db.commit()
-    db.refresh(user1)
-    db.refresh(user2)
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     # Create question with initial revision
     q1 = Question(organization_id=org.id)
@@ -496,7 +512,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     initial_text = random_lower_string()
     rev1 = QuestionRevision(
         question_id=q1.id,
-        created_by_id=user1.id,
+        created_by_id=user_id,
         question_text=initial_text,
         question_type=QuestionType.single_choice,
         options=[
@@ -515,7 +531,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     # Create a new revision with a different user
     new_text = random_lower_string()
     new_revision_data = {
-        "created_by_id": user2.id,
+        "created_by_id": user_id,
         "question_text": new_text,
         "question_type": QuestionType.multi_choice,
         "options": [
@@ -529,6 +545,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/questions/{q1.id}/revisions",
         json=new_revision_data,
+        headers=get_user_superadmin_token,
     )
     data = response.json()
 
@@ -538,7 +555,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     assert data["question_type"] == QuestionType.multi_choice
     assert len(data["options"]) == 3
     # Check created_by_id is updated to user2
-    assert data["created_by_id"] == user2.id
+    assert data["created_by_id"] == user_id
 
     # Verify in database
     db.refresh(q1)
@@ -546,7 +563,7 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     assert new_rev is not None
     assert new_rev.question_text == new_text
     assert new_rev.id != rev1.id
-    assert new_rev.created_by_id == user2.id
+    assert new_rev.created_by_id == user_id
 
     # Check revisions list
     response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}/revisions")
@@ -556,10 +573,10 @@ def test_create_question_revision(client: TestClient, db: SessionDep) -> None:
     assert len(revisions) == 2
     assert revisions[0]["id"] == new_rev.id
     assert revisions[0]["is_current"] is True
-    assert revisions[0]["created_by_id"] == user2.id
+    assert revisions[0]["created_by_id"] == user_id
     assert revisions[1]["id"] == rev1.id
     assert revisions[1]["is_current"] is False
-    assert revisions[1]["created_by_id"] == user1.id
+    assert revisions[1]["created_by_id"] == user_id
 
 
 def test_get_revision(client: TestClient, db: SessionDep) -> None:
@@ -615,7 +632,9 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 404
 
 
-def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
+def test_question_tag_operations(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -623,14 +642,14 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     db.refresh(org)
 
     # Create user
-    user = create_random_user(db)
-    db.refresh(user)
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     # Create tag type and tags
     tag_type = TagType(
         name="Question Category",
         description="Categories for questions",
-        created_by_id=user.id,
+        created_by_id=user_id,
         organization_id=org.id,
     )
     db.add(tag_type)
@@ -640,14 +659,14 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
         name="Science",
         description="Science questions",
         tag_type_id=tag_type.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         organization_id=org.id,
     )
     tag2 = Tag(
         name="Physics",
         description="Physics questions",
         tag_type_id=tag_type.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         organization_id=org.id,
     )
     db.add(tag1)
@@ -659,7 +678,6 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     # Create question with one tag initially
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -673,6 +691,7 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
     data = response.json()
 
@@ -723,15 +742,15 @@ def test_question_tag_operations(client: TestClient, db: SessionDep) -> None:
     assert tags[0]["id"] == tag2.id
 
 
-def test_question_location_operations(client: TestClient, db: SessionDep) -> None:
+def test_question_location_operations(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create organization
-    org = Organization(name=random_lower_string())
-    db.add(org)
 
     # Create user
-    user = create_random_user(db)
-    db.refresh(user)
-
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
     # Set up location hierarchy similar to how it's done in test_location.py
     # Create country
     india = Country(name="India")
@@ -757,14 +776,12 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     db.add(mayani)
     db.commit()
 
-    db.refresh(org)
     db.refresh(kerala)
     db.refresh(ernakulam)
     db.refresh(kovil)
 
     question_data = {
-        "organization_id": org.id,
-        "created_by_id": user.id,  # Add created_by_id
+        "organization_id": org_id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -779,12 +796,13 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["organization_id"] == org.id
-    assert data["created_by_id"] == user.id
+    assert data["organization_id"] == org_id
+    assert data["created_by_id"] == user_id
     assert len(data["locations"]) == 1
     assert data["locations"][0]["state_id"] == kerala.id
     assert data["locations"][0]["district_id"] is None
@@ -849,13 +867,19 @@ def test_question_location_operations(client: TestClient, db: SessionDep) -> Non
     assert "removed" in response.json()["message"]
 
     # Verify location was removed
-    response = client.get(f"{settings.API_V1_STR}/questions/{data['id']}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{data['id']}",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 200
     question = response.json()
     assert len(question["locations"]) == 2  # Now only state and block
 
     # Verify we can still filter by location
-    response = client.get(f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 200
     assert len(response.json()) >= 1
 
@@ -1021,22 +1045,11 @@ def test_bulk_upload_questions(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     # Create organization
-    org_name = random_lower_string()
-    org_response = client.post(
-        f"{settings.API_V1_STR}/organization/",
-        json={"name": org_name},
-        headers=get_user_superadmin_token,
-    )
-    org_data = org_response.json()
-    org_id = org_data["id"]
 
     # Create user
-    user = create_random_user(db)
-    user.organization_id = org_id
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    user_id = user.id
+
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
 
     # Create country and state
     india = Country(name="India")
@@ -1044,18 +1057,18 @@ def test_bulk_upload_questions(
     db.commit()
     db.refresh(india)
 
-    kerala = State(name="Kerala", country_id=india.id)
-    db.add(kerala)
-    db.commit()
-    db.refresh(kerala)
+    response = client.post(
+        f"{settings.API_V1_STR}/location/state/",
+        json={"name": "Kerala", "country_id": india.id},
+        headers=get_user_superadmin_token,
+    )
 
     # Create tag type
-    client.post(
+    response = client.post(
         f"{settings.API_V1_STR}/tagtype/",
         json={
             "name": "Test Tag Type",
             "description": "For testing",
-            "created_by_id": user_id,
             "organization_id": org_id,
         },
         headers=get_user_superadmin_token,
@@ -1070,6 +1083,7 @@ What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Kerala
 What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Kerala
 ,,,,,,,
 """
+
     # Create a temporary file
     import tempfile
 
@@ -1078,17 +1092,6 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         temp_file_path = temp_file.name
 
     try:
-        # Test with invalid user ID (test user not found)
-        with open(temp_file_path, "rb") as file:
-            response = client.post(
-                f"{settings.API_V1_STR}/questions/bulk-upload",
-                files={"file": ("test_questions.csv", file, "text/csv")},
-                data={"user_id": "999999"},  # Non-existent user
-            )
-        assert response.status_code == 404
-        assert "User not found" in response.json()["detail"]
-
-        # Test with completely empty CSV file (line 1015)
         empty_csv = ""
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(empty_csv.encode("utf-8"))
@@ -1098,7 +1101,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("empty.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
         assert response.status_code in [400, 500]
 
@@ -1112,7 +1115,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("whitespace.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
         assert response.status_code in [400, 500]
 
@@ -1126,7 +1129,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("headers_only.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
         assert response.status_code in [400, 500]
 
@@ -1140,7 +1143,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("invalid.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
         assert response.status_code in [400, 500]
 
@@ -1149,18 +1152,21 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("test_questions.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
 
         assert response.status_code == 200
         data = response.json()
+
         assert "Created" in data["message"]
 
         # Check that questions were created
         response = client.get(
-            f"{settings.API_V1_STR}/questions/?organization_id={org_id}"
+            f"{settings.API_V1_STR}/questions/",
+            headers=get_user_superadmin_token,
         )
         questions = response.json()
+
         assert len(questions) >= 4  # Updated to reflect 4 questions
 
         # Check for specific question content
@@ -1188,10 +1194,18 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
                 assert any(tag["name"] == "Chemistry" for tag in question["tags"])
             elif question["question_text"] == "What are prime numbers?":
                 assert any(tag["name"] == "Math" for tag in question["tags"])
-
-        # Check locations were correctly associated
-        for question in questions:
+        csv_question_texts = [
+            "What is 2+2?",
+            "What is the capital of France?",
+            "What is H2O?",
+            "What are prime numbers?",
+        ]
+        csv_questions = [
+            q for q in questions if q["question_text"] in csv_question_texts
+        ]
+        for question in csv_questions:
             locations = question["locations"]
+
             assert len(locations) > 0
             assert any(loc["state_name"] == "Kerala" for loc in locations)
 
@@ -1207,7 +1221,7 @@ What is a prime number?,A number only divisible by 1 and itself,An even number,A
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("bad_tag.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
         assert response.status_code == 200
         data = response.json()
@@ -1225,7 +1239,7 @@ What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geog
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
                 files={"file": ("test_questions_bad_state.csv", file, "text/csv")},
-                data={"user_id": str(user_id)},
+                headers=get_user_superadmin_token,
             )
 
         assert response.status_code == 200
@@ -1266,13 +1280,12 @@ def test_latest_question_revision(
     db.refresh(organization)
 
     # Create user for test
-    user = create_random_user(db)
-    db.refresh(user)
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     question_text = random_lower_string()
     question_data = {
         "organization_id": organization.id,
-        "created_by_id": user.id,
         "question_text": question_text,
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1287,6 +1300,7 @@ def test_latest_question_revision(
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
     data_main_question = response.json()
 
@@ -1308,12 +1322,11 @@ def test_latest_question_revision(
     assert data_main_question["latest_question_revision_id"] == data_revision_1[0]["id"]
     assert data_main_question["question_text"] == data_revision_1[0]["text"]
     assert data_main_question["question_type"] == data_revision_1[0]["type"]
-    assert data_main_question["created_by_id"] == data_revision_1[0]["created_by_id"]
+    assert data_main_question["created_by_id"] == user_id
 
     # Create a new revision with a different user
-    user2 = create_random_user(db)
+
     new_revision_data = {
-        "created_by_id": user2.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
@@ -1327,11 +1340,10 @@ def test_latest_question_revision(
     response = client.post(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
         json=new_revision_data,
+        headers=get_user_superadmin_token,
     )
 
-    user3 = create_random_user(db)
     new_revision_data = {
-        "created_by_id": user3.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.multi_choice,
         "options": [
@@ -1345,6 +1357,7 @@ def test_latest_question_revision(
     response = client.post(
         f"{settings.API_V1_STR}/questions/{data_main_question['id']}/revisions",
         json=new_revision_data,
+        headers=get_user_superadmin_token,
     )
 
     response = client.get(

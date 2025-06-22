@@ -360,7 +360,6 @@ class QuestionCreate(QuestionBase):
     organization_id: int = Field(
         description="ID of the organization that will own this question"
     )
-    created_by_id: int = Field(description="ID of the user creating this question")
     state_ids: list[int] | None = Field(
         default=None, description="IDs of states to associate"
     )
@@ -379,7 +378,7 @@ class QuestionCreate(QuestionBase):
 class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
 
-    created_by_id: int = Field(description="ID of the user creating this revision")
+    pass
 
 
 class QuestionLocationCreate(SQLModel):

@@ -3,12 +3,20 @@ from datetime import datetime
 from io import StringIO
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from sqlalchemy import desc
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, get_current_user
 from app.models import (
     Block,
     CandidateTest,
@@ -182,7 +190,9 @@ def prepare_for_db(
 
 @router.post("/", response_model=QuestionPublic)
 def create_question(
-    question_create: QuestionCreate, session: SessionDep
+    question_create: QuestionCreate,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
     # Create the main question record
@@ -197,7 +207,7 @@ def create_question(
 
     revision = QuestionRevision(
         question_id=question.id,
-        created_by_id=question_create.created_by_id,
+        created_by_id=current_user.id,
         question_text=question_create.question_text,
         instructions=question_create.instructions,
         question_type=question_create.question_type,
@@ -329,9 +339,9 @@ class CandidateTestInfoDict(TypedDict):
 @router.get("/", response_model=list[QuestionPublic])
 def get_questions(
     session: SessionDep,
+    current_user: User = Depends(get_current_user),
     skip: int = 0,
     limit: int = 100,
-    organization_id: int | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
@@ -342,17 +352,16 @@ def get_questions(
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-    query = select(Question)
 
+    query = select(Question).where(
+        Question.organization_id == current_user.organization_id
+    )
     # Apply filters only if they're provided
     if is_deleted is not None:
         query = query.where(Question.is_deleted == is_deleted)
 
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
-
-    if organization_id is not None:
-        query = query.where(Question.organization_id == organization_id)
 
     # Handle tag-based filtering with multiple tags
     if tag_ids:
@@ -609,6 +618,7 @@ def create_question_revision(
     question_id: int,
     revision_data: QuestionRevisionCreate,
     session: SessionDep,
+    current_user: User = Depends(get_current_user),
 ) -> QuestionPublic:
     """Create a new revision for an existing question."""
     question = session.get(Question, question_id)
@@ -620,7 +630,7 @@ def create_question_revision(
 
     new_revision = QuestionRevision(
         question_id=question_id,
-        created_by_id=revision_data.created_by_id,
+        created_by_id=current_user.id,
         question_text=revision_data.question_text,
         instructions=revision_data.instructions,
         question_type=revision_data.question_type,
@@ -1027,7 +1037,9 @@ def remove_question_tag(
 
 @router.post("/bulk-upload", response_model=Message)
 async def upload_questions_csv(
-    session: SessionDep, file: UploadFile = File(...), user_id: int = Form(...)
+    session: SessionDep,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
 ) -> Message:
     """
     Bulk upload questions from a CSV file.
@@ -1039,12 +1051,13 @@ async def upload_questions_csv(
     - State: State name or comma-separated list of states (optional)
     """
     # Verify user exists
+    user_id = current_user.id
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Verify organization exists
-    organization_id = user.organization_id
+    organization_id = current_user.organization_id
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -1246,7 +1259,7 @@ async def upload_questions_csv(
                 # Create the revision with serialized data
                 revision = QuestionRevision(
                     question_id=question.id,
-                    created_by_id=question_create.created_by_id,
+                    created_by_id=user_id,
                     question_text=question_create.question_text,
                     instructions=question_create.instructions,
                     question_type=question_create.question_type,

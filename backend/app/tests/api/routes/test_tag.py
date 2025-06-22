@@ -1,3 +1,4 @@
+# test_helpers.py
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
@@ -5,7 +6,7 @@ from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
 from app.tests.utils.user import create_random_user
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import get_user_data_from_me_route, random_lower_string
 
 
 def setup_user_organization(
@@ -22,13 +23,14 @@ def setup_user_organization(
 def test_create_tagtype(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     user, organization = setup_user_organization(db)
 
     data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
         "organization_id": organization.id,
-        "created_by_id": user.id,
     }
 
     response = client.post(
@@ -36,12 +38,13 @@ def test_create_tagtype(
         json=data,
         headers=get_user_superadmin_token,
     )
+
     response_data = response.json()
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
     assert response_data["organization_id"] == data["organization_id"]
-    assert response_data["created_by_id"] == data["created_by_id"]
+    assert response_data["created_by_id"] == user_id
     assert response_data["is_deleted"] is False
     assert response_data["is_active"] is None
     assert "created_date" in response_data
@@ -50,7 +53,6 @@ def test_create_tagtype(
     data = {
         "name": random_lower_string(),
         "organization_id": organization.id,
-        "created_by_id": user.id,
     }
 
     response = client.post(
@@ -63,7 +65,7 @@ def test_create_tagtype(
     assert response_data["name"] == data["name"]
     assert response_data["description"] is None
     assert response_data["organization_id"] == data["organization_id"]
-    assert response_data["created_by_id"] == data["created_by_id"]
+    assert response_data["created_by_id"] == user_id
     assert response_data["is_deleted"] is False
     assert response_data["is_active"] is None
     assert "created_date" in response_data
@@ -75,12 +77,14 @@ def test_get_tagtype(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
     db.add(tagtype)
     db.commit()
@@ -108,12 +112,14 @@ def test_get_tagtype_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
     db.add(tagtype)
     db.commit()
@@ -138,13 +144,15 @@ def test_update_tagtype_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     user, organization = setup_user_organization(db)
     user_b, organization_b = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
         organization_id=organization.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(tagtype)
     db.commit()
@@ -152,14 +160,12 @@ def test_update_tagtype_by_id(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "organization_id": organization.id,
-        "created_by_id": user.id,
     }
 
     data_b = {
         "name": random_lower_string(),
         "description": random_lower_string(),
         "organization_id": organization_b.id,
-        "created_by_id": user_b.id,
     }
     response = client.put(
         f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
@@ -171,7 +177,7 @@ def test_update_tagtype_by_id(
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
     assert response_data["organization_id"] == tagtype.organization_id
-    assert response_data["created_by_id"] == tagtype.created_by_id
+    assert response_data["created_by_id"] == user_id
     assert response_data["is_deleted"] is False
     assert response_data["is_active"] is None
     assert "created_date" in response_data
@@ -187,7 +193,7 @@ def test_update_tagtype_by_id(
     assert response_data["name"] == data_b["name"]
     assert response_data["description"] == data_b["description"]
     assert response_data["organization_id"] == data_b["organization_id"]
-    assert response_data["created_by_id"] == data_b["created_by_id"]
+    assert response_data["created_by_id"] == user_id
     assert response_data["is_deleted"] is False
     assert response_data["is_active"] is None
     assert "created_date" in response_data
@@ -350,7 +356,7 @@ def test_create_tag(
     )
 
     response_data = response.json()
-    print(response_data)
+
     assert response.status_code == 200
     assert "delete" in response_data["message"]
 
@@ -369,6 +375,9 @@ def test_read_tag(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
+    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
@@ -376,14 +385,13 @@ def test_read_tag(
     response_data = response.json()
     assert response.status_code == 200
 
-    user, organization = setup_user_organization(db)
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
-    user_b = create_random_user(db)
+
     db.add(tagtype)
     db.commit()
 
@@ -391,8 +399,8 @@ def test_read_tag(
         name=random_lower_string(),
         description=random_lower_string(),
         tag_type_id=tagtype.id,
-        created_by_id=user_b.id,
-        organization_id=organization.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
     )
     db.add(tag)
     db.commit()
@@ -404,7 +412,7 @@ def test_read_tag(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-    print("Response Data:", response_data)
+
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
@@ -419,8 +427,8 @@ def test_read_tag(
     tagtype_2 = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
     db.add(tagtype_2)
     db.commit()
@@ -428,8 +436,8 @@ def test_read_tag(
         name=random_lower_string(),
         description=random_lower_string(),
         tag_type_id=tagtype_2.id,
-        created_by_id=user.id,
-        organization_id=organization.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
     )
     db.add(tag_2)
     db.commit()
@@ -448,7 +456,7 @@ def test_read_tag(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-    print("Complete Response Data:", response_data)
+
     assert all(item["name"] != tag_2.name for item in response_data)
     assert all(item["description"] != tag_2.description for item in response_data)
 

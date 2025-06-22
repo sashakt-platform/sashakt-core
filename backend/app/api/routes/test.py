@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import col, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import SessionDep, get_current_user, permission_dependency
 from app.models import (
     Message,
     QuestionRevision,
@@ -17,6 +17,7 @@ from app.models import (
     TestState,
     TestTag,
     TestUpdate,
+    User,
 )
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
@@ -60,11 +61,12 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
 def create_test(
     test_create: TestCreate,
     session: SessionDep,
+    current_user: User = Depends(get_current_user),
 ) -> TestPublic:
     test_data = test_create.model_dump(
         exclude={"tag_ids", "question_revision_ids", "state_ids"}
     )
-
+    test_data["created_by_id"] = current_user.id
     # Auto-generate UUID for link if not provided
     if not test_data.get("link"):
         import uuid
@@ -338,7 +340,10 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     dependencies=[Depends(permission_dependency("update_test"))],
 )
 def update_test(
-    test_id: int, test_update: TestUpdate, session: SessionDep
+    test_id: int,
+    test_update: TestUpdate,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
@@ -431,6 +436,7 @@ def update_test(
             session.commit()
 
     test_data = test_update.model_dump(exclude_unset=True)
+    test_data["created_by_id"] = current_user.id
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()

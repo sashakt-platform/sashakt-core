@@ -6,6 +6,11 @@ from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.models import CandidateTest
 
+if TYPE_CHECKING:
+    from app.models import (
+        User,
+    )
+
 
 class MarksLevelEnum(str, enum.Enum):
     QUESTION = "question"
@@ -13,7 +18,7 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, QuestionRevision, State, User
+    from app.models import Candidate, QuestionRevision, State
     from app.models.tag import Tag
 
 
@@ -149,11 +154,6 @@ class TestBase(SQLModel):
         title="Template ID",
         description="ID of the template from which the test is created.",
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        title="User ID",
-        description="ID of the user who created the test.",
-    )
 
 
 class Test(TestBase, table=True):
@@ -183,6 +183,11 @@ class Test(TestBase, table=True):
     candidates: list["Candidate"] | None = Relationship(
         back_populates="tests", link_model=CandidateTest
     )
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class TestCreate(TestBase):
@@ -201,6 +206,11 @@ class TestPublic(TestBase):
     question_revisions: list["QuestionRevision"]
     states: list["State"]
     total_questions: int | None = None
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class TestUpdate(TestBase):

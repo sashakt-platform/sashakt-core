@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import not_, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import SessionDep, get_current_user, permission_dependency
 from app.models import (
     Message,
     Tag,
@@ -14,6 +14,7 @@ from app.models import (
     TagTypePublic,
     TagTypeUpdate,
     TagUpdate,
+    User,
 )
 
 router_tagtype = APIRouter(
@@ -32,24 +33,48 @@ router_tag = APIRouter(
 
 
 @router_tagtype.post("/", response_model=TagTypePublic)
-def create_tagtype(tagtype_create: TagTypeCreate, session: SessionDep) -> TagType:
-    tagtype = TagType.model_validate(tagtype_create)
-    session.add(tagtype)
+def create_tagtype(
+    tagtype_create: TagTypeCreate,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> TagType:
+    tag_type = TagType(
+        **tagtype_create.model_dump(),
+        created_by_id=current_user.id,
+    )
+
+    session.add(tag_type)
     session.commit()
-    session.refresh(tagtype)
-    return tagtype
+    session.refresh(tag_type)
+    return tag_type
 
 
 @router_tagtype.get("/", response_model=list[TagTypePublic])
-def get_tagtype(session: SessionDep) -> Sequence[TagType]:
-    tagtype = session.exec(select(TagType).where(not_(TagType.is_deleted))).all()
+def get_tagtype(
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> Sequence[TagType]:
+    tagtype = session.exec(
+        select(TagType).where(
+            TagType.organization_id == current_user.organization_id,
+            not_(TagType.is_deleted),
+        )
+    ).all()
     return tagtype
 
 
 @router_tagtype.get("/{tagtype_id}", response_model=TagTypePublic)
-def get_tagtype_by_id(tagtype_id: int, session: SessionDep) -> TagType:
+def get_tagtype_by_id(
+    tagtype_id: int,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> TagType:
     tagtype = session.get(TagType, tagtype_id)
-    if not tagtype or tagtype.is_deleted is True:
+    if (
+        not tagtype
+        or tagtype.is_deleted is True
+        or tagtype.organization_id != current_user.organization_id
+    ):
         raise HTTPException(status_code=404, detail="TagType not found")
     return tagtype
 
@@ -59,11 +84,14 @@ def update_tagtype(
     tagtype_id: int,
     updated_data: TagTypeUpdate,
     session: SessionDep,
+    current_user: User = Depends(get_current_user),
 ) -> TagType:
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype or tagtype.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag Type not found")
+
     tagtype_data = updated_data.model_dump(exclude_unset=True)
+    tagtype_data["created_by_id"] = current_user.id
     tagtype.sqlmodel_update(tagtype_data)
     session.add(tagtype)
     session.commit()
@@ -104,7 +132,11 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
 
 # Create a Tag
 @router_tag.post("/", response_model=TagPublic)
-def create_tag(tag_create: TagCreate, session: SessionDep) -> TagPublic:
+def create_tag(
+    tag_create: TagCreate,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> TagPublic:
     tag_type_id = tag_create.tag_type_id
     tag_type = session.get(TagType, tag_type_id)
     if not tag_type or tag_type.is_deleted is True:
@@ -112,7 +144,9 @@ def create_tag(tag_create: TagCreate, session: SessionDep) -> TagPublic:
     organization_id = tag_type.organization_id
 
     tag_data = tag_create.model_dump(exclude_unset=True)
+
     tag_data["organization_id"] = organization_id
+    tag_data["created_by_id"] = current_user.id
     tag = Tag.model_validate(tag_data)
     session.add(tag)
     session.commit()
@@ -124,12 +158,23 @@ def create_tag(tag_create: TagCreate, session: SessionDep) -> TagPublic:
 
 # Get all Tags
 @router_tag.get("/", response_model=list[TagPublic])
-def get_tags(session: SessionDep) -> Sequence[TagPublic]:
-    tags = session.exec(select(Tag).where(not_(Tag.is_deleted))).all()
+def get_tags(
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> Sequence[TagPublic]:
+    tags = session.exec(
+        select(Tag).where(
+            Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
+        )
+    ).all()
     tag_public = []
     for tag in tags:
         tag_type = session.get(TagType, tag.tag_type_id)
-        if not tag_type or tag_type.is_deleted is True:
+        if (
+            not tag_type
+            or tag_type.is_deleted is True
+            or tag_type.organization_id != current_user.organization_id
+        ):
             continue
         tag_public.append(
             TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
