@@ -212,3 +212,10 @@ class TestCandidatePublic(SQLModel):
 
     # Candidate test info
     candidate_test: "CandidateTestPublic"
+
+
+class Result(SQLModel):
+    correct_answer: int
+    incorrect_answer: int
+    mandatory_not_attempted: int
+    optional_not_attempted: int

@@ -1490,3 +1490,39 @@ def test_valid_ids_option(
     )
 
     assert response.status_code == 422
+
+
+def test_duplicate_option_ids_error_message(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Create organization
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    # Create user for test
+    user = create_random_user(db)
+    db.refresh(user)
+
+    question_data = {
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 1, "key": "B", "value": "Option 2"},  # Duplicate ID
+        ],
+        # Invalid correct answer index
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert "Option IDs must be unique" in response.json()["detail"][0]["msg"]

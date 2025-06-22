@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -14,6 +16,8 @@ from app.models import (
     TestCandidatePublic,
 )
 from app.models.question import QuestionType
+from app.models.test import TestQuestion
+from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import create_random_user
 
 from ...utils.utils import random_lower_string
@@ -1736,3 +1740,420 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
     ).all()
     assert len(answers) == 1
     assert answers[0].response == "10"
+
+
+def test_get_test_result(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,  # Assuming user ID 1 exists
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    # Create a candidate
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    # Create a candidate test
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    questions = [
+        create_random_question_revision(db),
+        create_random_question_revision(db),
+        create_random_question_revision(db),
+        create_random_question_revision(db),
+    ]
+
+    db.add_all(questions)
+    db.commit()
+
+    # Create a Question first
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    new_revision_data = {
+        "created_by_id": user.id,
+        "question_id": question.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+        "is_active": True,
+        "is_deleted": False,
+    }
+    revision = QuestionRevision(**new_revision_data)
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    new_revision_data = {
+        "created_by_id": user.id,
+        "question_id": question.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "apppe"},
+            {"id": 2, "key": "B", "value": "banana"},
+            {"id": 3, "key": "C", "value": "mango"},
+        ],
+        "correct_answer": [3],
+        "is_mandatory": False,
+        "is_active": True,
+        "is_deleted": False,
+    }
+    revision2 = QuestionRevision(**new_revision_data)
+    db.add(revision2)
+    db.commit()
+    db.refresh(revision2)
+    for q in questions:
+        test_question = TestQuestion(test_id=test.id, question_revision_id=q.id)
+        db.add(test_question)
+    test_question1 = TestQuestion(test_id=test.id, question_revision_id=revision.id)
+    test_question2 = TestQuestion(test_id=test.id, question_revision_id=revision2.id)
+    db.add(test_question1)
+    db.add(test_question2)
+    db.commit()
+
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=questions[0].id,
+        response=1,
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=questions[1].id,  # Assuming question revision ID 1 exists
+        response=2,
+        visited=True,
+        time_spent=30,
+    )
+
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision.id,
+        response="2",
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision2.id,
+        response=3,
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    # Call the endpoint
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": str(candidate.identity)},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # assert data["test_id"] == test.id
+    assert data["correct_answer"] == 2
+    assert data["incorrect_answer"] == 2
+    assert data["mandatory_not_attempted"] == 0
+    assert data["optional_not_attempted"] == 0
+
+
+def test_result_with_no_answers(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,  # Assuming user ID 1 exists
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    # Create a candidate
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    # Create a candidate test
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    new_revision_data = {
+        "created_by_id": user.id,
+        "question_id": question.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [3],
+        "is_mandatory": True,
+        "is_active": True,
+        "is_deleted": False,
+    }
+    revision = QuestionRevision(**new_revision_data)
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    question2 = Question(organization_id=org.id)
+    db.add(question2)
+    db.commit()
+    db.refresh(question2)
+
+    new_revision_data = {
+        "created_by_id": user.id,
+        "question_id": question2.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "values 1"},
+            {"id": 2, "key": "B", "value": "values 2"},
+            {"id": 3, "key": "C", "value": " values 3"},
+        ],
+        "correct_answer": [2, 3],
+        "is_mandatory": True,
+        "is_active": True,
+        "is_deleted": False,
+    }
+    revision2 = QuestionRevision(**new_revision_data)
+    db.add(revision2)
+    db.commit()
+    db.refresh(revision2)
+
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision.id,  # Assuming question revision ID 1 exists
+        response="",
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+
+    candidate_test_answer2 = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision2.id,
+        response=[3, 2],
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer2)
+    db.commit()
+    db.refresh(candidate_test_answer2)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0
+
+
+def test_get_test_result_not_found(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    candidate_test_id = 100
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Candidate test not found"
+
+
+def test_convert_to_list_with_int_reponse(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test is of mcq",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+        is_mandatory=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    revision2 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[2],
+        is_mandatory=False,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision2)
+    db.commit()
+    db.refresh(revision2)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision.id,
+        response=[2, 3],  # Integer response
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision2.id,
+        response="",  # Integer response
+        visited=True,
+        time_spent=30,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 0  # Assuming correct answer is option B (2)
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 0
+    assert data["optional_not_attempted"] == 1
