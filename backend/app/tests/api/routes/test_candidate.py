@@ -2376,3 +2376,72 @@ def test_pretest_timer_test_already_started(client: TestClient, db: SessionDep) 
     # Step 5: Assert the result
     assert response.status_code == 400
     assert response.json()["detail"] == "Test has already started"
+
+
+def test_candidate_timer_raises_if_time_limit_not_set(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    test = Test(
+        name="Time Limit Test",
+        description="Test without time limit",
+        start_instructions="Instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        time_limit=None,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Laptop",
+        consent=True,
+        start_time=datetime.now(),
+        end_time=None,
+        is_submitted=False,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    # Assert the API returns 400 with correct message
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Test time limit is not set"
+    test.time_limit = 60
+
+    candidate_test.end_time = None
+    db.add(candidate_test)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Test end time is not set"
+
+
+def test_candidate_prestart_timer_candidate_test_not_found(client: TestClient) -> None:
+    # Try accessing a non-existing candidate test ID (e.g., 99999)
+    response = client.get(f"{settings.API_V1_STR}/candidate/pretest_timer/99999")
+
+    # Assert 404 response
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Candidate test not found"
