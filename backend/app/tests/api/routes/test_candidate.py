@@ -2203,7 +2203,6 @@ def test_candidate_timer_with_specific_dates(
     db.refresh(candidate_test)
 
     response = client.get(f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}")
-    print("datetime4", response.json())
 
     assert response.status_code == 200
     data = response.json()
@@ -2332,7 +2331,7 @@ def test_pretest_timer_returns_time_left(client: TestClient, db: SessionDep) -> 
         f"{settings.API_V1_STR}/candidate/pretest_timer/{candidate_test.id}"
     )
     minutes_left = response.json()
-    print("minutes_left", minutes_left)
+
     assert response.status_code == 200
 
     assert isinstance(minutes_left, float)

@@ -733,7 +733,7 @@ def test_get_test_by_filter_description(
 def test_get_test_by_filter_start_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    db.exec(delete(Test))
+    db.execute(delete(Test))
     db.commit()
     user = create_random_user(db)
 
