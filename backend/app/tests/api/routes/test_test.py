@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
@@ -733,6 +733,8 @@ def test_get_test_by_filter_description(
 def test_get_test_by_filter_start_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
+    db.exec(delete(Test))
+    db.commit()
     user = create_random_user(db)
 
     test_1 = Test(
@@ -778,6 +780,7 @@ def test_get_test_by_filter_start_time(
 
     assert response.status_code == 200
     data = response.json()
+
     assert len(data) == 4
 
     response = client.get(
