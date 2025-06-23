@@ -55,14 +55,14 @@ from .question import (
     QuestionCandidatePublic,
     QuestionCreate,
     QuestionLocation,
-    QuestionLocationItem,
     QuestionLocationPublic,
-    QuestionLocationsCreate,
+    QuestionLocationsUpdate,
+    QuestionLocationUpdateItem,
     QuestionPublic,
     QuestionRevision,
     QuestionRevisionCreate,
     QuestionTag,
-    QuestionTagsCreate,
+    QuestionTagsUpdate,
     QuestionUpdate,
 )
 from .role import Role, RoleCreate, RolePermission, RolePublic, RolesPublic, RoleUpdate
@@ -191,9 +191,9 @@ __all__ = [
     "PermissionsPublic",
     "PermissionUpdate",
     "RolePermission",
-    "QuestionLocationItem",
-    "QuestionLocationsCreate",
-    "QuestionTagsCreate",
+    "QuestionLocationUpdateItem",
+    "QuestionLocationsUpdate",
+    "QuestionTagsUpdate",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete

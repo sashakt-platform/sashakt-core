@@ -10,21 +10,19 @@ from typing_extensions import TypedDict
 
 from app.api.deps import SessionDep
 from app.models import (
-    Block,
     CandidateTest,
-    District,
     Message,
     Organization,
     Question,
     QuestionCreate,
     QuestionLocation,
     QuestionLocationPublic,
-    QuestionLocationsCreate,
+    QuestionLocationsUpdate,
     QuestionPublic,
     QuestionRevision,
     QuestionRevisionCreate,
     QuestionTag,
-    QuestionTagsCreate,
+    QuestionTagsUpdate,
     QuestionUpdate,
     State,
     Tag,
@@ -765,166 +763,72 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     )
 
 
-@router.post("/{question_id}/locations", response_model=list[QuestionLocationPublic])
-def add_question_locations(
+@router.put("/{question_id}/locations", response_model=list[QuestionLocationPublic])
+def update_question_locations(
     question_id: int,
-    location_data: QuestionLocationsCreate,
+    location_data: QuestionLocationsUpdate,
     session: SessionDep,
 ) -> list[QuestionLocationPublic]:
-    """Add one or more locations to a question."""
+    """
+    Update all locations for a question by syncing the provided list.
+    This will add new locations and remove any existing ones not in the list.
+    """
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    locations_to_add = location_data.locations
-    if not locations_to_add:
-        raise HTTPException(status_code=400, detail="No location data provided")
-
-    results = []
-    for loc_data in locations_to_add:
-        # Determine which location type is being added
-        location = None
-
-        if loc_data.state_id:
-            # Check if this state is already associated
-            existing_query = select(QuestionLocation).where(
-                QuestionLocation.question_id == question_id,
-                QuestionLocation.state_id == loc_data.state_id,
-            )
-            if session.exec(existing_query).first():
-                continue  # Skip already associated states
-
-            location = QuestionLocation(
-                question_id=question_id,
-                state_id=loc_data.state_id,
-                district_id=None,
-                block_id=None,
-            )
-        elif loc_data.district_id:
-            # Check if this district is already associated
-            existing_query = select(QuestionLocation).where(
-                QuestionLocation.question_id == question_id,
-                QuestionLocation.district_id == loc_data.district_id,
-            )
-            if session.exec(existing_query).first():
-                continue  # Skip already associated districts
-
-            location = QuestionLocation(
-                question_id=question_id,
-                state_id=None,
-                district_id=loc_data.district_id,
-                block_id=None,
-            )
-        elif loc_data.block_id:
-            # Check if this block is already associated
-            existing_query = select(QuestionLocation).where(
-                QuestionLocation.question_id == question_id,
-                QuestionLocation.block_id == loc_data.block_id,
-            )
-            if session.exec(existing_query).first():
-                continue  # Skip already associated blocks
-
-            location = QuestionLocation(
-                question_id=question_id,
-                state_id=None,
-                district_id=None,
-                block_id=loc_data.block_id,
-            )
-        else:
-            continue  # Skip invalid location data
-
-        if location:
-            session.add(location)
-            session.flush()  # Flush to get the ID before processing names
-
-            # Get related location names for response
-            state_name = None
-            district_name = None
-            block_name = None
-
-            if location.state_id:
-                state = session.get(State, location.state_id)
-                if state:
-                    state_name = state.name
-
-            if location.district_id:
-                district = session.get(District, location.district_id)
-                if district:
-                    district_name = district.name
-
-            if location.block_id:
-                block = session.get(Block, location.block_id)
-                if block:
-                    block_name = block.name
-
-            if location.id is not None:
-                results.append(
-                    QuestionLocationPublic(
-                        id=location.id,
-                        state_id=location.state_id,
-                        district_id=location.district_id,
-                        block_id=location.block_id,
-                        state_name=state_name,
-                        district_name=district_name,
-                        block_name=block_name,
-                    )
-                )
-
-    session.commit()
-    return results
-
-
-@router.delete("/{question_id}/locations/{location_id}", response_model=Message)
-def remove_question_location(
-    question_id: int,
-    location_id: int,
-    session: SessionDep,
-) -> Message:
-    """Remove a location from a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Find the location
-    location = session.get(QuestionLocation, location_id)
-    if not location or location.question_id != question_id:
-        raise HTTPException(
-            status_code=404, detail="Location not found for this question"
-        )
-
-    # Delete the location
-    session.delete(location)
-    session.commit()
-
-    return Message(message="Location removed from question successfully")
-
-
-@router.delete("/{question_id}/locations", response_model=Message)
-def remove_question_locations(
-    question_id: int,
-    session: SessionDep,
-    location_ids: list[int] = Query(..., description="Location IDs to remove"),
-) -> Message:
-    """Remove multiple locations from a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    if not location_ids:
-        raise HTTPException(status_code=400, detail="No location IDs provided")
-
-    deleted_count = 0
-    for location_id in location_ids:
-        # Find the location
-        location = session.get(QuestionLocation, location_id)
-        if location and location.question_id == question_id:
-            session.delete(location)
-            deleted_count += 1
-
-    session.commit()
-    return Message(
-        message=f"Removed {deleted_count} location(s) from question successfully"
+    # Get current locations
+    current_locations_query = select(QuestionLocation).where(
+        QuestionLocation.question_id == question_id
     )
+    current_locations = session.exec(current_locations_query).all()
+    current_location_set = {
+        (loc.state_id, loc.district_id, loc.block_id): loc for loc in current_locations
+    }
+
+    # Get desired locations from the request
+    desired_location_set = {
+        (
+            loc.state_id,
+            loc.district_id,
+            loc.block_id,
+        )
+        for loc in location_data.locations
+    }
+
+    # Determine locations to remove
+    locations_to_remove = [
+        loc
+        for key, loc in current_location_set.items()
+        if key not in desired_location_set
+    ]
+    for loc in locations_to_remove:
+        session.delete(loc)
+
+    # Determine locations to add
+    current_simple_set = set(current_location_set.keys())
+    for loc_item in location_data.locations:
+        key = (loc_item.state_id, loc_item.district_id, loc_item.block_id)
+        if key not in current_simple_set:
+            new_location = QuestionLocation(
+                question_id=question_id,
+                state_id=loc_item.state_id,
+                district_id=loc_item.district_id,
+                block_id=loc_item.block_id,
+            )
+            session.add(new_location)
+
+    session.commit()
+
+    # Return the new state of locations
+    final_locations_query = select(QuestionLocation).where(
+        QuestionLocation.question_id == question_id
+    )
+    final_locations = session.exec(final_locations_query).all()
+    return [
+        QuestionLocationPublic.model_validate(loc, from_attributes=True)
+        for loc in final_locations
+    ]
 
 
 @router.get("/{question_id}/tags", response_model=list[TagPublic])
@@ -961,131 +865,50 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     return result
 
 
-@router.post("/{question_id}/tags", response_model=list[QuestionTagResponse])
-def add_question_tags(
+@router.put("/{question_id}/tags", response_model=list[TagPublic])
+def update_question_tags(
     question_id: int,
-    tag_data: QuestionTagsCreate,
+    tag_data: QuestionTagsUpdate,
     session: SessionDep,
-) -> list[QuestionTagResponse]:
-    """Add one or more tags to a question."""
+) -> list[TagPublic]:
+    """
+    Update all tags for a question by syncing the provided list of tag IDs.
+    This will add new tags and remove any existing ones not in the list.
+    """
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    tag_ids = tag_data.tag_ids
-    if not tag_ids:
-        raise HTTPException(status_code=400, detail="No tag IDs provided")
-
-    results = []
-    for tag_id in tag_ids:
-        # Check if tag exists
-        tag = session.get(Tag, tag_id)
-        if not tag:
-            continue  # Skip non-existent tags
-
-        # Check if relationship already exists
-        existing_query = select(QuestionTag).where(
-            QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_id
-        )
-        existing = session.exec(existing_query).first()
-        if existing and existing.id is not None and existing.created_date is not None:
-            results.append(
-                QuestionTagResponse(
-                    id=existing.id,
-                    question_id=existing.question_id,
-                    tag_id=existing.tag_id,
-                    tag_name=tag.name,
-                    created_date=existing.created_date,
-                )
-            )
-            continue
-
-        # Create new relationship
-        question_tag = QuestionTag(
-            question_id=question_id,
-            tag_id=tag_id,
-        )
-        session.add(question_tag)
-        session.flush()  # Flush to get the ID before commit
-
-        # Ensure we have valid ID after flush
-        if question_tag.id is not None and question_tag.created_date is not None:
-            results.append(
-                QuestionTagResponse(
-                    id=question_tag.id,
-                    question_id=question_tag.question_id,
-                    tag_id=question_tag.tag_id,
-                    tag_name=tag.name,
-                    created_date=question_tag.created_date,
-                )
-            )
-
-    session.commit()
-    return results
-
-
-@router.delete("/{question_id}/tags/{tag_id}", response_model=Message)
-def remove_question_tag(
-    question_id: int,
-    tag_id: int,
-    session: SessionDep,
-) -> Message:
-    """Remove a tag from a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Find the tag
-    tag = session.get(Tag, tag_id)
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-    # Find the question-tag relationship
-    question_tag_query = select(QuestionTag).where(
-        QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_id
+    # Get current tags
+    current_tags_query = select(QuestionTag).where(
+        QuestionTag.question_id == question_id
     )
-    question_tag = session.exec(question_tag_query).first()
+    current_tags = session.exec(current_tags_query).all()
+    current_tag_ids = {qt.tag_id for qt in current_tags}
 
-    if not question_tag:
-        raise HTTPException(
-            status_code=404, detail="Tag not associated with this question"
-        )
+    # Get desired tags from the request
+    desired_tag_ids = set(tag_data.tag_ids)
 
-    # Delete the relationship
-    session.delete(question_tag)
-    session.commit()
+    # Determine tags to remove
+    tags_to_remove_ids = current_tag_ids - desired_tag_ids
+    if tags_to_remove_ids:
+        for qt in current_tags:
+            if qt.tag_id in tags_to_remove_ids:
+                session.delete(qt)
 
-    return Message(message="Tag removed from question successfully")
-
-
-@router.delete("/{question_id}/tags", response_model=Message)
-def remove_question_tags(
-    question_id: int,
-    session: SessionDep,
-    tag_ids: list[int] = Query(..., description="Tag IDs to remove"),
-) -> Message:
-    """Remove multiple tags from a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    if not tag_ids:
-        raise HTTPException(status_code=400, detail="No tag IDs provided")
-
-    deleted_count = 0
-    for tag_id in tag_ids:
-        # Find the question-tag relationship
-        question_tag_query = select(QuestionTag).where(
-            QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_id
-        )
-        question_tag = session.exec(question_tag_query).first()
-
-        if question_tag:
-            session.delete(question_tag)
-            deleted_count += 1
+    # Determine tags to add
+    tags_to_add_ids = desired_tag_ids - current_tag_ids
+    for tag_id in tags_to_add_ids:
+        # Optional: Check if tag exists
+        tag = session.get(Tag, tag_id)
+        if tag:
+            question_tag = QuestionTag(question_id=question_id, tag_id=tag_id)
+            session.add(question_tag)
 
     session.commit()
-    return Message(message=f"Removed {deleted_count} tag(s) from question successfully")
+
+    # Return the new list of tags for the question
+    return get_question_tags(question_id=question_id, session=session)
 
 
 @router.post("/bulk-upload", response_model=Message)

@@ -382,14 +382,16 @@ class QuestionRevisionCreate(QuestionBase):
     created_by_id: int = Field(description="ID of the user creating this revision")
 
 
-class QuestionTagsCreate(SQLModel):
-    """Data needed to add one or more tags to a question."""
+class QuestionTagsUpdate(SQLModel):
+    """Data to update all tags for a question."""
 
-    tag_ids: list[int] = Field(description="IDs of tags to associate with the question")
+    tag_ids: list[int] = Field(
+        description="The complete list of tag IDs to associate with the question"
+    )
 
 
-class QuestionLocationItem(SQLModel):
-    """Item for specifying a location to add to a question."""
+class QuestionLocationUpdateItem(SQLModel):
+    """Item for specifying a location to associate with a question."""
 
     # Only one of these should be provided
     state_id: int | None = Field(
@@ -403,11 +405,11 @@ class QuestionLocationItem(SQLModel):
     )
 
 
-class QuestionLocationsCreate(SQLModel):
-    """Data needed to add one or more locations to a question."""
+class QuestionLocationsUpdate(SQLModel):
+    """Data to update all locations for a question."""
 
-    locations: list[QuestionLocationItem] = Field(
-        description="List of locations to associate with the question"
+    locations: list[QuestionLocationUpdateItem] = Field(
+        description="The complete list of locations to associate with the question"
     )
 
 
