@@ -2300,7 +2300,7 @@ def test_public_timer_when_test_already_started(
         link="public-test-uuid",
         is_active=True,
         is_deleted=False,
-        start_time=datetime.now() - timedelta(minutes=20),
+        start_time=datetime(2024, 5, 24, 9, 0, 0),
         end_time=datetime.now() + timedelta(days=1),
         created_by_id=create_random_user(db).id,
     )
@@ -2310,7 +2310,6 @@ def test_public_timer_when_test_already_started(
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-
     assert "time_left_seconds" in data
     assert data["time_left_seconds"] == "0"
 
