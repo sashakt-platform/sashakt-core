@@ -573,8 +573,15 @@ def get_test_result(
     )
 
 
-@router.get("/timer/{candidate_test_id}")
-def get_time_left(candidate_test_id: int, session: SessionDep) -> dict[str, str]:
+@router.get("/time_left/{candidate_test_id}")
+def get_time_left(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> dict[str, str]:
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
     candidate_test = session.exec(
         select(CandidateTest).where(CandidateTest.id == candidate_test_id)
     ).first()
@@ -586,38 +593,28 @@ def get_time_left(candidate_test_id: int, session: SessionDep) -> dict[str, str]
         raise HTTPException(status_code=404, detail="Associated test not found")
     current_time = datetime.now()
     if not candidate_test.start_time:
-        raise HTTPException(status_code=400, detail="Test has not started yet")
+        return {"time_left": "0"}
+    start_time = candidate_test.start_time
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+
     elapsed_time = current_time - candidate_test.start_time
-
-    if test.time_limit is None:
-        raise HTTPException(status_code=400, detail="Test time limit is not set")
-    remaining_by_limit = timedelta(minutes=float(test.time_limit)) - elapsed_time
-    if test.end_time is None:
-        raise HTTPException(status_code=400, detail="Test end time is not set")
-    remaining_by_endtime = test.end_time - current_time
-    final_time_left = min(remaining_by_limit, remaining_by_endtime)
-
+    remaining_times = []
+    if test.time_limit is not None:
+        remaining_by_limit = timedelta(minutes=float(test.time_limit)) - elapsed_time
+        remaining_times.append(remaining_by_limit)
+    if test.end_time is not None:
+        remaining_by_endtime = test.end_time - current_time
+        remaining_times.append(remaining_by_endtime)
+    if not remaining_times:
+        return {
+            "time_left": "0",
+            "message": "No time limit or end time is set for this test.",
+        }
+    final_time_left = min(remaining_times)
     if final_time_left.total_seconds() <= 0:
-        raise HTTPException(status_code=400, detail="Time is over")
-    time_left_str = str(final_time_left).split(".")[0]  # remove microseconds
+        return {"time_left": "0"}
 
-    return {"time_left": time_left_str}
-
-
-@router.get("/pretest_timer/{candidate_test_id}")
-def get_time_before_test_start(candidate_test_id: int, session: SessionDep) -> float:
-    candidate_test = session.exec(
-        select(CandidateTest).where(CandidateTest.id == candidate_test_id)
-    ).first()
-    if not candidate_test:
-        raise HTTPException(status_code=404, detail="Candidate test not found")
-    test = session.exec(select(Test).where(Test.id == candidate_test.test_id)).first()
-    if not test:
-        raise HTTPException(status_code=404, detail="Associated test not found")
-    current_time = datetime.now()
-    if not test.start_time:
-        raise HTTPException(status_code=400, detail="Test start time not defined")
-    if current_time >= test.start_time:
-        raise HTTPException(status_code=400, detail="Test has already started")
-    minutes_left = (test.start_time - current_time).total_seconds() / 60
-    return round(minutes_left, 2)
+    time_left_seconds = int(final_time_left.total_seconds())
+    time_left_str = str(time_left_seconds)
+    return {"time_left_seconds": time_left_str}

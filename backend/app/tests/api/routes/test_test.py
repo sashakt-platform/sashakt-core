@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import delete, select
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
@@ -733,8 +733,6 @@ def test_get_test_by_filter_description(
 def test_get_test_by_filter_start_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    db.execute(delete(Test))
-    db.commit()
     user = create_random_user(db)
 
     test_1 = Test(
@@ -743,7 +741,7 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 25, 10, 30),
+        start_time=datetime(2025, 7, 25, 10, 30),
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -751,7 +749,7 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 27, 12, 30),
+        start_time=datetime(2025, 7, 27, 12, 30),
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -759,7 +757,7 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 28, 15, 30),
+        start_time=datetime(2025, 7, 28, 15, 30),
     )
 
     test_4 = Test(
@@ -768,13 +766,13 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 28, 19, 30),
+        start_time=datetime(2025, 7, 28, 19, 30),
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-25T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-25T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -784,7 +782,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 4
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-27T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -793,7 +791,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -802,7 +800,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-28T15:30:59Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
@@ -811,7 +809,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-28T19:31:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -820,7 +818,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 0
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-24T00:00:00Z&start_time_lte=2025-04-26T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-24T00:00:00Z&start_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -829,7 +827,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-27T12:30:00Z&start_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T12:30:00Z&start_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -838,7 +836,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_lte=2025-07-28T15:30:00Z&start_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -858,7 +856,7 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 25, 10, 30),
+        end_time=datetime(2025, 7, 25, 10, 30),
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -866,7 +864,7 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 27, 12, 30),
+        end_time=datetime(2025, 7, 27, 12, 30),
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -874,7 +872,7 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 28, 15, 30),
+        end_time=datetime(2025, 7, 28, 15, 30),
     )
 
     test_4 = Test(
@@ -883,13 +881,13 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 28, 19, 30),
+        end_time=datetime(2025, 7, 28, 19, 30),
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-25T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-25T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -898,7 +896,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 4
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-27T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -907,7 +905,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -916,7 +914,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-28T15:30:59Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
@@ -925,7 +923,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-28T19:31:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -934,7 +932,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 0
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-24T00:00:00Z&end_time_lte=2025-04-26T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-24T00:00:00Z&end_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -943,7 +941,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-27T12:30:00Z&end_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T12:30:00Z&end_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -952,7 +950,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_lte=2025-07-28T15:30:00Z&end_time_lte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -2270,3 +2268,96 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     assert response.status_code == 404
     assert "Test not found or not active" in response.json()["detail"]
+
+
+def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -> None:
+    future_start_time = datetime.now() + timedelta(minutes=10)  # 10 minutes from now
+    test = Test(
+        name="Public Start Timer Test",
+        link="public-test-uuid",
+        is_active=True,
+        is_deleted=False,
+        start_time=future_start_time,
+        created_by_id=create_random_user(db).id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
+    assert response.status_code == 200
+    data = response.json()
+    assert "time_left_seconds" in data
+    assert data["time_left_seconds"].isdigit()
+    time_left = int(data["time_left_seconds"])
+    assert 590 <= time_left <= 600
+
+
+def test_public_timer_when_test_already_started(
+    client: TestClient, db: SessionDep
+) -> None:
+    test = Test(
+        name="Public Start Timer Test",
+        link="public-test-uuid",
+        is_active=True,
+        is_deleted=False,
+        start_time=datetime.now() - timedelta(minutes=10),
+        end_time=datetime.now() + timedelta(days=1),
+        created_by_id=create_random_user(db).id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "time_left" in data
+    assert data["time_left"] == "0"
+
+
+def test_public_timer_test_not_found_or_not_active(
+    client: TestClient, db: SessionDep
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/test/public/time_left/nonexistent-test-link"
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test not found or not active"
+    user = create_random_user(db)
+    deleted_test = Test(
+        name="Deleted Test",
+        link="deleted-test-link",
+        start_time=datetime.now() + timedelta(minutes=10),
+        end_time=datetime.now() + timedelta(hours=2),
+        time_limit=60,
+        is_active=True,
+        is_deleted=True,  # Marked as deleted
+        created_by_id=user.id,
+    )
+    db.add(deleted_test)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test not found or not active"
+
+
+def test_public_timer_returns_zero_if_start_time_none(
+    client: TestClient, db: SessionDep
+) -> None:
+    test = Test(
+        name="Test with no start time",
+        link="test-no-start-time",
+        is_active=True,
+        is_deleted=False,
+        start_time=None,  # This is the key for this test
+        created_by_id=create_random_user(db).id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {"time_left": "0"}

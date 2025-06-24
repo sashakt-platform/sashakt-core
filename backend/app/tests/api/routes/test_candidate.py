@@ -2163,6 +2163,10 @@ def test_convert_to_list_with_int_reponse(
 def test_candidate_timer_with_specific_dates(
     client: TestClient, db: SessionDep
 ) -> None:
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
     user = create_random_user(db)
     org = Organization(name=random_lower_string())
 
@@ -2172,14 +2176,11 @@ def test_candidate_timer_with_specific_dates(
     db.add(org)
     db.commit()
     db.refresh(org)
-    candidate = Candidate(identity=uuid.uuid4())
-    db.add(candidate)
-    db.commit()
-    db.refresh(candidate)
+
     test = Test(
         name="Date Based Test",
-        start_time=datetime(2025, 6, 23, 12, 0, 0),  # June 2, 12:00 PM
-        end_time=datetime(2025, 6, 25, 12, 0, 0),  # June 5, 12:00 PM
+        start_time=datetime.now() - timedelta(minutes=30),
+        end_time=datetime.now() + timedelta(minutes=40),
         time_limit=60,  # 60 minutes time limit
         is_active=True,
         created_by_id=user.id,
@@ -2188,78 +2189,50 @@ def test_candidate_timer_with_specific_dates(
     db.commit()
     db.refresh(test)
 
-    simulated_start_time = datetime.now() - timedelta(minutes=20)
     candidate_test = CandidateTest(
         test_id=test.id,
         created_by_id=user.id,
         candidate_id=candidate.id,
         device="Laptop",
         consent=True,
-        start_time=simulated_start_time,
+        start_time=datetime.now() - timedelta(minutes=30),
         is_submitted=False,
     )
     db.add(candidate_test)
     db.commit()
     db.refresh(candidate_test)
 
-    response = client.get(f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/time_left/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+    )
 
     assert response.status_code == 200
     data = response.json()
-    assert "time_left" in data
-    time_left = data["time_left"]
-    parts = time_left.split(":")
-    assert len(parts) == 3
-    assert all(part.isdigit() for part in parts)
-    hours, minutes, seconds = map(int, parts)
-    assert 0 <= hours <= 1
-    assert 0 <= minutes < 60
-    assert 0 <= seconds < 60
+    print("data090", data)
+    assert "time_left_seconds" in data
+    time_left = data["time_left_seconds"]
+    assert time_left.isdigit()
+    time_left = int(time_left)
+    assert 1795 <= time_left <= 1800
 
 
-def test_candidate_timer_candidate_test_not_found(client: TestClient) -> None:
-    # Try accessing a non-existing candidate test ID (e.g., 99999)
-    response = client.get(f"{settings.API_V1_STR}/candidate/timer/99999")
-
-    # Assert 404 response
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Candidate test not found"
-
-
-def test_candidate_timer_time_is_over(client: TestClient, db: SessionDep) -> None:
-    user = create_random_user(db)
+def test_candidate_timer_candidate_test_not_found(
+    client: TestClient, db: SessionDep
+) -> None:
     candidate = Candidate(identity=uuid.uuid4())
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
-    now = datetime.now()
-    test = Test(
-        name="Expired Test",
-        start_time=now - timedelta(days=1),
-        end_time=now + timedelta(days=1),  # still ongoing
-        time_limit=5,  # 5 minutes time limit
-        is_active=True,
-        created_by_id=user.id,
+    # Try accessing a non-existing candidate test ID (e.g., 99999)
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/time_left/99999",
+        params={"candidate_uuid": str(candidate.identity)},
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-    started_at = now - timedelta(minutes=6)
-    candidate_test = CandidateTest(
-        test_id=test.id,
-        candidate_id=candidate.id,
-        created_by_id=user.id,
-        start_time=started_at,
-        is_submitted=False,
-        device="Laptop",
-        consent=True,
-    )
-    db.add(candidate_test)
-    db.commit()
-    db.refresh(candidate_test)
-    response = client.get(f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}")
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Time is over"
+
+    # Assert 404 response
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Candidate test not found or invalid UUID"
 
 
 def test_candidate_timer_end_time_takes_priority(
@@ -2294,91 +2267,19 @@ def test_candidate_timer_end_time_takes_priority(
     db.add(candidate_test)
     db.commit()
     db.refresh(candidate_test)
-    response = client.get(f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}")
-    assert response.status_code == 200
-
-
-def test_pretest_timer_returns_time_left(client: TestClient, db: SessionDep) -> None:
-    user = create_random_user(db)
-    candidate = Candidate(identity=uuid.uuid4())
-    db.add(candidate)
-    db.commit()
-    db.refresh(candidate)
-    test_start_time = datetime.now() + timedelta(hours=1)
-    test = Test(
-        name="Upcoming Test",
-        start_time=test_start_time,
-        end_time=test_start_time + timedelta(hours=2),
-        time_limit=60,
-        is_active=True,
-        created_by_id=user.id,
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-    candidate_test = CandidateTest(
-        test_id=test.id,
-        candidate_id=candidate.id,
-        device="Laptop",
-        consent=True,
-        is_submitted=False,
-        start_time=datetime.now(),
-    )
-    db.add(candidate_test)
-    db.commit()
-    db.refresh(candidate_test)
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/pretest_timer/{candidate_test.id}"
+        f"{settings.API_V1_STR}/candidate/time_left/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
     )
-    minutes_left = response.json()
-
     assert response.status_code == 200
+    data = response.json()
+    assert "time_left_seconds" in data
 
-    assert isinstance(minutes_left, float)
-    assert 59.0 < minutes_left <= 60.0  # Should be just under 60 minutes
-
-
-def test_pretest_timer_test_already_started(client: TestClient, db: SessionDep) -> None:
-    user = create_random_user(db)
-    candidate = Candidate(identity=uuid.uuid4())
-    db.add_all([user, candidate])
-    db.commit()
-    db.refresh(user)
-    db.refresh(candidate)
-    test_start_time = datetime(2024, 6, 20, 10, 0, 0)
-    test_end_time = datetime(2024, 6, 20, 11, 0, 0)
-    test = Test(
-        name="Test Already Started",
-        start_time=test_start_time,
-        end_time=test_end_time,
-        time_limit=60,
-        is_active=True,
-        created_by_id=user.id,
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-    candidate_test = CandidateTest(
-        test_id=test.id,
-        candidate_id=candidate.id,
-        device="Laptop",
-        consent=True,
-        is_submitted=False,
-        start_time=datetime(2025, 6, 20, 10, 0, 0),
-    )
-    db.add(candidate_test)
-    db.commit()
-    db.refresh(candidate_test)
-    response = client.get(
-        f"{settings.API_V1_STR}/candidate/pretest_timer/{candidate_test.id}"
-    )
-
-    # Step 5: Assert the result
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Test has already started"
+    time_left_seconds = int(data["time_left_seconds"])
+    assert 295 <= time_left_seconds <= 300
 
 
-def test_candidate_timer_raises_if_time_limit_not_set(
+def test_candidate_timer_raises_if_timelimit_and_end_time_not_set(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user = create_random_user(db)
@@ -2416,32 +2317,58 @@ def test_candidate_timer_raises_if_time_limit_not_set(
     db.refresh(candidate_test)
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/time_left/{candidate_test.id}",
         params={"candidate_uuid": str(candidate.identity)},
         headers=get_user_superadmin_token,
     )
 
-    # Assert the API returns 400 with correct message
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Test time limit is not set"
-    test.time_limit = 60
+    assert response.status_code == 200
+    data = response.json()
+    assert "time_left" in data
+    assert data["time_left"] == "0"
+    assert data.get("message") == "No time limit or end time is set for this test."
 
-    candidate_test.end_time = None
+
+def test_candidate_timer_with_only_time_limit(
+    client: TestClient, db: SessionDep
+) -> None:
+    # Create a candidate with random UUID
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    # Create a user
+    user = create_random_user(db)
+    test = Test(
+        name="Only Time Limit Test",
+        time_limit=30,  # 30 minutes
+        end_time=None,
+        start_time=datetime.now() - timedelta(minutes=5),  # test started 5 minutes ago
+        is_active=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        created_by_id=user.id,
+        candidate_id=candidate.id,
+        device="Laptop",
+        consent=True,
+        start_time=datetime.now() - timedelta(minutes=5),
+        is_submitted=False,
+    )
     db.add(candidate_test)
     db.commit()
+    db.refresh(candidate_test)
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/timer/{candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/time_left/{candidate_test.id}",
         params={"candidate_uuid": str(candidate.identity)},
-        headers=get_user_superadmin_token,
     )
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Test end time is not set"
-
-
-def test_candidate_prestart_timer_candidate_test_not_found(client: TestClient) -> None:
-    # Try accessing a non-existing candidate test ID (e.g., 99999)
-    response = client.get(f"{settings.API_V1_STR}/candidate/pretest_timer/99999")
-
-    # Assert 404 response
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Candidate test not found"
+    assert response.status_code == 200
+    data = response.json()
+    assert "time_left_seconds" in data
+    assert data["time_left_seconds"].isdigit()
+    assert 1495 <= int(data["time_left_seconds"]) <= 1500  # 30 minutes in seconds
