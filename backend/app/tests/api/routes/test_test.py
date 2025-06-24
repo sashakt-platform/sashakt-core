@@ -950,7 +950,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_lte=2025-07-28T15:30:00Z&end_time_lte=2025-07-25T10:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_lte=2025-07-28T15:30:00Z&end_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -2300,7 +2300,7 @@ def test_public_timer_when_test_already_started(
         link="public-test-uuid",
         is_active=True,
         is_deleted=False,
-        start_time=datetime.now() - timedelta(minutes=10),
+        start_time=datetime.now() - timedelta(minutes=20),
         end_time=datetime.now() + timedelta(days=1),
         created_by_id=create_random_user(db).id,
     )
@@ -2311,8 +2311,8 @@ def test_public_timer_when_test_already_started(
     assert response.status_code == 200
     data = response.json()
 
-    assert "time_left" in data
-    assert data["time_left"] == "0"
+    assert "time_left_seconds" in data
+    assert data["time_left_seconds"] == "0"
 
 
 def test_public_timer_test_not_found_or_not_active(
@@ -2360,4 +2360,4 @@ def test_public_timer_returns_zero_if_start_time_none(
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-    assert data == {"time_left": "0"}
+    assert data == {"time_left_seconds": "0"}

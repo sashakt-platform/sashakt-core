@@ -592,8 +592,7 @@ def get_time_left(
     if not test:
         raise HTTPException(status_code=404, detail="Associated test not found")
     current_time = datetime.now()
-    if not candidate_test.start_time:
-        return {"time_left": "0"}
+
     start_time = candidate_test.start_time
     if start_time.tzinfo is None:
         start_time = start_time.replace(tzinfo=timezone.utc)
@@ -608,12 +607,12 @@ def get_time_left(
         remaining_times.append(remaining_by_endtime)
     if not remaining_times:
         return {
-            "time_left": "0",
+            "time_left_seconds": "0",
             "message": "No time limit or end time is set for this test.",
         }
     final_time_left = min(remaining_times)
     if final_time_left.total_seconds() <= 0:
-        return {"time_left": "0"}
+        return {"time_left_seconds": "0"}
 
     time_left_seconds = int(final_time_left.total_seconds())
     time_left_str = str(time_left_seconds)

@@ -522,10 +522,10 @@ def get_time_before_test_start_public(
     if not test or test.is_deleted or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     if test.start_time is None:
-        return {"time_left": "0"}
+        return {"time_left_seconds": "0"}
     current_time = datetime.now()
     start_time = test.start_time
     if current_time >= start_time:
-        return {"time_left": "0"}
+        return {"time_left_seconds": "0"}
     seconds_left = (start_time - current_time).total_seconds()
     return {"time_left_seconds": str(int(seconds_left))}

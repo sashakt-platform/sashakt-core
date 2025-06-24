@@ -2324,8 +2324,8 @@ def test_candidate_timer_raises_if_timelimit_and_end_time_not_set(
 
     assert response.status_code == 200
     data = response.json()
-    assert "time_left" in data
-    assert data["time_left"] == "0"
+    assert "time_left_seconds" in data
+    assert data["time_left_seconds"] == "0"
     assert data.get("message") == "No time limit or end time is set for this test."
 
 
