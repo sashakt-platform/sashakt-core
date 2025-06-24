@@ -25,14 +25,14 @@ from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
-from app.tests.utils.user import create_random_user
-from app.tests.utils.utils import get_user_data_from_me_route, random_lower_string
+from app.tests.utils.user import create_random_user, get_current_user_data
+from app.tests.utils.utils import random_lower_string
 
 
 def setup_data(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> Any:
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
     user = db.get(User, user_id)
@@ -159,7 +159,7 @@ def test_create_test(
         question_revision_one,
         question_revision_two,
     ) = setup_data(client, db, get_user_superadmin_token)
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
     payload = {
@@ -1947,8 +1947,7 @@ def test_update_test(
         question_revision_one,
         question_revision_two,
     ) = setup_data(client, db, get_user_superadmin_token)
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
-    user_id = user_data["id"]
+
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -1964,7 +1963,7 @@ def test_update_test(
         no_of_random_questions=1,
         question_pagination=1,
         is_template=False,
-        created_by_id=user_id,
+        created_by_id=user.id,
     )
     db.add(test)
     db.commit()
@@ -2046,7 +2045,7 @@ def test_update_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
-    assert data["created_by_id"] == user_id
+    assert data["created_by_id"] == user.id
     assert "id" in data
     assert "created_date" in data
     from datetime import datetime

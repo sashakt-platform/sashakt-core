@@ -6,11 +6,6 @@ from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.models import CandidateTest
 
-if TYPE_CHECKING:
-    from app.models import (
-        User,
-    )
-
 
 class MarksLevelEnum(str, enum.Enum):
     QUESTION = "question"
@@ -18,7 +13,7 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, QuestionRevision, State
+    from app.models import Candidate, QuestionRevision, State, User
     from app.models.tag import Tag
 
 

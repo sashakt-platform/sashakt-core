@@ -18,8 +18,8 @@ from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 
 # from app.models.user import User
-from app.tests.utils.user import create_random_user
-from app.tests.utils.utils import get_user_data_from_me_route, random_lower_string
+from app.tests.utils.user import create_random_user, get_current_user_data
+from app.tests.utils.utils import random_lower_string
 
 
 def test_create_question(
@@ -34,7 +34,7 @@ def test_create_question(
     )
     org_data = org_response.json()
     org_id = org_data["id"]
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     # Create a tag type
     tag_type_response = client.post(
@@ -125,7 +125,7 @@ def test_read_questions(
 ) -> None:
     # Create test organization
 
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
@@ -501,7 +501,7 @@ def test_create_question_revision(
     db.refresh(org)
 
     # Create users - original creator and revision creator
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
     # Create question with initial revision
@@ -642,7 +642,7 @@ def test_question_tag_operations(
     db.refresh(org)
 
     # Create user
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
     # Create tag type and tags
@@ -748,7 +748,7 @@ def test_question_location_operations(
     # Create organization
 
     # Create user
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
     # Set up location hierarchy similar to how it's done in test_location.py
@@ -1048,20 +1048,19 @@ def test_bulk_upload_questions(
 
     # Create user
 
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
-
+    print("org_id", org_id)
     # Create country and state
     india = Country(name="India")
     db.add(india)
     db.commit()
     db.refresh(india)
 
-    response = client.post(
-        f"{settings.API_V1_STR}/location/state/",
-        json={"name": "Kerala", "country_id": india.id},
-        headers=get_user_superadmin_token,
-    )
+    kerala = State(name="Kerala", country_id=india.id)
+    db.add(kerala)
+    db.commit()
+    db.refresh(kerala)
 
     # Create tag type
     response = client.post(
@@ -1162,11 +1161,11 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
 
         # Check that questions were created
         response = client.get(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions/?organization_id={org_id}",
             headers=get_user_superadmin_token,
         )
         questions = response.json()
-
+        print("question4", questions)
         assert len(questions) >= 4  # Updated to reflect 4 questions
 
         # Check for specific question content
@@ -1194,17 +1193,11 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
                 assert any(tag["name"] == "Chemistry" for tag in question["tags"])
             elif question["question_text"] == "What are prime numbers?":
                 assert any(tag["name"] == "Math" for tag in question["tags"])
-        csv_question_texts = [
-            "What is 2+2?",
-            "What is the capital of France?",
-            "What is H2O?",
-            "What are prime numbers?",
-        ]
-        csv_questions = [
-            q for q in questions if q["question_text"] in csv_question_texts
-        ]
-        for question in csv_questions:
+
+        for question in questions:
+            print("question ->", question)
             locations = question["locations"]
+            print("locations for ->", locations)
 
             assert len(locations) > 0
             assert any(loc["state_name"] == "Kerala" for loc in locations)
@@ -1280,7 +1273,7 @@ def test_latest_question_revision(
     db.refresh(organization)
 
     # Create user for test
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
     question_text = random_lower_string()

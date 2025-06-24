@@ -4,9 +4,9 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
-from app.tests.utils.user import create_random_user
+from app.tests.utils.user import create_random_user, get_current_user_data
 
-from ...utils.utils import get_user_data_from_me_route, random_lower_string
+from ...utils.utils import random_lower_string
 
 
 def setup_user_organization(
@@ -23,7 +23,7 @@ def setup_user_organization(
 def test_create_tagtype(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     user, organization = setup_user_organization(db)
 
@@ -77,7 +77,7 @@ def test_get_tagtype(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     organization_id = user_data["organization_id"]
     tagtype = TagType(
@@ -112,7 +112,7 @@ def test_get_tagtype_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     organization_id = user_data["organization_id"]
     tagtype = TagType(
@@ -144,7 +144,7 @@ def test_update_tagtype_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     user, organization = setup_user_organization(db)
     user_b, organization_b = setup_user_organization(db)
@@ -375,7 +375,7 @@ def test_read_tag(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_user_data_from_me_route(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     organization_id = user_data["organization_id"]
     response = client.get(

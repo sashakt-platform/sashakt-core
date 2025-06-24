@@ -1,6 +1,5 @@
 import random
 import string
-from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
@@ -25,15 +24,3 @@ def get_superuser_token_headers(client: TestClient) -> dict[str, str]:
     a_token = tokens["access_token"]
     headers = {"Authorization": f"Bearer {a_token}"}
     return headers
-
-
-def get_user_data_from_me_route(
-    client: TestClient, auth_header: dict[str, Any]
-) -> dict[str, Any]:
-    response = client.get(
-        f"{settings.API_V1_STR}/users/me",
-        headers=auth_header,
-    )
-    assert response.status_code == 200, f"Failed to fetch user info: {response.text}"
-    user_data = cast(dict[str, Any], response.json())
-    return user_data
