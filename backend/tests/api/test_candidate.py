@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import (
     Candidate,
     CandidateTest,
@@ -29,7 +30,7 @@ def test_submit_answer_for_qr_candidate(
     }
 
     response = client.post(
-        f"/api/candidate/submit_answer/{test_candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/submit_answer/{test_candidate_test.id}",
         json=answer_request,
         params={"candidate_uuid": str(test_candidate.identity)},
     )
@@ -91,7 +92,7 @@ def test_submit_batch_answers_for_qr_candidate(
 
     # Submit batch answers
     response = client.post(
-        f"/api/candidate/submit_answers/{test_candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/submit_answers/{test_candidate_test.id}",
         json=batch_request,
         params={"candidate_uuid": str(test_candidate.identity)},
     )
@@ -139,7 +140,7 @@ def test_submit_batch_answers_invalid_uuid(
     }
 
     response = client.post(
-        f"/api/candidate/submit_answers/{test_candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/submit_answers/{test_candidate_test.id}",
         json=batch_request,
         params={"candidate_uuid": str(uuid.uuid4())},  # Random UUID
     )
@@ -156,7 +157,7 @@ def test_submit_batch_answers_empty_list(
     batch_request = {"answers": []}
 
     response = client.post(
-        f"/api/candidate/submit_answers/{test_candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/submit_answers/{test_candidate_test.id}",
         json=batch_request,
         params={"candidate_uuid": str(test_candidate.identity)},
     )
@@ -198,7 +199,7 @@ def test_submit_batch_answers_update_existing(
 
     # Submit batch answers
     response = client.post(
-        f"/api/candidate/submit_answers/{test_candidate_test.id}",
+        f"{settings.API_V1_STR}/candidate/submit_answers/{test_candidate_test.id}",
         json=batch_request,
         params={"candidate_uuid": str(test_candidate.identity)},
     )
