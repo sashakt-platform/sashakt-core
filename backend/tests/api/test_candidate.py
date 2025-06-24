@@ -10,8 +10,8 @@ from app.models import (
     CandidateTest,
     CandidateTestAnswer,
     QuestionRevision,
-    QuestionType,
 )
+from app.models.question import QuestionType
 
 
 def test_submit_answer_for_qr_candidate(
