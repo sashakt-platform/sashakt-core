@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -1507,10 +1508,6 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     db.add(question_revision)
     db.flush()
 
-    question.last_revision_id = question_revision.id
-    db.commit()
-    db.refresh(question_revision)
-
     test = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1955,7 +1952,6 @@ def test_result_with_no_answers(
         "options": [
             {"id": 1, "key": "A", "value": "Option 1"},
             {"id": 2, "key": "B", "value": "Option 2"},
-            {"id": 3, "key": "C", "value": "Option 3"},
         ],
         "correct_answer": [3],
         "is_mandatory": True,
@@ -2115,7 +2111,6 @@ def test_convert_to_list_with_int_reponse(
         options=[
             {"id": 1, "key": "A", "value": "Option 1"},
             {"id": 2, "key": "B", "value": "Option 2"},
-            {"id": 3, "key": "C", "value": "Option 3"},
         ],
         correct_answer=[2],
         is_mandatory=False,
@@ -2157,3 +2152,289 @@ def test_convert_to_list_with_int_reponse(
     assert data["incorrect_answer"] == 1
     assert data["mandatory_not_attempted"] == 0
     assert data["optional_not_attempted"] == 1
+
+
+def test_submit_batch_answers_for_qr_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test submitting multiple answers at once"""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    # Create question with revision
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 2+2?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create a second question revision for testing
+    second_question = Question(organization_id=org.id)
+    db.add(second_question)
+    db.flush()
+    second_question_revision = QuestionRevision(
+        question_id=second_question.id,
+        created_by_id=user.id,
+        question_text="Second test question",
+        question_type=QuestionType.single_choice,
+        options=[{"id": 1, "key": "A", "value": "1"}],
+        correct_answer=[1],
+    )
+    db.add(second_question_revision)
+    db.flush()
+    second_question.last_revision_id = second_question_revision.id
+    db.commit()
+    db.refresh(second_question_revision)
+
+    # Create test
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    # Link questions to test
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.add(
+        TestQuestion(test_id=test.id, question_revision_id=second_question_revision.id)
+    )
+    db.commit()
+
+    # Start test to create candidate and candidate_test
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Prepare batch request
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": question_revision.id,
+                "response": "4",
+                "visited": True,
+                "time_spent": 30,
+            },
+            {
+                "question_revision_id": second_question_revision.id,
+                "response": "1",
+                "visited": True,
+                "time_spent": 45,
+            },
+        ]
+    }
+
+    # Submit batch answers
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+    # Sort by question revision ID to have a deterministic order for verification
+    data.sort(key=lambda x: x["question_revision_id"])
+
+    # Verify first answer
+    assert data[0]["question_revision_id"] == question_revision.id
+    assert data[0]["response"] == "4"
+    assert data[0]["visited"] is True
+    assert data[0]["time_spent"] == 30
+
+    # Verify second answer
+    assert data[1]["question_revision_id"] == second_question_revision.id
+    assert data[1]["response"] == "1"
+    assert data[1]["visited"] is True
+    assert data[1]["time_spent"] == 45
+
+    # Verify answers in database
+    answers = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .order_by("question_revision_id")
+    ).all()
+    assert len(answers) == 2
+    assert answers[0].response == "4"
+    assert answers[1].response == "1"
+
+
+def test_submit_batch_answers_invalid_uuid(client: TestClient, db: SessionDep) -> None:
+    """Test submitting batch answers with invalid UUID"""
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(), created_by_id=user.id, link=random_lower_string()
+    )
+    db.add(test)
+    db.commit()
+
+    # Start test to create candidate_test
+    payload = {"test_id": test.id}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    candidate_test_id = start_response.json()["candidate_test_id"]
+
+    batch_request: dict[str, list[dict[str, Any]]] = {
+        "answers": [
+            {
+                "question_revision_id": 1,
+                "response": "1",
+                "visited": True,
+                "time_spent": 30,
+            }
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": str(uuid.uuid4())},  # Random UUID
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Candidate test not found or invalid UUID"
+
+
+def test_submit_batch_answers_empty_list(client: TestClient, db: SessionDep) -> None:
+    """Test submitting empty batch answers list"""
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(), created_by_id=user.id, link=random_lower_string()
+    )
+    db.add(test)
+    db.commit()
+
+    # Start test to create candidate_test
+    payload = {"test_id": test.id}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    batch_request: dict[str, list[Any]] = {"answers": []}
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 0
+
+
+def test_submit_batch_answers_update_existing(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test updating existing answers in batch"""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 2+2?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Create initial answer
+    initial_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test_id,
+        question_revision_id=question_revision.id,
+        response="3",
+        visited=True,
+        time_spent=20,
+    )
+    db.add(initial_answer)
+    db.commit()
+    db.refresh(initial_answer)
+
+    # Prepare batch request to update the answer
+    batch_request: dict[str, list[dict[str, Any]]] = {
+        "answers": [
+            {
+                "question_revision_id": question_revision.id,
+                "response": "4",
+                "visited": True,
+                "time_spent": 30,
+            }
+        ]
+    }
+
+    # Submit batch answers
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["response"] == "4"
+    assert data[0]["time_spent"] == 30
+
+    # Verify answer was updated in database
+    db.refresh(initial_answer)
+    assert initial_answer.response == "4"
+    assert initial_answer.time_spent == 30
