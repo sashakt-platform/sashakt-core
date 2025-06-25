@@ -2477,7 +2477,6 @@ def test_candidate_timer_with_specific_dates(
 
         candidate_test = CandidateTest(
             test_id=test.id,
-            created_by_id=user.id,
             candidate_id=candidate.id,
             device="Laptop",
             consent=True,
