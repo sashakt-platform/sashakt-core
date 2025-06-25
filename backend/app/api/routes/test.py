@@ -522,11 +522,10 @@ def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> Ti
     if not test or test.is_deleted or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     if test.start_time is None:
-        return TimeLeft(time_left=None)
+        return TimeLeft(time_left=0)
     current_time = get_current_time()
     start_time = test.start_time
     if current_time >= start_time:
-        print("Test has already started or is in progress")
         return TimeLeft(time_left=0)
     seconds_left = (start_time - current_time).total_seconds()
     return TimeLeft(time_left=int(seconds_left))

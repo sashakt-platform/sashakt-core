@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.api.routes.utils import get_current_time
 from app.core.config import settings
 from app.models import (
     Country,
@@ -2047,7 +2047,6 @@ def test_update_test(
     assert data["created_by_id"] == payload["created_by_id"]
     assert "id" in data
     assert "created_date" in data
-    from datetime import datetime
 
     created_date = datetime.fromisoformat(data["created_date"])
     assert created_date == created_date_original
@@ -2272,79 +2271,87 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
 
 
 def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -> None:
-    future_start_time = get_current_time() + timedelta(
-        minutes=10
-    )  # 10 minutes from now
-    test = Test(
-        name="Public Start Timer Test",
-        link="public-test-uuid",
-        is_active=True,
-        is_deleted=False,
-        start_time=future_start_time,
-        created_by_id=create_random_user(db).id,
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
-    assert response.status_code == 200
-    data = response.json()
-    assert "time_left" in data
-    time_left = data["time_left"]
-    assert isinstance(time_left, int)
-    assert 590 <= time_left <= 600
+    fake_current_time = datetime(2024, 5, 24, 10, 0, 0)  # Fixed time for testing
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        future_start_time = fake_current_time + timedelta(
+            minutes=10
+        )  # 10 minutes from now``
+        test = Test(
+            name="Public Start Timer Test",
+            link="public-test-uuid",
+            is_active=True,
+            is_deleted=False,
+            start_time=future_start_time,
+            created_by_id=create_random_user(db).id,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/{test.link}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "time_left" in data
+        time_left = data["time_left"]
+        assert isinstance(time_left, int)
+        assert time_left == 600
 
 
 def test_public_timer_when_test_already_started(
     client: TestClient, db: SessionDep
 ) -> None:
-    test = Test(
-        name="Public Start Timer Test",
-        link="public-test-uuid1",
-        is_active=True,
-        is_deleted=False,
-        start_time=datetime(2024, 5, 24, 9, 0, 0),
-        end_time=get_current_time() + timedelta(days=1),
-        created_by_id=create_random_user(db).id,
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-    print("test link is ", test.link)
-    print("time of now:", get_current_time())
-    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
-    assert response.status_code == 200
-    data = response.json()
-    assert "time_left" in data
-    assert data["time_left"] == 0
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)  # Fixed time for testing
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        test = Test(
+            name="Public Start Timer Test",
+            link="public-test-uuid1",
+            is_active=True,
+            is_deleted=False,
+            start_time=datetime(2024, 5, 24, 9, 0, 0),
+            end_time=fake_current_time + timedelta(days=1),
+            created_by_id=create_random_user(db).id,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/{test.link}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "time_left" in data
+        assert data["time_left"] == 0
 
 
 def test_public_timer_test_not_found_or_not_active(
     client: TestClient, db: SessionDep
 ) -> None:
-    response = client.get(
-        f"{settings.API_V1_STR}/test/public/time_left/nonexistent-test-link"
-    )
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Test not found or not active"
-    user = create_random_user(db)
-    deleted_test = Test(
-        name="Deleted Test",
-        link="deleted-test-link",
-        start_time=get_current_time() + timedelta(minutes=10),
-        end_time=get_current_time() + timedelta(hours=2),
-        time_limit=60,
-        is_active=True,
-        is_deleted=True,  # Marked as deleted
-        created_by_id=user.id,
-    )
-    db.add(deleted_test)
-    db.commit()
-    response = client.get(
-        f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
-    )
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Test not found or not active"
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)  # Fixed time for testing
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/nonexistent-test-link"
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Test not found or not active"
+        user = create_random_user(db)
+        deleted_test = Test(
+            name="Deleted Test",
+            link="deleted-test-link",
+            start_time=fake_current_time + timedelta(minutes=10),
+            end_time=fake_current_time + timedelta(hours=2),
+            time_limit=60,
+            is_active=True,
+            is_deleted=True,  # Marked as deleted
+            created_by_id=user.id,
+        )
+        db.add(deleted_test)
+        db.commit()
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Test not found or not active"
 
 
 def test_public_timer_returns_zero_if_start_time_none(
@@ -2364,4 +2371,4 @@ def test_public_timer_returns_zero_if_start_time_none(
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-    assert data == {"time_left": None}
+    assert data == {"time_left": 0}
