@@ -7,6 +7,7 @@ from sqlmodel import SQLModel, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
+    BatchAnswerSubmitRequest,
     Candidate,
     CandidateAnswerSubmitRequest,
     CandidateCreate,
@@ -161,6 +162,65 @@ def submit_answer_for_qr_candidate(
         session.commit()
         session.refresh(candidate_test_answer)
         return candidate_test_answer
+
+
+@router.post(
+    "/submit_answers/{candidate_test_id}",
+    response_model=list[CandidateTestAnswerPublic],
+)
+def submit_batch_answers_for_qr_candidate(
+    candidate_test_id: int,
+    session: SessionDep,
+    batch_request: BatchAnswerSubmitRequest = Body(...),
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> list[CandidateTestAnswer]:
+    """
+    Submit multiple answers for QR code candidates using UUID authentication.
+    Creates new answers or updates existing ones in a single transaction.
+    """
+    # Verify UUID access
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+
+    results = []
+    for answer in batch_request.answers:
+        # Check if answer already exists for this question
+        existing_answer = session.exec(
+            select(CandidateTestAnswer)
+            .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+            .where(
+                CandidateTestAnswer.question_revision_id == answer.question_revision_id
+            )
+        ).first()
+
+        if existing_answer:
+            # Update existing answer
+            existing_answer.response = answer.response
+            existing_answer.visited = answer.visited
+            existing_answer.time_spent = answer.time_spent
+            session.add(existing_answer)
+            results.append(existing_answer)
+        else:
+            # Create new answer
+            new_answer = CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=answer.question_revision_id,
+                response=answer.response,
+                visited=answer.visited,
+                time_spent=answer.time_spent,
+            )
+            session.add(new_answer)
+            results.append(new_answer)
+
+    # Commit all changes in a single transaction
+    session.commit()
+
+    # Refresh all results
+    for result in results:
+        session.refresh(result)
+
+    return results
 
 
 @router.post("/submit_test/{candidate_test_id}", response_model=CandidateTestPublic)
