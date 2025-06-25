@@ -1057,10 +1057,10 @@ def test_bulk_upload_questions(
     db.commit()
     db.refresh(india)
 
-    kerala = State(name="Kerala", country_id=india.id)
-    db.add(kerala)
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
     db.commit()
-    db.refresh(kerala)
+    db.refresh(punjab)
 
     # Create tag type
     response = client.post(
@@ -1076,10 +1076,10 @@ def test_bulk_upload_questions(
     # Create a CSV file with test data - add an empty row to test skipping
     # Also includes duplicate tags to test tag cache
     csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
-What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Kerala
-What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Kerala
-What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Kerala
-What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Kerala
+What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Punjab
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Punjab
+What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Punjab
+What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Punjab
 ,,,,,,,
 """
 
@@ -1161,11 +1161,10 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
 
         # Check that questions were created
         response = client.get(
-            f"{settings.API_V1_STR}/questions/?organization_id={org_id}",
+            f"{settings.API_V1_STR}/questions/",
             headers=get_user_superadmin_token,
         )
         questions = response.json()
-        print("question4", questions)
         assert len(questions) >= 4  # Updated to reflect 4 questions
 
         # Check for specific question content
@@ -1195,16 +1194,20 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
                 assert any(tag["name"] == "Math" for tag in question["tags"])
 
         for question in questions:
-            print("question ->", question)
-            locations = question["locations"]
-            print("locations for ->", locations)
-
-            assert len(locations) > 0
-            assert any(loc["state_name"] == "Kerala" for loc in locations)
+            # Check locations were correctly associated
+            if question["question_text"] in [
+                "What is 2+2?",
+                "What is the capital of France?",
+                "What is H2O?",
+                "What are prime numbers?",
+            ]:
+                locations = question["locations"]
+                assert len(locations) > 0
+                assert any(loc["state_name"] == "Punjab" for loc in locations)
 
         # Test with non-existent tag type
         csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
-What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,NonExistentType:Math,Kerala
+What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,NonExistentType:Math,Punjab
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(csv_content_bad_tag.encode("utf-8"))
