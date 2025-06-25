@@ -28,6 +28,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import Result
+from app.models.utils import TimeLeft, get_current_time
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -573,14 +574,14 @@ def get_test_result(
     )
 
 
-@router.get("/time_left/{candidate_test_id}")
+@router.get("/time_left/{candidate_test_id}", response_model=TimeLeft)
 def get_time_left(
     candidate_test_id: int,
     session: SessionDep,
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> dict[str, str]:
+) -> TimeLeft:
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
     candidate_test = session.exec(
         select(CandidateTest).where(CandidateTest.id == candidate_test_id)
@@ -591,11 +592,7 @@ def get_time_left(
 
     if not test:
         raise HTTPException(status_code=404, detail="Associated test not found")
-    current_time = datetime.now()
-
-    start_time = candidate_test.start_time
-    if start_time.tzinfo is None:
-        start_time = start_time.replace(tzinfo=timezone.utc)
+    current_time = get_current_time()
 
     elapsed_time = current_time - candidate_test.start_time
     remaining_times = []
@@ -606,14 +603,11 @@ def get_time_left(
         remaining_by_endtime = test.end_time - current_time
         remaining_times.append(remaining_by_endtime)
     if not remaining_times:
-        return {
-            "time_left_seconds": "0",
-            "message": "No time limit or end time is set for this test.",
-        }
+        return {"time_left_seconds": None}
     final_time_left = min(remaining_times)
     if final_time_left.total_seconds() <= 0:
-        return {"time_left_seconds": "0"}
+        return {"time_left_seconds": 0}
 
     time_left_seconds = int(final_time_left.total_seconds())
-    time_left_str = str(time_left_seconds)
-    return {"time_left_seconds": time_left_str}
+
+    return {"time_left_seconds": int(time_left_seconds)}

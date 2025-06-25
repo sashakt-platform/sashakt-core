@@ -21,6 +21,7 @@ from app.models import (
     TestTag,
 )
 from app.models.question import QuestionType
+from app.models.utils import get_current_time
 from app.tests.utils.location import create_random_state
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
@@ -2271,7 +2272,9 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
 
 
 def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -> None:
-    future_start_time = datetime.now() + timedelta(minutes=10)  # 10 minutes from now
+    future_start_time = get_current_time() + timedelta(
+        minutes=10
+    )  # 10 minutes from now
     test = Test(
         name="Public Start Timer Test",
         link="public-test-uuid",
@@ -2287,8 +2290,8 @@ def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -
     assert response.status_code == 200
     data = response.json()
     assert "time_left_seconds" in data
-    assert data["time_left_seconds"].isdigit()
-    time_left = int(data["time_left_seconds"])
+    time_left = data["time_left_seconds"]
+    assert isinstance(time_left, int)
     assert 590 <= time_left <= 600
 
 
@@ -2301,7 +2304,7 @@ def test_public_timer_when_test_already_started(
         is_active=True,
         is_deleted=False,
         start_time=datetime(2024, 5, 24, 9, 0, 0),
-        end_time=datetime.now() + timedelta(days=1),
+        end_time=get_current_time() + timedelta(days=1),
         created_by_id=create_random_user(db).id,
     )
     db.add(test)
@@ -2311,7 +2314,7 @@ def test_public_timer_when_test_already_started(
     assert response.status_code == 200
     data = response.json()
     assert "time_left_seconds" in data
-    assert data["time_left_seconds"] == "0"
+    assert data["time_left_seconds"] == 0
 
 
 def test_public_timer_test_not_found_or_not_active(
@@ -2326,8 +2329,8 @@ def test_public_timer_test_not_found_or_not_active(
     deleted_test = Test(
         name="Deleted Test",
         link="deleted-test-link",
-        start_time=datetime.now() + timedelta(minutes=10),
-        end_time=datetime.now() + timedelta(hours=2),
+        start_time=get_current_time() + timedelta(minutes=10),
+        end_time=get_current_time() + timedelta(hours=2),
         time_limit=60,
         is_active=True,
         is_deleted=True,  # Marked as deleted
@@ -2359,4 +2362,4 @@ def test_public_timer_returns_zero_if_start_time_none(
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-    assert data == {"time_left_seconds": "0"}
+    assert data == {"time_left_seconds": None}

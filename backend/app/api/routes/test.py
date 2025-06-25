@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
+from app.models.utils import TimeLeft, get_current_time
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -514,18 +515,16 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     return Message(message="Test deleted successfully")
 
 
-@router.get("/public/time_left/{test_uuid}")
-def get_time_before_test_start_public(
-    test_uuid: str, session: SessionDep
-) -> dict[str, str]:
+@router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)
+def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> TimeLeft:
     test = session.exec(select(Test).where(Test.link == test_uuid)).first()
     if not test or test.is_deleted or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     if test.start_time is None:
-        return {"time_left_seconds": "0"}
-    current_time = datetime.now()
+        return {"time_left_seconds": None}
+    current_time = get_current_time()
     start_time = test.start_time
     if current_time >= start_time:
-        return {"time_left_seconds": "0"}
+        return {"time_left_seconds": 0}
     seconds_left = (start_time - current_time).total_seconds()
-    return {"time_left_seconds": str(int(seconds_left))}
+    return {"time_left_seconds": int(seconds_left)}

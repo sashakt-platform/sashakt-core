@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -18,6 +18,7 @@ from app.models import (
 )
 from app.models.question import QuestionType
 from app.models.test import TestQuestion
+from app.models.utils import get_current_time
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import create_random_user
 
@@ -2179,8 +2180,8 @@ def test_candidate_timer_with_specific_dates(
 
     test = Test(
         name="Date Based Test",
-        start_time=datetime.now() - timedelta(minutes=30),
-        end_time=datetime.now() + timedelta(minutes=40),
+        start_time=get_current_time() - timedelta(minutes=30),
+        end_time=get_current_time() + timedelta(minutes=40),
         time_limit=60,  # 60 minutes time limit
         is_active=True,
         created_by_id=user.id,
@@ -2195,7 +2196,7 @@ def test_candidate_timer_with_specific_dates(
         candidate_id=candidate.id,
         device="Laptop",
         consent=True,
-        start_time=datetime.now() - timedelta(minutes=30),
+        start_time=get_current_time() - timedelta(minutes=30),
         is_submitted=False,
     )
     db.add(candidate_test)
@@ -2212,8 +2213,8 @@ def test_candidate_timer_with_specific_dates(
     print("data090", data)
     assert "time_left_seconds" in data
     time_left = data["time_left_seconds"]
-    assert time_left.isdigit()
-    time_left = int(time_left)
+    assert isinstance(time_left, int)
+
     assert 1795 <= time_left <= 1800
 
 
@@ -2243,7 +2244,7 @@ def test_candidate_timer_end_time_takes_priority(
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
-    now = datetime.now()
+    now = get_current_time()
     test = Test(
         name="End Time Priority Test",
         start_time=now - timedelta(minutes=2),
@@ -2308,7 +2309,7 @@ def test_candidate_timer_raises_if_timelimit_and_end_time_not_set(
         candidate_id=candidate.id,
         device="Laptop",
         consent=True,
-        start_time=datetime.now(),
+        start_time=get_current_time(),
         end_time=None,
         is_submitted=False,
     )
@@ -2325,8 +2326,8 @@ def test_candidate_timer_raises_if_timelimit_and_end_time_not_set(
     assert response.status_code == 200
     data = response.json()
     assert "time_left_seconds" in data
-    assert data["time_left_seconds"] == "0"
-    assert data.get("message") == "No time limit or end time is set for this test."
+
+    assert data["time_left_seconds"] is None
 
 
 def test_candidate_timer_with_only_time_limit(
@@ -2344,7 +2345,8 @@ def test_candidate_timer_with_only_time_limit(
         name="Only Time Limit Test",
         time_limit=30,  # 30 minutes
         end_time=None,
-        start_time=datetime.now() - timedelta(minutes=5),  # test started 5 minutes ago
+        start_time=get_current_time()
+        - timedelta(minutes=5),  # test started 5 minutes ago
         is_active=True,
         created_by_id=user.id,
     )
@@ -2357,7 +2359,7 @@ def test_candidate_timer_with_only_time_limit(
         candidate_id=candidate.id,
         device="Laptop",
         consent=True,
-        start_time=datetime.now() - timedelta(minutes=5),
+        start_time=get_current_time() - timedelta(minutes=5),
         is_submitted=False,
     )
     db.add(candidate_test)
@@ -2370,5 +2372,5 @@ def test_candidate_timer_with_only_time_limit(
     assert response.status_code == 200
     data = response.json()
     assert "time_left_seconds" in data
-    assert data["time_left_seconds"].isdigit()
+    assert isinstance(data["time_left_seconds"], int)
     assert 1495 <= int(data["time_left_seconds"]) <= 1500  # 30 minutes in seconds
