@@ -2492,8 +2492,8 @@ def test_candidate_timer_with_specific_dates(
     assert response.status_code == 200
     data = response.json()
     print("data090", data)
-    assert "time_left_seconds" in data
-    time_left = data["time_left_seconds"]
+    assert "time_left" in data
+    time_left = data["time_left"]
     assert isinstance(time_left, int)
 
     assert 1795 <= time_left <= 1800
@@ -2555,10 +2555,10 @@ def test_candidate_timer_end_time_takes_priority(
     )
     assert response.status_code == 200
     data = response.json()
-    assert "time_left_seconds" in data
+    assert "time_left" in data
 
-    time_left_seconds = int(data["time_left_seconds"])
-    assert 295 <= time_left_seconds <= 300
+    time_left = int(data["time_left"])
+    assert 295 <= time_left <= 300
 
 
 def test_candidate_timer_raises_if_timelimit_and_end_time_not_set(
@@ -2606,9 +2606,9 @@ def test_candidate_timer_raises_if_timelimit_and_end_time_not_set(
 
     assert response.status_code == 200
     data = response.json()
-    assert "time_left_seconds" in data
+    assert "time_left" in data
 
-    assert data["time_left_seconds"] is None
+    assert data["time_left"] is None
 
 
 def test_candidate_timer_with_only_time_limit(
@@ -2652,6 +2652,6 @@ def test_candidate_timer_with_only_time_limit(
     )
     assert response.status_code == 200
     data = response.json()
-    assert "time_left_seconds" in data
-    assert isinstance(data["time_left_seconds"], int)
-    assert 1495 <= int(data["time_left_seconds"]) <= 1500  # 30 minutes in seconds
+    assert "time_left" in data
+    assert isinstance(data["time_left"], int)
+    assert 1495 <= int(data["time_left"]) <= 1500  # 30 minutes in seconds

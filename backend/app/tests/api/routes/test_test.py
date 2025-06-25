@@ -2289,8 +2289,8 @@ def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-    assert "time_left_seconds" in data
-    time_left = data["time_left_seconds"]
+    assert "time_left" in data
+    time_left = data["time_left"]
     assert isinstance(time_left, int)
     assert 590 <= time_left <= 600
 
@@ -2300,7 +2300,7 @@ def test_public_timer_when_test_already_started(
 ) -> None:
     test = Test(
         name="Public Start Timer Test",
-        link="public-test-uuid",
+        link="public-test-uuid1",
         is_active=True,
         is_deleted=False,
         start_time=datetime(2024, 5, 24, 9, 0, 0),
@@ -2310,11 +2310,13 @@ def test_public_timer_when_test_already_started(
     db.add(test)
     db.commit()
     db.refresh(test)
+    print("test link is ", test.link)
+    print("time of now:", get_current_time())
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-    assert "time_left_seconds" in data
-    assert data["time_left_seconds"] == 0
+    assert "time_left" in data
+    assert data["time_left"] == 0
 
 
 def test_public_timer_test_not_found_or_not_active(
@@ -2362,4 +2364,4 @@ def test_public_timer_returns_zero_if_start_time_none(
     response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
     assert response.status_code == 200
     data = response.json()
-    assert data == {"time_left_seconds": None}
+    assert data == {"time_left": None}

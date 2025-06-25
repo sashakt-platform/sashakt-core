@@ -663,11 +663,11 @@ def get_time_left(
         remaining_by_endtime = test.end_time - current_time
         remaining_times.append(remaining_by_endtime)
     if not remaining_times:
-        return {"time_left_seconds": None}
+        return {"time_left": None}
     final_time_left = min(remaining_times)
     if final_time_left.total_seconds() <= 0:
-        return {"time_left_seconds": 0}
+        return {"time_left": 0}
 
-    time_left_seconds = int(final_time_left.total_seconds())
+    time_left = int(final_time_left.total_seconds())
 
-    return {"time_left_seconds": int(time_left_seconds)}
+    return {"time_left": int(time_left)}

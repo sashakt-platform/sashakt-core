@@ -10,7 +10,7 @@ class Message(SQLModel):
 
 
 class TimeLeft(TypedDict):
-    time_left_seconds: int | None
+    time_left: int | None
 
 
 def get_current_time() -> datetime:
