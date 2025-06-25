@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
+from app.api.routes.utils import get_current_time
 from app.core.config import settings
 from app.models import (
     Candidate,
@@ -19,7 +20,6 @@ from app.models import (
 )
 from app.models.question import QuestionType
 from app.models.test import TestQuestion
-from app.models.utils import get_current_time
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import create_random_user
 

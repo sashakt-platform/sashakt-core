@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlmodel import SQLModel
 from typing_extensions import TypedDict
 
@@ -11,8 +9,3 @@ class Message(SQLModel):
 
 class TimeLeft(TypedDict):
     time_left: int | None
-
-
-def get_current_time() -> datetime:
-    """Returns the current datetime."""
-    return datetime.now()

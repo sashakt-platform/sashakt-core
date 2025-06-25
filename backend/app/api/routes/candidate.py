@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import SQLModel, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
+from app.api.routes.utils import get_current_time
 from app.models import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -29,7 +30,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import Result
-from app.models.utils import TimeLeft, get_current_time
+from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -663,11 +664,10 @@ def get_time_left(
         remaining_by_endtime = test.end_time - current_time
         remaining_times.append(remaining_by_endtime)
     if not remaining_times:
-        return {"time_left": None}
+        return TimeLeft(time_left=None)
     final_time_left = min(remaining_times)
     if final_time_left.total_seconds() <= 0:
-        return {"time_left": 0}
+        return TimeLeft(time_left=0)
 
     time_left = int(final_time_left.total_seconds())
-
-    return {"time_left": int(time_left)}
+    return TimeLeft(time_left=time_left)

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import col, select
 
 from app.api.deps import SessionDep, permission_dependency
+from app.api.routes.utils import get_current_time
 from app.models import (
     Message,
     QuestionRevision,
@@ -20,7 +21,7 @@ from app.models import (
 )
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
-from app.models.utils import TimeLeft, get_current_time
+from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -521,11 +522,11 @@ def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> Ti
     if not test or test.is_deleted or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     if test.start_time is None:
-        return {"time_left": None}
+        return TimeLeft(time_left=None)
     current_time = get_current_time()
     start_time = test.start_time
     if current_time >= start_time:
         print("Test has already started or is in progress")
-        return {"time_left": 0}
+        return TimeLeft(time_left=0)
     seconds_left = (start_time - current_time).total_seconds()
-    return {"time_left": int(seconds_left)}
+    return TimeLeft(time_left=int(seconds_left))
