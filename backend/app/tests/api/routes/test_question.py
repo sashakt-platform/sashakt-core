@@ -532,7 +532,6 @@ def test_create_question_revision(
     # Create a new revision with a different user
     new_text = random_lower_string()
     new_revision_data = {
-        "created_by_id": user_id,
         "question_text": new_text,
         "question_type": QuestionType.multi_choice,
         "options": [
@@ -1431,7 +1430,6 @@ def test_invalid_correct_option(
 
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1467,7 +1465,6 @@ def test_valid_correct_option(
 
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1511,7 +1508,6 @@ def test_valid_ids_option(
 
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1547,7 +1543,6 @@ def test_duplicate_option_ids_error_message(
 
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1613,7 +1608,6 @@ def test_bulk_tag_operations(
     # Create question
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1749,7 +1743,6 @@ def test_bulk_location_operations(
     # Create question
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -1908,7 +1901,6 @@ def test_mixed_single_and_bulk_operations(
     # Create question
     question_data = {
         "organization_id": org.id,
-        "created_by_id": user.id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
