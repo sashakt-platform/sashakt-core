@@ -8,6 +8,7 @@ from app.api.deps import (
     CurrentUser,
     SessionDep,
     get_current_active_superuser,
+    get_current_user,
     permission_dependency,
 )
 from app.core.config import settings
@@ -51,7 +52,12 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     dependencies=[Depends(permission_dependency("create_user"))],
     response_model=UserPublic,
 )
-def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
+def create_user(
+    *,
+    session: SessionDep,
+    user_in: UserCreate,
+    current_user: User = Depends(get_current_user),
+) -> Any:
     """
     Create new user.
     """
@@ -62,7 +68,9 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
             detail="The user with this email already exists in the system.",
         )
 
-    user = crud.create_user(session=session, user_create=user_in)
+    user = crud.create_user(
+        session=session, user_create=user_in, created_by_id=current_user.id
+    )
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
             email_to=user_in.email, username=user_in.email, password=user_in.password

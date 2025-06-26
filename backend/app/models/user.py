@@ -33,7 +33,6 @@ class UserBase(SQLModel):
     phone: str = Field(max_length=255)
     role_id: int = Field(foreign_key="role.id")
     organization_id: int = Field(foreign_key="organization.id")
-    created_by_id: int | None = Field(default=None, foreign_key="user.id")
 
 
 # Properties to receive via API on creation
@@ -81,6 +80,7 @@ class User(UserBase, table=True):
     )
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
+    created_by_id: int | None = Field(default=None, foreign_key="user.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
@@ -105,6 +105,7 @@ class UserPublic(UserBase):
     modified_date: datetime
     is_active: bool | None
     is_deleted: bool
+    created_by_id: int | None
 
 
 class UsersPublic(SQLModel):

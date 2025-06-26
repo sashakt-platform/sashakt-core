@@ -9,7 +9,7 @@ from app.core.security import verify_password
 from app.models import Role, User, UserCreate
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
-from app.tests.utils.user import create_random_user
+from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_email, random_lower_string
 
 
@@ -65,6 +65,9 @@ def test_create_user_new_email(
         user = crud.get_user_by_email(session=db, email=username)
         assert user
         assert user.email == created_user["email"]
+
+        current_user_data = get_current_user_data(client, superuser_token_headers)
+        assert user.created_by_id == current_user_data["id"]
 
 
 def test_get_existing_user(
