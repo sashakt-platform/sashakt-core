@@ -6,7 +6,6 @@ from typing import Any
 from fastapi import (
     APIRouter,
     Body,
-    Depends,
     File,
     HTTPException,
     Query,
@@ -16,7 +15,7 @@ from sqlalchemy import desc
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import SessionDep, get_current_user
+from app.api.deps import CurrentUser, SessionDep
 from app.models import (
     Block,
     CandidateTest,
@@ -192,7 +191,7 @@ def prepare_for_db(
 def create_question(
     question_create: QuestionCreate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
     # Create the main question record
@@ -339,7 +338,7 @@ class CandidateTestInfoDict(TypedDict):
 @router.get("/", response_model=list[QuestionPublic])
 def get_questions(
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
     state_ids: list[int] = Query(None),  # Support multiple states
@@ -618,7 +617,7 @@ def create_question_revision(
     question_id: int,
     revision_data: QuestionRevisionCreate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new revision for an existing question."""
     question = session.get(Question, question_id)
@@ -1038,8 +1037,8 @@ def remove_question_tag(
 @router.post("/bulk-upload", response_model=Message)
 async def upload_questions_csv(
     session: SessionDep,
+    current_user: CurrentUser,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
 ) -> Message:
     """
     Bulk upload questions from a CSV file.

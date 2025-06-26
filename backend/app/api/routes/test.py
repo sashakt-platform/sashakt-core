@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import col, select
 
-from app.api.deps import SessionDep, get_current_user, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.models import (
     Message,
     QuestionRevision,
@@ -17,7 +17,6 @@ from app.models import (
     TestState,
     TestTag,
     TestUpdate,
-    User,
 )
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
@@ -61,7 +60,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
 def create_test(
     test_create: TestCreate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> TestPublic:
     test_data = test_create.model_dump(
         exclude={"tag_ids", "question_revision_ids", "state_ids"}
@@ -343,7 +342,7 @@ def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
 

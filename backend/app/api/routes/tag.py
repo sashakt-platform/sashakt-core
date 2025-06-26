@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import not_, select
 
-from app.api.deps import SessionDep, get_current_user, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.models import (
     Message,
     Tag,
@@ -14,7 +14,6 @@ from app.models import (
     TagTypePublic,
     TagTypeUpdate,
     TagUpdate,
-    User,
 )
 
 router_tagtype = APIRouter(
@@ -36,7 +35,7 @@ router_tag = APIRouter(
 def create_tagtype(
     tagtype_create: TagTypeCreate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> TagType:
     tag_type = TagType(
         **tagtype_create.model_dump(),
@@ -52,7 +51,7 @@ def create_tagtype(
 @router_tagtype.get("/", response_model=list[TagTypePublic])
 def get_tagtype(
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> Sequence[TagType]:
     tagtype = session.exec(
         select(TagType).where(
@@ -67,7 +66,7 @@ def get_tagtype(
 def get_tagtype_by_id(
     tagtype_id: int,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> TagType:
     tagtype = session.get(TagType, tagtype_id)
     if (
@@ -84,7 +83,7 @@ def update_tagtype(
     tagtype_id: int,
     updated_data: TagTypeUpdate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> TagType:
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype or tagtype.is_deleted is True:
@@ -135,7 +134,7 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
 def create_tag(
     tag_create: TagCreate,
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> TagPublic:
     tag_type_id = tag_create.tag_type_id
     tag_type = session.get(TagType, tag_type_id)
@@ -160,7 +159,7 @@ def create_tag(
 @router_tag.get("/", response_model=list[TagPublic])
 def get_tags(
     session: SessionDep,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> Sequence[TagPublic]:
     tags = session.exec(
         select(Tag).where(
