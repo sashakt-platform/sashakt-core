@@ -154,6 +154,10 @@ class TestBase(SQLModel):
         title="User ID",
         description="ID of the user who created the test.",
     )
+    show_result: bool = Field(
+        default=True,
+        description="Whether result should be visible after test submission",
+    )
 
 
 class Test(TestBase, table=True):
