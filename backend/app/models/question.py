@@ -303,7 +303,6 @@ class QuestionLocation(SQLModel, table=True):
         UniqueConstraint("question_id", "district_id"),
         UniqueConstraint("question_id", "block_id"),
     )
-
     id: int | None = Field(
         default=None,
         primary_key=True,
@@ -333,7 +332,6 @@ class QuestionLocation(SQLModel, table=True):
         foreign_key="block.id",
         description="ID of the block this question is associated with",
     )
-
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this location was created",
@@ -457,7 +455,6 @@ class QuestionPublic(SQLModel):
     created_by_id: int = Field(
         description="ID of the user who created the current revision"
     )
-
     # Related location and tag information
     locations: list["QuestionLocationPublic"] | None = Field(
         description="Geographic locations associated with this question"

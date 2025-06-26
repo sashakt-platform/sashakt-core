@@ -41,7 +41,6 @@ class TestQuestion(SQLModel, table=True):
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
-
     question_revision: "QuestionRevision" = Relationship(
         back_populates="test_questions"
     )
@@ -196,7 +195,6 @@ class TestPublic(TestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-
     is_deleted: bool
     tags: list["Tag"]
     question_revisions: list["QuestionRevision"]

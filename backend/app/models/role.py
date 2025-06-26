@@ -35,7 +35,6 @@ class RoleUpdate(RoleBase):
 # Database model, database table inferred from class name
 class Role(RoleBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-
     users: list["User"] = Relationship(back_populates="role")
     permissions: list["Permission"] | None = Relationship(
         back_populates="roles", link_model=RolePermission
@@ -45,7 +44,6 @@ class Role(RoleBase, table=True):
 # Properties to return via API, id is always required
 class RolePublic(RoleBase):
     id: int
-
     permissions: list[int]
 
 

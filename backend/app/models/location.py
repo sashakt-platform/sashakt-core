@@ -24,7 +24,6 @@ class Country(CountryBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-
     states: list["State"] | None = Relationship(back_populates="country")
 
 
@@ -63,7 +62,6 @@ class State(StateBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-
     country: Country | None = Relationship(back_populates="states")
     districts: list["District"] | None = Relationship(back_populates="state")
     tests: list["Test"] | None = Relationship(
@@ -107,7 +105,6 @@ class District(DistrictBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-
     state: State | None = Relationship(back_populates="districts")
     blocks: list["Block"] | None = Relationship(back_populates="district")
     question_locations: list["QuestionLocation"] = Relationship(
@@ -152,7 +149,6 @@ class Block(BlockBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-
     district: District | None = Relationship(back_populates="blocks")
     question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
 

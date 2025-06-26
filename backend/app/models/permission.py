@@ -28,7 +28,6 @@ class PermissionUpdate(PermissionBase):
 # Database model, database table inferred from class name
 class Permission(PermissionBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-
     roles: list["Role"] | None = Relationship(
         back_populates="permissions", link_model=RolePermission
     )

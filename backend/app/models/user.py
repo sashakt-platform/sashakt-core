@@ -74,7 +74,6 @@ class User(UserBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-
     is_deleted: bool = Field(default=False, nullable=False)
     hashed_password: str
     question_revisions: list["QuestionRevision"] = Relationship(
@@ -104,7 +103,6 @@ class UserPublic(UserBase):
     id: int
     created_date: datetime
     modified_date: datetime
-
     is_deleted: bool
 
 
