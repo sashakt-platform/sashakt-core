@@ -73,6 +73,7 @@ def test_create_user_new_email(
 def test_get_existing_user(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
+    current_user = get_current_user_data(client, get_user_superadmin_token)
     organization = create_random_organization(db)
     username = random_email()
     password = random_lower_string()
@@ -85,7 +86,7 @@ def test_get_existing_user(
         full_name=full_name,
         phone=phone,
         role_id=role.id,
-        organization_id=organization.id,
+        organization_id=current_user["organization_id"],
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
@@ -98,6 +99,24 @@ def test_get_existing_user(
     existing_user = crud.get_user_by_email(session=db, email=username)
     assert existing_user
     assert existing_user.email == api_user["email"]
+
+    user_in = UserCreate(
+        email=random_email(),
+        password=password,
+        full_name=full_name,
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=organization.id,
+    )
+    user = crud.create_user(
+        session=db, user_create=user_in, created_by_id=current_user["id"]
+    )
+    user_id = user.id
+    response = client.get(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert 400 <= response.status_code < 500
 
 
 def test_get_existing_user_current_user(client: TestClient, db: Session) -> None:
@@ -209,16 +228,16 @@ def test_create_user_existing_username(
 def test_retrieve_users(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
+    current_user = get_current_user_data(client, superuser_token_headers)
     username = random_email()
     password = random_lower_string()
-    organization = create_random_organization(db)
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
-        organization_id=organization.id,
+        organization_id=current_user["organization_id"],
     )
     crud.create_user(session=db, user_create=user_in)
 
@@ -230,20 +249,22 @@ def test_retrieve_users(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=create_random_role(db).id,
-        organization_id=organization.id,
+        organization_id=current_user["organization_id"],
     )
     crud.create_user(session=db, user_create=user_in2)
 
     r = client.get(f"{settings.API_V1_STR}/users/", headers=superuser_token_headers)
     all_users = r.json()
 
-    assert len(all_users["data"]) > 1
+    assert len(all_users["data"]) > 2
     assert "count" in all_users
     for item in all_users["data"]:
         assert "email" in item
         assert "full_name" in item
         assert "phone" in item
         assert "role_id" in item
+        assert "organization_id" in item
+        assert item["organization_id"] == current_user["organization_id"]
 
 
 def test_update_user_me(

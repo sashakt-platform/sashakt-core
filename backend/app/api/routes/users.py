@@ -8,7 +8,6 @@ from app.api.deps import (
     CurrentUser,
     SessionDep,
     get_current_active_superuser,
-    get_current_user,
     permission_dependency,
 )
 from app.core.config import settings
@@ -33,15 +32,29 @@ router = APIRouter(prefix="/users", tags=["users"])
     dependencies=[Depends(permission_dependency("read_user"))],
     response_model=UsersPublic,
 )
-def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
+def read_users(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 100,
+) -> Any:
     """
     Retrieve users.
     """
-
-    count_statement = select(func.count()).select_from(User)
+    current_user_organization_id = current_user.organization_id
+    count_statement = (
+        select(func.count())
+        .select_from(User)
+        .where(User.organization_id == current_user_organization_id)
+    )
     count = session.exec(count_statement).one()
 
-    statement = select(User).offset(skip).limit(limit)
+    statement = (
+        select(User)
+        .where(User.organization_id == current_user_organization_id)
+        .offset(skip)
+        .limit(limit)
+    )
     users = session.exec(statement).all()
 
     return UsersPublic(data=users, count=count)
@@ -56,7 +69,7 @@ def create_user(
     *,
     session: SessionDep,
     user_in: UserCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> Any:
     """
     Create new user.
@@ -195,13 +208,13 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
-    if user == current_user:
-        return user
-    # if not current_user.is_superuser:
-    #     raise HTTPException(
-    #         status_code=403,
-    #         detail="The user doesn't have enough privileges",
-    #     )
+    if (
+        not user
+        or user.is_deleted
+        or user.organization_id != current_user.organization_id
+    ):
+        raise HTTPException(status_code=404, detail="User not found")
+
     return user
 
 
