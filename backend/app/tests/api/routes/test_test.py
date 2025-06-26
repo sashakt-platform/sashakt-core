@@ -20,18 +20,23 @@ from app.models import (
     TestQuestion,
     TestState,
     TestTag,
+    User,
 )
 from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
-from app.tests.utils.user import create_random_user
+from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
 
-def setup_data(db: SessionDep) -> Any:
-    user = create_random_user(db)
+def setup_data(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> Any:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
+    user = db.get(User, user_id)
     india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
@@ -48,21 +53,21 @@ def setup_data(db: SessionDep) -> Any:
     tag_type = TagType(
         name=random_lower_string(),
         organization_id=organization.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(tag_type)
     db.commit()
 
     tag_a = Tag(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
 
     tag_b = Tag(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
@@ -86,7 +91,7 @@ def setup_data(db: SessionDep) -> Any:
     # Create question revisions
     question_revision_one = QuestionRevision(
         question_id=question_one.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text="What is the size of Sun",
         question_type=QuestionType.single_choice,
         options=[
@@ -98,7 +103,7 @@ def setup_data(db: SessionDep) -> Any:
 
     question_revision_two = QuestionRevision(
         question_id=question_two.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text="What is the speed of light",
         question_type=QuestionType.single_choice,
         options=[
@@ -154,7 +159,9 @@ def test_create_test(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     payload = {
         "name": random_lower_string(),
@@ -171,7 +178,6 @@ def test_create_test(
         "no_of_random_questions": 4,
         "question_pagination": 1,
         "is_template": False,
-        "created_by_id": user.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "state_ids": [punjab.id],
@@ -198,7 +204,7 @@ def test_create_test(
     assert data["no_of_random_questions"] == payload["no_of_random_questions"]
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
-    assert data["created_by_id"] == user.id
+    assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -237,7 +243,7 @@ def test_create_test(
         no_of_random_questions=2,
         question_pagination=1,
         is_template=True,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(sample_test)
     db.commit()
@@ -261,7 +267,6 @@ def test_create_test(
         "question_pagination": 1,
         "is_template": False,
         "template_id": sample_test.id,
-        "created_by_id": user.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "state_ids": [punjab.id, goa.id],
@@ -288,7 +293,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
-    assert data["created_by_id"] == payload["created_by_id"]
+    assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -327,7 +332,6 @@ def test_create_test(
         "question_pagination": 1,
         "is_template": False,
         "template_id": sample_test.id,
-        "created_by_id": user.id,
     }
 
     response = client.post(
@@ -353,7 +357,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == sample_test.id
-    assert data["created_by_id"] == user.id
+    assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -536,7 +540,7 @@ def test_get_tests(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     test = Test(
         name=random_lower_string(),
@@ -1944,7 +1948,7 @@ def test_update_test(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     test = Test(
         name=random_lower_string(),
@@ -2012,7 +2016,6 @@ def test_update_test(
         "question_pagination": 1,
         "is_template": False,
         "template_id": None,
-        "created_by_id": user.id,
         "tag_ids": [tag_a.id, tag_b.id],
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
@@ -2044,7 +2047,7 @@ def test_update_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
-    assert data["created_by_id"] == payload["created_by_id"]
+    assert data["created_by_id"] == user.id
     assert "id" in data
     assert "created_date" in data
 
@@ -2136,7 +2139,7 @@ def test_delete_test(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     test = Test(
         name=random_lower_string(),
@@ -2174,7 +2177,9 @@ def test_delete_test(
     assert "id" not in data
 
 
-def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
+def test_get_public_test_info(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     """Test the public test endpoint that doesn't require authentication."""
     (
         user,
@@ -2189,7 +2194,7 @@ def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     # Create a test
     test = Test(
