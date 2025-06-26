@@ -19,6 +19,7 @@ class RoleBase(SQLModel):
     name: str = Field(min_length=1, max_length=255, nullable=False)
     description: str | None = Field(default=None, max_length=255, nullable=True)
     label: str = Field(nullable=False)
+    is_active: bool = Field(default=True)
 
 
 # Properties to receive on name creation
@@ -34,7 +35,7 @@ class RoleUpdate(RoleBase):
 # Database model, database table inferred from class name
 class Role(RoleBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    is_active: bool = Field(default=True, nullable=False)
+
     users: list["User"] = Relationship(back_populates="role")
     permissions: list["Permission"] | None = Relationship(
         back_populates="roles", link_model=RolePermission
@@ -44,7 +45,7 @@ class Role(RoleBase, table=True):
 # Properties to return via API, id is always required
 class RolePublic(RoleBase):
     id: int
-    is_active: bool
+
     permissions: list[int]
 
 

@@ -142,7 +142,7 @@ def get_state(
     session: SessionDep,
     skip: int = 0,
     limit: int = 10,
-    is_active: bool | None = None,
+    is_active: bool = True,
     country: int | None = None,
 ) -> Sequence[State]:
     query = select(State)

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 # -----Models for Country-----
 class CountryBase(SQLModel):
     name: str = Field(nullable=False, index=True)
+    is_active: bool = Field(default=True)
 
 
 class Country(CountryBase, table=True):
@@ -23,7 +24,7 @@ class Country(CountryBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     states: list["State"] | None = Relationship(back_populates="country")
 
 
@@ -31,7 +32,6 @@ class CountryPublic(CountryBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
 
 
 class CountryCreate(CountryBase):
@@ -48,6 +48,7 @@ class CountryUpdate(CountryBase):
 # -----Models for State-----
 class StateBase(SQLModel):
     name: str = Field(nullable=False, index=True)
+    is_active: bool = Field(default=True)
     country_id: int = Field(
         foreign_key="country.id", nullable=False, ondelete="CASCADE"
     )
@@ -62,7 +63,7 @@ class State(StateBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     country: Country | None = Relationship(back_populates="states")
     districts: list["District"] | None = Relationship(back_populates="state")
     tests: list["Test"] | None = Relationship(
@@ -75,7 +76,6 @@ class StatePublic(StateBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
 
 
 class StateCreate(StateBase):
@@ -95,6 +95,7 @@ class StateUpdate(StateBase):
 class DistrictBase(SQLModel):
     name: str = Field(nullable=False, index=True)
     state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
+    is_active: bool = Field(default=True)
 
 
 class District(DistrictBase, table=True):
@@ -106,7 +107,7 @@ class District(DistrictBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     state: State | None = Relationship(back_populates="districts")
     blocks: list["Block"] | None = Relationship(back_populates="district")
     question_locations: list["QuestionLocation"] = Relationship(
@@ -118,7 +119,6 @@ class DistrictPublic(DistrictBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
 
 
 class DistrictCreate(DistrictBase):
@@ -140,6 +140,7 @@ class BlockBase(SQLModel):
     district_id: int = Field(
         foreign_key="district.id", nullable=False, ondelete="CASCADE"
     )
+    is_active: bool = Field(default=True)
 
 
 class Block(BlockBase, table=True):
@@ -151,7 +152,7 @@ class Block(BlockBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     district: District | None = Relationship(back_populates="blocks")
     question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
 
@@ -160,7 +161,6 @@ class BlockPublic(BlockBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
 
 
 class BlockCreate(BlockBase):

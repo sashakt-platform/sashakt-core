@@ -43,7 +43,7 @@ def test_create_tagtype(
     assert response_data["organization_id"] == data["organization_id"]
     assert response_data["created_by_id"] == data["created_by_id"]
     assert response_data["is_deleted"] is False
-    assert response_data["is_active"] is None
+    assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -65,7 +65,7 @@ def test_create_tagtype(
     assert response_data["organization_id"] == data["organization_id"]
     assert response_data["created_by_id"] == data["created_by_id"]
     assert response_data["is_deleted"] is False
-    assert response_data["is_active"] is None
+    assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -128,7 +128,7 @@ def test_get_tagtype_by_id(
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == tagtype.created_by_id
     assert response_data["is_deleted"] is False
-    assert response_data["is_active"] is None
+    assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -173,7 +173,7 @@ def test_update_tagtype_by_id(
     assert response_data["organization_id"] == tagtype.organization_id
     assert response_data["created_by_id"] == tagtype.created_by_id
     assert response_data["is_deleted"] is False
-    assert response_data["is_active"] is None
+    assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -189,7 +189,7 @@ def test_update_tagtype_by_id(
     assert response_data["organization_id"] == data_b["organization_id"]
     assert response_data["created_by_id"] == data_b["created_by_id"]
     assert response_data["is_deleted"] is False
-    assert response_data["is_active"] is None
+    assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -619,7 +619,7 @@ def test_visibility_tag_by_id(
     db.add(tag)
     db.commit()
 
-    assert tag.is_active is None
+    assert tag.is_active is True
 
     response = client.patch(
         f"{settings.API_V1_STR}/tag/{tag.id}",

@@ -142,6 +142,8 @@ class CandidateBase(SQLModel):
         default=None, foreign_key="user.id", nullable=True, ondelete="CASCADE"
     )
 
+    is_active: bool = Field(default=True)
+
 
 class CandidateCreate(CandidateBase):
     pass
@@ -159,7 +161,7 @@ class Candidate(CandidateBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     is_deleted: bool = Field(default=False, nullable=False)
     user: "User" = Relationship(back_populates="candidates")
     tests: list["Test"] | None = Relationship(
@@ -172,7 +174,7 @@ class CandidatePublic(CandidateBase):
     candidate_uuid: uuid.UUID | None = None  # Include uuid in public response
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
+
     is_deleted: bool
 
 

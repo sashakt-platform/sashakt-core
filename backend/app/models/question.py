@@ -147,6 +147,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Whether the question must be answered",
     )
+    is_active: bool = Field(default=True, description="Whether this question is active")
     marking_scheme: MarkingSchemeDict | None = Field(
         sa_type=JSON, default=None, description="Scoring rules for this question"
     )
@@ -212,9 +213,7 @@ class Question(SQLModel, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
         description="When this question was last modified",
     )
-    is_active: bool | None = Field(
-        default=True, nullable=True, description="Whether this question is active"
-    )
+    is_active: bool = Field(default=True, description="Whether this question is active")
     is_deleted: bool | None = Field(
         default=False,
         nullable=True,
@@ -263,9 +262,7 @@ class QuestionRevision(QuestionBase, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
         description="When this revision was last modified",
     )
-    is_active: bool | None = Field(
-        default=True, nullable=True, description="Whether this revision is active"
-    )
+
     is_deleted: bool | None = Field(
         default=False,
         nullable=True,
@@ -434,7 +431,7 @@ class QuestionPublic(SQLModel):
     )
     created_date: datetime = Field(description="When this question was created")
     modified_date: datetime = Field(description="When this question was last modified")
-    is_active: bool | None = Field(description="Whether this question is active")
+    is_active: bool = Field(default=True, description="Whether this question is active")
     is_deleted: bool | None = Field(
         description="Whether this question is marked as deleted"
     )
@@ -488,9 +485,7 @@ class QuestionCandidatePublic(SQLModel):
 class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 
-    is_active: bool | None = Field(
-        default=None, description="Whether this question is active"
-    )
+    is_active: bool = Field(default=True, description="Whether this question is active")
     is_deleted: bool | None = Field(
         default=None, description="Whether this question is marked as deleted"
     )
