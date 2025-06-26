@@ -83,14 +83,11 @@ def update_tagtype(
     tagtype_id: int,
     updated_data: TagTypeUpdate,
     session: SessionDep,
-    current_user: CurrentUser,
 ) -> TagType:
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype or tagtype.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag Type not found")
-
     tagtype_data = updated_data.model_dump(exclude_unset=True)
-    tagtype_data["created_by_id"] = current_user.id
     tagtype.sqlmodel_update(tagtype_data)
     session.add(tagtype)
     session.commit()

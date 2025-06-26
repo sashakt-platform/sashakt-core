@@ -1568,7 +1568,11 @@ def test_duplicate_option_ids_error_message(
     assert "Option IDs must be unique" in response.json()["detail"][0]["msg"]
 
 
-def test_bulk_tag_operations(client: TestClient, db: SessionDep) -> None:
+def test_bulk_tag_operations(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     """Test bulk adding and removing tags."""
     # Create organization
     org = Organization(name=random_lower_string())
@@ -1622,6 +1626,7 @@ def test_bulk_tag_operations(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     question_id = response.json()["id"]
@@ -1677,13 +1682,20 @@ def test_bulk_tag_operations(client: TestClient, db: SessionDep) -> None:
     assert tag_results[0]["id"] == tags[3].id
 
     # Verify tags were removed
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     current_tags = response.json()
     assert len(current_tags) == 1
     assert current_tags[0]["id"] == tags[3].id
 
 
-def test_bulk_location_operations(client: TestClient, db: SessionDep) -> None:
+def test_bulk_location_operations(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
     """Test bulk adding and removing locations."""
     # Create organization
     org = Organization(name=random_lower_string())
@@ -1750,6 +1762,7 @@ def test_bulk_location_operations(client: TestClient, db: SessionDep) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     question_id = response.json()["id"]
@@ -1852,7 +1865,9 @@ def test_bulk_location_operations(client: TestClient, db: SessionDep) -> None:
     assert len(question["locations"]) == 0
 
 
-def test_mixed_single_and_bulk_operations(client: TestClient, db: SessionDep) -> None:
+def test_mixed_single_and_bulk_operations(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     """Test that the PUT update operations work seamlessly."""
     # Create organization
     org = Organization(name=random_lower_string())
@@ -1906,6 +1921,7 @@ def test_mixed_single_and_bulk_operations(client: TestClient, db: SessionDep) ->
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     question_id = response.json()["id"]

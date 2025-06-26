@@ -344,7 +344,6 @@ def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
-    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
@@ -437,7 +436,6 @@ def update_test(
             session.commit()
 
     test_data = test_update.model_dump(exclude_unset=True)
-    test_data["created_by_id"] = current_user.id
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()
