@@ -600,6 +600,14 @@ def get_test_result(
 
     if not candidate_test:
         raise HTTPException(status_code=404, detail="Candidate test not found")
+    test = session.get(Test, candidate_test.test_id)
+    if test is None:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if not test.show_result:
+        raise HTTPException(
+            status_code=403, detail="Results are not visible for this test"
+        )
+
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
     joined_data = session.exec(
         select(CandidateTestAnswer, QuestionRevision)

@@ -2804,3 +2804,118 @@ def test_candidate_timer_no_start_time_only_end_time(
 
         time_left = int(data["time_left"])
         assert time_left == 300
+
+
+def test_result_not_visible(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    test = Test(
+        name="Hidden Result Test",
+        description=random_lower_string(),
+        time_limit=50,
+        marks=90,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,  # Assuming user ID 1 exists
+        is_active=True,
+        is_deleted=False,
+        show_result=False,  # Result not visible
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    # Create a candidate
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    # Create a candidate test
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test phone",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    # Create a Question first
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    new_revision_data = {
+        "created_by_id": user.id,
+        "question_id": question.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+        "is_active": True,
+        "is_deleted": False,
+    }
+    revision = QuestionRevision(**new_revision_data)
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    new_revision_data = {
+        "created_by_id": user.id,
+        "question_id": question.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "apppe"},
+            {"id": 2, "key": "B", "value": "banana"},
+            {"id": 3, "key": "C", "value": "mango"},
+        ],
+        "correct_answer": [3],
+        "is_mandatory": False,
+        "is_active": True,
+        "is_deleted": False,
+    }
+    revision2 = QuestionRevision(**new_revision_data)
+    db.add(revision2)
+    db.commit()
+    db.refresh(revision2)
+
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision.id,
+        response="2",
+        visited=True,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision2.id,
+        response=3,
+        visited=True,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+    db.refresh(candidate_test_answer)
+    # Call the endpoint
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": str(candidate.identity)},
+    )
+    assert response.status_code == 403
+    data = response.json()
+    assert data["detail"] == "Results are not visible for this test"
