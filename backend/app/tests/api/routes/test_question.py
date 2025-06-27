@@ -2123,3 +2123,64 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     )
     assert response.status_code == 200
     assert len(response.json()) == 0
+
+
+def test_inactive_question_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+    tag_type = TagType(
+        name="hard questions",
+        description="Categories for questions",
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type)
+    db.flush()
+    tag = Tag(
+        name="Data science",
+        description="data science Science related questions",
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    q1 = Question(organization_id=org_id, is_active=False)
+    db.add(q1)
+    db.flush()
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "apple"},
+            {"id": 2, "key": "B", "value": "mango"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.flush()
+    q1.last_revision_id = rev1.id
+    q1_tag = QuestionTag(
+        question_id=q1.id,
+        tag_id=tag.id,
+    )
+    db.add(q1_tag)
+    db.commit()
+    db.refresh(q1)
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    # Make sure the inactive question is NOT in the response
+    assert all(item["id"] != q1.id for item in data)

@@ -14,6 +14,7 @@ class OrganizationBase(SQLModel):
     description: str | None = Field(
         default=None, title="Description", description="Description of the organization"
     )
+    is_active: bool = Field(default=True)
 
 
 class Organization(OrganizationBase, table=True):
@@ -25,7 +26,7 @@ class Organization(OrganizationBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None)
+
     is_deleted: bool = Field(default=False)
 
     # Relationships
@@ -43,7 +44,6 @@ class OrganizationPublic(OrganizationBase):
     id: int | None
     created_date: datetime | None
     modified_date: datetime | None
-    is_active: bool | None
     is_deleted: bool
 
 

@@ -29,7 +29,7 @@ def test_create_organization(
     assert data["name"] == name
     assert data["description"] == description
     assert "id" in data
-    assert data["is_active"] is None
+    assert data["is_active"] is True
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
         json={
@@ -313,7 +313,7 @@ def test_read_organization_by_id(
     assert data["name"] == maha_vikas.name
     assert data["id"] == maha_vikas.id
     assert data["description"] == maha_vikas.description
-    assert data["is_active"] is None
+    assert data["is_active"] is True
 
 
 def test_update_organization(
