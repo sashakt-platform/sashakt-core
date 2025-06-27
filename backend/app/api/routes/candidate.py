@@ -1,11 +1,12 @@
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import SQLModel, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
+from app.api.routes.utils import get_current_time
 from app.models import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -29,6 +30,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import Result
+from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -631,3 +633,41 @@ def get_test_result(
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
     )
+
+
+@router.get("/time_left/{candidate_test_id}", response_model=TimeLeft)
+def get_time_left(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> TimeLeft:
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = session.exec(
+        select(CandidateTest).where(CandidateTest.id == candidate_test_id)
+    ).first()
+    if not candidate_test:
+        raise HTTPException(status_code=404, detail="Candidate test not found")
+    test = session.exec(select(Test).where(Test.id == candidate_test.test_id)).first()
+
+    if not test:
+        raise HTTPException(status_code=404, detail="Associated test not found")
+    current_time = get_current_time()
+
+    elapsed_time = current_time - candidate_test.start_time
+    remaining_times = []
+    if test.time_limit is not None:
+        remaining_by_limit = timedelta(minutes=float(test.time_limit)) - elapsed_time
+        remaining_times.append(remaining_by_limit)
+    if test.end_time is not None:
+        remaining_by_endtime = test.end_time - current_time
+        remaining_times.append(remaining_by_endtime)
+    if not remaining_times:
+        return TimeLeft(time_left=None)
+    final_time_left = min(remaining_times)
+    if final_time_left.total_seconds() <= 0:
+        return TimeLeft(time_left=0)
+
+    time_left = int(final_time_left.total_seconds())
+    return TimeLeft(time_left=time_left)
