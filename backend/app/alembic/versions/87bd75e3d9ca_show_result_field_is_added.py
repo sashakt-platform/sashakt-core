@@ -1,8 +1,8 @@
-"""Add show_result to test
+"""show_result field is added
 
-Revision ID: 76c4b1c0f53c
+Revision ID: 87bd75e3d9ca
 Revises: ec341854b5e6
-Create Date: 2025-06-27 08:32:28.560705
+Create Date: 2025-06-27 09:37:01.333876
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '76c4b1c0f53c'
+revision = '87bd75e3d9ca'
 down_revision = 'ec341854b5e6'
 branch_labels = None
 depends_on = None
