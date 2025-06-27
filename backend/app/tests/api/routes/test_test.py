@@ -2377,3 +2377,37 @@ def test_public_timer_returns_zero_if_start_time_none(
     assert response.status_code == 200
     data = response.json()
     assert data == {"time_left": 0}
+
+
+def test_get_inactive_tests_not_listed(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    test = Test(
+        name=random_lower_string(),
+        description="test with inactive status",
+        time_limit=50,
+        marks=20,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        created_by_id=user_id,
+        is_active=False,
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert all(item["id"] != test.id for item in data)

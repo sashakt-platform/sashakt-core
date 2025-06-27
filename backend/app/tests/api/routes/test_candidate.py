@@ -41,7 +41,7 @@ def test_create_candidate(
     data = response.json()
     assert response.status_code == 200
     assert "id" in data
-    assert data["is_active"] is None
+    assert data["is_active"] is True
     assert data["user_id"] == user.id
 
     response = client.post(
@@ -118,7 +118,7 @@ def test_read_candidate_by_id(
     assert data["modified_date"] == (
         candidate_aa.modified_date.isoformat() if candidate_aa.modified_date else None
     )
-    assert data["is_active"] is None
+    assert data["is_active"] is True
     assert data["is_deleted"] is False
 
     response = client.get(
@@ -136,7 +136,7 @@ def test_read_candidate_by_id(
     assert data["modified_date"] == (
         candidate_b.modified_date.isoformat() if candidate_b.modified_date else None
     )
-    assert data["is_active"] is None
+    assert data["is_active"] is True
     assert data["is_deleted"] is False
 
     response = client.get(
@@ -154,7 +154,7 @@ def test_read_candidate_by_id(
     assert data["modified_date"] == (
         candidate_c.modified_date.isoformat() if candidate_c.modified_date else None
     )
-    assert data["is_active"] is None
+    assert data["is_active"] is True
     assert data["is_deleted"] is False
 
 

@@ -175,7 +175,7 @@ def get_test(
     question_pagination: int | None = None,
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
-    is_active: bool | None = None,
+    is_active: bool = True,
     is_deleted: bool | None = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
         default=["created_date"],
@@ -201,8 +201,7 @@ def get_test(
     if is_deleted is not None:
         query = query.where(Test.is_deleted == is_deleted)
 
-    if is_active is not None:
-        query = query.where(Test.is_active == is_active)
+    query = query.where(Test.is_active == is_active)
 
     if name is not None:
         query = query.where(col(Test.name).contains(name))
