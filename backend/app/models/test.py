@@ -149,11 +149,6 @@ class TestBase(SQLModel):
         title="Template ID",
         description="ID of the template from which the test is created.",
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        title="User ID",
-        description="ID of the user who created the test.",
-    )
     show_result: bool = Field(
         default=True,
         description="Whether result should be visible after test submission",
@@ -187,6 +182,11 @@ class Test(TestBase, table=True):
     candidates: list["Candidate"] | None = Relationship(
         back_populates="tests", link_model=CandidateTest
     )
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class TestCreate(TestBase):
@@ -205,6 +205,11 @@ class TestPublic(TestBase):
     question_revisions: list["QuestionRevision"]
     states: list["State"]
     total_questions: int | None = None
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class TestUpdate(TestBase):
