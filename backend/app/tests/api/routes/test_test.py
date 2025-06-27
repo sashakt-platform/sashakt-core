@@ -2411,3 +2411,33 @@ def test_get_inactive_tests_not_listed(
 
     assert response.status_code == 200
     assert all(item["id"] != test.id for item in data)
+
+
+def test_template_with_link(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    payload = {
+        "name": "test with template and link",
+        "description": "this test has link  and and is a template",
+        "time_limit": 30,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "marks_level": None,
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    print("response19", response.text)
+    assert response.status_code == 422
+    assert "Templates should not have a link" in response.text
