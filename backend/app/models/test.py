@@ -150,6 +150,7 @@ class TestBase(SQLModel):
     )
     show_result: bool = Field(
         default=True,
+        sa_column_kwargs={"server_default": "true"},
         description="Whether result should be visible after test submission",
     )
     is_active: bool = Field(default=True)
