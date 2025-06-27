@@ -68,13 +68,12 @@ def create_test(
         exclude={"tag_ids", "question_revision_ids", "state_ids"}
     )
     test_data["created_by_id"] = current_user.id
+    test = Test.model_validate(test_data)
     # Auto-generate UUID for link if not provided
-    if not test_data.get("link"):
+    if not test.is_template and not test.link:
         import uuid
 
-        test_data["link"] = str(uuid.uuid4())
-
-    test = Test.model_validate(test_data)
+        test.link = str(uuid.uuid4())
 
     if test.random_questions is True and (
         test.no_of_random_questions is None
