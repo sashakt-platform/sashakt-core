@@ -2,6 +2,7 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
+from pydantic import model_validator
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.models import CandidateTest
@@ -189,6 +190,12 @@ class TestCreate(TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
+
+    @model_validator(mode="after")
+    def check_link_for_template(self):
+        if self.is_template and self.link:
+            raise ValueError("Templates should not have a link.")
+        return self
 
 
 class TestPublic(TestBase):
