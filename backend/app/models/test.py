@@ -41,7 +41,6 @@ class TestQuestion(SQLModel, table=True):
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
-
     question_revision: "QuestionRevision" = Relationship(
         back_populates="test_questions"
     )
@@ -153,6 +152,7 @@ class TestBase(SQLModel):
         default=True,
         description="Whether result should be visible after test submission",
     )
+    is_active: bool = Field(default=True)
 
 
 class Test(TestBase, table=True):
@@ -165,7 +165,7 @@ class Test(TestBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     is_deleted: bool = Field(default=False, nullable=False)
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
@@ -199,7 +199,6 @@ class TestPublic(TestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
     is_deleted: bool
     tags: list["Tag"]
     question_revisions: list["QuestionRevision"]
