@@ -8,11 +8,17 @@ from app.core.security import create_access_token, get_password_hash, verify_pas
 from app.models.user import User, UserCreate, UserUpdate
 
 
-def create_user(*, session: Session, user_create: UserCreate) -> User:
+def create_user(
+    *,
+    session: Session,
+    user_create: UserCreate,
+    created_by_id: int | None = None,
+) -> User:
     db_obj = User.model_validate(
         user_create,
         update={
             "hashed_password": get_password_hash(user_create.password),
+            "created_by_id": created_by_id,
         },
     )
     session.add(db_obj)
