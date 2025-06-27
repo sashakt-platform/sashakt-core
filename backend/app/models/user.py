@@ -34,6 +34,7 @@ class UserBase(SQLModel):
     role_id: int = Field(foreign_key="role.id")
     organization_id: int = Field(foreign_key="organization.id")
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
+    is_active: bool = Field(default=True)
 
 
 # Properties to receive via API on creation
@@ -73,7 +74,6 @@ class User(UserBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool = Field(default=True, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
     hashed_password: str
     question_revisions: list["QuestionRevision"] = Relationship(
@@ -81,6 +81,7 @@ class User(UserBase, table=True):
     )
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
+    created_by_id: int | None = Field(default=None, foreign_key="user.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
@@ -103,8 +104,8 @@ class UserPublic(UserBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
     is_deleted: bool
+    created_by_id: int | None
 
 
 class UsersPublic(SQLModel):

@@ -147,6 +147,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Whether the question must be answered",
     )
+    is_active: bool = Field(default=True, description="Whether this question is active")
     marking_scheme: MarkingSchemeDict | None = Field(
         sa_type=JSON, default=None, description="Scoring rules for this question"
     )
@@ -212,9 +213,7 @@ class Question(SQLModel, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
         description="When this question was last modified",
     )
-    is_active: bool | None = Field(
-        default=True, nullable=True, description="Whether this question is active"
-    )
+    is_active: bool = Field(default=True, description="Whether this question is active")
     is_deleted: bool | None = Field(
         default=False,
         nullable=True,
@@ -263,9 +262,7 @@ class QuestionRevision(QuestionBase, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
         description="When this revision was last modified",
     )
-    is_active: bool | None = Field(
-        default=True, nullable=True, description="Whether this revision is active"
-    )
+
     is_deleted: bool | None = Field(
         default=False,
         nullable=True,
@@ -306,7 +303,6 @@ class QuestionLocation(SQLModel, table=True):
         UniqueConstraint("question_id", "district_id"),
         UniqueConstraint("question_id", "block_id"),
     )
-
     id: int | None = Field(
         default=None,
         primary_key=True,
@@ -336,7 +332,6 @@ class QuestionLocation(SQLModel, table=True):
         foreign_key="block.id",
         description="ID of the block this question is associated with",
     )
-
     created_date: datetime | None = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this location was created",
@@ -360,7 +355,6 @@ class QuestionCreate(QuestionBase):
     organization_id: int = Field(
         description="ID of the organization that will own this question"
     )
-    created_by_id: int = Field(description="ID of the user creating this question")
     state_ids: list[int] | None = Field(
         default=None, description="IDs of states to associate"
     )
@@ -379,7 +373,7 @@ class QuestionCreate(QuestionBase):
 class QuestionRevisionCreate(QuestionBase):
     """Data needed to create a new revision for an existing question"""
 
-    created_by_id: int = Field(description="ID of the user creating this revision")
+    pass
 
 
 class QuestionTagsUpdate(SQLModel):
@@ -434,7 +428,7 @@ class QuestionPublic(SQLModel):
     )
     created_date: datetime = Field(description="When this question was created")
     modified_date: datetime = Field(description="When this question was last modified")
-    is_active: bool | None = Field(description="Whether this question is active")
+    is_active: bool = Field(default=True, description="Whether this question is active")
     is_deleted: bool | None = Field(
         description="Whether this question is marked as deleted"
     )
@@ -460,7 +454,6 @@ class QuestionPublic(SQLModel):
     created_by_id: int = Field(
         description="ID of the user who created the current revision"
     )
-
     # Related location and tag information
     locations: list["QuestionLocationPublic"] | None = Field(
         description="Geographic locations associated with this question"
@@ -488,9 +481,7 @@ class QuestionCandidatePublic(SQLModel):
 class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 
-    is_active: bool | None = Field(
-        default=None, description="Whether this question is active"
-    )
+    is_active: bool = Field(default=True, description="Whether this question is active")
     is_deleted: bool | None = Field(
         default=None, description="Whether this question is marked as deleted"
     )
