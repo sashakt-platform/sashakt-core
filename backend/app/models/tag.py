@@ -17,11 +17,6 @@ class TagTypeBase(SQLModel):
         default=None, nullable=True, description="Description of the Tag Type"
     )
     is_active: bool = Field(default=True)
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        nullable=False,
-        description="User ID who created the Tag Type",
-    )
     organization_id: int = Field(
         foreign_key="organization.id",
         nullable=False,
@@ -42,6 +37,11 @@ class TagType(TagTypeBase, table=True):
     tags: list["Tag"] = Relationship(back_populates="tag_type")
     created_by: "User" = Relationship(back_populates="tag_types")
     organization: "Organization" = Relationship(back_populates="tag_types")
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        nullable=False,
+        description="User ID who created the Tag Type",
+    )
 
 
 class TagTypeCreate(TagTypeBase):
@@ -53,6 +53,9 @@ class TagTypePublic(TagTypeBase):
     created_date: datetime
     modified_date: datetime
     is_deleted: bool
+    created_by_id: int = Field(
+        description="ID of the user who created the current revision"
+    )
 
 
 class TagTypeUpdate(TagTypeBase):
@@ -65,11 +68,6 @@ class TagBase(SQLModel):
         default=None, nullable=True, description="Description of the Tag"
     )
     is_active: bool = Field(default=True)
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        nullable=False,
-        description="User ID who created the Tag",
-    )
 
 
 class Tag(TagBase, table=True):
@@ -100,6 +98,11 @@ class Tag(TagBase, table=True):
     )
     organization: "Organization" = Relationship(back_populates="tags")
     created_by: "User" = Relationship(back_populates="tags")
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        nullable=False,
+        description="User ID who created the Tag",
+    )
 
 
 class TagCreate(TagBase):

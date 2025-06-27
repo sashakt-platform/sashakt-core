@@ -81,6 +81,7 @@ class User(UserBase, table=True):
     )
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
+    created_by_id: int | None = Field(default=None, foreign_key="user.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
@@ -104,6 +105,7 @@ class UserPublic(UserBase):
     created_date: datetime
     modified_date: datetime
     is_deleted: bool
+    created_by_id: int | None
 
 
 class UsersPublic(SQLModel):
