@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
+from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
@@ -150,6 +151,7 @@ def create_test(
 )
 def get_test(
     session: SessionDep,
+    current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
     marks_level: MarksLevelEnum | None = None,
@@ -183,7 +185,8 @@ def get_test(
         examples=["-created_date", "name"],
     ),
 ) -> Sequence[TestPublic]:
-    query = select(Test)
+    query = select(Test).join(User).where(Test.created_by_id == User.id)
+    query = query.where(User.organization_id == current_user.organization_id)
 
     for order in order_by:
         is_desc = order.startswith("-")

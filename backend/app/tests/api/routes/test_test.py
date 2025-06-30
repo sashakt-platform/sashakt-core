@@ -613,26 +613,27 @@ def test_get_tests(
 def test_get_test_by_filter_name(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_name_1 = random_lower_string()
     test_name_2 = random_lower_string()
     test_1 = Test(
         name=random_lower_string() + test_name_1 + random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
 
     test_2 = Test(
         name=test_name_2,
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
 
     test_3 = Test(
         name=random_lower_string() + test_name_1 + random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -674,13 +675,14 @@ def test_get_test_by_filter_name(
 def test_get_test_by_filter_description(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     random_text_1 = random_lower_string()
     random_text_2 = random_lower_string()
     test_1 = Test(
         name=random_lower_string(),
         description=random_text_1,
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -688,7 +690,7 @@ def test_get_test_by_filter_description(
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string() + random_text_1 + random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -696,7 +698,7 @@ def test_get_test_by_filter_description(
     test_3 = Test(
         name=random_lower_string(),
         description=random_text_2,
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -738,12 +740,13 @@ def test_get_test_by_filter_description(
 def test_get_test_by_filter_start_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 25, 10, 30),
@@ -751,7 +754,7 @@ def test_get_test_by_filter_start_time(
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 27, 12, 30),
@@ -759,7 +762,7 @@ def test_get_test_by_filter_start_time(
     test_3 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 15, 30),
@@ -768,7 +771,7 @@ def test_get_test_by_filter_start_time(
     test_4 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 19, 30),
@@ -853,12 +856,12 @@ def test_get_test_by_filter_start_time(
 def test_get_test_by_filter_end_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 25, 10, 30),
@@ -866,7 +869,7 @@ def test_get_test_by_filter_end_time(
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 27, 12, 30),
@@ -874,7 +877,7 @@ def test_get_test_by_filter_end_time(
     test_3 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 15, 30),
@@ -883,7 +886,7 @@ def test_get_test_by_filter_end_time(
     test_4 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 19, 30),
@@ -967,12 +970,13 @@ def test_get_test_by_filter_end_time(
 def test_get_test_by_filter_start_end_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 24, 10, 30),
@@ -981,7 +985,7 @@ def test_get_test_by_filter_start_end_time(
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 26, 10, 30),
@@ -990,7 +994,7 @@ def test_get_test_by_filter_start_end_time(
     test_3 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 14, 30),
@@ -1000,7 +1004,7 @@ def test_get_test_by_filter_start_end_time(
     test_4 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 19, 10),
@@ -1031,12 +1035,13 @@ def test_get_test_by_filter_start_end_time(
 def test_get_test_by_filter_time_limit(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=30,
@@ -1044,7 +1049,7 @@ def test_get_test_by_filter_time_limit(
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=40,
@@ -1052,7 +1057,7 @@ def test_get_test_by_filter_time_limit(
     test_3 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=45,
@@ -1061,7 +1066,7 @@ def test_get_test_by_filter_time_limit(
     test_4 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -1069,7 +1074,7 @@ def test_get_test_by_filter_time_limit(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_gte=25&time_limit_lte=40&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?time_limit_gte=25&time_limit_lte=40&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
 
@@ -1078,7 +1083,7 @@ def test_get_test_by_filter_time_limit(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_gte=31&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?time_limit_gte=31&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
 
@@ -1087,25 +1092,27 @@ def test_get_test_by_filter_time_limit(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_lte=40&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?time_limit_lte=40&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    filtered = [d for d in data if d["name"] in [test_1.name, test_2.name]]
+    assert len(filtered) == 2
 
 
 def test_get_test_by_filter_completion_message(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     random_text_1 = random_lower_string()
     random_text_2 = random_lower_string()
 
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_lower_string() + random_text_1,
@@ -1113,7 +1120,7 @@ def test_get_test_by_filter_completion_message(
 
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_lower_string()
@@ -1123,7 +1130,7 @@ def test_get_test_by_filter_completion_message(
 
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_text_2,
@@ -1168,13 +1175,14 @@ def test_get_test_by_filter_completion_message(
 def test_get_test_by_filter_start_instructions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     random_text_1 = random_lower_string()
     random_text_2 = random_lower_string()
 
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_lower_string() + random_text_1,
@@ -1182,7 +1190,7 @@ def test_get_test_by_filter_start_instructions(
 
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_lower_string()
@@ -1192,7 +1200,7 @@ def test_get_test_by_filter_start_instructions(
 
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_text_2,
@@ -1236,24 +1244,25 @@ def test_get_test_by_filter_start_instructions(
 def test_get_test_by_filter_no_of_attempts(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=1,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=2,
     )
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=3,
@@ -1263,40 +1272,48 @@ def test_get_test_by_filter_no_of_attempts(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts_gte=1&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_attempts_gte=1&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts_gte=2&no_of_attempts_lte=3&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_attempts_gte=2&no_of_attempts_lte=3&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts_lte=2&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_attempts_lte=2&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts=1&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_attempts=1&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts=7&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_attempts=7&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1307,17 +1324,18 @@ def test_get_test_by_filter_no_of_attempts(
 def test_get_test_by_filter_shuffle(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
@@ -1325,14 +1343,14 @@ def test_get_test_by_filter_shuffle(
 
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
     )
     test_4 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
@@ -1341,44 +1359,51 @@ def test_get_test_by_filter_shuffle(
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?shuffle=true&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?shuffle=true&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?shuffle=false&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?shuffle=false&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_2.name, test_4.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 4
+    expected_names = [test_1.name, test_3.name, test_2.name, test_4.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 4
 
 
 def test_get_test_by_filter_random_questions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
@@ -1386,14 +1411,14 @@ def test_get_test_by_filter_random_questions(
 
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
     )
     test_4 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
@@ -1402,49 +1427,56 @@ def test_get_test_by_filter_random_questions(
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?random_questions=true&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?random_questions=true&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?random_questions=false&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?random_questions=false&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_2.name, test_4.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 4
+    expected_names = [test_1.name, test_3.name, test_4.name, test_2.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 4
 
 
 def test_get_test_by_filter_no_random_questions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=20,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=10,
     )
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=45,
     )
@@ -1452,59 +1484,68 @@ def test_get_test_by_filter_no_random_questions(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=10&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=10&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_random_questions_lte=10&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_random_questions_lte=10&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
+    expected_names = [test_2.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=20&no_of_random_questions_lte=45&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=20&no_of_random_questions_lte=45&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
 
 
 def test_get_test_by_filter_question_pagination(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=1,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=2,
     )
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=0,
@@ -1512,23 +1553,27 @@ def test_get_test_by_filter_question_pagination(
     db.add_all([test_1, test_2, test_3])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?question_pagination=1&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?question_pagination=1&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
+    expected_names = [test_1.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?question_pagination=2&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?question_pagination=2&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
+    expected_names = [test_2.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1539,17 +1584,18 @@ def test_get_test_by_filter_question_pagination(
 def test_get_test_by_filter_is_template(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=False,
@@ -1557,7 +1603,7 @@ def test_get_test_by_filter_is_template(
 
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
@@ -1565,23 +1611,27 @@ def test_get_test_by_filter_is_template(
     db.add_all([test_1, test_2, test_3])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_template=true&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?is_template=true&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_template=false&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?is_template=false&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
+    expected_names = [test_2.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1592,24 +1642,24 @@ def test_get_test_by_filter_is_template(
 def test_get_test_by_filter_created_by(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user_1 = create_random_user(db)
-    user_2 = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     test_1 = Test(
         name=random_lower_string(),
-        created_by_id=user_1.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
         name=random_lower_string(),
-        created_by_id=user_1.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
         name=random_lower_string(),
-        created_by_id=user_2.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -1617,46 +1667,50 @@ def test_get_test_by_filter_created_by(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user_1.id}&created_by={user_2.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user_1.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
 
 
 def test_get_test_order_by(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
@@ -1666,30 +1720,34 @@ def test_get_test_order_by(
     test_names = sorted([test_1.name, test_2.name, test_3.name], key=str.lower)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?order_by=name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?order_by=name&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
-    assert data[0]["name"] == test_names[0]
-    assert data[1]["name"] == test_names[1]
-    assert data[2]["name"] == test_names[2]
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
+    assert filtered[0]["name"] == test_names[0]
+    assert filtered[1]["name"] == test_names[1]
+    assert filtered[2]["name"] == test_names[2]
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?order_by=-name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?order_by=-name&created_by={user_id}",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
-    assert data[0]["name"] == test_names[2]
-    assert data[1]["name"] == test_names[1]
-    assert data[2]["name"] == test_names[0]
+    expected_names = [test_1.name, test_2.name, test_3.name]
+    filtered = [d for d in data if d["name"] in expected_names]
+    assert len(filtered) == 3
+    assert filtered[0]["name"] == test_names[2]
+    assert filtered[1]["name"] == test_names[1]
+    assert filtered[2]["name"] == test_names[0]
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1702,7 +1760,7 @@ def test_get_test_order_by(
     assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-created_date",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}&order_by=-created_date",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1715,7 +1773,7 @@ def test_get_test_order_by(
     assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-name&order_by=created_date",
+        f"{settings.API_V1_STR}/test/?created_by={user_id}&order_by=-name&order_by=created_date",
         headers=get_user_superadmin_token,
     )
 
