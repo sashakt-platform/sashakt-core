@@ -2298,10 +2298,10 @@ def test_bulk_upload_questions_response_format(
     db.commit()
     db.refresh(tag_type)
     csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
-What is 4+4?,4,3,5,8,A,Test Tag Type:Math,Punjab
-What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Punjab
-Water,Gold,Silver,Carbon,A,Test Tag Type:Chemistry,Punjab
-Invalid state?,A,B,C,D,A,Test Tag Type:Math,NonExistentState
+What is 4+4?,4,3,5,8,A,Response Model Type:Math,Punjab
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Response Model Type:Geography,Punjab
+Water,Gold,Silver,Carbon,A,Response Model Type:Chemistry,Punjab
+Invalid state?,A,B,C,D,A,Response Model Type:Math,NonExistentState
 Invalid tagtype?,A,B,C,D,A,NonExistentType:Math,Punjab
 """
     import tempfile
