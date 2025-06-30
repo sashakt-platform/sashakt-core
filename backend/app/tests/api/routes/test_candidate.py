@@ -2919,3 +2919,21 @@ def test_result_not_visible(
     assert response.status_code == 403
     data = response.json()
     assert data["detail"] == "Results are not visible for this test"
+
+
+def test_candidate_inactive_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_candidate_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/",
+        json={"user_id": user.id, "is_active": False},
+        headers=get_user_candidate_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["is_active"] is False
+    assert data["user_id"] == user.id
