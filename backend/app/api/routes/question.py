@@ -11,7 +11,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
@@ -341,6 +341,7 @@ def get_questions(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
+    question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
@@ -355,6 +356,14 @@ def get_questions(
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
+    if question_text:
+        query = query.join(QuestionRevision).where(
+            Question.last_revision_id == QuestionRevision.id
+        )
+        query = query.where(
+            func.lower(QuestionRevision.question_text).contains(question_text.lower())
+        )
+
     # Apply filters only if they're provided
     if is_deleted is not None:
         query = query.where(Question.is_deleted == is_deleted)
