@@ -195,6 +195,7 @@ def create_question(
     # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,
+        is_active=question_create.is_active,
     )
     session.add(question)
     session.flush()
@@ -215,6 +216,7 @@ def create_question(
         marking_scheme=marking_scheme,
         solution=question_create.solution,
         media=media,
+        is_active=question_create.is_active,
     )
     session.add(revision)
     session.flush()
@@ -637,11 +639,13 @@ def create_question_revision(
         marking_scheme=marking_scheme,  # Now serialized
         solution=revision_data.solution,
         media=media,  # Now serialized
+        is_active=revision_data.is_active,
     )
     session.add(new_revision)
     session.flush()
 
     question.last_revision_id = new_revision.id
+    question.is_active = revision_data.is_active
     # No need to set modified_date manually
     session.add(question)
     session.commit()
