@@ -16,11 +16,7 @@ class TagTypeBase(SQLModel):
     description: str | None = Field(
         default=None, nullable=True, description="Description of the Tag Type"
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        nullable=False,
-        description="User ID who created the Tag Type",
-    )
+    is_active: bool = Field(default=True)
     organization_id: int = Field(
         foreign_key="organization.id",
         nullable=False,
@@ -37,11 +33,15 @@ class TagType(TagTypeBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
     is_deleted: bool = Field(default=False, nullable=False)
     tags: list["Tag"] = Relationship(back_populates="tag_type")
     created_by: "User" = Relationship(back_populates="tag_types")
     organization: "Organization" = Relationship(back_populates="tag_types")
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        nullable=False,
+        description="User ID who created the Tag Type",
+    )
 
 
 class TagTypeCreate(TagTypeBase):
@@ -52,8 +52,10 @@ class TagTypePublic(TagTypeBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
     is_deleted: bool
+    created_by_id: int = Field(
+        description="ID of the user who created the current revision"
+    )
 
 
 class TagTypeUpdate(TagTypeBase):
@@ -65,11 +67,7 @@ class TagBase(SQLModel):
     description: str | None = Field(
         default=None, nullable=True, description="Description of the Tag"
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        nullable=False,
-        description="User ID who created the Tag",
-    )
+    is_active: bool = Field(default=True)
 
 
 class Tag(TagBase, table=True):
@@ -86,7 +84,7 @@ class Tag(TagBase, table=True):
         nullable=False,
         description="ID of the Tag Type to which the Tag should belong to",
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     is_deleted: bool = Field(default=False, nullable=False)
     tag_type: "TagType" = Relationship(back_populates="tags")
     tests: list["Test"] = Relationship(back_populates="tags", link_model=TestTag)
@@ -100,6 +98,11 @@ class Tag(TagBase, table=True):
     )
     organization: "Organization" = Relationship(back_populates="tags")
     created_by: "User" = Relationship(back_populates="tags")
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        nullable=False,
+        description="User ID who created the Tag",
+    )
 
 
 class TagCreate(TagBase):
@@ -110,7 +113,6 @@ class TagPublic(TagBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
     is_deleted: bool
     tag_type: TagType
     organization_id: int

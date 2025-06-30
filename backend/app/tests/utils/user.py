@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -106,3 +108,15 @@ def authentication_token_from_email(
         user = crud.update_user(session=db, db_user=user, user_in=user_in_update)
 
     return user_authentication_headers(client=client, email=email, password=password)
+
+
+def get_current_user_data(
+    client: TestClient, auth_header: dict[str, Any]
+) -> dict[str, Any]:
+    response = client.get(
+        f"{settings.API_V1_STR}/users/me",
+        headers=auth_header,
+    )
+    assert response.status_code == 200, f"Failed to fetch user info: {response.text}"
+    user_data = cast(dict[str, Any], response.json())
+    return user_data
