@@ -2151,30 +2151,37 @@ def test_inactive_question_not_listed(
     db.add(tag)
     db.commit()
     db.refresh(tag)
-    q1 = Question(organization_id=org_id, is_active=False)
-    db.add(q1)
-    db.flush()
-    rev1 = QuestionRevision(
-        question_id=q1.id,
-        created_by_id=user_id,
-        question_text=random_lower_string(),
-        question_type=QuestionType.single_choice,
-        options=[
-            {"id": 1, "key": "A", "value": "apple"},
-            {"id": 2, "key": "B", "value": "mango"},
+
+    question_text = random_lower_string()
+    question_data = {
+        "organization_id": org_id,
+        "question_text": question_text,
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
         ],
-        correct_answer=[1],
+        "correct_answer": [1],  # First option is correct
+        "is_mandatory": True,
+        "tag_ids": [tag.id],
+        "is_active": False,  # Set question as inactive
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
     )
-    db.add(rev1)
-    db.flush()
-    q1.last_revision_id = rev1.id
-    q1_tag = QuestionTag(
-        question_id=q1.id,
-        tag_id=tag.id,
-    )
-    db.add(q1_tag)
-    db.commit()
-    db.refresh(q1)
+    data = response.json()
+
+    assert "id" in data
+    assert data["question_text"] == question_text
+    assert data["question_type"] == QuestionType.single_choice
+    assert len(data["options"]) == 3
+    assert data["correct_answer"] == [1]  # First option is correct
+    assert data["is_active"] is False  # Check if question is inactive
+    question_id = data["id"]
+
     response = client.get(
         f"{settings.API_V1_STR}/questions/",
         headers=get_user_superadmin_token,
@@ -2183,4 +2190,85 @@ def test_inactive_question_not_listed(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert all(item["id"] != q1.id for item in data)
+    assert all(item["id"] != question_id for item in data)
+
+
+def test_deactivate_question_with_new_revision(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    question_text = random_lower_string()
+    question_data = {
+        "organization_id": org_id,
+        "question_text": question_text,
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],  # First option is correct
+        "is_mandatory": True,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["question_text"] == question_text
+    assert data["question_type"] == QuestionType.single_choice
+    assert len(data["options"]) == 3
+    assert data["correct_answer"] == [1]  # First option is correct
+    assert data["is_active"] is True  # Check if question is active
+    question_id = data["id"]
+
+    # Create a new revision for the question
+    new_revision_data = {
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.multi_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "New Option 1"},
+            {"id": 2, "key": "B", "value": "New Option 2"},
+            {"id": 3, "key": "C", "value": "New Option 3"},
+        ],
+        "correct_answer": [2],
+        "is_active": False,  # Deactivate the question in the new revision
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=new_revision_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data_revision = response.json()
+    assert data_revision["question_text"] == new_revision_data["question_text"]
+    assert data_revision["question_type"] == new_revision_data["question_type"]
+    assert len(data_revision["options"]) == 3
+    assert data_revision["correct_answer"] == [2]  # Second option is correct
+    assert data_revision["is_active"] is False  # Check if question is inactive
+
+    # Fetch the latest revision to ensure it is inactive
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    # Make sure the inactive question is NOT in the response
+    assert all(item["id"] != question_id for item in data)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert data["is_active"] is False  # Check if question is inactive
+    assert data["id"] == question_id
