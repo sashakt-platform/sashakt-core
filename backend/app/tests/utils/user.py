@@ -22,11 +22,18 @@ def user_authentication_headers(
     return headers
 
 
-def create_random_user(db: Session) -> User:
+def create_random_user(db: Session, organization_id: int | None = None) -> User:
     role = Role(name=random_lower_string(), label=random_lower_string())
-    organization = create_random_organization(session=db)
+    if organization_id is not None:
+        organization = db.get(Organization, organization_id)
+        if not organization:
+            raise ValueError(f"Organization with ID {organization_id} not found")
+    else:
+        organization = create_random_organization(session=db)
     db.add_all([organization, role])
     db.commit()
+    db.refresh(organization)
+    db.refresh(role)
     email = random_email()
     password = random_lower_string()
     full_name = random_lower_string()

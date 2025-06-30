@@ -11,7 +11,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
@@ -195,6 +195,7 @@ def create_question(
     # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,
+        is_active=question_create.is_active,
     )
     session.add(question)
     session.flush()
@@ -215,6 +216,7 @@ def create_question(
         marking_scheme=marking_scheme,
         solution=question_create.solution,
         media=media,
+        is_active=question_create.is_active,
     )
     session.add(revision)
     session.flush()
@@ -339,6 +341,7 @@ def get_questions(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
+    question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
@@ -353,6 +356,14 @@ def get_questions(
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
+    if question_text:
+        query = query.join(QuestionRevision).where(
+            Question.last_revision_id == QuestionRevision.id
+        )
+        query = query.where(
+            func.lower(QuestionRevision.question_text).contains(question_text.lower())
+        )
+
     # Apply filters only if they're provided
     if is_deleted is not None:
         query = query.where(Question.is_deleted == is_deleted)
@@ -637,11 +648,13 @@ def create_question_revision(
         marking_scheme=marking_scheme,  # Now serialized
         solution=revision_data.solution,
         media=media,  # Now serialized
+        is_active=revision_data.is_active,
     )
     session.add(new_revision)
     session.flush()
 
     question.last_revision_id = new_revision.id
+    question.is_active = revision_data.is_active
     # No need to set modified_date manually
     session.add(question)
     session.commit()
