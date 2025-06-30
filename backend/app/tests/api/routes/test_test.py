@@ -1443,9 +1443,7 @@ def test_get_test_by_filter_random_questions(
     )
     assert response.status_code == 200
     data = response.json()
-    expected_names = [test_1.name, test_3.name, test_4.name, test_2.name]
-    filtered = [d for d in data if d["name"] in expected_names]
-    assert len(filtered) == 4
+    assert len(data) == 4
 
 
 def test_get_test_by_filter_no_random_questions(
@@ -1661,9 +1659,7 @@ def test_get_test_by_filter_created_by(
     )
     assert response.status_code == 200
     data = response.json()
-    expected_names = [test_1.name, test_2.name, test_3.name]
-    filtered = [d for d in data if d["name"] in expected_names]
-    assert len(filtered) == 2
+    assert len(data) == 2
 
 
 def test_get_test_order_by(
