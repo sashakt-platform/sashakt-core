@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -175,6 +175,8 @@ def get_test(
     question_pagination: int | None = None,
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
+    tags_param: list[str] | None = Query(None),
+    states_param: list[int] | None = Query(None),
     is_active: bool = True,
     is_deleted: bool | None = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
@@ -204,7 +206,7 @@ def get_test(
     query = query.where(Test.is_active == is_active)
 
     if name is not None:
-        query = query.where(col(Test.name).contains(name))
+        query = query.where(func.lower(Test.name).like(f"%{name.lower()}%"))
 
     if description is not None:
         query = query.where(col(Test.description).contains(description))
@@ -268,6 +270,21 @@ def get_test(
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))
+    if tags_param:
+        tag_subquery = (
+            select(TestTag.test_id)
+            .join(Tag)
+            .where(col(Tag.name).in_(tags_param))
+            .distinct()
+        )
+        query = query.where(col(Test.id).in_(tag_subquery))
+    if states_param:
+        state_subquery = (
+            select(TestState.test_id)
+            .where(col(TestState.state_id).in_(states_param))
+            .distinct()
+        )
+        query = query.where(col(Test.id).in_(state_subquery))
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
