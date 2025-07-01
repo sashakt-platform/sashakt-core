@@ -846,7 +846,7 @@ def test_inactive_tagtype_not_listed(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization = setup_user_organization(db)
+    user, organization = setup_user_organization(db)
     data = {
         "name": "Inactive TagType Test",
         "description": random_lower_string(),
