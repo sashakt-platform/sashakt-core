@@ -2641,7 +2641,6 @@ def test_get_tests_by_state_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    print("state9", data)
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_1.id, test_3.id}
     response = client.get(
@@ -2660,3 +2659,68 @@ def test_get_tests_by_state_filter(
     data = response.json()
     assert len(data) == 3
     assert {test["id"] for test in data} == {test_1.id, test_2.id, test_3.id}
+
+
+def test_get_tests_by_combined_name_tag_state_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    db.refresh(user)
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name="Maharashtra", is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    tag_type = TagType(
+        name="Skill Type",
+        description="type",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag = Tag(
+        name="aptitude",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    test_1 = Test(
+        name="Python Aptitude Test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add(test_1)
+    db.commit()
+    db.refresh(test_1)
+    db.add_all(
+        [
+            TestTag(test_id=test_1.id, tag_id=tag.id),
+            TestState(test_id=test_1.id, state_id=state.id),
+        ]
+    )
+    db.commit()
+    test_2 = Test(
+        name="Java Test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add(test_2)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=python&tags_param=aptitude&states_param={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == test_1.id
