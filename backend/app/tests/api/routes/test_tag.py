@@ -758,25 +758,29 @@ def test_inactive_tag_not_listed(
     )
     db.add(tagtype)
     db.commit()
-    tag = Tag(
-        name="tag is added with is_active status false",
-        description=random_lower_string(),
-        tag_type_id=tagtype.id,
-        created_by_id=user.id,
-        organization_id=organization.id,
-        is_active=False,  # Set tag as inactive
+    data = {
+        "name": "tag is added with is_active status false",
+        "description": random_lower_string(),
+        "tag_type_id": tagtype.id,
+        "organization_id": organization.id,
+        "is_active": False,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
     )
-    db.add(tag)
-    db.commit()
-    db.refresh(tag)
+    assert response.status_code == 200
+    created_tag = response.json()
+    tag_id = created_tag["id"]
+    assert created_tag["is_active"] is False
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-    print("Response Data200:", response_data)
     # The inactive tag should NOT be in the response
-    assert all(item["id"] != tag.id for item in response_data)
+    assert all(item["id"] != tag_id for item in response_data)
 
 
 def test_tag_is_active_toggle(
@@ -842,18 +846,22 @@ def test_inactive_tagtype_not_listed(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
-    tagtype = TagType(
-        name=random_lower_string(),
-        description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
-        is_active=False,  # Set tagtype as inactive
+    organization = setup_user_organization(db)
+    data = {
+        "name": "Inactive TagType Test",
+        "description": random_lower_string(),
+        "organization_id": organization.id,
+        "is_active": False,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data,
+        headers=get_user_superadmin_token,
     )
-    db.add(tagtype)
-    db.commit()
-    db.refresh(tagtype)
-
+    assert response.status_code == 200
+    data = response.json()
+    tagtype_id = data["id"]
+    assert data["is_active"] is False
     response = client.get(
         f"{settings.API_V1_STR}/tagtype/",
         headers=get_user_superadmin_token,
@@ -861,4 +869,4 @@ def test_inactive_tagtype_not_listed(
     response_data = response.json()
 
     # The inactive tagtype should NOT be in the response
-    assert all(item["id"] != tagtype.id for item in response_data)
+    assert all(item["id"] != tagtype_id for item in response_data)

@@ -751,3 +751,41 @@ def test_create_inactive_user_not_listed(
     )
     all_users = r.json()["data"]
     assert all(item["id"] != user_id for item in all_users)
+
+
+def test_get_inactive_users_not_listed(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    username = random_email()
+    password = random_lower_string()
+    full_name = random_lower_string()
+    phone = random_lower_string()
+    role = create_random_role(db)
+    organization = create_random_organization(db)
+    data = {
+        "email": username,
+        "password": password,
+        "phone": phone,
+        "role_id": role.id,
+        "full_name": full_name,
+        "organization_id": organization.id,
+        "is_active": False,  # Create inactive user
+    }
+    r = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert r.status_code == 200
+    created_user = r.json()
+    assert created_user["email"] == username
+    user_id = created_user["id"]
+    assert created_user["is_active"] is False
+    r = client.get(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+    )
+    all_users = r.json()["data"]
+    assert all(item["id"] != user_id for item in all_users)

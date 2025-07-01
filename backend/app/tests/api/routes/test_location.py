@@ -699,3 +699,124 @@ def test_update_block(
     )
     assert response.status_code == 404
     assert response.json() == {"detail": "Block not found"}
+
+
+def test_create_inactive_country_not_listed(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country_name = "InactiveLand"
+    response = client.post(
+        f"{settings.API_V1_STR}/location/country/",
+        json={"name": country_name, "is_active": False},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    country_id = data["id"]
+    assert data["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/location/country/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert all(item["id"] != country_id for item in data)
+
+
+def test_create_inactive_state_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name="ActiveCountry")
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    response = client.post(
+        f"{settings.API_V1_STR}/location/state/",
+        json={"name": "InactiveState", "country_id": country.id, "is_active": False},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    state_id = data["id"]
+    assert data["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert all(item["id"] != state_id for item in data)
+
+
+def test_create_inactive_district_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    india = Country(name="ActiveCountry")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+    state = State(name="ActiveState", country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/district/",
+        json={
+            "name": "InactiveDistrict",
+            "state_id": state.id,
+            "is_active": False,
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    district_id = data["id"]
+    assert data["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert all(item["id"] != district_id for item in data)
+
+
+def test_create_inactive_block_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name="ActiveCountry")
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name="ActiveState", country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name="ActiveDistrict", state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+    response = client.post(
+        f"{settings.API_V1_STR}/location/block/",
+        json={
+            "name": "InactiveBlock",
+            "district_id": district.id,
+            "is_active": False,
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    block_id = data["id"]
+    assert data["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/location/block/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert all(item["id"] != block_id for item in data)
