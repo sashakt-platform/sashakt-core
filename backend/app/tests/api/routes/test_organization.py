@@ -426,3 +426,29 @@ def test_delete_organization(
 
     assert response.status_code == 404
     assert "id" not in data
+
+
+def test_inactive_organization_not_listed(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={
+            "name": "inactive org",
+            "description": "organization is not active",
+            "is_active": False,
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    org_id = data["id"]
+    assert data["is_active"] is False
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert all(item["id"] != org_id for item in data)
