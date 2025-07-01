@@ -2473,7 +2473,7 @@ def test_clone_test(
     assert data["states"][0]["id"] == state.id
     assert len(data["question_revisions"]) == 1
     assert data["question_revisions"][0]["id"] == question_revision.id
-    
+
 
 def test_clone_soft_deleted_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
@@ -2550,5 +2550,3 @@ def test_clone_template_test_link_not_copied(
     assert data["is_template"] is True
     assert data["name"].startswith("Copy of ")
     assert data.get("link") is None
-   
-
