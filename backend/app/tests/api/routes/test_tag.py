@@ -742,3 +742,131 @@ def test_delete_tag_by_id(
     response_data = response.json()
     assert response.status_code == 404
     assert response_data["detail"] == "Tag not found"
+
+
+def test_inactive_tag_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype)
+    db.commit()
+    data = {
+        "name": "tag is added with is_active status false",
+        "description": random_lower_string(),
+        "tag_type_id": tagtype.id,
+        "organization_id": organization.id,
+        "is_active": False,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    created_tag = response.json()
+    tag_id = created_tag["id"]
+    assert created_tag["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    # The inactive tag should NOT be in the response
+    assert all(item["id"] != tag_id for item in response_data)
+
+
+def test_tag_is_active_toggle(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+    data = {
+        "name": "active tag",
+        "description": random_lower_string(),
+        "tag_type_id": tagtype.id,
+        "created_by_id": user.id,
+        "organization_id": organization.id,
+        "is_active": True,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+
+    response_data = response.json()
+    assert response.status_code == 200
+    tag_id = response_data["id"]
+    assert response_data["is_active"] is True
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["is_active"] is True
+    response = client.patch(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        json={"is_active": False},
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["is_active"] is False
+
+
+def test_inactive_tagtype_not_listed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    data = {
+        "name": "Inactive TagType Test",
+        "description": random_lower_string(),
+        "organization_id": organization.id,
+        "is_active": False,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    tagtype_id = data["id"]
+    assert data["is_active"] is False
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    # The inactive tagtype should NOT be in the response
+    assert all(item["id"] != tagtype_id for item in response_data)
