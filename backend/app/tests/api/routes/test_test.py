@@ -2727,7 +2727,7 @@ def test_get_tests_by_tags_filter(
     )
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param={tag_1.id}",
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2735,7 +2735,7 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_1.id, test_4.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param={tag_2.id}",
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2743,7 +2743,7 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_2.id, test_5.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param={tag_3.id}",
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2751,7 +2751,7 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_3.id, test_5.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param={tag_2.id}&tags_param={tag_3.id}",
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2804,7 +2804,7 @@ def test_get_tests_by_state_filter(
     db.add_all([test_state_1, test_state_2, test_state_3a, test_state_3b])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?states_param={state_1.id}",
+        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2812,7 +2812,7 @@ def test_get_tests_by_state_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_1.id, test_3.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?states_param={state_2.id}",
+        f"{settings.API_V1_STR}/test/?state_ids={state_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2820,7 +2820,7 @@ def test_get_tests_by_state_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_2.id, test_3.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?states_param={state_1.id}&states_param={state_2.id}",
+        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}&state_ids={state_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2885,7 +2885,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
     db.add(test_2)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name=python&tags_param={tag.id}&states_param={state.id}",
+        f"{settings.API_V1_STR}/test/?name=python&tag_ids={tag.id}&states_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2929,7 +2929,6 @@ def test_get_tests_by_case_insensitive_description_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    print("description", data)
     assert len(data) == 2
     returned_ids = {test["id"] for test in data}
     assert test_1.id in returned_ids

@@ -175,8 +175,8 @@ def get_test(
     question_pagination: int | None = None,
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
-    tags_param: list[int] | None = Query(None),
-    states_param: list[int] | None = Query(None),
+    tag_ids: list[int] | None = Query(None),
+    state_ids: list[int] | None = Query(None),
     is_active: bool = True,
     is_deleted: bool | None = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
@@ -272,16 +272,16 @@ def get_test(
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))
-    if tags_param:
-        tag_query = select(TestTag.test_id).where(col(TestTag.tag_id).in_(tags_param))
+    if tag_ids:
+        tag_query = select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids))
         test_ids_with_tags = session.exec(tag_query).all()
         if test_ids_with_tags:
             query = query.where(col(Test.id).in_(test_ids_with_tags))
         else:
             return []
-    if states_param:
+    if state_ids:
         state_subquery = select(TestState.test_id).where(
-            col(TestState.state_id).in_(states_param)
+            col(TestState.state_id).in_(state_ids)
         )
         test_ids_with_states = session.exec(state_subquery).all()
         if test_ids_with_states:
