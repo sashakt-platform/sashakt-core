@@ -2421,16 +2421,19 @@ def test_clone_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user = create_random_user(db)
-    tag = create_random_tag(db)
-    state = create_random_state(db)
-    question_revision = create_random_question_revision(db)
+    tag_a = create_random_tag(db)
+    tag_b = create_random_tag(db)
+    state_a = create_random_state(db)
+    state_b = create_random_state(db)
+    question_revision_a = create_random_question_revision(db)
+    question_revision_b = create_random_question_revision(db)
     test = Test(
         name="Original Test",
-        description="Original description",
+        description=random_lower_string(),
         time_limit=30,
         marks=10,
-        completion_message="Good luck!",
-        start_instructions="Read carefully.",
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
         link=random_lower_string(),
         no_of_attempts=1,
         shuffle=True,
@@ -2443,9 +2446,16 @@ def test_clone_test(
     db.add(test)
     db.commit()
     db.refresh(test)
-    db.add(TestTag(test_id=test.id, tag_id=tag.id))
-    db.add(TestState(test_id=test.id, state_id=state.id))
-    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.add_all(
+        [
+            TestTag(test_id=test.id, tag_id=tag_a.id),
+            TestTag(test_id=test.id, tag_id=tag_b.id),
+            TestState(test_id=test.id, state_id=state_a.id),
+            TestState(test_id=test.id, state_id=state_b.id),
+            TestQuestion(test_id=test.id, question_revision_id=question_revision_a.id),
+            TestQuestion(test_id=test.id, question_revision_id=question_revision_b.id),
+        ]
+    )
     db.commit()
     response = client.post(
         f"{settings.API_V1_STR}/test/{test.id}/clone",
@@ -2467,12 +2477,20 @@ def test_clone_test(
     assert data["question_pagination"] == test.question_pagination
     assert data["is_template"] == test.is_template
     assert data["created_by_id"] != test.created_by_id
-    assert len(data["tags"]) == 1
-    assert data["tags"][0]["id"] == tag.id
-    assert len(data["states"]) == 1
-    assert data["states"][0]["id"] == state.id
-    assert len(data["question_revisions"]) == 1
-    assert data["question_revisions"][0]["id"] == question_revision.id
+    assert data["link"] is not None
+    assert data["link"] != test.link
+    assert len(data["tags"]) == 2
+    tag_ids = [t["id"] for t in data["tags"]]
+    assert tag_a.id in tag_ids
+    assert tag_b.id in tag_ids
+    assert len(data["states"]) == 2
+    state_ids = [s["id"] for s in data["states"]]
+    assert state_a.id in state_ids
+    assert state_b.id in state_ids
+    assert len(data["question_revisions"]) == 2
+    qrev_ids = [q["id"] for q in data["question_revisions"]]
+    assert question_revision_a.id in qrev_ids
+    assert question_revision_b.id in qrev_ids
 
 
 def test_clone_soft_deleted_test(
@@ -2481,11 +2499,11 @@ def test_clone_soft_deleted_test(
     user = create_random_user(db)
     test = Test(
         name="Soft Deleted Test",
-        description="Should not be cloned",
+        description=random_lower_string(),
         time_limit=30,
         marks=10,
-        completion_message="Good luck!",
-        start_instructions="Read carefully.",
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
         link=random_lower_string(),
         no_of_attempts=1,
         shuffle=True,
@@ -2518,11 +2536,11 @@ def test_clone_template_test_link_not_copied(
     # Create a template test
     test = Test(
         name="Template Test",
-        description="A template test",
+        description=random_lower_string(),
         time_limit=30,
         marks=10,
-        completion_message="Template!",
-        start_instructions="Instructions",
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
         no_of_attempts=1,
         shuffle=True,
         random_questions=False,
