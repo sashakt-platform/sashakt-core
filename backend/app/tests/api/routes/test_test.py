@@ -2614,7 +2614,9 @@ def test_clone_template_test_link_not_copied(
 def test_get_test_by_filter_case_insensitive_name(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name="python test",
         created_by_id=user.id,
@@ -2672,7 +2674,9 @@ def test_get_test_by_filter_case_insensitive_name(
 def test_get_tests_by_tags_filter(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     db.refresh(user)
     tag_type = TagType(
         name="Skill Category",
@@ -2792,7 +2796,9 @@ def test_get_tests_by_tags_filter(
 def test_get_tests_by_state_filter(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     db.refresh(user)
     country = Country(name="India", is_active=True)
     db.add(country)
@@ -2862,7 +2868,9 @@ def test_get_tests_by_state_filter(
 def test_get_tests_by_combined_name_tag_state_filter(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     db.refresh(user)
     country = Country(name="India", is_active=True)
     db.add(country)
@@ -2927,7 +2935,9 @@ def test_get_tests_by_combined_name_tag_state_filter(
 def test_get_tests_by_case_insensitive_description_filter(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     db.refresh(user)
     keyword = "importantDescription"
     test_1 = Test(
