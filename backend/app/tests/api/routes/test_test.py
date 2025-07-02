@@ -2415,3 +2415,167 @@ def test_get_inactive_tests_not_listed(
 
     assert response.status_code == 200
     assert all(item["id"] != test_id for item in data)
+
+
+def test_clone_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user1 = create_random_user(db)
+    superadmin = get_current_user_data(client, get_user_superadmin_token)
+    test = Test(
+        name="Original Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user1.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add_all(
+        [
+            TestTag(test_id=test.id, tag_id=tag_hindi.id),
+            TestTag(test_id=test.id, tag_id=tag_marathi.id),
+            TestState(test_id=test.id, state_id=punjab.id),
+            TestState(test_id=test.id, state_id=goa.id),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_one.id
+            ),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_two.id
+            ),
+        ]
+    )
+    db.commit()
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != test.id
+    assert data["name"].startswith("Copy of ")
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["marks"] == test.marks
+    assert data["completion_message"] == test.completion_message
+    assert data["start_instructions"] == test.start_instructions
+    assert data["no_of_attempts"] == test.no_of_attempts
+    assert data["shuffle"] == test.shuffle
+    assert data["random_questions"] == test.random_questions
+    assert data["no_of_random_questions"] == test.no_of_random_questions
+    assert data["question_pagination"] == test.question_pagination
+    assert data["is_template"] == test.is_template
+    assert data["created_by_id"] != test.created_by_id
+    assert data["created_by_id"] == superadmin["id"]
+    assert data["link"] is not None
+    assert data["link"] != test.link
+    assert len(data["tags"]) == 2
+    tag_ids = [tag["id"] for tag in data["tags"]]
+    assert set(tag_ids) == {tag_hindi.id, tag_marathi.id}
+    assert len(data["states"]) == 2
+    state_ids = [state["id"] for state in data["states"]]
+    assert set(state_ids) == {punjab.id, goa.id}
+    assert len(data["question_revisions"]) == 2
+    qrev_ids = [q["id"] for q in data["question_revisions"]]
+    assert set(qrev_ids) == {question_revision_one.id, question_revision_two.id}
+
+
+def test_clone_soft_deleted_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name="Soft Deleted Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+        is_deleted=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test not found"
+
+
+def test_clone_template_test_link_not_copied(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    tag = create_random_tag(db)
+    state = create_random_state(db)
+    question_revision = create_random_question_revision(db)
+
+    # Create a template test
+    test = Test(
+        name="Template Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add(TestTag(test_id=test.id, tag_id=tag.id))
+    db.add(TestState(test_id=test.id, state_id=state.id))
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    # Clone the template test
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != test.id
+    assert data["is_template"] is True
+    assert data["name"].startswith("Copy of ")
+    assert data.get("link") is None
