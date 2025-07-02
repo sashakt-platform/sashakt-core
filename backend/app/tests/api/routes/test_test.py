@@ -2380,28 +2380,32 @@ def test_public_timer_returns_zero_if_start_time_none(
 
 
 def test_get_inactive_tests_not_listed(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
-    user_id = user_data["id"]
-    test = Test(
-        name=random_lower_string(),
-        description="test with inactive status",
-        time_limit=50,
-        marks=20,
-        completion_message=random_lower_string(),
-        start_instructions=random_lower_string(),
-        marks_level=None,
-        link=random_lower_string(),
-        no_of_attempts=1,
-        shuffle=False,
-        no_of_random_questions=2,
-        question_pagination=1,
-        created_by_id=user_id,
-        is_active=False,
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 15,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "is_active": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
     )
-    db.add(test)
-    db.commit()
+    data = response.json()
+    test_id = data["id"]
+    assert data["is_active"] is False
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
@@ -2410,4 +2414,4 @@ def test_get_inactive_tests_not_listed(
     data = response.json()
 
     assert response.status_code == 200
-    assert all(item["id"] != test.id for item in data)
+    assert all(item["id"] != test_id for item in data)
