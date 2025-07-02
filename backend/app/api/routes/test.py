@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
+from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
@@ -69,13 +70,11 @@ def create_test(
     )
     test_data["created_by_id"] = current_user.id
     # Auto-generate UUID for link if not provided
-    if not test_data.get("link"):
+    if not test_data["is_template"] and not test_data["link"]:
         import uuid
 
         test_data["link"] = str(uuid.uuid4())
-
     test = Test.model_validate(test_data)
-
     if test.random_questions is True and (
         test.no_of_random_questions is None
         or (test.no_of_random_questions is not None and test.no_of_random_questions < 1)
@@ -151,6 +150,7 @@ def create_test(
 )
 def get_test(
     session: SessionDep,
+    current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
     marks_level: MarksLevelEnum | None = None,
@@ -186,7 +186,8 @@ def get_test(
         examples=["-created_date", "name"],
     ),
 ) -> Sequence[TestPublic]:
-    query = select(Test)
+    query = select(Test).join(User).where(Test.created_by_id == User.id)
+    query = query.where(User.organization_id == current_user.organization_id)
 
     for order in order_by:
         is_desc = order.startswith("-")
