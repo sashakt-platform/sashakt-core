@@ -38,7 +38,7 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import Option
+from app.models.question import BulkUploadQuestionsResponse, Option
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -923,12 +923,12 @@ def update_question_tags(
     return get_question_tags(question_id=question_id, session=session)
 
 
-@router.post("/bulk-upload", response_model=Message)
+@router.post("/bulk-upload", response_model=BulkUploadQuestionsResponse)
 async def upload_questions_csv(
     session: SessionDep,
     current_user: CurrentUser,
     file: UploadFile = File(...),
-) -> Message:
+) -> BulkUploadQuestionsResponse:
     """
     Bulk upload questions from a CSV file.
     The CSV should include columns:
@@ -1205,8 +1205,12 @@ async def upload_questions_csv(
                 f" The following tag types were not found: {', '.join(failed_tagtypes)}"
             )
 
-        return Message(message=message)
-
+        return BulkUploadQuestionsResponse(
+            message=message,
+            uploaded_questions=questions_created + questions_failed,
+            success_questions=questions_created,
+            failed_questions=questions_failed,
+        )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised
         raise
