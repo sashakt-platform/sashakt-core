@@ -2885,7 +2885,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
     db.add(test_2)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name=python&tag_ids={tag.id}&states_ids={state.id}",
+        f"{settings.API_V1_STR}/test/?name=python&tag_ids={tag.id}&state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
