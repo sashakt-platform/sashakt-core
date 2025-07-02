@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -175,6 +175,8 @@ def get_test(
     question_pagination: int | None = None,
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
+    tag_ids: list[int] | None = Query(None),
+    state_ids: list[int] | None = Query(None),
     is_active: bool = True,
     is_deleted: bool | None = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
@@ -204,10 +206,12 @@ def get_test(
     query = query.where(Test.is_active == is_active)
 
     if name is not None:
-        query = query.where(col(Test.name).contains(name))
+        query = query.where(func.lower(Test.name).like(f"%{name.lower()}%"))
 
     if description is not None:
-        query = query.where(col(Test.description).contains(description))
+        query = query.where(
+            func.lower(Test.description).like(f"%{description.lower()}%")
+        )
 
     if completion_message is not None:
         query = query.where(col(Test.completion_message).contains(completion_message))
@@ -268,6 +272,22 @@ def get_test(
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))
+    if tag_ids:
+        tag_query = select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids))
+        test_ids_with_tags = session.exec(tag_query).all()
+        if test_ids_with_tags:
+            query = query.where(col(Test.id).in_(test_ids_with_tags))
+        else:
+            return []
+    if state_ids:
+        state_subquery = select(TestState.test_id).where(
+            col(TestState.state_id).in_(state_ids)
+        )
+        test_ids_with_states = session.exec(state_subquery).all()
+        if test_ids_with_states:
+            query = query.where(col(Test.id).in_(test_ids_with_states))
+        else:
+            return []
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
