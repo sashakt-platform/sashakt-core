@@ -2420,13 +2420,22 @@ def test_get_inactive_tests_not_listed(
 def test_clone_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-    tag_a = create_random_tag(db)
-    tag_b = create_random_tag(db)
-    state_a = create_random_state(db)
-    state_b = create_random_state(db)
-    question_revision_a = create_random_question_revision(db)
-    question_revision_b = create_random_question_revision(db)
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user1 = create_random_user(db)
+    superadmin = get_current_user_data(client, get_user_superadmin_token)
     test = Test(
         name="Original Test",
         description=random_lower_string(),
@@ -2441,19 +2450,23 @@ def test_clone_test(
         no_of_random_questions=2,
         question_pagination=1,
         is_template=False,
-        created_by_id=user.id,
+        created_by_id=user1.id,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
     db.add_all(
         [
-            TestTag(test_id=test.id, tag_id=tag_a.id),
-            TestTag(test_id=test.id, tag_id=tag_b.id),
-            TestState(test_id=test.id, state_id=state_a.id),
-            TestState(test_id=test.id, state_id=state_b.id),
-            TestQuestion(test_id=test.id, question_revision_id=question_revision_a.id),
-            TestQuestion(test_id=test.id, question_revision_id=question_revision_b.id),
+            TestTag(test_id=test.id, tag_id=tag_hindi.id),
+            TestTag(test_id=test.id, tag_id=tag_marathi.id),
+            TestState(test_id=test.id, state_id=punjab.id),
+            TestState(test_id=test.id, state_id=goa.id),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_one.id
+            ),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_two.id
+            ),
         ]
     )
     db.commit()
@@ -2477,20 +2490,18 @@ def test_clone_test(
     assert data["question_pagination"] == test.question_pagination
     assert data["is_template"] == test.is_template
     assert data["created_by_id"] != test.created_by_id
+    assert data["created_by_id"] == superadmin["id"]
     assert data["link"] is not None
     assert data["link"] != test.link
     assert len(data["tags"]) == 2
-    tag_ids = [t["id"] for t in data["tags"]]
-    assert tag_a.id in tag_ids
-    assert tag_b.id in tag_ids
+    tag_ids = [tag["id"] for tag in data["tags"]]
+    assert set(tag_ids) == {tag_hindi.id, tag_marathi.id}
     assert len(data["states"]) == 2
-    state_ids = [s["id"] for s in data["states"]]
-    assert state_a.id in state_ids
-    assert state_b.id in state_ids
+    state_ids = [state["id"] for state in data["states"]]
+    assert set(state_ids) == {punjab.id, goa.id}
     assert len(data["question_revisions"]) == 2
     qrev_ids = [q["id"] for q in data["question_revisions"]]
-    assert question_revision_a.id in qrev_ids
-    assert question_revision_b.id in qrev_ids
+    assert set(qrev_ids) == {question_revision_one.id, question_revision_two.id}
 
 
 def test_clone_soft_deleted_test(
