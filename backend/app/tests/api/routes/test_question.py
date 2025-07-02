@@ -2385,3 +2385,66 @@ def test_filter_questions_by_latest_revision_subtext(
     data = response.json()
     ids = [item["id"] for item in data]
     assert question.id not in ids
+
+
+def test_bulk_upload_questions_response_format(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    # Prepare a CSV with some valid and some invalid rows
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    tag_type = TagType(
+        name="Response Model Type",
+        description="For testing the response model",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is 4+4?,4,3,5,8,A,Response Model Type:Math,Punjab
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Response Model Type:Geography,Punjab
+Water,Gold,Silver,Carbon,A,Response Model Type:Chemistry,Punjab
+Invalid state?,A,B,C,D,A,Response Model Type:Math,NonExistentState
+Invalid tagtype?,A,B,C,D,A,NonExistentType:Math,Punjab
+"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == 200
+        data = response.json()
+        # Check response structure
+        assert "message" in data
+        assert "uploaded_questions" in data
+        assert "success_questions" in data
+        assert "failed_questions" in data
+        assert data["uploaded_questions"] == 5
+        assert data["success_questions"] == 2
+        assert data["failed_questions"] == 3
+        assert "Bulk upload complete." in data["message"]
+        assert "Created 2 questions successfully." in data["message"]
+        assert "Failed to create 3 questions." in data["message"]
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)

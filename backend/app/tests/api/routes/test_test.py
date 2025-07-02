@@ -2447,6 +2447,525 @@ def test_get_inactive_tests_not_listed(
     assert all(item["id"] != test_id for item in data)
 
 
+def test_clone_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user1 = create_random_user(db)
+    superadmin = get_current_user_data(client, get_user_superadmin_token)
+    test = Test(
+        name="Original Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user1.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add_all(
+        [
+            TestTag(test_id=test.id, tag_id=tag_hindi.id),
+            TestTag(test_id=test.id, tag_id=tag_marathi.id),
+            TestState(test_id=test.id, state_id=punjab.id),
+            TestState(test_id=test.id, state_id=goa.id),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_one.id
+            ),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_two.id
+            ),
+        ]
+    )
+    db.commit()
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != test.id
+    assert data["name"].startswith("Copy of ")
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["marks"] == test.marks
+    assert data["completion_message"] == test.completion_message
+    assert data["start_instructions"] == test.start_instructions
+    assert data["no_of_attempts"] == test.no_of_attempts
+    assert data["shuffle"] == test.shuffle
+    assert data["random_questions"] == test.random_questions
+    assert data["no_of_random_questions"] == test.no_of_random_questions
+    assert data["question_pagination"] == test.question_pagination
+    assert data["is_template"] == test.is_template
+    assert data["created_by_id"] != test.created_by_id
+    assert data["created_by_id"] == superadmin["id"]
+    assert data["link"] is not None
+    assert data["link"] != test.link
+    assert len(data["tags"]) == 2
+    tag_ids = [tag["id"] for tag in data["tags"]]
+    assert set(tag_ids) == {tag_hindi.id, tag_marathi.id}
+    assert len(data["states"]) == 2
+    state_ids = [state["id"] for state in data["states"]]
+    assert set(state_ids) == {punjab.id, goa.id}
+    assert len(data["question_revisions"]) == 2
+    qrev_ids = [q["id"] for q in data["question_revisions"]]
+    assert set(qrev_ids) == {question_revision_one.id, question_revision_two.id}
+
+
+def test_clone_soft_deleted_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name="Soft Deleted Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+        is_deleted=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test not found"
+
+
+def test_clone_template_test_link_not_copied(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    tag = create_random_tag(db)
+    state = create_random_state(db)
+    question_revision = create_random_question_revision(db)
+
+    # Create a template test
+    test = Test(
+        name="Template Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add(TestTag(test_id=test.id, tag_id=tag.id))
+    db.add(TestState(test_id=test.id, state_id=state.id))
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    # Clone the template test
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != test.id
+    assert data["is_template"] is True
+    assert data["name"].startswith("Copy of ")
+    assert data.get("link") is None
+
+
+def test_get_test_by_filter_case_insensitive_name(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    test_1 = Test(
+        name="python test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+
+    test_2 = Test(
+        name="PyThon advanced test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+
+    test_3 = Test(
+        name=" beginner test PYTHON",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=python",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 3
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=PYTHON",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+
+def test_get_tests_by_tags_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    db.refresh(user)
+    tag_type = TagType(
+        name="Skill Category",
+        description="Example tag type",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag_1 = Tag(
+        name="aptitude",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    tag_2 = Tag(
+        name="logic",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    tag_3 = Tag(
+        name="english",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    db.add_all([tag_1, tag_2, tag_3])
+    db.commit()
+    test_1 = Test(
+        name="test with aptitude tag",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name="test with logic tag",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name="test with english tag",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_4 = Test(
+        name="another aptitude test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_5 = Test(
+        name="test with logic and english",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3, test_4, test_5])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+    test_tag_link_1 = TestTag(test_id=test_1.id, tag_id=tag_1.id)
+    test_tag_link_2 = TestTag(test_id=test_2.id, tag_id=tag_2.id)
+    test_tag_link_3 = TestTag(test_id=test_3.id, tag_id=tag_3.id)
+    test_tag_link_4 = TestTag(test_id=test_4.id, tag_id=tag_1.id)
+    test_tag_link_5 = TestTag(test_id=test_5.id, tag_id=tag_2.id)
+    test_tag_link_6 = TestTag(test_id=test_5.id, tag_id=tag_3.id)
+
+    db.add_all(
+        [
+            test_tag_link_1,
+            test_tag_link_2,
+            test_tag_link_3,
+            test_tag_link_4,
+            test_tag_link_5,
+            test_tag_link_6,
+        ]
+    )
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_1.id, test_4.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_2.id, test_5.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_3.id, test_5.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+
+def test_get_tests_by_state_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    db.refresh(user)
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_1 = State(name="Maharashtra", is_active=True, country_id=country.id)
+    state_2 = State(name="Karnataka", is_active=True, country_id=country.id)
+    db.add_all([state_1, state_2])
+    db.commit()
+    db.refresh(state_1)
+    db.refresh(state_2)
+    test_1 = Test(
+        name="test for Maharashtra",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name="test for Karnataka",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name="test for both states",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+    test_state_1 = TestState(test_id=test_1.id, state_id=state_1.id)
+    test_state_2 = TestState(test_id=test_2.id, state_id=state_2.id)
+    test_state_3a = TestState(test_id=test_3.id, state_id=state_1.id)
+    test_state_3b = TestState(test_id=test_3.id, state_id=state_2.id)
+    db.add_all([test_state_1, test_state_2, test_state_3a, test_state_3b])
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_1.id, test_3.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?state_ids={state_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_2.id, test_3.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}&state_ids={state_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    assert {test["id"] for test in data} == {test_1.id, test_2.id, test_3.id}
+
+
+def test_get_tests_by_combined_name_tag_state_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    db.refresh(user)
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name="Maharashtra", is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    tag_type = TagType(
+        name="Skill Type",
+        description="type",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag = Tag(
+        name="aptitude",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    test_1 = Test(
+        name="Python Aptitude Test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add(test_1)
+    db.commit()
+    db.refresh(test_1)
+    db.add_all(
+        [
+            TestTag(test_id=test_1.id, tag_id=tag.id),
+            TestState(test_id=test_1.id, state_id=state.id),
+        ]
+    )
+    db.commit()
+    test_2 = Test(
+        name="Java Test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add(test_2)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=python&tag_ids={tag.id}&state_ids={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == test_1.id
+
+
+def test_get_tests_by_case_insensitive_description_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    db.refresh(user)
+    keyword = "importantDescription"
+    test_1 = Test(
+        name=random_lower_string(),
+        description=keyword,  # exact case
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name=random_lower_string(),
+        description="someText" + keyword.upper() + "moreText",  # upper case
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name=random_lower_string(),
+        description="completely different",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?description={keyword}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    returned_ids = {test["id"] for test in data}
+    assert test_1.id in returned_ids
+    assert test_2.id in returned_ids
+    assert test_3.id not in returned_ids
+
+
 def test_get_tests_filtered_by_organization(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:

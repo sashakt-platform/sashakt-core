@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -175,6 +175,8 @@ def get_test(
     question_pagination: int | None = None,
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
+    tag_ids: list[int] | None = Query(None),
+    state_ids: list[int] | None = Query(None),
     is_active: bool = True,
     is_deleted: bool | None = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
@@ -205,10 +207,12 @@ def get_test(
     query = query.where(Test.is_active == is_active)
 
     if name is not None:
-        query = query.where(col(Test.name).contains(name))
+        query = query.where(func.lower(Test.name).like(f"%{name.lower()}%"))
 
     if description is not None:
-        query = query.where(col(Test.description).contains(description))
+        query = query.where(
+            func.lower(Test.description).like(f"%{description.lower()}%")
+        )
 
     if completion_message is not None:
         query = query.where(col(Test.completion_message).contains(completion_message))
@@ -269,6 +273,22 @@ def get_test(
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))
+    if tag_ids:
+        tag_query = select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids))
+        test_ids_with_tags = session.exec(tag_query).all()
+        if test_ids_with_tags:
+            query = query.where(col(Test.id).in_(test_ids_with_tags))
+        else:
+            return []
+    if state_ids:
+        state_subquery = select(TestState.test_id).where(
+            col(TestState.state_id).in_(state_ids)
+        )
+        test_ids_with_states = session.exec(state_subquery).all()
+        if test_ids_with_states:
+            query = query.where(col(Test.id).in_(test_ids_with_states))
+        else:
+            return []
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
@@ -532,3 +552,74 @@ def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> Ti
         return TimeLeft(time_left=0)
     seconds_left = (start_time - current_time).total_seconds()
     return TimeLeft(time_left=int(seconds_left))
+
+
+@router.post(
+    "/{test_id}/clone",
+    response_model=TestPublic,
+    dependencies=[Depends(permission_dependency("create_test"))],
+)
+def clone_test(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> TestPublic:
+    # Fetch the original test
+    original = session.get(Test, test_id)
+    if not original or original.is_deleted:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    test_data = original.model_dump(exclude={"id", "created_date", "modified_date"})
+    test_data["name"] = f"Copy of {original.name}"
+    test_data["created_by_id"] = current_user.id
+    if not original.is_template:
+        import uuid
+
+        test_data["link"] = str(uuid.uuid4())
+
+    new_test = Test.model_validate(test_data)
+    session.add(new_test)
+    session.commit()
+    session.refresh(new_test)
+
+    tag_links = session.exec(
+        select(TestTag).where(TestTag.test_id == original.id)
+    ).all()
+    for tag_link in tag_links:
+        session.add(TestTag(test_id=new_test.id, tag_id=tag_link.tag_id))
+    session.commit()
+
+    question_links = session.exec(
+        select(TestQuestion).where(TestQuestion.test_id == original.id)
+    ).all()
+    for ql in question_links:
+        session.add(
+            TestQuestion(
+                test_id=new_test.id, question_revision_id=ql.question_revision_id
+            )
+        )
+    session.commit()
+    state_links = session.exec(
+        select(TestState).where(TestState.test_id == original.id)
+    ).all()
+    for sl in state_links:
+        session.add(TestState(test_id=new_test.id, state_id=sl.state_id))
+    session.commit()
+
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == new_test.id)
+    tags = session.exec(tags_query).all()
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == new_test.id)
+    )
+    question_revisions = session.exec(question_revision_query).all()
+    state_query = select(State).join(TestState).where(TestState.test_id == new_test.id)
+    states = session.exec(state_query).all()
+
+    return TestPublic(
+        **new_test.model_dump(),
+        tags=tags,
+        question_revisions=question_revisions,
+        states=states,
+    )

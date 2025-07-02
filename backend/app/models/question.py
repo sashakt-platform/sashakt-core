@@ -487,6 +487,13 @@ class QuestionUpdate(SQLModel):
     )
 
 
+class BulkUploadQuestionsResponse(SQLModel):
+    message: str
+    uploaded_questions: int
+    success_questions: int
+    failed_questions: int
+
+
 # Force model rebuild to handle forward references
 QuestionPublic.model_rebuild()
 QuestionRevision.model_rebuild()
