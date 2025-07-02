@@ -2414,8 +2414,7 @@ def test_get_inactive_tests_not_listed(
     data = response.json()
 
     assert response.status_code == 200
-
-    assert all(item["id"] != test.id for item in data)
+    assert all(item["id"] != test_id for item in data)
 
 
 def test_get_test_by_filter_case_insensitive_name(
@@ -2564,7 +2563,7 @@ def test_get_tests_by_tags_filter(
     )
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param=aptitude",
+        f"{settings.API_V1_STR}/test/?tags_param={tag_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2572,7 +2571,7 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_1.id, test_4.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param=logic",
+        f"{settings.API_V1_STR}/test/?tags_param={tag_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2580,7 +2579,7 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_2.id, test_5.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param=english",
+        f"{settings.API_V1_STR}/test/?tags_param={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2588,7 +2587,7 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 2
     assert {test["id"] for test in data} == {test_3.id, test_5.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tags_param=logic&tags_param=english",
+        f"{settings.API_V1_STR}/test/?tags_param={tag_2.id}&tags_param={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2722,7 +2721,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
     db.add(test_2)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name=python&tags_param=aptitude&states_param={state.id}",
+        f"{settings.API_V1_STR}/test/?name=python&tags_param={tag.id}&states_param={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2730,3 +2729,45 @@ def test_get_tests_by_combined_name_tag_state_filter(
     assert len(data) == 1
     assert data[0]["id"] == test_1.id
 
+
+def test_get_tests_by_case_insensitive_description_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    db.refresh(user)
+    keyword = "importantDescription"
+    test_1 = Test(
+        name=random_lower_string(),
+        description=keyword,  # exact case
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name=random_lower_string(),
+        description="someText" + keyword.upper() + "moreText",  # upper case
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name=random_lower_string(),
+        description="completely different",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?description={keyword}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    print("description", data)
+    assert len(data) == 2
+    returned_ids = {test["id"] for test in data}
+    assert test_1.id in returned_ids
+    assert test_2.id in returned_ids
+    assert test_3.id not in returned_ids
