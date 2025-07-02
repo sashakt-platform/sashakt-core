@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -2444,3 +2445,59 @@ def test_get_inactive_tests_not_listed(
 
     assert response.status_code == 200
     assert all(item["id"] != test_id for item in data)
+
+
+def test_get_tests_filtered_by_organization(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    test1 = Test(
+        name="Org Test",
+        description=random_lower_string(),
+        organization_id=org_id,
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test1)
+    other_org = create_random_organization(db)
+    other_user = create_random_user(db, organization_id=other_org.id)
+    test2 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=other_org.id,
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=other_user.id,
+    )
+    db.add(test2)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    ids = [item["id"] for item in data]
+    assert test1.id in ids
+    assert test2.id not in ids
