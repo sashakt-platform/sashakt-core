@@ -59,11 +59,12 @@ def get_countries(
     session: SessionDep,
     skip: int = 0,
     limit: int = 10,
-    is_active: bool = True,
+    is_active: bool | None = None,
 ) -> Sequence[Country]:
     query = select(Country)
 
-    query = query.where(Country.is_active == is_active)
+    if is_active is not None:
+        query = query.where(Country.is_active == is_active)
 
     # Apply pagination
     query = query.offset(skip).limit(limit)
@@ -141,7 +142,7 @@ def get_state(
     session: SessionDep,
     skip: int = 0,
     limit: int = 10,
-    is_active: bool = True,
+    is_active: bool | None = None,
     country: int | None = None,
 ) -> Sequence[State]:
     query = select(State)
@@ -230,12 +231,13 @@ def get_district(
     session: SessionDep,
     skip: int = 0,
     limit: int = 10,
-    is_active: bool = True,
+    is_active: bool | None = None,
     state: int | None = None,
 ) -> Sequence[District]:
     query = select(District)
 
-    query = query.where(District.is_active == is_active)
+    if is_active is not None:
+        query = query.where(District.is_active == is_active)
 
     if state is not None:
         query = query.where(District.state_id == state)
@@ -318,17 +320,18 @@ def get_block(
     session: SessionDep,
     skip: int = 0,
     limit: int = 10,
-    is_active: bool = True,
+    is_active: bool | None = None,
     district: int | None = None,
 ) -> Sequence[Block]:
     query = select(Block)
 
-    query = query.where(Block.is_active == is_active)
+    if is_active is not None:
+        query = query.where(Block.is_active == is_active)
 
     if district is not None:
         query = query.where(Block.district_id == district)
 
-    # Apply apgination
+    # Apply pagination
     query = query.offset(skip).limit(limit)
 
     blocks = session.exec(query).all()

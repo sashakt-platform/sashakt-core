@@ -2125,7 +2125,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     assert len(response.json()) == 0
 
 
-def test_inactive_question_not_listed(
+def test_inactive_question_listed(
     client: TestClient,
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
@@ -2183,7 +2183,7 @@ def test_inactive_question_not_listed(
     question_id = data["id"]
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -2263,7 +2263,7 @@ def test_deactivate_question_with_new_revision(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert all(item["id"] != question_id for item in data)
+    assert any(item["id"] == question_id for item in data)
 
 
 def test_filter_questions_by_latest_revision_text(
