@@ -701,7 +701,7 @@ def test_update_block(
     assert response.json() == {"detail": "Block not found"}
 
 
-def test_create_inactive_country_listed(
+def test_create_inactive_country_not_listed(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
@@ -716,12 +716,12 @@ def test_create_inactive_country_listed(
     assert data["is_active"] is False
     country_id = data["id"]
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?is_active=false",
+        f"{settings.API_V1_STR}/location/country/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert all(item["is_active"] is False for item in data)
-    assert any(item["id"] == country_id for item in data)
+    assert all(item["is_active"] is True for item in data)
+    assert all(item["id"] != country_id for item in data)
 
 
 def test_create_inactive_state_not_listed(
@@ -764,7 +764,7 @@ def test_create_inactive_state_not_listed(
     assert any(item["id"] == state_id for item in data)
 
 
-def test_create_inactive_district_listed(
+def test_create_inactive_district_not_listed(
     client: TestClient,
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
@@ -806,7 +806,7 @@ def test_create_inactive_district_listed(
     assert all(item["is_active"] is False for item in data)
 
 
-def test_create_inactive_block_listed(
+def test_create_inactive_block_not_listed(
     client: TestClient,
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
