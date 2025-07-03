@@ -870,3 +870,206 @@ def test_inactive_tagtype_not_listed(
 
     # The inactive tagtype should NOT be in the response
     assert all(item["id"] != tagtype_id for item in response_data)
+
+
+def test_create_tag_without_tag_type(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    real_user = create_random_user(db)
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    tag_id = data["id"]
+    assert response.status_code == 200
+    assert data["name"] == data["name"]
+    assert data["description"] == data["description"]
+    assert data["is_deleted"] is False
+    assert data["tag_type"] is None
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=real_user.id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+    updated_data = {
+        "name": random_lower_string(),
+        "tag_type_id": tagtype.id,
+    }
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        json=updated_data,
+        headers=get_user_superadmin_token,
+    )
+    update_data = update_response.json()
+    assert update_response.status_code == 200
+    assert update_data["tag_type"]["id"] == tagtype.id
+    assert update_data["tag_type"]["name"] == tagtype.name
+    assert update_data["tag_type"]["organization_id"] == organization.id
+    assert update_data["tag_type"] is not None
+
+
+def test_create_tag_with_invalid_tag_type_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    invalid_tag_type_id = 85
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "tag_type_id": invalid_tag_type_id,
+        "created_by_id": user.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert response_data["detail"] == "Tag Type not found"
+
+
+def test_update_tag_to_remove_tag_type(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    tag_type = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "tag_type_id": tag_type.id,
+        "created_by_id": user.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    tag_id = data["id"]
+    assert data["tag_type"]["id"] == tag_type.id
+    update_payload = {"name": data["name"], "tag_type_id": None}
+    update_response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    update_data = update_response.json()
+    assert update_response.status_code == 200
+    assert update_data["id"] == tag_id
+    assert update_data["tag_type"] is None
+    assert update_data["name"] == data["name"]
+    assert update_data["description"] == data["description"]
+
+
+def test_update_tag_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    invalid_tag_id = 999999
+    update_data = {
+        "name": "Updated Tag Name",
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{invalid_tag_id}",
+        json=update_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tag not found"
+
+
+def test_update_tag_soft_deleted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        is_deleted=True,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    update_data = {"name": "Updated Name"}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json=update_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tag not found"
+
+
+def test_create_tag_with_deleted_tag_type(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    tag_type = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        is_deleted=True,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json={
+            "name": random_lower_string(),
+            "tag_type_id": tag_type.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tag Type not found"
