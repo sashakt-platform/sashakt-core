@@ -901,9 +901,7 @@ def test_get_is_active_country(
         f"{settings.API_V1_STR}/location/country/?is_active=true",
         headers=get_user_superadmin_token,
     )
-
     assert response.status_code == 200
-    data = response.json()
     data = response.json()
     assert len(data) == 10  # default limit is 10
     assert all(item["is_active"] is True for item in data)
