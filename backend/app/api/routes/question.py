@@ -11,7 +11,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
@@ -38,7 +38,7 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import Option
+from app.models.question import BulkUploadQuestionsResponse, Option
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -341,6 +341,7 @@ def get_questions(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
+    question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
@@ -355,6 +356,14 @@ def get_questions(
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
+    if question_text:
+        query = query.join(QuestionRevision).where(
+            Question.last_revision_id == QuestionRevision.id
+        )
+        query = query.where(
+            func.lower(QuestionRevision.question_text).contains(question_text.lower())
+        )
+
     # Apply filters only if they're provided
     if is_deleted is not None:
         query = query.where(Question.is_deleted == is_deleted)
@@ -923,12 +932,12 @@ def update_question_tags(
     return get_question_tags(question_id=question_id, session=session)
 
 
-@router.post("/bulk-upload", response_model=Message)
+@router.post("/bulk-upload", response_model=BulkUploadQuestionsResponse)
 async def upload_questions_csv(
     session: SessionDep,
     current_user: CurrentUser,
     file: UploadFile = File(...),
-) -> Message:
+) -> BulkUploadQuestionsResponse:
     """
     Bulk upload questions from a CSV file.
     The CSV should include columns:
@@ -1205,8 +1214,12 @@ async def upload_questions_csv(
                 f" The following tag types were not found: {', '.join(failed_tagtypes)}"
             )
 
-        return Message(message=message)
-
+        return BulkUploadQuestionsResponse(
+            message=message,
+            uploaded_questions=questions_created + questions_failed,
+            success_questions=questions_created,
+            failed_questions=questions_failed,
+        )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised
         raise
