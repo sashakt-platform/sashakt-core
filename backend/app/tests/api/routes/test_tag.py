@@ -879,23 +879,23 @@ def test_create_tag_without_tag_type(
 ) -> None:
     user, organization = setup_user_organization(db)
     real_user = create_random_user(db)
-    data = {
+    request_data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
     }
 
     response = client.post(
         f"{settings.API_V1_STR}/tag/",
-        json=data,
+        json=request_data,
         headers=get_user_superadmin_token,
     )
-    data = response.json()
-    tag_id = data["id"]
+    response_data = response.json()
+    tag_id = response_data["id"]
     assert response.status_code == 200
-    assert data["name"] == data["name"]
-    assert data["description"] == data["description"]
-    assert data["is_deleted"] is False
-    assert data["tag_type"] is None
+    assert response_data["name"] == request_data["name"]
+    assert response_data["description"] == request_data["description"]
+    assert response_data["is_deleted"] is False
+    assert response_data["tag_type"] is None
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
