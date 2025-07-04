@@ -713,13 +713,14 @@ def test_create_inactive_country_not_listed(
     )
     data = response.json()
     assert response.status_code == 200
-    country_id = data["id"]
     assert data["is_active"] is False
+    country_id = data["id"]
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/",
+        f"{settings.API_V1_STR}/location/country/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
+    assert all(item["is_active"] is True for item in data)
     assert all(item["id"] != country_id for item in data)
 
 
@@ -742,11 +743,25 @@ def test_create_inactive_state_not_listed(
     state_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert all(item["id"] != state_id for item in data)
+    assert all(item["is_active"] is True for item in data)
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert any(item["id"] == state_id for item in data)
+    assert all(item["is_active"] is False for item in data)
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?limit=100",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert any(item["id"] == state_id for item in data)
 
 
 def test_create_inactive_district_not_listed(
@@ -777,11 +792,18 @@ def test_create_inactive_district_not_listed(
     district_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert all(item["id"] != district_id for item in data)
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert any(item["id"] == district_id for item in data)
+    assert all(item["is_active"] is False for item in data)
 
 
 def test_create_inactive_block_not_listed(
@@ -815,8 +837,71 @@ def test_create_inactive_block_not_listed(
     block_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/",
+        f"{settings.API_V1_STR}/location/block/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert all(item["id"] != block_id for item in data)
+    response = client.get(
+        f"{settings.API_V1_STR}/location/block/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert any(item["id"] == block_id for item in data)
+    assert all(item["is_active"] is False for item in data)
+
+
+def test_get_is_active_country(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    dubai = Country(name=random_lower_string())
+    austria = Country(name=random_lower_string())
+
+    db.add_all([dubai, austria])
+    db.commit()
+    db.refresh(dubai)
+
+    db.refresh(austria)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/country/?limit=100",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert any(item["name"] == dubai.name for item in data)
+    assert any(item["name"] == austria.name for item in data)
+
+    for _ in range(1, 11):
+        country = Country(name=random_lower_string(), is_active=True)
+        db.add(country)
+        db.commit()
+
+    country_1 = Country(name=random_lower_string(), is_active=False)
+    country_2 = Country(name=random_lower_string(), is_active=False)
+    db.add_all([country_1, country_2])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/country/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    names = [item["name"] for item in data]
+
+    assert country_1.name in names
+    assert country_2.name in names
+    assert all(item["is_active"] is False for item in data)
+    data = response.json()
+    response = client.get(
+        f"{settings.API_V1_STR}/location/country/?is_active=true",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 10  # default limit is 10
+    assert all(item["is_active"] is True for item in data)
