@@ -2125,7 +2125,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     assert len(response.json()) == 0
 
 
-def test_inactive_question_not_listed(
+def test_inactive_question_listed(
     client: TestClient,
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
@@ -2183,7 +2183,7 @@ def test_inactive_question_not_listed(
     question_id = data["id"]
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions/?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -2263,7 +2263,7 @@ def test_deactivate_question_with_new_revision(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert all(item["id"] != question_id for item in data)
+    assert any(item["id"] == question_id for item in data)
 
 
 def test_filter_questions_by_latest_revision_text(
@@ -2448,6 +2448,78 @@ Invalid tagtype?,A,B,C,D,A,NonExistentType:Math,Punjab
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_get_questions_by_is_active_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    active_question = Question(organization_id=org_id, is_active=True)
+    db.add(active_question)
+    db.flush()
+    rev1 = QuestionRevision(
+        question_id=active_question.id,
+        created_by_id=user_id,
+        question_text="Active question",
+        question_type="single_choice",
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.flush()
+    active_question.last_revision_id = rev1.id
+    inactive_question = Question(organization_id=org_id, is_active=False)
+    db.add(inactive_question)
+    db.flush()
+    rev2 = QuestionRevision(
+        question_id=inactive_question.id,
+        created_by_id=user_id,
+        question_text="Inactive question",
+        question_type="single_choice",
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev2)
+    db.flush()
+    inactive_question.last_revision_id = rev2.id
+    db.commit()
+    db.refresh(active_question)
+    db.refresh(inactive_question)
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    ids = [q["id"] for q in data]
+    assert active_question.id in ids
+    assert inactive_question.id in ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?is_active=true",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    ids = [q["id"] for q in data]
+    assert active_question.id in ids
+    assert inactive_question.id not in ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    ids = [q["id"] for q in data]
+    assert inactive_question.id in ids
+    assert active_question.id not in ids
 
 
 def test_bulk_upload_questions_without_tagtype(

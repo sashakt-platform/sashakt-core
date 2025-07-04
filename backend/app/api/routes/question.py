@@ -348,7 +348,7 @@ def get_questions(
     block_ids: list[int] = Query(None),  # Support multiple blocks
     tag_ids: list[int] = Query(None),  # Support multiple tags
     created_by_id: int | None = None,
-    is_active: bool = True,
+    is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
@@ -369,7 +369,8 @@ def get_questions(
     if is_deleted is not None:
         query = query.where(Question.is_deleted == is_deleted)
 
-    query = query.where(Question.is_active == is_active)
+    if is_active is not None:
+        query = query.where(Question.is_active == is_active)
 
     # Handle tag-based filtering with multiple tags
     if tag_ids:
