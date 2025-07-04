@@ -2409,7 +2409,7 @@ def test_public_timer_returns_zero_if_start_time_none(
     assert data == {"time_left": 0}
 
 
-def test_get_inactive_tests_not_listed(
+def test_get_inactive_tests_listed(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     payload = {
@@ -2438,13 +2438,13 @@ def test_get_inactive_tests_not_listed(
     assert data["is_active"] is False
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test/?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
     assert response.status_code == 200
-    assert all(item["id"] != test_id for item in data)
+    assert any(item["id"] == test_id for item in data)
 
 
 def test_clone_test(
@@ -3030,3 +3030,54 @@ def test_get_tests_filtered_by_organization(
     ids = [item["id"] for item in data]
     assert test1.id in ids
     assert test2.id not in ids
+
+
+def test_get_all_tests_includes_active_and_inactive(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    active_test = Test(
+        name="Active Test",
+        is_active=True,
+        is_deleted=False,
+        created_by_id=user_id,
+    )
+    db.add(active_test)
+    inactive_test = Test(
+        name="Inactive Test",
+        is_active=False,
+        is_deleted=False,
+        created_by_id=user_id,
+    )
+    db.add(inactive_test)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    test_names = [test["name"] for test in data]
+    assert "Active Test" in test_names
+    assert "Inactive Test" in test_names
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?is_active=true",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    names = [test["name"] for test in data]
+    assert "Active Test" in names
+    assert "Inactive Test" not in names
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    name = [test["name"] for test in data]
+    assert "Inactive Test" in name
+    assert "Active Test" not in name
