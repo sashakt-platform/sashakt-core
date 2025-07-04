@@ -27,6 +27,24 @@ from app.models.utils import TimeLeft
 router = APIRouter(prefix="/test", tags=["Test"])
 
 
+def validate_test_time_config(
+    start_time: datetime | None, end_time: datetime | None, time_limit: int | None
+) -> None:
+    if start_time and end_time:
+        if end_time <= start_time:
+            raise HTTPException(
+                status_code=400,
+                detail="End time cannot be earlier than start time.",
+            )
+        if time_limit is not None:
+            total_seconds = (end_time - start_time).total_seconds()
+            if time_limit * 60 > total_seconds:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Time limit cannot be more than the duration between start and end time.",
+                )
+
+
 # Public endpoint to get basic test information (for landing page)
 @router.get("/public/{test_uuid}", response_model=TestPublicLimited)
 def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimited:
@@ -74,6 +92,11 @@ def create_test(
         import uuid
 
         test_data["link"] = str(uuid.uuid4())
+    validate_test_time_config(
+        test_data.get("start_time"),
+        test_data.get("end_time"),
+        test_data.get("time_limit"),
+    )
     test = Test.model_validate(test_data)
     if test.random_questions is True and (
         test.no_of_random_questions is None
@@ -370,6 +393,25 @@ def update_test(
 
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
+    if (
+        test_update.start_time is not None
+        or test_update.end_time is not None
+        or test_update.time_limit is not None
+    ):
+        start_time = (
+            test_update.start_time
+            if test_update.start_time is not None
+            else test.start_time
+        )
+        end_time = (
+            test_update.end_time if test_update.end_time is not None else test.end_time
+        )
+        time_limit = (
+            test_update.time_limit
+            if test_update.time_limit is not None
+            else test.time_limit
+        )
+        validate_test_time_config(start_time, end_time, time_limit)
 
     # Updating Tags
     tags_remove = [
