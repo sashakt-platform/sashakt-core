@@ -64,6 +64,13 @@ def start_test_for_candidate(
     if not test or test.is_deleted or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
 
+    current_time = get_current_time()
+    if test.start_time and test.start_time > current_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test has not started yet. Please wait until the scheduled start time.",
+        )
+
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
         identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
