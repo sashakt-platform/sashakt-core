@@ -802,7 +802,6 @@ def test_tag_is_active_toggle(
         "name": "active tag",
         "description": random_lower_string(),
         "tag_type_id": tagtype.id,
-        "created_by_id": user.id,
         "organization_id": organization.id,
         "is_active": True,
     }
@@ -935,7 +934,6 @@ def test_create_tag_with_invalid_tag_type_id(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "tag_type_id": invalid_tag_type_id,
-        "created_by_id": user.id,
     }
 
     response = client.post(
@@ -967,7 +965,6 @@ def test_update_tag_to_remove_tag_type(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "tag_type_id": tag_type.id,
-        "created_by_id": user.id,
     }
 
     response = client.post(

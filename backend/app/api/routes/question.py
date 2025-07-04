@@ -92,7 +92,9 @@ def build_question_response(
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type=tag_type,
+                tag_type=get_tag_type_by_id(session, tag_type_id=tag.tag_type_id)
+                if tag.tag_type_id
+                else None,
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -102,7 +104,6 @@ def build_question_response(
                 is_deleted=tag.is_deleted,
             )
             for tag in tags
-            if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
         ]
 
     # Prepare location information
@@ -1046,22 +1047,23 @@ async def upload_questions_csv(
                             tag_name = parts[1].strip()
                         else:
                             # Default tag type if no colon present
-                            tag_type_name = "Training Tag"
+                            tag_type_name = None
                             tag_name = tag_entry
 
-                        cache_key = f"{tag_type_name}:{tag_name}"
+                        cache_key = f"{tag_type_name or 'default'}:{tag_name}"
                         if cache_key in tag_cache:
                             tag_ids.append(tag_cache[cache_key])
                             continue
+                        tag_type = None
+                        if tag_type_name:
+                            tag_type_query = select(TagType).where(
+                                TagType.name == tag_type_name,
+                                TagType.organization_id == organization_id,
+                            )
 
-                        tag_type_query = select(TagType).where(
-                            TagType.name == tag_type_name,
-                            TagType.organization_id == organization_id,
-                        )
+                            tag_type = session.exec(tag_type_query).first()
 
-                        tag_type = session.exec(tag_type_query).first()
-
-                        if not tag_type:
+                        if tag_type_name and not tag_type:
                             failed_tagtypes.add(tag_type_name)
                             tagtype_error = True
                             continue
@@ -1073,22 +1075,30 @@ async def upload_questions_csv(
                                 Tag.tag_type_id == tag_type.id,
                                 Tag.organization_id == organization_id,
                             )
-                            tag = session.exec(tag_query).first()
+                        else:
+                            tag_query = select(Tag).where(
+                                Tag.name == tag_name,
+                                Tag.tag_type_id is None,
+                                Tag.organization_id == organization_id,
+                            )
+                        tag = session.exec(tag_query).first()
 
-                            if not tag:
-                                tag = Tag(
-                                    name=tag_name,
-                                    description=f"Tag for {tag_name}",
-                                    tag_type_id=tag_type.id,
-                                    created_by_id=user_id,
-                                    organization_id=organization_id,
-                                )
-                                session.add(tag)
-                                session.flush()
+                        if not tag:
+                            tag = Tag(
+                                name=tag_name,
+                                description=f"Tag for {tag_name}",
+                                tag_type_id=tag_type.id if tag_type else None,
+                                created_by_id=user_id,
+                                organization_id=organization_id,
+                            )
+                            session.add(tag)
+                            session.flush()
 
-                            if tag and tag.id:
-                                tag_ids.append(tag.id)
-                                tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
+                        if tag and tag.id:
+                            tag_ids.append(tag.id)
+                            tag_cache[f"{tag_type_name or 'default'}:{tag_name}"] = (
+                                tag.id
+                            )
 
                 if tagtype_error:
                     questions_failed += 1
