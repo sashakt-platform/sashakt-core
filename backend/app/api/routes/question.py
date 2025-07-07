@@ -43,7 +43,7 @@ from app.models.question import BulkUploadQuestionsResponse, Option
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
-def get_tag_type_by_id(session: SessionDep, tag_type_id: int) -> TagType | None:
+def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
     if not tag_type or tag_type.is_deleted:
@@ -1051,7 +1051,7 @@ async def upload_questions_csv(
                             tag_type_name = None
                             tag_name = tag_entry
 
-                        cache_key = f"{tag_type_name or 'default'}:{tag_name}"
+                        cache_key = f"{tag_type_name}:{tag_name}"
                         if cache_key in tag_cache:
                             tag_ids.append(tag_cache[cache_key])
                             continue
@@ -1097,9 +1097,7 @@ async def upload_questions_csv(
 
                         if tag and tag.id:
                             tag_ids.append(tag.id)
-                            tag_cache[f"{tag_type_name or 'default'}:{tag_name}"] = (
-                                tag.id
-                            )
+                            tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
 
                 if tagtype_error:
                     questions_failed += 1

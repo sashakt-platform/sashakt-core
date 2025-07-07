@@ -79,10 +79,9 @@ class Tag(TagBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    tag_type_id: int = Field(
+    tag_type_id: int | None = Field(
         default=None,
         foreign_key="tagtype.id",
-        nullable=True,
         description="ID of the Tag Type to which the Tag should belong to",
     )
 

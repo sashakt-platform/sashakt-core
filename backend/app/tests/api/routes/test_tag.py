@@ -457,8 +457,8 @@ def test_read_tag(
     )
     response_data = response.json()
 
-    assert all(item["name"] != tag_2.name for item in response_data)
-    assert all(item["description"] != tag_2.description for item in response_data)
+    assert any(item["name"] == tag_2.name for item in response_data)
+    assert any(item["description"] == tag_2.description for item in response_data)
 
 
 def test_read_tag_by_id(
@@ -525,8 +525,10 @@ def test_read_tag_by_id(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-    assert response.status_code == 404
-    assert "not found" in response_data["detail"]
+    assert response.status_code == 200
+    assert response_data["name"] == tag.name
+    assert response_data["description"] == tag.description
+    assert response_data["tag_type"] is None
 
 
 def test_update_tag_by_id(
@@ -690,8 +692,9 @@ def test_visibility_tag_by_id(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-    assert response.status_code == 404
-    assert "not found" in response_data["detail"]
+    assert response.status_code == 200
+    assert response_data["is_active"] is False
+    assert response_data["tag_type"] is None
 
 
 def test_delete_tag_by_id(
