@@ -2946,7 +2946,7 @@ def test_start_test_before_start_time(client: TestClient, db: SessionDep) -> Non
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
-        start_time="2025-12-27T12:30:00Z",
+        start_time="2025-07-06T12:30:00Z",
         time_limit=60,
         marks=100,
         start_instructions="Test instructions",
@@ -2960,7 +2960,10 @@ def test_start_test_before_start_time(client: TestClient, db: SessionDep) -> Non
     db.refresh(test)
 
     payload = {"test_id": test.id, "device_info": "Browser on MacOS Chrome"}
-
-    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
-    assert response.status_code == 400
-    assert "Test has not started yet" in response.json()["detail"]
+    fake_now = datetime(2025, 7, 5, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        assert response.status_code == 400
+        assert "Test has not started yet" in response.json()["detail"]
