@@ -1073,3 +1073,43 @@ def test_create_tag_with_deleted_tag_type(
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "Tag Type not found"
+
+
+def test_get_tag_with_tagtype_of_different_organization_returns_tag_type_none(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_a_id = user_data["organization_id"]
+    user_b = create_random_user(db)
+    tagtype_other_org = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user_b.organization_id,  # different org
+        created_by_id=user_b.id,
+    )
+    db.add(tagtype_other_org)
+    db.commit()
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype_other_org.id,
+        created_by_id=user_id,
+        organization_id=org_a_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    for item in response_data:
+        if item["id"] == tag.id:
+            assert item["name"] == tag.name
+            assert item["tag_type"] is None
