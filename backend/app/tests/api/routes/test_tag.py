@@ -1109,7 +1109,30 @@ def test_get_tag_with_tagtype_of_different_organization_returns_tag_type_none(
     response_data = response.json()
 
     assert response.status_code == 200
-    for item in response_data:
-        if item["id"] == tag.id:
-            assert item["name"] == tag.name
-            assert item["tag_type"] is None
+    assert any(item["name"] == tag.name for item in response_data)
+    assert any(item["description"] == tag.description for item in response_data)
+    # Assert that the tag's tag_type is None in the response
+    matching_tags = [item for item in response_data if item["id"] == tag.id]
+    assert len(matching_tags) > 0
+    assert matching_tags[0]["tag_type"] is None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert response_data["name"] == tag.name
+    assert response_data["description"] == tag.description
+    assert response_data["tag_type"] is None
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json={"is_active": False},
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["is_active"] is False
+    assert response_data["tag_type"] is None
