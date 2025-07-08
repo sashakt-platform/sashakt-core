@@ -2939,6 +2939,36 @@ def test_candidate_inactive_not_listed(
     assert data["user_id"] == user.id
 
 
+def test_start_test_before_start_time(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+
+    # Create a test
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        start_time="2025-07-06T12:30:00Z",
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {"test_id": test.id, "device_info": "Browser on MacOS Chrome"}
+    fake_now = datetime(2025, 7, 5, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        assert response.status_code == 400
+        assert "Test has not started yet" in response.json()["detail"]
+
+
 def test_candidate_test_question_ids_are_shuffled(
     client: TestClient, db: SessionDep
 ) -> None:

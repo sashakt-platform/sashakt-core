@@ -78,6 +78,13 @@ def start_test_for_candidate(
     if test.shuffle:
         random.shuffle(question_ids)
 
+    current_time = get_current_time()
+    if test.start_time and test.start_time > current_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test has not started yet. Please wait until the scheduled start time.",
+        )
+
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
         identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
