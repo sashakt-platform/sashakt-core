@@ -1031,7 +1031,6 @@ async def upload_questions_csv(
                     {"id": letter_map[key], "key": key, "value": value}
                     for key, value in zip(letter_map.keys(), options, strict=True)
                 ]
-                print("The valid options are:", valid_options)
                 # Process tags if present
                 tag_ids = []
                 tagtype_error = False

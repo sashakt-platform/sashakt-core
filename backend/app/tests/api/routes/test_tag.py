@@ -466,23 +466,24 @@ def test_read_tag_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=user_data["organization_id"],
+        created_by_id=user_data["id"],
     )
-    user_b = create_random_user(db)
+    user_b = create_random_user(db, user_data["organization_id"])
     db.add(tagtype)
     db.commit()
+    db.refresh(tagtype)
 
     tag = Tag(
         name=random_lower_string(),
         description=random_lower_string(),
         tag_type_id=tagtype.id,
         created_by_id=user_b.id,
-        organization_id=organization.id,
+        organization_id=user_b.organization_id,
     )
     db.add(tag)
     db.commit()
@@ -608,14 +609,16 @@ def test_visibility_tag_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
-    user_b = create_random_user(db)
+    user_b = create_random_user(db, organization_id)
     db.add(tagtype)
     db.commit()
 
@@ -624,7 +627,7 @@ def test_visibility_tag_by_id(
         description=random_lower_string(),
         tag_type_id=tagtype.id,
         created_by_id=user_b.id,
-        organization_id=organization.id,
+        organization_id=user_b.organization_id,
     )
     db.add(tag)
     db.commit()
