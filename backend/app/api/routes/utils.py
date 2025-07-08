@@ -35,4 +35,4 @@ async def health_check() -> bool:
 
 def get_current_time() -> datetime:
     """Returns the current datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
