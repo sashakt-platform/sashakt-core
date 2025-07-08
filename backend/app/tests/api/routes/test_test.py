@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.api.routes.utils import get_current_time
 from app.core.config import settings
 from app.models import (
     Country,
@@ -3084,6 +3083,165 @@ def test_get_all_tests_includes_active_and_inactive(
     assert "Active Test" not in name
 
 
+def test_create_test_end_time_before_start_time(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    start_time = "2025-07-19T10:00:00Z"
+    end_time = "2025-07-18T12:00:00Z"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time,
+        "end_time": end_time,
+        "time_limit": 10,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_create_test_time_limit_exceeds_duration(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    start_time = "2025-07-19T10:00:00Z"
+    end_time = "2025-07-19T10:30:00Z"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time,
+        "end_time": end_time,
+        "time_limit": 70,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert (
+        "Time limit cannot be more than the duration between start and end time"
+        in response.json()["detail"]
+    )
+
+
+def test_update_test_time_limit_exceeds_duration(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        start_time="2025-07-19T10:00:00Z",
+        end_time="2025-07-19T10:30:00Z",
+        time_limit=30,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 60,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "Time limit cannot be more than the duration" in data["detail"]
+
+
+def test_update_test_end_time_before_start_time(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        start_time="2025-07-19T10:00:00Z",
+        end_time="2025-07-19T11:00:00Z",
+        time_limit=60,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "name": random_lower_string(),
+        "start_time": "2025-07-20T10:00:00Z",
+        "end_time": "2025-07-19T10:00:00Z",
+        "time_limit": 10,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_create_test_start_and_end_time_same(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    start_time = "2025-07-19T10:00:00Z"
+    end_time = "2025-07-19T10:00:00Z"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time,
+        "end_time": end_time,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_create_test_valid_data_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": "2025-07-19T10:00:00Z",
+        "end_time": "2025-07-19T11:00:00Z",
+        "time_limit": 30,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+
 def test_get_public_test_info_expire_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -3101,32 +3259,34 @@ def test_get_public_test_info_expire_test(
         question_revision_one,
         question_revision_two,
     ) = setup_data(client, db, get_user_superadmin_token)
+    fake_current_time = datetime(2025, 5, 24, 10, 0, 0)  # Fixed time for testing
 
-    test = Test(
-        name=random_lower_string(),
-        description=random_lower_string(),
-        marks=80,
-        start_instructions="Test instructions",
-        link=random_lower_string(),
-        created_by_id=user.id,
-        is_active=True,
-        is_deleted=False,
-        start_time=get_current_time() - timedelta(hours=1),
-        end_time=get_current_time() - timedelta(minutes=10),
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-    test_question_one = TestQuestion(
-        test_id=test.id, question_revision_id=question_revision_one.id
-    )
-    test_question_two = TestQuestion(
-        test_id=test.id, question_revision_id=question_revision_two.id
-    )
-    db.add_all([test_question_one, test_question_two])
-    db.commit()
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            marks=80,
+            start_instructions="Test instructions",
+            link=random_lower_string(),
+            created_by_id=user.id,
+            is_active=True,
+            is_deleted=False,
+            start_time=fake_current_time - timedelta(hours=1),
+            end_time=fake_current_time - timedelta(minutes=10),
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        test_question_one = TestQuestion(
+            test_id=test.id, question_revision_id=question_revision_one.id
+        )
+        test_question_two = TestQuestion(
+            test_id=test.id, question_revision_id=question_revision_two.id
+        )
+        db.add_all([test_question_one, test_question_two])
+        db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
-    data = response.json()
-    assert response.status_code == 400
-    assert data["detail"] == "Test has already ended"
+        response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+        data = response.json()
+        assert response.status_code == 400
+        assert data["detail"] == "Test has already ended"
