@@ -64,7 +64,7 @@ def start_test_for_candidate(
     test = session.get(Test, start_test_request.test_id)
     if not test or test.is_deleted or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
-    question_ids = [
+    question_revision_ids = [
         q.question_revision_id
         for q in session.exec(
             select(TestQuestion).where(TestQuestion.test_id == test.id)
@@ -72,11 +72,12 @@ def start_test_for_candidate(
     ]
 
     if test.random_questions and test.no_of_random_questions:
-        question_ids = random.sample(
-            question_ids, min(test.no_of_random_questions, len(question_ids))
+        question_revision_ids = random.sample(
+            question_revision_ids,
+            min(test.no_of_random_questions, len(question_revision_ids)),
         )
     if test.shuffle:
-        random.shuffle(question_ids)
+        random.shuffle(question_revision_ids)
 
     current_time = get_current_time()
     if test.start_time and test.start_time > current_time:
@@ -105,7 +106,7 @@ def start_test_for_candidate(
         start_time=start_time,
         end_time=None,  # Will be set when test is actually submitted
         is_submitted=False,
-        question_ids=question_ids,
+        question_revision_ids=question_revision_ids,
     )
     session.add(candidate_test)
     session.commit()
@@ -316,7 +317,7 @@ def get_test_questions(
 
     state_query = select(State).join(TestState).where(TestState.test_id == test.id)
     states = session.exec(state_query).all()
-    assigned_ids = candidate_test.question_ids
+    assigned_ids = candidate_test.question_revision_ids
     if not assigned_ids:
         raise HTTPException(status_code=404, detail="No questions assigned")
     question_revision_query = select(QuestionRevision).where(

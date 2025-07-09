@@ -3029,7 +3029,7 @@ def test_candidate_test_question_ids_are_shuffled(
         select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
     ).first()
     assert candidate_test is not None
-    stored_ids = [int(qid) for qid in candidate_test.question_ids if qid]
+    stored_ids = [int(qid) for qid in candidate_test.question_revision_ids if qid]
 
     assert len(stored_ids) == len(question_ids)
     assert set(stored_ids) == set(question_ids)
@@ -3044,6 +3044,27 @@ def test_candidate_test_question_ids_are_shuffled(
     returned_ids = [q["id"] for q in returned_questions]
 
     assert returned_ids == stored_ids
+    response2 = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    data2 = response2.json()
+    assert response2.status_code == 200
+    candidate_test_2 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data2["candidate_test_id"])
+    ).first()
+    assert candidate_test_2 is not None
+    stored_ids_2 = [int(qid) for qid in candidate_test_2.question_revision_ids if qid]
+    assert len(stored_ids_2) == len(question_ids)
+    assert set(stored_ids_2) == set(question_ids)
+    assert stored_ids_2 != question_ids
+    get_response2 = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_2.id}",
+        params={"candidate_uuid": data2["candidate_uuid"]},
+    )
+    assert get_response2.status_code == 200
+    test_data2 = get_response2.json()
+    returned_questions2 = test_data2["question_revisions"]
+    returned_ids2 = [q["id"] for q in returned_questions2]
+
+    assert returned_ids2 == stored_ids_2
 
 
 def test_candidate_test_question_ids_are_random(
@@ -3105,7 +3126,7 @@ def test_candidate_test_question_ids_are_random(
         select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
     ).first()
     assert candidate_test is not None
-    stored_ids = candidate_test.question_ids
+    stored_ids = candidate_test.question_revision_ids
 
     assert len(stored_ids) == 3
     assert set(stored_ids).issubset(set(all_question_ids))
@@ -3120,6 +3141,25 @@ def test_candidate_test_question_ids_are_random(
     returned_ids = [q["id"] for q in returned_questions]
 
     assert returned_ids == stored_ids
+    response2 = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response2.status_code == 200
+    data2 = response2.json()
+    assert "candidate_uuid" in data2
+    assert "candidate_test_id" in data2
+    candidate_test_2 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data2["candidate_test_id"])
+    ).first()
+    assert candidate_test_2 is not None
+    stored_ids_2 = candidate_test_2.question_revision_ids
+    assert len(stored_ids_2) == 3
+    assert set(stored_ids_2).issubset(set(all_question_ids))
+    get_response2 = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_2.id}",
+        params={"candidate_uuid": data2["candidate_uuid"]},
+    )
+    assert get_response2.status_code == 200
+    returned_ids_2 = [q["id"] for q in get_response2.json()["question_revisions"]]
+    assert returned_ids_2 == stored_ids_2
 
 
 def test_candidate_test_question_ids_in_order(
@@ -3185,7 +3225,7 @@ def test_candidate_test_question_ids_in_order(
         select(CandidateTest).where(CandidateTest.id == candidate_test_id)
     ).first()
     assert candidate_test is not None
-    stored_ids = candidate_test.question_ids
+    stored_ids = candidate_test.question_revision_ids
     get_response = client.get(
         f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
         params={"candidate_uuid": candidate_uuid},
