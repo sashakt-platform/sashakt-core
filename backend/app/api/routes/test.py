@@ -56,6 +56,9 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     test = session.exec(select(Test).where(Test.link == test_uuid)).first()
     if not test or test.is_deleted or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
+    current_time = get_current_time()
+    if test.end_time is not None and test.end_time < current_time:
+        raise HTTPException(status_code=400, detail="Test has already ended")
 
     # Calculate total questions
     question_revision_query = (
