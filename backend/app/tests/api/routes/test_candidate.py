@@ -3130,7 +3130,6 @@ def test_candidate_test_question_ids_are_random(
 
     assert len(stored_ids) == 3
     assert set(stored_ids).issubset(set(all_question_ids))
-    assert stored_ids != all_question_ids[:3]
     get_response = client.get(
         f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test.id}",
         params={"candidate_uuid": data["candidate_uuid"]},

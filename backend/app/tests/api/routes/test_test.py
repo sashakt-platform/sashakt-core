@@ -389,8 +389,7 @@ def test_create_test_random_question_field(
         "name": random_lower_string(),
         "created_by_id": user.id,
         "link": random_lower_string(),
-        "random_questions": True,
-        "no_of_random_questions": 5,
+        "random_questions": False,
     }
 
     response = client.post(
@@ -3288,3 +3287,101 @@ def test_get_public_test_info_expire_test(
     data = response.json()
     assert response.status_code == 400
     assert data["detail"] == "Test has already ended"
+
+
+def test_random_questions_validation(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 20,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "marks_level": None,
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": True,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+        "state_ids": [punjab.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "cannot be greater than total questions added" in response.json()["detail"]
+
+
+def test_random_questions_valid_case(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": True,
+        "no_of_random_questions": 2,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [
+            question_revision_one.id,
+            question_revision_two.id,
+        ],
+        "state_ids": [punjab.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["random_questions"] is True
+    assert data["no_of_random_questions"] == 2
+    assert len(data["question_revisions"]) == 2

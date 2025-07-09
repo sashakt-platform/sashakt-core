@@ -137,6 +137,23 @@ def create_test(
 
         session.add_all(question_links)
         session.commit()
+    if test.random_questions:
+        total_questions = len(
+            session.exec(
+                select(TestQuestion).where(TestQuestion.test_id == test.id)
+            ).all()
+        )
+        if (
+            test.no_of_random_questions is not None
+            and test.no_of_random_questions > total_questions
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"No. of random questions ({test.no_of_random_questions}) "
+                    f"cannot be greater than total questions added ({total_questions})"
+                ),
+            )
 
     if test_create.state_ids:
         state_ids = test_create.state_ids
