@@ -2992,7 +2992,7 @@ def test_candidate_test_question_ids_are_shuffled(
     db.commit()
     db.refresh(test)
     question_ids = []
-    for i in range(5):
+    for i in range(10):
         question = Question(
             created_by_id=user.id,
             organization_id=user.organization_id,
@@ -3089,7 +3089,7 @@ def test_candidate_test_question_ids_are_random(
     db.commit()
     db.refresh(test)
     all_question_ids = []
-    for i in range(5):
+    for i in range(10):
         question = Question(
             created_by_id=user.id,
             organization_id=user.organization_id,
