@@ -39,7 +39,7 @@ class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
     )
     # Add relationship to QuestionRevision
     question_revision: "QuestionRevision" = Relationship(
-        back_populates="candidate_test_answers", overlaps="candidate_tests"
+        back_populates="candidate_test_answers"
     )
 
 
