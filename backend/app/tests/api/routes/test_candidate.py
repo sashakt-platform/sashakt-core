@@ -3239,3 +3239,24 @@ def test_candidate_test_question_ids_in_order(
     returned_ids = [q["id"] for q in returned_questions]
     assert stored_ids == inserted_question_ids
     assert returned_ids == inserted_question_ids
+    response2 = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response2.status_code == 200
+    data2 = response2.json()
+    candidate_test_id_2 = data2["candidate_test_id"]
+    candidate_uuid_2 = data2["candidate_uuid"]
+
+    candidate_test_2 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == candidate_test_id_2)
+    ).first()
+    assert candidate_test_2 is not None
+    stored_ids_2 = candidate_test_2.question_revision_ids
+
+    get_response_2 = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id_2}",
+        params={"candidate_uuid": candidate_uuid_2},
+    )
+    assert get_response_2.status_code == 200
+    returned_ids_2 = [q["id"] for q in get_response_2.json()["question_revisions"]]
+    assert stored_ids_2 == inserted_question_ids
+    assert returned_ids_2 == inserted_question_ids
+    assert returned_ids == returned_ids_2
