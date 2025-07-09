@@ -144,7 +144,6 @@ def test_get_existing_user_current_user(client: TestClient, db: Session) -> None
         data=login_data,
     )
     tokens = r.json()
-    print("tokens-->", tokens)
     a_token = tokens["access_token"]
     headers = {"Authorization": f"Bearer {a_token}"}
 
@@ -301,7 +300,6 @@ def test_update_user_me(
     assert user_db.full_name == full_name
 
     user = create_random_user(db)
-    print("user--->", user)
 
     data = {
         "email": user.email,
