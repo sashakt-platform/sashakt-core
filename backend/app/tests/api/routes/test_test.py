@@ -3497,7 +3497,7 @@ def test_update_test_random_question_success(
         "no_of_random_questions": 2,
         "tag_ids": [tag_a.id, tag_b.id],
         "state_ids": [state_a.id, state_b.id],
-        "question_revision_ids": [question_revision_two.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
     }
 
     response = client.put(

@@ -431,15 +431,19 @@ def update_test(
                 status_code=400,
                 detail="No. of random questions must be provided if random questions are enabled.",
             )
-        existing_revision_ids = [
-            q.question_revision_id
-            for q in session.exec(
-                select(TestQuestion).where(TestQuestion.test_id == test_id)
+        if (
+            test_update.question_revision_ids
+            and len(test_update.question_revision_ids) > 0
+        ):
+            total_questions = len(test_update.question_revision_ids)
+        else:
+            existing_revision_ids = session.exec(
+                select(TestQuestion.question_revision_id).where(
+                    TestQuestion.test_id == test_id
+                )
             ).all()
-        ]
-        update_revision_ids = test_update.question_revision_ids or []
-        new_question_ids = list(set(existing_revision_ids + update_revision_ids))
-        total_questions = len(new_question_ids)
+
+            total_questions = len(existing_revision_ids)
         if test_update.no_of_random_questions > total_questions:
             raise HTTPException(
                 status_code=400,

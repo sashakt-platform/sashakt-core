@@ -3063,8 +3063,10 @@ def test_candidate_test_question_ids_are_shuffled(
     test_data2 = get_response2.json()
     returned_questions2 = test_data2["question_revisions"]
     returned_ids2 = [q["id"] for q in returned_questions2]
-
     assert returned_ids2 == stored_ids_2
+    assert stored_ids != stored_ids_2
+    assert len(stored_ids) == len(stored_ids_2)
+    assert sorted(stored_ids) == sorted(stored_ids_2)
 
 
 def test_candidate_test_question_ids_are_random(
@@ -3159,6 +3161,8 @@ def test_candidate_test_question_ids_are_random(
     assert get_response2.status_code == 200
     returned_ids_2 = [q["id"] for q in get_response2.json()["question_revisions"]]
     assert returned_ids_2 == stored_ids_2
+    assert stored_ids != stored_ids_2
+    assert len(stored_ids) == len(stored_ids_2)
 
 
 def test_candidate_test_question_ids_in_order(
