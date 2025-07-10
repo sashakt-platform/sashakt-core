@@ -117,12 +117,16 @@ def test_read_candidate_by_id(
         == candidate_aa.created_date.astimezone(CURRENT_ZONE)
         .replace(tzinfo=None)
         .isoformat()
+        if candidate_aa.created_date
+        else None
     )
     assert (
         data["modified_date"]
         == candidate_aa.modified_date.astimezone(CURRENT_ZONE)
         .replace(tzinfo=None)
         .isoformat()
+        if candidate_aa.modified_date
+        else None
     )
 
     assert data["is_active"] is True
@@ -143,12 +147,16 @@ def test_read_candidate_by_id(
         == candidate_b.created_date.astimezone(CURRENT_ZONE)
         .replace(tzinfo=None)
         .isoformat()
+        if candidate_b.created_date
+        else None
     )
     assert (
         data["modified_date"]
         == candidate_b.modified_date.astimezone(CURRENT_ZONE)
         .replace(tzinfo=None)
         .isoformat()
+        if candidate_b.modified_date
+        else None
     )
 
     assert data["is_active"] is True
@@ -168,12 +176,16 @@ def test_read_candidate_by_id(
         == candidate_c.created_date.astimezone(CURRENT_ZONE)
         .replace(tzinfo=None)
         .isoformat()
+        if candidate_c.created_date
+        else None
     )
     assert (
         data["modified_date"]
         == candidate_c.modified_date.astimezone(CURRENT_ZONE)
         .replace(tzinfo=None)
         .isoformat()
+        if candidate_c.modified_date
+        else None
     )
     assert data["is_active"] is True
     assert data["is_deleted"] is False
