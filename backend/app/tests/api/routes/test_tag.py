@@ -1214,6 +1214,7 @@ def test_read_tag_with_sort(
     )
     response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
     assert response_names == sorted(expected, reverse=True)
+
     response = client.get(
         f"{settings.API_V1_STR}/tag/?order_by=tag_type_name",
         headers=get_user_superadmin_token,
@@ -1227,7 +1228,7 @@ def test_read_tag_with_sort(
     assert response.status_code == 200
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name,name",
+        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name&order_by=name",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
