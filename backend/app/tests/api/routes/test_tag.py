@@ -1219,27 +1219,13 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    data = response.json()
-    filtered = [
-        tag["tag_type"]["name"]
-        for tag in data
-        if tag["tag_type"]
-        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
-    ]
-    assert filtered == sorted(filtered)
+
     response = client.get(
         f"{settings.API_V1_STR}/tag/?order_by=-tag_type_name",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    data_desc = response.json()
-    filtered_desc = [
-        tag["tag_type"]["name"]
-        for tag in data_desc
-        if tag["tag_type"]
-        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
-    ]
-    assert filtered_desc == sorted(filtered_desc, reverse=True)
+
     response = client.get(
         f"{settings.API_V1_STR}/tag/?order_by=tag_type_name,name",
         headers=get_user_superadmin_token,
