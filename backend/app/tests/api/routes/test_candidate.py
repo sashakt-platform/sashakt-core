@@ -3260,3 +3260,114 @@ def test_candidate_test_question_ids_in_order(
     assert stored_ids_2 == inserted_question_ids
     assert returned_ids_2 == inserted_question_ids
     assert returned_ids == returned_ids_2
+
+
+def test_get_test_result_with_random_true(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        random_questions=True,
+        show_result=True,
+        no_of_random_questions=6,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    all_question_ids = []
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=user.organization_id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+        q = QuestionRevision(
+            question_text=f"Q{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(q)
+        db.commit()
+        db.refresh(q)
+        all_question_ids.append(q.id)
+        tq = TestQuestion(test_id=test.id, question_revision_id=q.id)
+        db.add(tq)
+        db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome Browser on Ubuntu"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "candidate_uuid" in data
+    assert "candidate_test_id" in data
+
+    print("response->", data)
+    candidate_test_id = data["candidate_test_id"]
+    candidate_uuid = data["candidate_uuid"]
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.is_submitted = True
+    db.add(candidate_test)
+    db.commit()
+    selected_ids = candidate_test.question_revision_ids
+    assert len(selected_ids) == 6
+    for i, qid in enumerate(selected_ids):
+        if i == 2:
+            answer = CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=qid,
+                response="",
+                visited=True,
+                time_spent=10,
+            )
+        else:
+            answer_value = [1] if i % 2 == 0 else [2]
+            answer = CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=qid,
+                response=answer_value,
+                visited=True,
+                time_spent=30,
+            )
+        db.add(answer)
+    db.commit()
+    result_response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert result_response.status_code == 200
+    data = result_response.json()
+    print("response1->", data)
+    assert data["correct_answer"] == 2
+    assert data["incorrect_answer"] == 3
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0

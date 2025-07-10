@@ -3510,3 +3510,60 @@ def test_update_test_random_question_success(
     data = response.json()
     assert data["random_questions"] is True
     assert data["no_of_random_questions"] == 2
+
+
+def test_get_public_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test the public test endpoint that doesn't require authentication."""
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    # Create a test
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        random_questions=True,
+        no_of_random_questions=4,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    # Test public endpoint - no authentication required, uses link UUID
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["total_questions"] == 4
