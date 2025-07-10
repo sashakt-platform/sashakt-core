@@ -1139,3 +1139,117 @@ def test_get_tag_with_tagtype_of_different_organization_returns_tag_type_none(
     assert response.status_code == 200
     assert response_data["is_active"] is False
     assert response_data["tag_type"] is None
+
+
+def test_read_tag_with_sort(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    # user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+    user = create_random_user(db, user_data["organization_id"])
+    tagtype1 = TagType(
+        name="AlphaType",
+        description="desc",
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    tagtype2 = TagType(
+        name="BetaType",
+        description="desc",
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    tagtype3 = TagType(
+        name="GammaType",
+        description="desc",
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    db.add_all([tagtype1, tagtype2, tagtype3])
+    db.commit()
+    tag1 = Tag(
+        name="Python",
+        description="desc",
+        tag_type_id=tagtype1.id,
+        created_by_id=user.id,
+        organization_id=organization_id,
+    )
+    tag2 = Tag(
+        name="Django",
+        description="desc",
+        tag_type_id=tagtype2.id,
+        created_by_id=user.id,
+        organization_id=organization_id,
+    )
+    tag3 = Tag(
+        name="C++",
+        description="desc",
+        tag_type_id=tagtype1.id,
+        created_by_id=user.id,
+        organization_id=organization_id,
+    )
+    tag4 = Tag(
+        name="Git",
+        description="desc",
+        tag_type_id=tagtype3.id,
+        created_by_id=user.id,
+        organization_id=organization_id,
+    )
+    db.add_all([tag1, tag2, tag3, tag4])
+    db.commit()
+    expected = ["C++", "Django", "Git", "Python"]
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=name",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
+    assert response_names == sorted(expected)
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=-name",
+        headers=get_user_superadmin_token,
+    )
+    response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
+    assert response_names == sorted(expected, reverse=True)
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    filtered = [
+        tag["tag_type"]["name"]
+        for tag in data
+        if tag["tag_type"]
+        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
+    ]
+    assert filtered == sorted(filtered)
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=-tag_type_name",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data_desc = response.json()
+    filtered_desc = [
+        tag["tag_type"]["name"]
+        for tag in data_desc
+        if tag["tag_type"]
+        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
+    ]
+    assert filtered_desc == sorted(filtered_desc, reverse=True)
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name,name",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data_both = response.json()
+    filtered_both = [
+        (tag["tag_type"]["name"], tag["name"])
+        for tag in data_both
+        if tag["tag_type"]
+        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
+    ]
+    assert filtered_both == sorted(filtered_both)
