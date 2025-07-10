@@ -8,7 +8,7 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.api.routes.utils import get_current_time
-from app.core.config import settings
+from app.core.config import CURRENT_ZONE, settings
 from app.models import (
     Country,
     Organization,
@@ -1895,8 +1895,12 @@ def test_get_test_by_id(
     assert data["is_active"] == test.is_active
     assert data["id"] == test.id
 
-    assert datetime.fromisoformat(data["created_date"]) == test.created_date
-    assert datetime.fromisoformat(data["modified_date"]) == test.modified_date
+    assert datetime.fromisoformat(data["created_date"]) == test.created_date.astimezone(
+        CURRENT_ZONE
+    ).replace(tzinfo=None)
+    assert datetime.fromisoformat(
+        data["modified_date"]
+    ) == test.modified_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
 
     assert len(data["states"]) == len(states)
     assert len(data["tags"]) == len(tags)
@@ -1955,8 +1959,12 @@ def test_get_test_by_id(
     assert data["created_by_id"] == test_2.created_by_id
     assert data["is_template"] == test_2.is_template
     assert data["is_active"] == test_2.is_active
-    assert datetime.fromisoformat(data["created_date"]) == test_2.created_date
-    assert datetime.fromisoformat(data["modified_date"]) == test_2.modified_date
+    assert datetime.fromisoformat(
+        data["created_date"]
+    ) == test_2.created_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+    assert datetime.fromisoformat(
+        data["modified_date"]
+    ) == test_2.modified_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
 
     assert data["tags"] == []
     assert data["states"] == []
@@ -2083,7 +2091,9 @@ def test_update_test(
     assert "created_date" in data
 
     created_date = datetime.fromisoformat(data["created_date"])
-    assert created_date == created_date_original
+    assert created_date == created_date_original.astimezone(CURRENT_ZONE).replace(
+        tzinfo=None
+    )
     modified_date = datetime.fromisoformat(data["modified_date"])
     assert modified_date != modified_date_original
     assert "modified_date" in data
@@ -3288,3 +3298,32 @@ def test_get_public_test_info_expire_test(
     data = response.json()
     assert response.status_code == 400
     assert data["detail"] == "Test has already ended"
+
+
+def test_check_start_end_time_correct_time_zone(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    start_time = "2025-07-19T10:00:00"
+    end_time = "2025-07-19T11:00:00"
+    payload = {
+        "name": random_lower_string(),
+        "start_time": start_time,
+        "end_time": end_time,
+        "time_limit": 60,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["start_time"] == start_time
+    assert data["end_time"] == end_time
+    test_id = data["id"]
+
+    # Test getting test details directly from DB
+    db_test = db.get(Test, test_id)
+    print("Test DB->", db_test)

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
-from app.core.config import settings
+from app.core.config import CURRENT_ZONE, settings
 from app.models import (
     Candidate,
     CandidateTest,
@@ -112,12 +112,19 @@ def test_read_candidate_by_id(
     assert response.status_code == 200
     assert data["user_id"] == user_a.id
     assert data["id"] == candidate_aa.id
-    assert data["created_date"] == (
-        candidate_aa.created_date.isoformat() if candidate_aa.created_date else None
+    assert (
+        data["created_date"]
+        == candidate_aa.created_date.astimezone(CURRENT_ZONE)
+        .replace(tzinfo=None)
+        .isoformat()
     )
-    assert data["modified_date"] == (
-        candidate_aa.modified_date.isoformat() if candidate_aa.modified_date else None
+    assert (
+        data["modified_date"]
+        == candidate_aa.modified_date.astimezone(CURRENT_ZONE)
+        .replace(tzinfo=None)
+        .isoformat()
     )
+
     assert data["is_active"] is True
     assert data["is_deleted"] is False
 
@@ -130,12 +137,20 @@ def test_read_candidate_by_id(
     assert response.status_code == 200
     assert data["user_id"] == user_b.id
     assert data["id"] == candidate_b.id
-    assert data["created_date"] == (
-        candidate_b.created_date.isoformat() if candidate_b.created_date else None
+
+    assert (
+        data["created_date"]
+        == candidate_b.created_date.astimezone(CURRENT_ZONE)
+        .replace(tzinfo=None)
+        .isoformat()
     )
-    assert data["modified_date"] == (
-        candidate_b.modified_date.isoformat() if candidate_b.modified_date else None
+    assert (
+        data["modified_date"]
+        == candidate_b.modified_date.astimezone(CURRENT_ZONE)
+        .replace(tzinfo=None)
+        .isoformat()
     )
+
     assert data["is_active"] is True
     assert data["is_deleted"] is False
 
@@ -148,11 +163,17 @@ def test_read_candidate_by_id(
     assert response.status_code == 200
     assert data["user_id"] is None
     assert data["id"] == candidate_c.id
-    assert data["created_date"] == (
-        candidate_c.created_date.isoformat() if candidate_c.created_date else None
+    assert (
+        data["created_date"]
+        == candidate_c.created_date.astimezone(CURRENT_ZONE)
+        .replace(tzinfo=None)
+        .isoformat()
     )
-    assert data["modified_date"] == (
-        candidate_c.modified_date.isoformat() if candidate_c.modified_date else None
+    assert (
+        data["modified_date"]
+        == candidate_c.modified_date.astimezone(CURRENT_ZONE)
+        .replace(tzinfo=None)
+        .isoformat()
     )
     assert data["is_active"] is True
     assert data["is_deleted"] is False
@@ -316,8 +337,6 @@ def test_create_candidate_test(
     db.commit()
 
     device = random_lower_string()
-    start_time = "2025-03-19T10:00:00Z"
-    end_time = "2025-03-19T12:00:00Z"
 
     response = client.post(
         f"{settings.API_V1_STR}/candidate_test/",
@@ -326,8 +345,8 @@ def test_create_candidate_test(
             "candidate_id": candidate.id,
             "device": device,
             "consent": True,
-            "start_time": start_time,
-            "end_time": end_time,
+            "start_time": "2025-07-19T10:00:00",
+            "end_time": "2025-07-19T11:00:00",
             "is_submitted": False,
         },
         headers=get_user_candidate_token,
@@ -339,8 +358,8 @@ def test_create_candidate_test(
     assert data["candidate_id"] == candidate.id
     assert data["device"] == device
     assert data["is_submitted"] is False
-    assert data["start_time"] == start_time.rstrip("Z")
-    assert data["end_time"] == end_time.rstrip("Z")
+    assert data["start_time"] == "2025-07-19T10:00:00"
+    assert data["end_time"] == "2025-07-19T11:00:00"
     assert data["is_submitted"] is False
 
 
