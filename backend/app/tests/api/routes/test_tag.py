@@ -1240,3 +1240,39 @@ def test_read_tag_with_sort(
         and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
     ]
     assert filtered_both == sorted(filtered_both)
+
+
+def test_get_tags_with_invalid_sort_field(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id)
+
+    tag_type = TagType(
+        name="SampleType",
+        description="desc",
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+
+    tag = Tag(
+        name="SampleTag",
+        description="desc",
+        tag_type_id=tag_type.id,
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=randomfield",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert any(tag_data["name"] == "SampleTag" for tag_data in data)
