@@ -3542,13 +3542,13 @@ def test_check_start_time_end_time_validation(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user = create_random_user(db)
-    start_time = "2025-07-19T10:00:00"
-    end_time = "2025-07-19T11:00:00"
+    start_time_str = "2025-07-19T10:00:00"
+    end_time_str = "2025-07-19T11:00:00"
     payload = {
         "name": random_lower_string(),
         "created_by_id": user.id,
-        "start_time": start_time,
-        "end_time": end_time,
+        "start_time": start_time_str,
+        "end_time": end_time_str,
         "time_limit": 30,
     }
     response = client.post(
@@ -3558,8 +3558,28 @@ def test_check_start_time_end_time_validation(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["start_time"] == start_time
-    assert data["end_time"] == end_time
+    assert data["start_time"] == start_time_str
+    assert data["end_time"] == end_time_str
     assert data["time_limit"] == 30
-    data = db.query(Test).filter(Test.id == data["id"]).first()
-    assert data.start_time == start_time
+    db_test = db.exec(select(Test).filter(Test.id == data["id"])).first()
+    # Verify db_test is not None before accessing its attributes
+    assert db_test is not None
+    # Convert start_time from UTC to IST
+    assert db_test.start_time is not None
+    assert db_test.end_time is not None
+
+    # The datetime from DB is in UTC
+    start_time_utc = db_test.start_time
+    end_time_utc = db_test.end_time
+
+    # Convert to IST (which is what the API returns)
+    start_time_ist = start_time_utc.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+    end_time_ist = end_time_utc.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+
+    # Parse the API response times (which are in string format)
+    api_start_time = datetime.fromisoformat(data["start_time"])
+    api_end_time = datetime.fromisoformat(data["end_time"])
+
+    # Compare the times
+    assert api_start_time == start_time_ist
+    assert api_end_time == end_time_ist
