@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.models.utils import (
@@ -119,6 +120,9 @@ class CandidateTest(CandidateTestBase, table=True):
     # Updated relationship to reference QuestionRevision instead of Question
     question_revisions: list["QuestionRevision"] = Relationship(
         back_populates="candidate_tests", link_model=CandidateTestAnswer
+    )
+    question_revision_ids: list[int] = Field(
+        default_factory=list, sa_column=Column(JSON)
     )
 
 

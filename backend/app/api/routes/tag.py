@@ -133,11 +133,15 @@ def create_tag(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TagPublic:
+    tag_type = None
     tag_type_id = tag_create.tag_type_id
-    tag_type = session.get(TagType, tag_type_id)
-    if not tag_type or tag_type.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Tag Type not found")
-    organization_id = tag_type.organization_id
+    if tag_type_id is not None:
+        tag_type = session.get(TagType, tag_type_id)
+        if not tag_type or tag_type.is_deleted is True:
+            raise HTTPException(status_code=404, detail="Tag Type not found")
+        organization_id = tag_type.organization_id
+    else:
+        organization_id = current_user.organization_id
 
     tag_data = tag_create.model_dump(exclude_unset=True)
 
@@ -147,7 +151,8 @@ def create_tag(
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    session.refresh(tag_type)
+    if tag_type:
+        session.refresh(tag_type)
 
     return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
@@ -165,13 +170,17 @@ def get_tags(
     ).all()
     tag_public = []
     for tag in tags:
-        tag_type = session.get(TagType, tag.tag_type_id)
-        if (
-            not tag_type
-            or tag_type.is_deleted is True
-            or tag_type.organization_id != current_user.organization_id
-        ):
-            continue
+        tag_type = None
+        if tag.tag_type_id:
+            tag_type = session.get(TagType, tag.tag_type_id)
+
+            if (
+                not tag_type
+                or tag_type.is_deleted is True
+                or tag_type.organization_id != current_user.organization_id
+            ):
+                tag_type = None
+
         tag_public.append(
             TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
         )
@@ -181,13 +190,23 @@ def get_tags(
 
 # Get Tag by ID
 @router_tag.get("/{tag_id}", response_model=TagPublic)
-def get_tag_by_id(tag_id: int, session: SessionDep) -> TagPublic:
+def get_tag_by_id(
+    tag_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> TagPublic:
     tag = session.get(Tag, tag_id)
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
-    tag_type = session.get(TagType, tag.tag_type_id)
-    if not tag_type or tag_type.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Tag Type not found")
+    tag_type = None
+    if tag.tag_type_id:
+        tag_type = session.get(TagType, tag.tag_type_id)
+        if (
+            not tag_type
+            or tag_type.is_deleted is True
+            or tag_type.organization_id != current_user.organization_id
+        ):
+            tag_type = None
     return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
 
@@ -202,13 +221,16 @@ def update_tag(
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
     tag_data = updated_data.model_dump(exclude_unset=True)
+    tag_type_id = tag_data.get("tag_type_id")
+    if tag_type_id is not None:
+        tag_type = session.get(TagType, tag_type_id)
+        if not tag_type or tag_type.is_deleted:
+            raise HTTPException(status_code=404, detail="Tag Type not found")
     tag.sqlmodel_update(tag_data)
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    tag_type = session.get(TagType, tag.tag_type_id)
-    if not tag_type or tag_type.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Tag Type not found")
+    tag_type = session.get(TagType, tag.tag_type_id) if tag.tag_type_id else None
 
     return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
@@ -220,6 +242,7 @@ def update_tag(
 def visibility_tag(
     tag_id: int,
     session: SessionDep,
+    current_user: CurrentUser,
     is_active: bool = Query(False, description="Set visibility of Tag"),
 ) -> TagPublic:
     tag = session.get(Tag, tag_id)
@@ -229,9 +252,15 @@ def visibility_tag(
     session.add(tag)
     session.commit()
     session.refresh(tag)
-    tag_type = session.get(TagType, tag.tag_type_id)
-    if not tag_type or tag_type.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Tag Type not found")
+    tag_type = None
+    if tag.tag_type_id:
+        tag_type = session.get(TagType, tag.tag_type_id)
+        if (
+            not tag_type
+            or tag_type.is_deleted is True
+            or tag_type.organization_id != current_user.organization_id
+        ):
+            tag_type = None
 
     return TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
 
