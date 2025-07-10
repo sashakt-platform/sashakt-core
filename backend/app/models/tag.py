@@ -6,6 +6,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.location import State
 from app.models.question import QuestionRevision, QuestionTag
 from app.models.test import TestPublic, TestTag
+from app.models.utils import DatePublic
 
 if TYPE_CHECKING:
     from app.models import Organization, Question, QuestionRevision, Test, User
@@ -48,7 +49,7 @@ class TagTypeCreate(TagTypeBase):
     pass
 
 
-class TagTypePublic(TagTypeBase):
+class TagTypePublic(TagTypeBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime
@@ -109,7 +110,7 @@ class TagCreate(TagBase):
     tag_type_id: int
 
 
-class TagPublic(TagBase):
+class TagPublic(TagBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime

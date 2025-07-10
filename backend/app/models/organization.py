@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models.utils import DatePublic
+
 if TYPE_CHECKING:
     from app.models import Question, Tag, TagType, User
 
@@ -40,7 +42,7 @@ class OrganizationCreate(OrganizationBase):
     pass
 
 
-class OrganizationPublic(OrganizationBase):
+class OrganizationPublic(OrganizationBase, DatePublic):
     id: int | None
     created_date: datetime | None
     modified_date: datetime | None

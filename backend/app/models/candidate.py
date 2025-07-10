@@ -4,6 +4,13 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
+from app.models.utils import (
+    DatePublic,
+    PublicStartEndDate,
+    StoreEndDate,
+    StoreStartEndDate,
+)
+
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
     from app.models.location import State
@@ -46,7 +53,7 @@ class CandidateTestAnswerCreate(CandidateTestAnswerBase):
     __test__ = False
 
 
-class CandidateTestAnswerPublic(CandidateTestAnswerBase):
+class CandidateTestAnswerPublic(CandidateTestAnswerBase, DatePublic):
     __test__ = False
     id: int
     created_date: datetime
@@ -115,18 +122,18 @@ class CandidateTest(CandidateTestBase, table=True):
     )
 
 
-class CandidateTestCreate(CandidateTestBase):
+class CandidateTestCreate(CandidateTestBase, StoreStartEndDate):
     __test__ = False
 
 
-class CandidateTestPublic(CandidateTestBase):
+class CandidateTestPublic(CandidateTestBase, PublicStartEndDate, DatePublic):
     __test__ = False
     id: int
     created_date: datetime
     modified_date: datetime
 
 
-class CandidateTestUpdate(SQLModel):
+class CandidateTestUpdate(StoreEndDate):
     __test__ = False
     device: str
     consent: bool
@@ -167,7 +174,7 @@ class Candidate(CandidateBase, table=True):
     )
 
 
-class CandidatePublic(CandidateBase):
+class CandidatePublic(CandidateBase, DatePublic):
     id: int
     candidate_uuid: uuid.UUID | None = None  # Include uuid in public response
     created_date: datetime
@@ -179,7 +186,7 @@ class CandidateUpdate(CandidateBase):
     pass
 
 
-class TestCandidatePublic(SQLModel):
+class TestCandidatePublic(DatePublic, PublicStartEndDate):
     """Test information for candidates with safe questions (no answers)"""
 
     # Test info (all fields from TestBase)
