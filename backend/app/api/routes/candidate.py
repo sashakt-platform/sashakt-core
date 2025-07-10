@@ -468,7 +468,8 @@ def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
 def create_candidate_test(
     candidate_test_create: CandidateTestCreate, session: SessionDep
 ) -> CandidateTest:
-    candidate_test = CandidateTest.model_validate(candidate_test_create)
+    candidate_test_create_data = candidate_test_create.model_dump()
+    candidate_test = CandidateTest.model_validate(candidate_test_create_data)
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
