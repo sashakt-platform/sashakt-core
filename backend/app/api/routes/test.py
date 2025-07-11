@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.api.routes.utils import get_current_time
+from app.api.routes.utils import enforce_max_limit, get_current_time
 from app.models import (
     Message,
     QuestionRevision,
@@ -185,7 +185,7 @@ def get_test(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = None,
     marks_level: MarksLevelEnum | None = None,
     name: str | None = None,
     description: str | None = None,
@@ -219,6 +219,7 @@ def get_test(
         examples=["-created_date", "name"],
     ),
 ) -> Sequence[TestPublic]:
+    enforce_max_limit(limit)
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
 
@@ -325,7 +326,9 @@ def get_test(
             return []
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    query = query.offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
 
     # Execute query and get all questions
     tests = session.exec(query).all()

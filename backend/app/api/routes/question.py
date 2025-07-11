@@ -16,6 +16,7 @@ from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.routes.utils import enforce_max_limit
 from app.models import (
     CandidateTest,
     Message,
@@ -341,7 +342,7 @@ def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = None,
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
@@ -353,7 +354,7 @@ def get_questions(
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-
+    enforce_max_limit(limit)
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
@@ -423,7 +424,9 @@ def get_questions(
                 return []
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    query = query.offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
 
     # Execute query and get all questions
     questions = session.exec(query).all()

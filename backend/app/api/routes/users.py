@@ -10,6 +10,7 @@ from app.api.deps import (
     get_current_active_superuser,
     permission_dependency,
 )
+from app.api.routes.utils import enforce_max_limit
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.models import (
@@ -36,11 +37,12 @@ def read_users(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = None,
 ) -> Any:
     """
     Retrieve users.
     """
+    enforce_max_limit(limit)
     current_user_organization_id = current_user.organization_id
     count_statement = (
         select(func.count())
@@ -53,8 +55,9 @@ def read_users(
         select(User)
         .where(User.organization_id == current_user_organization_id)
         .offset(skip)
-        .limit(limit)
     )
+    if limit is not None:
+        statement = statement.limit(limit)
     users = session.exec(statement).all()
 
     return UsersPublic(data=users, count=count)

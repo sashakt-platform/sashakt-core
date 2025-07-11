@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic.networks import EmailStr
 
 from app.api.deps import get_current_active_superuser
@@ -36,3 +36,10 @@ async def health_check() -> bool:
 def get_current_time() -> datetime:
     """Returns the current datetime."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def enforce_max_limit(limit: int | None, max_limit: int = 1000) -> None:
+    if limit is not None and limit > max_limit:
+        raise HTTPException(
+            status_code=400, detail=f"Limit cannot exceed {max_limit} records"
+        )
