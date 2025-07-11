@@ -1292,3 +1292,63 @@ def test_get_tags_with_invalid_sort_field(
     assert response.status_code == 200
     data = response.json()
     assert any(tag_data["name"] == "SampleTag" for tag_data in data)
+
+
+def test_get_tags_includes_with_and_without_tag_types(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user = create_random_user(db, user_data["organization_id"])
+
+    tag_type_1 = TagType(
+        name="Difficulty",
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type_1)
+    db.commit()
+    db.refresh(tag_type_1)
+
+    tag1 = Tag(
+        name="Easy",
+        tag_type_id=tag_type_1.id,
+        organization_id=organization_id,
+        is_deleted=False,
+        created_by_id=user.id,
+    )
+    tag2 = Tag(
+        name="Medium",
+        tag_type_id=tag_type_1.id,
+        organization_id=organization_id,
+        is_deleted=False,
+        created_by_id=user.id,
+    )
+
+    tag3 = Tag(
+        name="General",
+        organization_id=organization_id,
+        is_deleted=False,
+        created_by_id=user.id,
+    )
+
+    db.add_all([tag1, tag2, tag3])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name&order_by=name",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    tag_names = [tag["name"] for tag in data]
+    assert "Easy" in tag_names
+    assert "Medium" in tag_names
+    assert "General" in tag_names
+    for tag in data:
+        if tag["name"] == "General":
+            assert tag["tag_type"] is None
+        elif tag["name"] in ["Easy", "Medium"]:
+            assert tag["tag_type"] is not None
+            assert tag["tag_type"]["name"] == "Difficulty"

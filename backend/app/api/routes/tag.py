@@ -174,7 +174,7 @@ def get_tags(
     )
     join_tag_type = any("tag_type_name" in field for field in order_by)
     if join_tag_type:
-        query = query.outerjoin(TagType).where(Tag.tag_type_id == TagType.id)
+        query = query.outerjoin(TagType)
 
     ordering = []
     for field in order_by:
