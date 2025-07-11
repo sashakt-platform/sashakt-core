@@ -36,7 +36,7 @@ def read_users(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = None,
 ) -> Any:
     """
     Retrieve users.
@@ -53,8 +53,9 @@ def read_users(
         select(User)
         .where(User.organization_id == current_user_organization_id)
         .offset(skip)
-        .limit(limit)
     )
+    if limit is not None:
+        statement = statement.limit(limit)
     users = session.exec(statement).all()
 
     return UsersPublic(data=users, count=count)

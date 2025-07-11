@@ -341,7 +341,7 @@ def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = None,
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
@@ -423,7 +423,9 @@ def get_questions(
                 return []
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    query = query.offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
 
     # Execute query and get all questions
     questions = session.exec(query).all()

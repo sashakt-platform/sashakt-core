@@ -2641,3 +2641,44 @@ def test_bulk_upload_questions_with_invalid_tagtype(
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_read_questions_without_limit(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    for _ in range(25):
+        question = Question(organization_id=org_id)
+        db.add(question)
+        db.flush()
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user.id,
+            question_text=random_lower_string(),
+            is_deleted=False,
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": "Option 1"},
+                {"id": 2, "key": "B", "value": "Option 2"},
+            ],
+            correct_answer=[1],
+        )
+        db.add(revision)
+        db.flush()
+        db.refresh(revision)
+        question.last_revision_id = revision.id
+
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/questions",
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert isinstance(data, list)
+    assert len(data) > 25

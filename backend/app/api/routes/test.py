@@ -185,7 +185,7 @@ def get_test(
     session: SessionDep,
     current_user: CurrentUser,
     skip: int = 0,
-    limit: int = 100,
+    limit: int | None = None,
     marks_level: MarksLevelEnum | None = None,
     name: str | None = None,
     description: str | None = None,
@@ -325,7 +325,9 @@ def get_test(
             return []
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    query = query.offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
 
     # Execute query and get all questions
     tests = session.exec(query).all()
