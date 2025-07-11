@@ -66,8 +66,6 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         ).first()
         if candidate_test and candidate_test.question_revision_ids:
             total_questions = len(candidate_test.question_revision_ids)
-        elif test.random_questions and test.no_of_random_questions:
-            total_questions = test.no_of_random_questions
     else:
         question_revision_query = (
             select(QuestionRevision)
