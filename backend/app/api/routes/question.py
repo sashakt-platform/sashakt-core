@@ -16,6 +16,7 @@ from sqlmodel import or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.routes.utils import enforce_max_limit
 from app.models import (
     CandidateTest,
     Message,
@@ -353,7 +354,7 @@ def get_questions(
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-
+    enforce_max_limit(limit)
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )

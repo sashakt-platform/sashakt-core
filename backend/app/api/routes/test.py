@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.api.routes.utils import get_current_time
+from app.api.routes.utils import enforce_max_limit, get_current_time
 from app.models import (
     Message,
     QuestionRevision,
@@ -219,6 +219,7 @@ def get_test(
         examples=["-created_date", "name"],
     ),
 ) -> Sequence[TestPublic]:
+    enforce_max_limit(limit)
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
 

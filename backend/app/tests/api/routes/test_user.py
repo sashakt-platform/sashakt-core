@@ -749,3 +749,23 @@ def test_create_inactive_user_not_listed(
     )
     all_users = r.json()["data"]
     assert all(item["id"] != user_id for item in all_users)
+
+
+def test_read_users_with_limit(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    for _ in range(5):
+        create_random_user(db, organization_id=org_id)
+    response = client.get(
+        f"{settings.API_V1_STR}/users/?limit=3",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "data" in data
+    assert isinstance(data["data"], list)
+    assert len(data["data"]) == 3

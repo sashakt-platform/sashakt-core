@@ -10,6 +10,7 @@ from app.api.deps import (
     get_current_active_superuser,
     permission_dependency,
 )
+from app.api.routes.utils import enforce_max_limit
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.models import (
@@ -41,6 +42,7 @@ def read_users(
     """
     Retrieve users.
     """
+    enforce_max_limit(limit)
     current_user_organization_id = current_user.organization_id
     count_statement = (
         select(func.count())
