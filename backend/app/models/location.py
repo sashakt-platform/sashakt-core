@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.test import Test, TestState
+from app.models.utils import DatePublic
 
 if TYPE_CHECKING:
     from app.models.question import QuestionLocation
@@ -27,7 +28,7 @@ class Country(CountryBase, table=True):
     states: list["State"] | None = Relationship(back_populates="country")
 
 
-class CountryPublic(CountryBase):
+class CountryPublic(CountryBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime
@@ -70,7 +71,7 @@ class State(StateBase, table=True):
     question_locations: list["QuestionLocation"] = Relationship(back_populates="state")
 
 
-class StatePublic(StateBase):
+class StatePublic(StateBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime
@@ -112,7 +113,7 @@ class District(DistrictBase, table=True):
     )
 
 
-class DistrictPublic(DistrictBase):
+class DistrictPublic(DistrictBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime
@@ -153,7 +154,7 @@ class Block(BlockBase, table=True):
     question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
 
 
-class BlockPublic(BlockBase):
+class BlockPublic(BlockBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime

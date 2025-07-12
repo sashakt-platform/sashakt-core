@@ -8,6 +8,7 @@ from typing_extensions import TypedDict
 
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
+from app.models.utils import DatePublic
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -419,7 +420,7 @@ class QuestionLocationPublic(SQLModel):
     block_name: str | None = Field(default=None, description="Name of the block")
 
 
-class QuestionPublic(SQLModel):
+class QuestionPublic(DatePublic):
     """Public representation of a question with its current revision"""
 
     id: int = Field(description="ID of the question")

@@ -7,6 +7,11 @@ from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import Self
 
 from app.models import CandidateTest
+from app.models.utils import (
+    DatePublic,
+    PublicStartEndDate,
+    StoreStartEndDate,
+)
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -192,7 +197,7 @@ class Test(TestBase, table=True):
     )
 
 
-class TestCreate(TestBase):
+class TestCreate(TestBase, StoreStartEndDate):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
@@ -204,7 +209,7 @@ class TestCreate(TestBase):
         return self
 
 
-class TestPublic(TestBase):
+class TestPublic(TestBase, DatePublic, PublicStartEndDate):
     id: int
     created_date: datetime
     modified_date: datetime
@@ -220,7 +225,7 @@ class TestPublic(TestBase):
     )
 
 
-class TestUpdate(TestBase):
+class TestUpdate(TestBase, StoreStartEndDate):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []

@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models.utils import DatePublic
+
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
@@ -100,7 +102,7 @@ class User(UserBase, table=True):
 
 
 # Properties to return via API, id is always required
-class UserPublic(UserBase):
+class UserPublic(UserBase, DatePublic):
     id: int
     created_date: datetime
     modified_date: datetime
