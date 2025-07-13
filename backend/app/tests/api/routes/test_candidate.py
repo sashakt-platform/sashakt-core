@@ -3262,7 +3262,7 @@ def test_candidate_test_question_ids_in_order(
     assert returned_ids == returned_ids_2
 
 
-def test_get_test_result_with_random_true(
+def test_get_test_result_with_random_question_true(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user = create_random_user(db)

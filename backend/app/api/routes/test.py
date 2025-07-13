@@ -19,7 +19,6 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
-from app.models.candidate import CandidateTest
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum
 from app.models.user import User
@@ -61,11 +60,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
     if test.random_questions:
-        candidate_test = session.exec(
-            select(CandidateTest).where(CandidateTest.test_id == test.id)
-        ).first()
-        if candidate_test and candidate_test.question_revision_ids:
-            total_questions = len(candidate_test.question_revision_ids)
+        total_questions = test.no_of_random_questions
     else:
         question_revision_query = (
             select(QuestionRevision)

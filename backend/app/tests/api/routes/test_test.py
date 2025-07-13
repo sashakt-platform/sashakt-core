@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -23,7 +23,6 @@ from app.models import (
     TestTag,
     User,
 )
-from app.models.candidate import Candidate, CandidateTest
 from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import create_random_organization
@@ -3542,44 +3541,45 @@ def test_get_public_test(
         is_active=True,
         is_deleted=False,
         random_questions=True,
-        no_of_random_questions=1,
+        no_of_random_questions=4,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
 
-    test_question_one = TestQuestion(
-        test_id=test.id, question_revision_id=question_revision_one.id
-    )
-    test_question_two = TestQuestion(
-        test_id=test.id, question_revision_id=question_revision_two.id
-    )
-    db.add_all([test_question_one, test_question_two])
+    all_question_ids = []
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=user.organization_id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        q = QuestionRevision(
+            question_text=f"Q{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        all_question_ids.append(q.id)
+        question.last_revision_id = q.id
+        db.add(question)
+        tq = TestQuestion(test_id=test.id, question_revision_id=q.id)
+        db.add(tq)
     db.commit()
-    candidate = Candidate(
-        user_id=user.id,
-        test_id=test.id,
-        organization_id=organization.id,
-    )
-    db.add(candidate)
-    db.commit()
-    db.refresh(candidate)
 
-    candidate_test = CandidateTest(
-        test_id=test.id,
-        candidate_id=candidate.id,
-        device="Web",
-        consent=False,
-        is_submitted=False,
-        start_time=datetime.now(timezone.utc),
-        question_revision_ids=[question_revision_one.id],
-    )
-    db.add(candidate_test)
-    db.commit()
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     data = response.json()
     assert response.status_code == 200
     assert data["id"] == test.id
     assert data["name"] == test.name
     assert data["description"] == test.description
-    assert data["total_questions"] == 1
+    assert data["total_questions"] == 4
