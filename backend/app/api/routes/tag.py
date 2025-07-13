@@ -162,12 +162,35 @@ def create_tag(
 def get_tags(
     session: SessionDep,
     current_user: CurrentUser,
+    order_by: list[str] = Query(
+        default=["tag_type_name", "name"],
+        title="Order by",
+        description="Order by fields: tag_type_name, name. Prefix with '-' for descending.",
+        examples=["-name", "tag_type_name"],
+    ),
 ) -> Sequence[TagPublic]:
-    tags = session.exec(
-        select(Tag).where(
-            Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
-        )
-    ).all()
+    query = select(Tag).where(
+        Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
+    )
+    join_tag_type = any("tag_type_name" in field for field in order_by)
+    if join_tag_type:
+        query = query.outerjoin(TagType)
+
+    ordering = []
+    for field in order_by:
+        desc = field.startswith("-")
+        field_name = field[1:] if desc else field
+        if field_name == "tag_type_name":
+            col = getattr(TagType, "name", None)
+        else:
+            col = getattr(Tag, field_name, None)
+
+        if col is None:
+            continue
+        ordering.append(col.desc() if desc else col.asc())
+    if ordering:
+        query = query.order_by(*ordering)
+    tags = session.exec(query).all()
     tag_public = []
     for tag in tags:
         tag_type = None
