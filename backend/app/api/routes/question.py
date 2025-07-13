@@ -186,6 +186,28 @@ def prepare_for_db(
     return options, marking_scheme, media
 
 
+def is_duplicate_question(
+    session: SessionDep, question_text: str, tag_ids: list[int] | None
+) -> bool:
+    normalized_text = question_text.strip().lower()
+    existing_revisions = session.exec(
+        select(QuestionRevision).where(
+            func.lower(QuestionRevision.question_text) == normalized_text
+        )
+    ).all()
+    new_tag_ids = set(tag_ids or [])
+    for rev in existing_revisions:
+        existing_tag_ids = {
+            qt.tag_id
+            for qt in session.exec(
+                select(QuestionTag).where(QuestionTag.question_id == rev.question_id)
+            ).all()
+        }
+        if existing_tag_ids == new_tag_ids:
+            return True
+    return False
+
+
 @router.post("/", response_model=QuestionPublic)
 def create_question(
     question_create: QuestionCreate,
@@ -193,6 +215,13 @@ def create_question(
     current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
+    if is_duplicate_question(
+        session, question_create.question_text, question_create.tag_ids
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Duplicate question: Same question text and tags already exist.",
+        )
     # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,

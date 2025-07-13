@@ -2641,3 +2641,237 @@ def test_bulk_upload_questions_with_invalid_tagtype(
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_create_dublicate_question(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    # user_id = user_data["id"]
+    tag_type_response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json={
+            "name": "Test Tag Type",
+            "description": "For testing",
+            "organization_id": org_id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    tag_type_data = tag_type_response.json()
+    tag_type_id = tag_type_data["id"]
+    tag_response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json={
+            "name": "Test Tag",
+            "description": "For testing questions",
+            "tag_type_id": tag_type_id,
+            "organization_id": org_id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    tag_data = tag_response.json()
+    tag_id = tag_data["id"]
+    question_data = {
+        "organization_id": org_id,
+        "question_text": "What is PYTHON",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag_id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["question_text"] == "What is PYTHON"
+    assert data["organization_id"] == org_id
+    assert data["question_type"] == QuestionType.single_choice
+    assert len(data["tags"]) == 1
+    assert data["tags"][0]["id"] == tag_id
+    question = db.get(Question, data["id"])
+    assert question is not None
+    duplicate_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert duplicate_response.status_code == 400
+    duplicate_data = duplicate_response.json()
+    assert (
+        duplicate_data["detail"]
+        == "Duplicate question: Same question text and tags already exist."
+    )
+
+
+def test_create_question_same_text_different_tags_should_pass(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    tag_type = TagType(
+        name="MCQ TagType",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+    tag = Tag(
+        name="Programming",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.flush()
+    different_tag = Tag(
+        name="DSA",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add(different_tag)
+    db.flush()
+    question = Question(
+        organization_id=org_id,
+        is_active=True,
+        created_by_id=user_id,
+    )
+    db.add(question)
+    db.flush()
+    revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user_id,
+        question_text="What is C++?",
+        question_type=QuestionType.single_choice,
+        is_mandatory=True,
+        correct_answer=[1],
+        options=[
+            {"id": 1, "key": "A", "value": "A snake"},
+            {"id": 2, "key": "B", "value": "A language"},
+        ],
+    )
+    db.add(revision)
+    db.flush()
+    question.last_revision_id = revision.id
+    db.add(question)
+    question_tag = QuestionTag(
+        question_id=question.id,
+        tag_id=tag.id,
+    )
+    db.add(question_tag)
+    db.commit()
+    duplicate_question_data = {
+        "organization_id": org_id,
+        "question_text": "What is c++?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "A snake"},
+            {"id": 2, "key": "B", "value": "A language"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [different_tag.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=duplicate_question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == "What is c++?"
+    assert data["tags"][0]["id"] == different_tag.id
+
+
+def test_create_question_same_text_no_tags_vs_with_tags_should_pass(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    tag_type = TagType(
+        name="Tech TagType",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag1 = Tag(
+        name="Java",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    tag2 = Tag(
+        name="Backend",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add_all([tag1, tag2])
+    db.flush()
+    db.commit()
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "What is Java?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],
+    }
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "What is Java?"
+    assert data1["tags"] == []
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "What is Java?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag2.id, tag1.id],
+    }
+
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response2.status_code == 200
+    data2 = response2.json()
+    assert data2["question_text"] == "What is Java?"
+    assert len(data2["tags"]) == 2
+    returned_tag_ids = [tag["id"] for tag in data2["tags"]]
+    assert set(returned_tag_ids) == {tag1.id, tag2.id}
