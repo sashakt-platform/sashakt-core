@@ -2643,7 +2643,7 @@ def test_bulk_upload_questions_with_invalid_tagtype(
             os.unlink(temp_file_path)
 
 
-def test_create_dublicate_question(
+def test_create_duplicate_question(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
@@ -2875,3 +2875,99 @@ def test_create_question_same_text_no_tags_vs_with_tags_should_pass(
     assert len(data2["tags"]) == 2
     returned_tag_ids = [tag["id"] for tag in data2["tags"]]
     assert set(returned_tag_ids) == {tag1.id, tag2.id}
+
+
+def test_bulk_upload_questions_with_duplicate(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    tag_type = TagType(
+        name="Bulk TagType",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag1 = Tag(
+        name="BulkTag",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    tag2 = Tag(
+        name="BulkTag 2",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add_all([tag1, tag2])
+    db.flush()
+    db.commit()
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "What   is   Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag1.id],
+    }
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "What   is   Python?"
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    What is 10+10?,20,10,30,40,A,Math,Punjab
+     What is 10+10?,20,10,30,40,A,Math,Punjab
+    What is PYTHON?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag,Punjab
+    What is Python?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag |BulkTag 2,Punjab
+    What is Python?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag 2,Punjab
+    What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
+    """
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={
+                    "file": ("test_questions_invalid_tagtype.csv", file, "text/csv")
+                },
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "Failed to create 2 questions." in data["message"]
+        assert data["uploaded_questions"] == 6
+        assert data["success_questions"] == 4
+        assert data["failed_questions"] == 2
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)

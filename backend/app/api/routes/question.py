@@ -1,4 +1,5 @@
 import csv
+import re
 from datetime import datetime
 from io import StringIO
 from typing import Any
@@ -189,18 +190,25 @@ def prepare_for_db(
 def is_duplicate_question(
     session: SessionDep, question_text: str, tag_ids: list[int] | None
 ) -> bool:
-    normalized_text = question_text.strip().lower()
-    existing_revisions = session.exec(
-        select(QuestionRevision).where(
-            func.lower(QuestionRevision.question_text) == normalized_text
+    normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
+    existing_questions = session.exec(
+        select(Question)
+        .join(QuestionRevision)
+        .where(Question.last_revision_id == QuestionRevision.id)
+        .where(
+            Question.is_active,
+            func.lower(
+                func.regexp_replace(QuestionRevision.question_text, r"\s+", " ", "g")
+            )
+            == normalized_text,
         )
     ).all()
     new_tag_ids = set(tag_ids or [])
-    for rev in existing_revisions:
+    for question in existing_questions:
         existing_tag_ids = {
             qt.tag_id
             for qt in session.exec(
-                select(QuestionTag).where(QuestionTag.question_id == rev.question_id)
+                select(QuestionTag).where(QuestionTag.question_id == question.id)
             ).all()
         }
         if existing_tag_ids == new_tag_ids:
@@ -1163,7 +1171,9 @@ async def upload_questions_csv(
                 if state_error:
                     questions_failed += 1
                     continue
-
+                if is_duplicate_question(session, question_text, tag_ids):
+                    questions_failed += 1
+                    continue
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
                     organization_id=organization_id,
