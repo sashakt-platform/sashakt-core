@@ -13,7 +13,7 @@ from fastapi import (
     UploadFile,
 )
 from sqlalchemy import desc, func
-from sqlmodel import or_, select
+from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
@@ -197,6 +197,7 @@ def is_duplicate_question(
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
             Question.is_active,
+            not_(Question.is_deleted),
             func.lower(
                 func.regexp_replace(QuestionRevision.question_text, r"\s+", " ", "g")
             )
