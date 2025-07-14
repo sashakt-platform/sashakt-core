@@ -2691,6 +2691,10 @@ What is 9+1?,10,20,30,40,A,Math,NonExistentState"""
         assert 6 in error_map and "Invalid correct option" in error_map[6]
         assert 7 in error_map and "Question text is missing" in error_map[7]
         assert 8 in error_map and "Invalid states" in error_map[8]
+        failed_details = data["failed_question_details"]
+        errors = [detail["error"] for detail in failed_details]
+        assert any("missing" in err.lower() for err in errors)
+
     finally:
         import os
 
