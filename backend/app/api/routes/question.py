@@ -1221,16 +1221,7 @@ async def upload_questions_csv(
                             session.add(question_tag)
 
                 questions_created += 1
-            except ValueError as ve:
-                questions_failed += 1
-                failed_question_details.append(
-                    {
-                        "row_number": row_number,
-                        "question_text": row.get("Questions", "").strip(),
-                        "error": str(ve),
-                    }
-                )
-                continue
+
             except Exception as e:
                 questions_failed += 1
                 # Optionally log the error
