@@ -2663,7 +2663,8 @@ What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geog
 Which option is missing?,,10,20,30,A,Math,Punjab
 What is 2 + 2?,4,5,6,7,Z,Math,Punjab
 ,1,2,3,4,A,Math,Punjab
-What is 9+1?,10,20,30,40,A,Math,NonExistentState"""
+What is 9+1?,10,20,30,40,A,Math,NonExistentState
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab"""
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -2678,10 +2679,10 @@ What is 9+1?,10,20,30,40,A,Math,NonExistentState"""
             )
         assert response.status_code == 200
         data = response.json()
-        assert data["uploaded_questions"] == 8
+        assert data["uploaded_questions"] == 9
         assert data["success_questions"] == 2
-        assert data["failed_questions"] == 6
-        assert "Failed to create 6 questions." in data["message"]
+        assert data["failed_questions"] == 7
+        assert "Failed to create 7 questions." in data["message"]
         error_map = {
             d["row_number"]: d["error"] for d in data["failed_question_details"]
         }
@@ -2691,6 +2692,7 @@ What is 9+1?,10,20,30,40,A,Math,NonExistentState"""
         assert 6 in error_map and "Invalid correct option" in error_map[6]
         assert 7 in error_map and "Question text is missing" in error_map[7]
         assert 8 in error_map and "Invalid states" in error_map[8]
+        assert 9 in error_map and "Correct option is missing" in error_map[9]
         failed_details = data["failed_question_details"]
         errors = [detail["error"] for detail in failed_details]
         assert any("missing" in err.lower() for err in errors)

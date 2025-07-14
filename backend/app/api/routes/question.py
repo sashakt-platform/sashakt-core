@@ -1025,11 +1025,13 @@ async def upload_questions_csv(
                 if not all(options):
                     raise ValueError("One or more options (A-D) are missing.")
                 # Convert option letter to index
-                correct_letter = row.get("Correct Option", "A").strip()
+                correct_letter = (row.get("Correct Option") or "").strip().upper()
+                if not correct_letter:
+                    raise ValueError("Correct option is missing.")
                 letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
                 if correct_letter not in letter_map:
                     raise ValueError(f"Invalid correct option: {correct_letter}")
-                correct_answer = letter_map.get(correct_letter, 1)
+                correct_answer = letter_map[correct_letter]
 
                 valid_options = [
                     {"id": letter_map[key], "key": key, "value": value}
