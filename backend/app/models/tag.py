@@ -79,9 +79,9 @@ class Tag(TagBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    tag_type_id: int = Field(
+    tag_type_id: int | None = Field(
+        default=None,
         foreign_key="tagtype.id",
-        nullable=False,
         description="ID of the Tag Type to which the Tag should belong to",
     )
 
@@ -106,7 +106,7 @@ class Tag(TagBase, table=True):
 
 
 class TagCreate(TagBase):
-    tag_type_id: int
+    tag_type_id: int | None = None
 
 
 class TagPublic(TagBase):
@@ -114,13 +114,13 @@ class TagPublic(TagBase):
     created_date: datetime
     modified_date: datetime
     is_deleted: bool
-    tag_type: TagType
+    tag_type: TagType | None = None
     organization_id: int
     created_by_id: int
 
 
 class TagUpdate(TagBase):
-    tag_type_id: int
+    tag_type_id: int | None = None
 
 
 # Rebuild the models to ensure the database schema is up to date

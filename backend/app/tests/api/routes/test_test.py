@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
+from app.api.routes.utils import get_current_time
 from app.core.config import settings
 from app.models import (
     Country,
@@ -388,8 +389,7 @@ def test_create_test_random_question_field(
         "name": random_lower_string(),
         "created_by_id": user.id,
         "link": random_lower_string(),
-        "random_questions": True,
-        "no_of_random_questions": 5,
+        "random_questions": False,
     }
 
     response = client.post(
@@ -2042,7 +2042,7 @@ def test_update_test(
         "no_of_attempts": 3,
         "shuffle": True,
         "random_questions": True,
-        "no_of_random_questions": 50,
+        "no_of_random_questions": 1,
         "question_pagination": 1,
         "is_template": False,
         "template_id": None,
@@ -3240,3 +3240,273 @@ def test_create_test_valid_data_success(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
+
+
+def test_get_public_test_info_expire_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        marks=80,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        start_time=get_current_time() - timedelta(hours=1),
+        end_time=get_current_time() - timedelta(minutes=10),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 400
+    assert data["detail"] == "Test has already ended"
+
+
+def test_random_questions_validation(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 20,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "marks_level": None,
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": True,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+        "state_ids": [punjab.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "cannot be greater than total questions added" in response.json()["detail"]
+
+
+def test_random_questions_valid_case(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": True,
+        "no_of_random_questions": 2,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [
+            question_revision_one.id,
+            question_revision_two.id,
+        ],
+        "state_ids": [punjab.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["random_questions"] is True
+    assert data["no_of_random_questions"] == 2
+    assert len(data["question_revisions"]) == 2
+
+
+def test_update_test_random_question_validation_fails(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        state_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name="Sample Test",
+        description="Initial test",
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=2,
+        shuffle=False,
+        random_questions=False,
+        no_of_random_questions=None,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {
+        "name": "Sample Test",
+        "random_questions": True,
+        "no_of_random_questions": 5,
+        "tag_ids": [tag_a.id],
+        "state_ids": [state_a.id],
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "No. of random questions (5) cannot be greater than total questions added (1)"
+    )
+
+
+def test_update_test_random_question_success(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        state_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name="Sample Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link="test-link",
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision_one.id))
+
+    db.commit()
+
+    payload = {
+        "name": "Sample Test Updated",
+        "random_questions": True,
+        "no_of_random_questions": 2,
+        "tag_ids": [tag_a.id, tag_b.id],
+        "state_ids": [state_a.id, state_b.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["random_questions"] is True
+    assert data["no_of_random_questions"] == 2

@@ -1,9 +1,10 @@
+import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import SQLModel, not_, select
+from sqlmodel import SQLModel, col, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -63,6 +64,27 @@ def start_test_for_candidate(
     test = session.get(Test, start_test_request.test_id)
     if not test or test.is_deleted or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
+    question_revision_ids = [
+        q.question_revision_id
+        for q in session.exec(
+            select(TestQuestion).where(TestQuestion.test_id == test.id)
+        ).all()
+    ]
+
+    if test.random_questions and test.no_of_random_questions:
+        question_revision_ids = random.sample(
+            question_revision_ids,
+            min(test.no_of_random_questions, len(question_revision_ids)),
+        )
+    if test.shuffle:
+        random.shuffle(question_revision_ids)
+
+    current_time = get_current_time()
+    if test.start_time and test.start_time > current_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test has not started yet. Please wait until the scheduled start time.",
+        )
 
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
@@ -84,6 +106,7 @@ def start_test_for_candidate(
         start_time=start_time,
         end_time=None,  # Will be set when test is actually submitted
         is_submitted=False,
+        question_revision_ids=question_revision_ids,
     )
     session.add(candidate_test)
     session.commit()
@@ -292,15 +315,22 @@ def get_test_questions(
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()
 
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-
     state_query = select(State).join(TestState).where(TestState.test_id == test.id)
     states = session.exec(state_query).all()
+    assigned_ids = candidate_test.question_revision_ids
+    if not assigned_ids:
+        raise HTTPException(status_code=404, detail="No questions assigned")
+    question_revision_query = select(QuestionRevision).where(
+        col(QuestionRevision.id).in_(assigned_ids)
+    )
+    question_revisions_map = {
+        q.id: q for q in session.exec(question_revision_query).all()
+    }
+    ordered_questions = [
+        question_revisions_map[qid]
+        for qid in assigned_ids
+        if qid in question_revisions_map
+    ]
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
@@ -314,7 +344,7 @@ def get_test_questions(
             is_mandatory=q.is_mandatory,
             media=q.media,
         )
-        for q in question_revisions
+        for q in ordered_questions
     ]
 
     return TestCandidatePublic(
@@ -322,7 +352,7 @@ def get_test_questions(
         question_revisions=candidate_questions,
         tags=tags,
         states=states,
-        total_questions=len(question_revisions),
+        total_questions=len(candidate_questions),
         candidate_test=candidate_test,
     )
 
