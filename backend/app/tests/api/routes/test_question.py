@@ -2962,12 +2962,91 @@ def test_bulk_upload_questions_with_duplicate(
             )
         assert response.status_code == 200, response.text
         data = response.json()
-        assert "Failed to create 2 questions." in data["message"]
+        assert "Failed to create 3 questions." in data["message"]
         assert data["uploaded_questions"] == 6
-        assert data["success_questions"] == 4
-        assert data["failed_questions"] == 2
+        assert data["success_questions"] == 3
+        assert data["failed_questions"] == 3
     finally:
         import os
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_duplicate_question_detected_if_any_tag_matches(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    tag_type = TagType(
+        name="level",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag1 = Tag(
+        name="level 1",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    tag2 = Tag(
+        name="level 2",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add_all([tag1, tag2])
+    db.flush()
+    db.commit()
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "What is SQL?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+        "tag_ids": [tag1.id],
+    }
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "What is SQL?"
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "What is SQL?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+        "tag_ids": [tag2.id, tag1.id],
+    }
+
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response2.status_code == 400
+    data2 = response2.json()
+    assert (
+        data2["detail"]
+        == "Duplicate question: Same question text and tags already exist."
+    )

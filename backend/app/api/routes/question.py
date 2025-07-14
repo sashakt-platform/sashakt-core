@@ -211,7 +211,7 @@ def is_duplicate_question(
                 select(QuestionTag).where(QuestionTag.question_id == question.id)
             ).all()
         }
-        if existing_tag_ids == new_tag_ids:
+        if new_tag_ids & existing_tag_ids:
             return True
     return False
 
@@ -1168,12 +1168,12 @@ async def upload_questions_csv(
                             state_cache[state_name] = state.id
 
                 # Skip this question if states weren't found
-                if state_error:
+                if state_error or is_duplicate_question(
+                    session, question_text, tag_ids
+                ):
                     questions_failed += 1
                     continue
-                if is_duplicate_question(session, question_text, tag_ids):
-                    questions_failed += 1
-                    continue
+
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
                     organization_id=organization_id,
