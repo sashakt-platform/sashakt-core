@@ -59,7 +59,11 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
-    if test.random_questions:
+    if (
+        test.random_questions
+        and test.no_of_random_questions is not None
+        and test.no_of_random_questions > 0
+    ):
         total_questions = test.no_of_random_questions
     else:
         question_revision_query = (
