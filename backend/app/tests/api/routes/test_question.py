@@ -2575,6 +2575,7 @@ What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Subject:Geography,P
         question_texts = [q["question_text"] for q in questions]
         assert "What is 10+10?" in question_texts
         assert "What is the color of the sky?" in question_texts
+        assert data["failed_question_details"] == []
         for question in questions:
             if question["question_text"] == "What is 10+10?":
                 assert any(tag["name"] == "Math" for tag in question["tags"])
@@ -2613,8 +2614,7 @@ def test_bulk_upload_questions_with_invalid_tagtype(
     What is 10+10?,20,10,30,40,A,Math,Punjab
     What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
     What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
-    What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
-    """
+    What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab"""
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -2636,6 +2636,61 @@ def test_bulk_upload_questions_with_invalid_tagtype(
         assert data["uploaded_questions"] == 4
         assert data["success_questions"] == 2
         assert data["failed_questions"] == 2
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_with_multiple_errors_report(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is 10+10?,20,10,30,40,A,Math,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
+What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
+Which option is missing?,,10,20,30,A,Math,Punjab
+What is 2 + 2?,4,5,6,7,Z,Math,Punjab
+,1,2,3,4,A,Math,Punjab
+What is 9+1?,10,20,30,40,A,Math,NonExistentState"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 2
+        assert data["failed_questions"] == 6
+        assert "Failed to create 6 questions." in data["message"]
+        error_map = {
+            d["row_number"]: d["error"] for d in data["failed_question_details"]
+        }
+        assert 3 in error_map and "Invalid tag types" in error_map[3]
+        assert 4 in error_map and "Invalid tag types" in error_map[4]
+        assert 5 in error_map and "One or more options" in error_map[5]
+        assert 6 in error_map and "Invalid correct option" in error_map[6]
+        assert 7 in error_map and "Question text is missing" in error_map[7]
+        assert 8 in error_map and "Invalid states" in error_map[8]
     finally:
         import os
 

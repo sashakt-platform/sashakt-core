@@ -1002,16 +1002,17 @@ async def upload_questions_csv(
         # Start processing rows
         questions_created = 0
         questions_failed = 0
+        failed_question_details = []
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
         failed_states = set()
         failed_tagtypes = set()
 
-        for row in csv_reader:
+        for row_number, row in enumerate(csv_reader, start=1):
             try:
                 # Skip empty rows
                 if not row.get("Questions", "").strip():
-                    continue
+                    raise ValueError("Question text is missing.")
 
                 # Extract data
                 question_text = row.get("Questions", "").strip()
@@ -1021,10 +1022,13 @@ async def upload_questions_csv(
                     row.get("Option C", "").strip(),
                     row.get("Option D", "").strip(),
                 ]
-
+                if not all(options):
+                    raise ValueError("One or more options (A-D) are missing.")
                 # Convert option letter to index
                 correct_letter = row.get("Correct Option", "A").strip()
                 letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
+                if correct_letter not in letter_map:
+                    raise ValueError(f"Invalid correct option: {correct_letter}")
                 correct_answer = letter_map.get(correct_letter, 1)
 
                 valid_options = [
@@ -1100,6 +1104,13 @@ async def upload_questions_csv(
 
                 if tagtype_error:
                     questions_failed += 1
+                    failed_question_details.append(
+                        {
+                            "row_number": row_number,
+                            "question_text": question_text,
+                            "error": f"Invalid tag types: {', '.join(failed_tagtypes)}",
+                        }
+                    )
                     continue
 
                 # Process state information if present
@@ -1133,6 +1144,13 @@ async def upload_questions_csv(
                 # Skip this question if states weren't found
                 if state_error:
                     questions_failed += 1
+                    failed_question_details.append(
+                        {
+                            "row_number": row_number,
+                            "question_text": question_text,
+                            "error": f"Invalid states: {', '.join(failed_states)}",
+                        }
+                    )
                     continue
 
                 # Create QuestionCreate object
@@ -1203,11 +1221,26 @@ async def upload_questions_csv(
                             session.add(question_tag)
 
                 questions_created += 1
-
+            except ValueError as ve:
+                questions_failed += 1
+                failed_question_details.append(
+                    {
+                        "row_number": row_number,
+                        "question_text": row.get("Questions", "").strip(),
+                        "error": str(ve),
+                    }
+                )
+                continue
             except Exception as e:
                 questions_failed += 1
                 # Optionally log the error
-                print(f"Error processing row: {str(e)}")
+                failed_question_details.append(
+                    {
+                        "row_number": row_number,
+                        "question_text": row.get("Questions", "").strip(),
+                        "error": str(e),
+                    }
+                )
                 continue
 
         # Commit all changes at once
@@ -1227,6 +1260,7 @@ async def upload_questions_csv(
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
+            failed_question_details=failed_question_details,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised
