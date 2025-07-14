@@ -3050,3 +3050,72 @@ def test_duplicate_question_detected_if_any_tag_matches(
         data2["detail"]
         == "Duplicate question: Same question text and tags already exist."
     )
+
+
+def test_question_revision_with_same_text_and_tags_is_allowed(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    tag_type = TagType(
+        name="Subject",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+    tag = Tag(
+        name="cyber security",
+        description=random_lower_string(),
+        tag_type_id=tag_type.id,
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.flush()
+    question_payload = {
+        "organization_id": org_id,
+        "question_text": "What is gravity?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Force"},
+            {"id": 2, "key": "B", "value": "Energy"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question = response.json()
+    question_id = question["id"]
+    revision_payload = {
+        "question_text": "What is gravity?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "A force that attracts objects"},
+            {"id": 2, "key": "B", "value": "No force at all"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 200
+    updated_question = revision_response.json()
+    assert updated_question["id"] == question_id
+    assert updated_question["question_text"] == "What is gravity?"
+    assert updated_question["options"][0]["value"] == "A force that attracts objects"
+    assert "tags" in updated_question
