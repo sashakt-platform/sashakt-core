@@ -640,11 +640,23 @@ def get_test_result(
         )
 
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-    joined_data = session.exec(
-        select(CandidateTestAnswer, QuestionRevision)
-        .join(QuestionRevision)
-        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
-    ).all()
+    if test.random_questions and candidate_test.question_revision_ids:
+        joined_data = session.exec(
+            select(CandidateTestAnswer, QuestionRevision)
+            .join(QuestionRevision)
+            .where(
+                CandidateTestAnswer.candidate_test_id == candidate_test_id,
+                col(CandidateTestAnswer.question_revision_id).in_(
+                    candidate_test.question_revision_ids
+                ),
+            )
+        ).all()
+    else:
+        joined_data = session.exec(
+            select(CandidateTestAnswer, QuestionRevision)
+            .join(QuestionRevision)
+            .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        ).all()
 
     correct = 0
     incorrect = 0

@@ -3583,3 +3583,76 @@ def test_check_start_time_end_time_validation(
     # Compare the times
     assert api_start_time == start_time_ist
     assert api_end_time == end_time_ist
+
+
+def test_get_public_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        random_questions=True,
+        no_of_random_questions=4,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_question_ids = []
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=user.organization_id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        q = QuestionRevision(
+            question_text=f"Q{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        all_question_ids.append(q.id)
+        question.last_revision_id = q.id
+        db.add(question)
+        tq = TestQuestion(test_id=test.id, question_revision_id=q.id)
+        db.add(tq)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["total_questions"] == 4

@@ -59,15 +59,20 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
-
-    # Calculate total questions
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-    total_questions = len(question_revisions)
+    if (
+        test.random_questions
+        and test.no_of_random_questions is not None
+        and test.no_of_random_questions > 0
+    ):
+        total_questions = test.no_of_random_questions
+    else:
+        question_revision_query = (
+            select(QuestionRevision)
+            .join(TestQuestion)
+            .where(TestQuestion.test_id == test.id)
+        )
+        question_revisions = session.exec(question_revision_query).all()
+        total_questions = len(question_revisions)
 
     return TestPublicLimited(
         **test.model_dump(),
