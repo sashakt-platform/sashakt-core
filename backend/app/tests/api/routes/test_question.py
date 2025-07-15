@@ -2616,7 +2616,8 @@ def test_bulk_upload_questions_with_invalid_tagtype(
     What is 10+10?,20,10,30,40,A,Math,Punjab
     What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
     What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
-    What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab"""
+    What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
+"""
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
