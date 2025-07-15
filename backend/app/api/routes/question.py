@@ -1,3 +1,4 @@
+import base64
 import csv
 from datetime import datetime
 from io import StringIO
@@ -1247,13 +1248,28 @@ async def upload_questions_csv(
             message += (
                 f" The following tag types were not found: {', '.join(failed_tagtypes)}"
             )
+        if questions_failed > 0:
+            csv_buffer = StringIO()
+            csv_writer = csv.DictWriter(
+                csv_buffer, fieldnames=["row_number", "question_text", "error"]
+            )
+            csv_writer.writeheader()
+            for row in failed_question_details:
+                csv_writer.writerow(row)
+            csv_buffer.seek(0)
+            csv_bytes = csv_buffer.getvalue().encode("utf-8")
+            base64_csv = base64.b64encode(csv_bytes).decode("utf-8")
+            data_link = f"data:text/csv;base64,{base64_csv}"
+            failed_message = f"Download failed questions: {data_link}"
+        else:
+            failed_message = "No failed questions. No CSV generated."
 
         return BulkUploadQuestionsResponse(
             message=message,
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
-            failed_question_details=failed_question_details,
+            failed_question_details=failed_message,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised

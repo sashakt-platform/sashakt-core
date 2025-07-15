@@ -498,10 +498,7 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
-    failed_question_details: list[FailedQuestion] | None = Field(
-        default=None,
-        description="List of questions that failed during bulk upload, with question text and error message.",
-    )
+    failed_question_details: str | None
 
 
 # Force model rebuild to handle forward references

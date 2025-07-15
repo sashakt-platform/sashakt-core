@@ -1,3 +1,6 @@
+import base64
+import csv
+import io
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
@@ -2575,7 +2578,9 @@ What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Subject:Geography,P
         question_texts = [q["question_text"] for q in questions]
         assert "What is 10+10?" in question_texts
         assert "What is the color of the sky?" in question_texts
-        assert data["failed_question_details"] == []
+        assert (
+            data["failed_question_details"] == "No failed questions. No CSV generated."
+        )
         for question in questions:
             if question["question_text"] == "What is 10+10?":
                 assert any(tag["name"] == "Math" for tag in question["tags"])
@@ -2683,19 +2688,34 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab""
         assert data["success_questions"] == 2
         assert data["failed_questions"] == 7
         assert "Failed to create 7 questions." in data["message"]
-        error_map = {
-            d["row_number"]: d["error"] for d in data["failed_question_details"]
+        expected_errors = {
+            3: "Invalid tag type",
+            4: "Invalid tag type",
+            5: "one or more options (a-d) are missing",
+            6: "Invalid correct option",
+            7: "Question text is missing",
+            8: "Invalid states: NonExistentState",
+            9: "Correct option is missing",
         }
-        assert 3 in error_map and "Invalid tag types" in error_map[3]
-        assert 4 in error_map and "Invalid tag types" in error_map[4]
-        assert 5 in error_map and "One or more options" in error_map[5]
-        assert 6 in error_map and "Invalid correct option" in error_map[6]
-        assert 7 in error_map and "Question text is missing" in error_map[7]
-        assert 8 in error_map and "Invalid states" in error_map[8]
-        assert 9 in error_map and "Correct option is missing" in error_map[9]
-        failed_details = data["failed_question_details"]
-        errors = [detail["error"] for detail in failed_details]
-        assert any("missing" in err.lower() for err in errors)
+        assert (
+            "Download failed questions: data:text/csv;base64,"
+            in data["failed_question_details"]
+        )
+        base64_csv = data["failed_question_details"].split("base64,")[-1]
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        rows = list(csv_reader)
+        assert len(rows) == 7
+        for row in rows:
+            assert "row_number" in row
+            assert "question_text" in row
+            assert "error" in row
+            assert row["error"]
+            row_number = int(row["row_number"])
+            expected_error = expected_errors.get(row_number)
+            assert expected_error is not None
+            assert expected_error.lower() in row["error"].lower()
 
     finally:
         import os
