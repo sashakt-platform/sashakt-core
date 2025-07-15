@@ -3197,7 +3197,6 @@ def test_check_question_duplication_if_deleted(
     )
     assert duplicate_response.status_code == 200
     duplicate_data = duplicate_response.json()
-    print("Duplicate Data:", duplicate_data)
     assert duplicate_data["question_text"] == "What is Python?"
     assert duplicate_data["tags"][0]["id"] == tag.id
     assert duplicate_data["organization_id"] == org_id
