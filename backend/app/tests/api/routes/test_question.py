@@ -3119,3 +3119,112 @@ def test_question_revision_with_same_text_and_tags_is_allowed(
     assert updated_question["question_text"] == "What is gravity?"
     assert updated_question["options"][0]["value"] == "A force that attracts objects"
     assert "tags" in updated_question
+
+
+def test_check_question_duplication_if_deleted(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    tag_type = TagType(
+        name="Test Tag Type",
+        description="For testing",
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.commit()
+
+    db.flush()
+    tag = Tag(
+        name="Test Tag",
+        description="For testing questions",
+        tag_type_id=tag_type.id,
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.flush()
+    question_data = {
+        "organization_id": org_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    question_id = data["id"]
+
+    # Delete the question
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert delete_response.status_code == 200
+
+    # Try to create a new question with the same text and tags
+    duplicate_question_data = {
+        "organization_id": org_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag.id],
+    }
+    duplicate_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=duplicate_question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert duplicate_response.status_code == 200
+    duplicate_data = duplicate_response.json()
+    assert duplicate_data["question_text"] == "What is Python?"
+    assert duplicate_data["tags"][0]["id"] == tag.id
+    assert duplicate_data["organization_id"] == org_id
+    assert duplicate_data["question_type"] == QuestionType.single_choice
+    assert len(duplicate_data["options"]) == 3
+    assert duplicate_data["options"][0]["value"] == "Option 1"
+    assert duplicate_data["options"][1]["value"] == "Option 2"
+    assert duplicate_data["options"][2]["value"] == "Option 3"
+    assert duplicate_data["correct_answer"] == [1]
+    assert duplicate_data["is_mandatory"] is True
+
+    duplicate_question_data = {
+        "organization_id": org_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 33"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+        "tag_ids": [tag.id],
+    }
+
+    another_duplicate_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=duplicate_question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert another_duplicate_response.status_code == 400
