@@ -934,7 +934,7 @@ def test_create_tag_with_invalid_tag_type_id(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     user, organization = setup_user_organization(db)
-    invalid_tag_type_id = 85
+    invalid_tag_type_id = -1
 
     data = {
         "name": random_lower_string(),

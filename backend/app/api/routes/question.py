@@ -1,5 +1,6 @@
 import base64
 import csv
+import re
 from datetime import datetime
 from io import StringIO
 from typing import Any
@@ -13,7 +14,7 @@ from fastapi import (
     UploadFile,
 )
 from sqlalchemy import desc, func
-from sqlmodel import or_, select
+from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
@@ -187,6 +188,35 @@ def prepare_for_db(
     return options, marking_scheme, media
 
 
+def is_duplicate_question(
+    session: SessionDep, question_text: str, tag_ids: list[int] | None
+) -> bool:
+    normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
+    existing_questions = session.exec(
+        select(Question)
+        .where(Question.is_deleted is None or not_(Question.is_deleted))
+        .join(QuestionRevision)
+        .where(Question.last_revision_id == QuestionRevision.id)
+        .where(
+            func.lower(
+                func.regexp_replace(QuestionRevision.question_text, r"\s+", " ", "g")
+            )
+            == normalized_text,
+        )
+    ).all()
+    new_tag_ids = set(tag_ids or [])
+    for question in existing_questions:
+        existing_tag_ids = {
+            qt.tag_id
+            for qt in session.exec(
+                select(QuestionTag).where(QuestionTag.question_id == question.id)
+            ).all()
+        }
+        if new_tag_ids & existing_tag_ids:
+            return True
+    return False
+
+
 @router.post("/", response_model=QuestionPublic)
 def create_question(
     question_create: QuestionCreate,
@@ -194,6 +224,13 @@ def create_question(
     current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
+    if is_duplicate_question(
+        session, question_create.question_text, question_create.tag_ids
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Duplicate question: Same question text and tags already exist.",
+        )
     # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,
@@ -1145,7 +1182,9 @@ async def upload_questions_csv(
                             state_cache[state_name] = state.id
 
                 # Skip this question if states weren't found
-                if state_error:
+                if state_error or is_duplicate_question(
+                    session, question_text, tag_ids
+                ):
                     questions_failed += 1
                     failed_question_details.append(
                         {
