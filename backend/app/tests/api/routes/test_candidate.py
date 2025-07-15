@@ -3328,6 +3328,7 @@ def test_get_test_result_with_random_question_true(
     assert "candidate_uuid" in data
     assert "candidate_test_id" in data
 
+    print("response->", data)
     candidate_test_id = data["candidate_test_id"]
     candidate_uuid = data["candidate_uuid"]
 
@@ -3365,6 +3366,7 @@ def test_get_test_result_with_random_question_true(
     )
     assert result_response.status_code == 200
     data = result_response.json()
+    print("response1->", data)
     assert data["correct_answer"] == 2
     assert data["incorrect_answer"] == 3
     assert data["mandatory_not_attempted"] == 1
