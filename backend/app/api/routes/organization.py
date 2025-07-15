@@ -93,8 +93,9 @@ def get_organization(
 
 
 @router.get(
-    "/Aggregated_data",
+    "/aggregated_data",
     response_model=AggregatedData,
+    dependencies=[Depends(permission_dependency("read_organization"))],
 )
 def get_organization_aggregated_stats_for_current_user(
     session: SessionDep,

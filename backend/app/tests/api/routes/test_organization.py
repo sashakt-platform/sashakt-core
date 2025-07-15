@@ -512,7 +512,7 @@ def test_get_aggregated_data_for_organization(
     db.commit()
     db.refresh(test)
     response = client.get(
-        f"{settings.API_V1_STR}/organization/Aggregated_data",
+        f"{settings.API_V1_STR}/organization/aggregated_data",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
