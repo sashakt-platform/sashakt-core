@@ -193,11 +193,10 @@ def is_duplicate_question(
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
+        .where(Question.is_deleted is None or not_(Question.is_deleted))
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
-            Question.is_active,
-            not_(Question.is_deleted),
             func.lower(
                 func.regexp_replace(QuestionRevision.question_text, r"\s+", " ", "g")
             )
