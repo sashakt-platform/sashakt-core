@@ -231,7 +231,7 @@ class TestUpdate(TestBase, StoreStartEndDate):
     state_ids: list[int] = []
 
 
-class TestPublicLimited(TestBase):
+class TestPublicLimited(TestBase, PublicStartEndDate):
     """Limited public information for test landing page"""
 
     id: int
