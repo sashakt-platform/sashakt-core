@@ -211,6 +211,8 @@ def is_duplicate_question(
                 select(QuestionTag).where(QuestionTag.question_id == question.id)
             ).all()
         }
+        if not new_tag_ids and not existing_tag_ids:
+            return True
         if new_tag_ids & existing_tag_ids:
             return True
     return False
