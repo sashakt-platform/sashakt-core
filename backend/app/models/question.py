@@ -8,7 +8,7 @@ from typing_extensions import TypedDict
 
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
-from app.models.utils import DatePublic
+from app.models.utils import DatePublic, PublicStartEndDate
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -493,6 +493,59 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
+
+
+# TypedDict classes with all required fields
+class QuestionRevisionInfo(TypedDict):
+    id: int
+    created_date: datetime
+    text: str
+    type: str
+    is_current: bool
+    created_by_id: int
+
+
+class RevisionDetailDict(DatePublic):
+    id: int
+    question_id: int
+    created_date: datetime
+    modified_date: datetime
+    is_active: bool | None
+    is_deleted: bool | None
+    question_text: str
+    instructions: str | None
+    question_type: str
+    options: list[Option] | None
+    correct_answer: Any
+    subjective_answer_limit: int | None
+    is_mandatory: bool
+    marking_scheme: dict[str, float] | None  # Updated type to float
+    solution: str | None
+    media: dict[str, Any] | None
+    is_current: bool
+    created_by_id: int
+
+
+class QuestionTagResponse(TypedDict):
+    id: int
+    question_id: int
+    tag_id: int
+    tag_name: str
+    created_date: datetime
+
+
+class TestInfoDict(DatePublic):
+    id: int
+    name: str
+    created_date: datetime
+
+
+class CandidateTestInfoDict(PublicStartEndDate):
+    id: int
+    candidate_id: int
+    test_id: int
+    start_time: datetime
+    is_submitted: bool
 
 
 # Force model rebuild to handle forward references

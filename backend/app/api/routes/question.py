@@ -1,5 +1,4 @@
 import csv
-from datetime import datetime
 from io import StringIO
 from typing import Any
 
@@ -13,7 +12,6 @@ from fastapi import (
 )
 from sqlalchemy import desc, func
 from sqlmodel import or_, select
-from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models import (
@@ -38,7 +36,14 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.question import (
+    BulkUploadQuestionsResponse,
+    CandidateTestInfoDict,
+    Option,
+    QuestionRevisionInfo,
+    RevisionDetailDict,
+    TestInfoDict,
+)
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -283,59 +288,6 @@ def create_question(
     return build_question_response(session, question, revision, locations, tags)
 
 
-# TypedDict classes with all required fields
-class QuestionRevisionInfo(TypedDict):
-    id: int
-    created_date: datetime
-    text: str
-    type: str
-    is_current: bool
-    created_by_id: int
-
-
-class RevisionDetailDict(TypedDict):
-    id: int
-    question_id: int
-    created_date: datetime
-    modified_date: datetime
-    is_active: bool | None
-    is_deleted: bool | None
-    question_text: str
-    instructions: str | None
-    question_type: str
-    options: list[Option] | None
-    correct_answer: Any
-    subjective_answer_limit: int | None
-    is_mandatory: bool
-    marking_scheme: dict[str, float] | None  # Updated type to float
-    solution: str | None
-    media: dict[str, Any] | None
-    is_current: bool
-    created_by_id: int
-
-
-class QuestionTagResponse(TypedDict):
-    id: int
-    question_id: int
-    tag_id: int
-    tag_name: str
-    created_date: datetime
-
-
-class TestInfoDict(TypedDict):
-    id: int
-    name: str
-    created_date: datetime
-
-
-class CandidateTestInfoDict(TypedDict):
-    id: int
-    candidate_id: int
-    test_id: int
-    start_time: datetime
-    is_submitted: bool
-
-
 @router.get("/", response_model=list[QuestionPublic])
 def get_questions(
     session: SessionDep,
@@ -484,7 +436,7 @@ def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDi
                 id=test.id, name=test.name, created_date=test.created_date
             )
             # Only add unique tests
-            if not any(t["id"] == test_info["id"] for t in test_info_dict_list):
+            if not any(t.id == test_info.id for t in test_info_dict_list):
                 test_info_dict_list.append(test_info)
 
     return test_info_dict_list
@@ -532,7 +484,7 @@ def get_question_candidate_tests(
             )
             # Avoid duplicates
             if not any(
-                ct["id"] == candidate_test_info["id"] for ct in candidate_test_info_list
+                ct.id == candidate_test_info.id for ct in candidate_test_info_list
             ):
                 candidate_test_info_list.append(candidate_test_info)
 
