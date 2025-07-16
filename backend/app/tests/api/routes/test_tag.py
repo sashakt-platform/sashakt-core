@@ -1379,7 +1379,7 @@ def test_create_modified_date_tagtype(
     response_data = response.json()
 
     data_db = db.exec(select(TagType).where(TagType.id == response_data["id"])).first()
-
+    assert data_db is not None
     check_created_modified_date(
         data_db.model_dump(include={"created_date", "modified_date"}),
         response_data["created_date"],
@@ -1411,7 +1411,7 @@ def test_create_modified_date_tag(
     response_data = response.json()
 
     data_db = db.exec(select(Tag).where(Tag.id == response_data["id"])).first()
-
+    assert data_db is not None
     check_created_modified_date(
         data_db.model_dump(include={"created_date", "modified_date"}),
         response_data["created_date"],

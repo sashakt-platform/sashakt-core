@@ -21,9 +21,9 @@ from app.models import (
 from app.models.question import QuestionType
 from app.models.test import TestQuestion
 from app.tests.utils.question_revisions import create_random_question_revision
-from app.tests.utils.user import create_random_user
+from app.tests.utils.user import create_random_user, get_current_user_data
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import check_created_modified_date, random_lower_string
 
 
 def test_create_candidate(
@@ -3378,7 +3378,6 @@ def test_get_test_result_with_random_question_true(
     assert "candidate_uuid" in data
     assert "candidate_test_id" in data
 
-    print("response->", data)
     candidate_test_id = data["candidate_test_id"]
     candidate_uuid = data["candidate_uuid"]
 
@@ -3416,8 +3415,363 @@ def test_get_test_result_with_random_question_true(
     )
     assert result_response.status_code == 200
     data = result_response.json()
-    print("response1->", data)
     assert data["correct_answer"] == 2
     assert data["incorrect_answer"] == 3
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+
+
+def test_check_candidate_create_modified_date_timezone(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/",
+        json={"user_id": user.id, "is_active": True},
+        headers=get_user_candidate_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == user.id
+    assert data["is_active"] is True
+
+    # Check created and modified dates
+    data_db = db.exec(select(Candidate).where(Candidate.id == data["id"])).first()
+    assert data_db is not None
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"}),
+        data["created_date"],
+        data["modified_date"],
+    )
+
+
+def test_candidate_test_create_modified_date_timezone(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    get_user_candidate_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/",
+        json={"user_id": user.id, "is_active": True},
+        headers=get_user_candidate_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == user.id
+    assert data["is_active"] is True
+
+    response_test = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response_test.status_code == 200
+    test_data = response_test.json()
+
+    start_time = "2025-01-01T10:00:00"
+    end_time = "2025-01-01T11:00:00"
+    response_candidate_test = client.post(
+        f"{settings.API_V1_STR}/candidate_test/",
+        json={
+            "test_id": test_data["id"],
+            "candidate_id": data["id"],
+            "device": random_lower_string(),
+            "start_time": start_time,
+            "end_time": end_time,
+            "consent": True,
+            "is_submitted": False,
+        },
+        headers=get_user_candidate_token,
+    )
+
+    assert response_candidate_test.status_code == 200
+    candidate_test_data = response_candidate_test.json()
+    assert "id" in candidate_test_data
+    assert candidate_test_data["test_id"] == test_data["id"]
+    assert candidate_test_data["candidate_id"] == data["id"]
+    assert candidate_test_data["consent"] is True
+
+    db_data = db.exec(
+        select(CandidateTest).where(CandidateTest.id == candidate_test_data["id"])
+    ).first()
+    # Check created and modified dates
+    assert db_data is not None
+    check_created_modified_date(
+        db_data.model_dump(include={"created_date", "modified_date"}),
+        candidate_test_data["created_date"],
+        candidate_test_data["modified_date"],
+    )
+
+    db_test_start_time = db_data.start_time
+    db_test_end_time = db_data.end_time
+    # Convert the datetime from DB to IST
+    start_time_ist = db_test_start_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+    end_time_ist = (
+        db_test_end_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if db_test_end_time
+        else None
+    )
+    assert start_time_ist.isoformat() == start_time
+    if end_time_ist:
+        assert end_time_ist.isoformat() == end_time
+
+
+def test_candidate_test_answer_created_modified_date_timezone(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    get_user_candidate_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_org_id = user_data["organization_id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/",
+        json={"user_id": user_id, "is_active": True},
+        headers=get_user_candidate_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == user_id
+    assert data["is_active"] is True
+
+    # Create a question
+    question = Question(organization_id=user_org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    # Create a question revision for the question
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user_id,
+        question_text="Sample Test Question",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[2],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(question_revision)
+    db.commit()
+    db.refresh(question_revision)
+
+    # Set the last_revision_id on the question
+    question.last_revision_id = question_revision.id
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    response_test = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_revision_ids": [question_revision.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response_test.status_code == 200
+    test_data = response_test.json()
+    start_time = "2025-01-01T10:00:00"
+    response_candidate_test = client.post(
+        f"{settings.API_V1_STR}/candidate_test/",
+        json={
+            "test_id": test_data["id"],
+            "candidate_id": data["id"],
+            "device": random_lower_string(),
+            "start_time": start_time,
+            "consent": True,
+            "is_submitted": False,
+        },
+        headers=get_user_candidate_token,
+    )
+
+    assert response_candidate_test.status_code == 200
+    response_candidate_test_data = response_candidate_test.json()
+
+    data_db = db.exec(
+        select(CandidateTest).where(
+            CandidateTest.id == response_candidate_test_data["id"]
+        )
+    ).first()
+
+    assert data_db is not None
+
+    db_test_start_time = data_db.start_time
+    # Convert the datetime from DB to IST
+    start_time_ist = db_test_start_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+    assert start_time_ist.isoformat() == start_time
+
+    response_candidate_test_answer = client.post(
+        f"{settings.API_V1_STR}/candidate_test_answer/",
+        json={
+            "candidate_test_id": response_candidate_test.json()["id"],
+            "question_revision_id": question_revision.id,
+            "response": "Sample response",
+            "visited": True,
+            "time_spent": 30,
+        },
+        headers=get_user_candidate_token,
+    )
+    assert response_candidate_test_answer.status_code == 200
+    candidate_test_answer_data = response_candidate_test_answer.json()
+
+    candidate_test_answer_db = db.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.id == candidate_test_answer_data["id"]
+        )
+    ).first()
+
+    assert candidate_test_answer_db is not None
+
+    check_created_modified_date(
+        candidate_test_answer_db.model_dump(include={"created_date", "modified_date"}),
+        candidate_test_answer_data["created_date"],
+        candidate_test_answer_data["modified_date"],
+    )
+
+    end_time = "2025-01-01T11:00:00"
+    response_end_test = client.put(
+        f"{settings.API_V1_STR}/candidate_test/{response_candidate_test_data['id']}",
+        json={
+            "device": random_lower_string(),
+            "end_time": end_time,
+            "consent": True,
+            "is_submitted": True,
+        },
+        headers=get_user_candidate_token,
+    )
+    assert response_end_test.status_code == 200
+    end_test_data = response_end_test.json()
+    db.commit()
+    data_db = db.exec(
+        select(CandidateTest).where(CandidateTest.id == end_test_data["id"])
+    ).first()
+
+    assert data_db is not None
+
+    db_test_end_time = data_db.end_time
+    # Convert the datetime from DB to IST
+    assert db_test_end_time is not None
+    end_time_ist = (
+        db_test_end_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if db_test_end_time
+        else None
+    )
+    if end_time_ist:
+        assert end_time_ist.isoformat() == end_time
+
+
+def test_candidate_test_get_questions_check_create_modified_date_timezone(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test the test_questions endpoint with candidate UUID verification."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    question = Question(organization_id=user_org_id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user_id,
+        question_text="What is 2+2?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[1],
+    )
+
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create test
+
+    start_time = "2024-05-24T10:00:00"
+    end_time = "2024-05-24T11:00:00"
+
+    response_test = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "start_time": start_time,
+            "end_time": end_time,
+            "question_revision_ids": [question_revision.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_test.status_code == 200
+
+    test_data = response_test.json()
+
+    # Create candidate and candidate_test using start_test endpoint
+    payload = {"test_id": test_data["id"], "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Test get_test_questions endpoint
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+
+    data_db = db.exec(select(Test).where(Test.id == test_data["id"])).first()
+    assert data_db is not None
+
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"}),
+        data["created_date"],
+        data["modified_date"],
+    )
+
+    db_test_start_time = data_db.start_time
+    db_test_end_time = data_db.end_time
+    # Convert the datetime from DB to IST
+    start_time_ist = (
+        db_test_start_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if db_test_start_time
+        else None
+    )
+    end_time_ist = (
+        db_test_end_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if db_test_end_time
+        else None
+    )
+    if start_time_ist:
+        assert start_time_ist.isoformat() == start_time
+    if end_time_ist:
+        assert end_time_ist.isoformat() == end_time

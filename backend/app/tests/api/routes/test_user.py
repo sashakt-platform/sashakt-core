@@ -10,7 +10,11 @@ from app.models import Role, User, UserCreate
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_email, random_lower_string
+from app.tests.utils.utils import (
+    check_created_modified_date,
+    random_email,
+    random_lower_string,
+)
 
 
 def test_get_users_superuser_me(
@@ -749,3 +753,31 @@ def test_create_inactive_user_not_listed(
     )
     all_users = r.json()["data"]
     assert all(item["id"] != user_id for item in all_users)
+
+
+def test_check_create_modified_date_timezone(
+    client: TestClient, db: Session, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": create_random_role(db).id,
+            "organization_id": create_random_organization(db).id,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "created_date" in data
+    assert "modified_date" in data
+    data_db = db.exec(select(User).where(User.id == data["id"])).first()
+    assert data_db is not None
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"}),
+        created_date_public=data["created_date"],
+        modified_date_public=data["modified_date"],
+    )
