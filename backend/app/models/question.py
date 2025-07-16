@@ -217,6 +217,7 @@ class Question(SQLModel, table=True):
     is_deleted: bool = Field(
         default=False,
         nullable=False,
+        sa_column_kwargs={"server_default": "false"},
         description="Whether this question is marked as deleted",
     )
 
@@ -266,6 +267,7 @@ class QuestionRevision(QuestionBase, table=True):
     is_deleted: bool = Field(
         default=False,
         nullable=False,
+        sa_column_kwargs={"server_default": "false"},
         description="Whether this revision is marked as deleted",
     )
     # Relationships

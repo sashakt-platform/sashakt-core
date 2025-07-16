@@ -1,8 +1,8 @@
-"""is_delete default set to False not None
+"""enforce is_deleted field to be boolean with default False
 
-Revision ID: d670996d32ec
+Revision ID: 5df93aaac93f
 Revises: 9523d37ecf45
-Create Date: 2025-07-16 04:08:17.165140
+Create Date: 2025-07-16 04:52:39.651883
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = 'd670996d32ec'
+revision = '5df93aaac93f'
 down_revision = '9523d37ecf45'
 branch_labels = None
 depends_on = None
