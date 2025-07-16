@@ -20,7 +20,7 @@ from app.models.test import Test, TestQuestion
 
 # from app.models.user import User
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import check_created_modified_date, random_lower_string
 
 
 def test_create_question(
@@ -490,6 +490,95 @@ def test_update_question(
     # Verify in database
     db.refresh(q1)
     assert q1.is_active is False
+
+
+def test_check_create_modified_date_question_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    # Get user data
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+
+    # Create question with location and tag
+    question_text = random_lower_string()
+    question_data = {
+        "organization_id": organization_id,
+        "question_text": question_text,
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    question_data = response.json()
+    question_id = question_data["id"]
+
+    # Create a test
+    test_data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 2,
+        "marks": 3,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "marks_level": None,
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "question_revision_ids": [question_data["latest_question_revision_id"]],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    test_data = response.json()
+    test_id = test_data["id"]
+
+    # Verify question is linked to test
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tests",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    tests_data = response.json()
+    assert len(tests_data) == 1
+    assert tests_data[0]["id"] == test_id
+
+    data_db = db.exec(
+        select(TestQuestion)
+        .where(TestQuestion.test_id == tests_data[0]["id"])
+        .where(
+            TestQuestion.question_revision_id
+            == question_data["latest_question_revision_id"]
+        )
+    ).first()
+    assert data_db is not None, "TestQuestion not found in database"
+    # Check created and modified dates
+
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date"}),
+        tests_data[0]["created_date"],
+        "",
+    )
 
 
 def test_create_question_revision(
@@ -1069,6 +1158,100 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     # Non-existent question
     response = client.get(f"{settings.API_V1_STR}/questions/99999/candidate-tests")
     assert response.status_code == 404
+
+
+def test_create_modified_date_question_candidate_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    # Get user data
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+
+    q1 = Question(organization_id=organization_id)
+    db.add(q1)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_data["id"],
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    db.commit()
+    db.refresh(q1)
+
+    # Create a candidate
+    candidate = Candidate()
+    db.add(candidate)
+    db.flush()
+
+    # Create a test with proper fields
+    test = Test(
+        name="Test 1",
+        organization_id=organization_id,
+        time_limit=60,
+        marks=10,
+        completion_message="Good job!",
+        start_instructions="Read carefully",
+        link="http://example.com/test1",
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_random_questions=10,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user_data["id"],
+    )
+    db.add(test)
+    db.flush()
+
+    candidate_test = CandidateTest(
+        candidate_id=candidate.id,
+        test_id=test.id,
+        device="web",
+        consent=True,
+        start_time="2024-12-12T10:00:00Z",
+        end_time="2024-12-12T11:00:00Z",
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.flush()
+
+    # Link question to candidate test
+    answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=rev1.id,
+        response="0",
+        visited=True,
+        time_spent=30,
+    )
+    db.add(answer)
+    db.commit()
+
+    # Get candidate tests for question
+    response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}/candidate-tests")
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 1
+    # Verify candidate test data
+    assert data[0]["id"] == candidate_test.id
+    data_db = db.exec(
+        select(CandidateTest).where(CandidateTest.id == candidate_test.id)
+    ).first()
+    assert data_db is not None, "CandidateTest not found in database"
+    data_db.created_date = data_db.start_time
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date"}), data[0]["start_time"], ""
+    )
 
 
 def test_bulk_upload_questions(
@@ -2641,3 +2824,53 @@ def test_bulk_upload_questions_with_invalid_tagtype(
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_created_modified_time_question(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_user(db).organization
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": organization.id,
+            "question_text": random_lower_string(),
+            "question_type": QuestionType.single_choice,
+            "options": [
+                {"id": 1, "key": "A", "value": "Option 1"},
+                {"id": 2, "key": "B", "value": "Option 2"},
+            ],
+            "correct_answer": [1],
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    data_db = db.exec(select(Question).where(Question.id == data["id"])).first()
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"})
+        if data_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/revisions/{data['latest_question_revision_id']}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    data_question_revision_db = db.exec(
+        select(QuestionRevision).where(QuestionRevision.id == data["id"])
+    ).first()
+    check_created_modified_date(
+        data_question_revision_db.model_dump(include={"created_date", "modified_date"})
+        if data_question_revision_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )

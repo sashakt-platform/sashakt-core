@@ -1,12 +1,13 @@
 # test_helpers.py
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
 from app.tests.utils.user import create_random_user, get_current_user_data
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import check_created_modified_date, random_lower_string
 
 
 def setup_user_organization(
@@ -1352,3 +1353,67 @@ def test_get_tags_includes_with_and_without_tag_types(
         elif tag["name"] in ["Easy", "Medium"]:
             assert tag["tag_type"] is not None
             assert tag["tag_type"]["name"] == "Difficulty"
+
+
+def test_create_modified_date_tagtype(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "organization_id": organization_id,
+        "created_by_id": user_id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=payload,
+    )
+    response_data = response.json()
+
+    data_db = db.exec(select(TagType).where(TagType.id == response_data["id"])).first()
+
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"}),
+        response_data["created_date"],
+        response_data["modified_date"],
+    )
+
+
+def test_create_modified_date_tag(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "organization_id": organization_id,
+        "created_by_id": user_id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+        json=payload,
+    )
+    response_data = response.json()
+
+    data_db = db.exec(select(Tag).where(Tag.id == response_data["id"])).first()
+
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"}),
+        response_data["created_date"],
+        response_data["modified_date"],
+    )

@@ -1,11 +1,12 @@
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.organization import Organization
 from app.tests.utils.organization import create_random_organization
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import check_created_modified_date, random_lower_string
 
 
 def test_create_organization(
@@ -452,3 +453,29 @@ def test_inactive_organization_not_listed(
     )
     data = response.json()
     assert all(item["id"] != org_id for item in data)
+
+
+def test_created_modified_time_organization(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    data_db = db.exec(select(Organization).where(Organization.id == data["id"])).first()
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"})
+        if data_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )
