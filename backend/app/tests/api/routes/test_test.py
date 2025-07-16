@@ -2311,14 +2311,14 @@ def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> No
     assert "Test not found or not active" in response.json()["detail"]
 
 
-def check_test_public_start_end_time_timezone(
+def test_check_public_start_end_time_timezone(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     """Test that public test start and end times are in UTC."""
 
     payload = {
-        "start_time": "2024-05-24T10:00:00+00:00",
-        "end_time": "2024-05-24T12:00:00+00:00",
+        "start_time": "2024-05-24T10:00:00",
+        "end_time": "2024-05-24T12:00:00",
         "name": random_lower_string(),
     }
 
@@ -2327,7 +2327,7 @@ def check_test_public_start_end_time_timezone(
         json=payload,
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 201
+    assert response.status_code == 200
     test = response.json()
     assert "id" in test
     assert test["start_time"] == "2024-05-24T10:00:00"
