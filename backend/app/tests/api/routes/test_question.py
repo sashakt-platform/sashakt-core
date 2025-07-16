@@ -1219,8 +1219,8 @@ def test_create_modified_date_question_candidate_tests(
         test_id=test.id,
         device="web",
         consent=True,
-        start_time="2024-12-12T10:00:00Z",
-        end_time="2024-12-12T11:00:00Z",
+        start_time="2024-12-12T10:00:00",
+        end_time="2024-12-12T11:00:00",
     )
     db.add(candidate_test)
     db.commit()
