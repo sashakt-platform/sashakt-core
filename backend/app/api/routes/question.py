@@ -193,7 +193,7 @@ def is_duplicate_question(
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
-        .where(Question.is_deleted is None or not_(Question.is_deleted))
+        .where(not_(Question.is_deleted))
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
@@ -336,7 +336,7 @@ class RevisionDetailDict(TypedDict):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool | None
+    is_deleted: bool = False
     question_text: str
     instructions: str | None
     question_type: str

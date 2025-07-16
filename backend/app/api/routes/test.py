@@ -216,7 +216,7 @@ def get_test(
     tag_ids: list[int] | None = Query(None),
     state_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
-    is_deleted: bool | None = False,  # Default to showing non-deleted questions
+    is_deleted: bool = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
         default=["created_date"],
         title="Order by",
@@ -239,8 +239,8 @@ def get_test(
         query = query.order_by(column.desc() if is_desc else column)
 
     # Apply filters only if they're provided
-    if is_deleted is not None:
-        query = query.where(Test.is_deleted == is_deleted)
+
+    query = query.where(Test.is_deleted == is_deleted)
 
     if is_active is not None:
         query = query.where(Test.is_active == is_active)
