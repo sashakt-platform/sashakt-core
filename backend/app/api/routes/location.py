@@ -331,7 +331,7 @@ def get_block(
     if district is not None:
         query = query.where(Block.district_id == district)
 
-    # Apply apgination
+    # Apply pagination
     query = query.offset(skip).limit(limit)
 
     blocks = session.exec(query).all()

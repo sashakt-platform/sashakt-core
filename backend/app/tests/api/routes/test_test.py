@@ -1,11 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.api.deps import SessionDep
+from app.api.routes.utils import get_current_time
 from app.core.config import settings
 from app.models import (
     Country,
@@ -19,18 +21,24 @@ from app.models import (
     TestQuestion,
     TestState,
     TestTag,
+    User,
 )
 from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
-from app.tests.utils.user import create_random_user
+from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
 
-def setup_data(db: SessionDep) -> Any:
-    user = create_random_user(db)
+def setup_data(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> Any:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
+    user = db.get(User, user_id)
     india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
@@ -47,21 +55,21 @@ def setup_data(db: SessionDep) -> Any:
     tag_type = TagType(
         name=random_lower_string(),
         organization_id=organization.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(tag_type)
     db.commit()
 
     tag_a = Tag(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
 
     tag_b = Tag(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         tag_type_id=tag_type.id,
         organization_id=organization.id,
     )
@@ -85,7 +93,7 @@ def setup_data(db: SessionDep) -> Any:
     # Create question revisions
     question_revision_one = QuestionRevision(
         question_id=question_one.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text="What is the size of Sun",
         question_type=QuestionType.single_choice,
         options=[
@@ -97,7 +105,7 @@ def setup_data(db: SessionDep) -> Any:
 
     question_revision_two = QuestionRevision(
         question_id=question_two.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text="What is the speed of light",
         question_type=QuestionType.single_choice,
         options=[
@@ -153,7 +161,9 @@ def test_create_test(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
 
     payload = {
         "name": random_lower_string(),
@@ -170,7 +180,6 @@ def test_create_test(
         "no_of_random_questions": 4,
         "question_pagination": 1,
         "is_template": False,
-        "created_by_id": user.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "state_ids": [punjab.id],
@@ -197,7 +206,7 @@ def test_create_test(
     assert data["no_of_random_questions"] == payload["no_of_random_questions"]
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
-    assert data["created_by_id"] == user.id
+    assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -236,7 +245,7 @@ def test_create_test(
         no_of_random_questions=2,
         question_pagination=1,
         is_template=True,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(sample_test)
     db.commit()
@@ -260,7 +269,6 @@ def test_create_test(
         "question_pagination": 1,
         "is_template": False,
         "template_id": sample_test.id,
-        "created_by_id": user.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "state_ids": [punjab.id, goa.id],
@@ -287,7 +295,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
-    assert data["created_by_id"] == payload["created_by_id"]
+    assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -326,7 +334,6 @@ def test_create_test(
         "question_pagination": 1,
         "is_template": False,
         "template_id": sample_test.id,
-        "created_by_id": user.id,
     }
 
     response = client.post(
@@ -352,7 +359,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == sample_test.id
-    assert data["created_by_id"] == user.id
+    assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -382,8 +389,7 @@ def test_create_test_random_question_field(
         "name": random_lower_string(),
         "created_by_id": user.id,
         "link": random_lower_string(),
-        "random_questions": True,
-        "no_of_random_questions": 5,
+        "random_questions": False,
     }
 
     response = client.post(
@@ -535,7 +541,7 @@ def test_get_tests(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     test = Test(
         name=random_lower_string(),
@@ -608,7 +614,9 @@ def test_get_tests(
 def test_get_test_by_filter_name(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_name_1 = random_lower_string()
     test_name_2 = random_lower_string()
     test_1 = Test(
@@ -669,7 +677,9 @@ def test_get_test_by_filter_name(
 def test_get_test_by_filter_description(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     random_text_1 = random_lower_string()
     random_text_2 = random_lower_string()
     test_1 = Test(
@@ -733,7 +743,9 @@ def test_get_test_by_filter_description(
 def test_get_test_by_filter_start_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
 
     test_1 = Test(
         name=random_lower_string(),
@@ -741,7 +753,7 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 25, 10, 30),
+        start_time=datetime(2025, 7, 25, 10, 30),
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -749,7 +761,7 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 27, 12, 30),
+        start_time=datetime(2025, 7, 27, 12, 30),
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -757,7 +769,7 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 28, 15, 30),
+        start_time=datetime(2025, 7, 28, 15, 30),
     )
 
     test_4 = Test(
@@ -766,22 +778,23 @@ def test_get_test_by_filter_start_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        start_time=datetime(2025, 4, 28, 19, 30),
+        start_time=datetime(2025, 7, 28, 19, 30),
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-25T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-25T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
+
     assert len(data) == 4
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-27T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -790,7 +803,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -799,7 +812,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-28T15:30:59Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
@@ -808,7 +821,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-28T19:31:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -817,7 +830,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 0
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-24T00:00:00Z&start_time_lte=2025-04-26T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-24T00:00:00Z&start_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -826,7 +839,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-27T12:30:00Z&start_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T12:30:00Z&start_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -835,7 +848,7 @@ def test_get_test_by_filter_start_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?start_time_lte=2025-07-28T15:30:00Z&start_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -847,15 +860,16 @@ def test_get_test_by_filter_start_time(
 def test_get_test_by_filter_end_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 25, 10, 30),
+        end_time=datetime(2025, 7, 25, 10, 30),
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -863,7 +877,7 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 27, 12, 30),
+        end_time=datetime(2025, 7, 27, 12, 30),
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -871,7 +885,7 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 28, 15, 30),
+        end_time=datetime(2025, 7, 28, 15, 30),
     )
 
     test_4 = Test(
@@ -880,13 +894,13 @@ def test_get_test_by_filter_end_time(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
-        end_time=datetime(2025, 4, 28, 19, 30),
+        end_time=datetime(2025, 7, 28, 19, 30),
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-25T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-25T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -895,7 +909,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 4
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-27T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -904,7 +918,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -913,7 +927,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-28T15:30:59Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
@@ -922,7 +936,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-28T19:31:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -931,7 +945,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 0
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-24T00:00:00Z&end_time_lte=2025-04-26T00:00:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-24T00:00:00Z&end_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -940,7 +954,7 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-04-27T12:30:00Z&end_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T12:30:00Z&end_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -949,10 +963,9 @@ def test_get_test_by_filter_end_time(
     assert len(data) == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_lte=2025-04-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test/?end_time_lte=2025-07-28T15:30:00Z&end_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
-
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 3
@@ -961,7 +974,9 @@ def test_get_test_by_filter_end_time(
 def test_get_test_by_filter_start_end_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
 
     test_1 = Test(
         name=random_lower_string(),
@@ -1025,7 +1040,9 @@ def test_get_test_by_filter_start_end_time(
 def test_get_test_by_filter_time_limit(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
 
     test_1 = Test(
         name=random_lower_string(),
@@ -1093,7 +1110,9 @@ def test_get_test_by_filter_time_limit(
 def test_get_test_by_filter_completion_message(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     random_text_1 = random_lower_string()
     random_text_2 = random_lower_string()
 
@@ -1162,7 +1181,9 @@ def test_get_test_by_filter_completion_message(
 def test_get_test_by_filter_start_instructions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     random_text_1 = random_lower_string()
     random_text_2 = random_lower_string()
 
@@ -1230,7 +1251,9 @@ def test_get_test_by_filter_start_instructions(
 def test_get_test_by_filter_no_of_attempts(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1301,7 +1324,9 @@ def test_get_test_by_filter_no_of_attempts(
 def test_get_test_by_filter_shuffle(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1362,7 +1387,9 @@ def test_get_test_by_filter_shuffle(
 def test_get_test_by_filter_random_questions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1423,7 +1450,9 @@ def test_get_test_by_filter_random_questions(
 def test_get_test_by_filter_no_random_questions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1481,7 +1510,9 @@ def test_get_test_by_filter_no_random_questions(
 def test_get_test_by_filter_question_pagination(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1533,7 +1564,10 @@ def test_get_test_by_filter_question_pagination(
 def test_get_test_by_filter_is_template(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
@@ -1586,9 +1620,10 @@ def test_get_test_by_filter_is_template(
 def test_get_test_by_filter_created_by(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user_1 = create_random_user(db)
-    user_2 = create_random_user(db)
-
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_1 = create_random_user(db, organization_id=org_id)
+    user_2 = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         created_by_id=user_1.id,
@@ -1631,8 +1666,9 @@ def test_get_test_by_filter_created_by(
 def test_get_test_order_by(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
     test_1 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -1942,7 +1978,7 @@ def test_update_test(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     test = Test(
         name=random_lower_string(),
@@ -2006,11 +2042,10 @@ def test_update_test(
         "no_of_attempts": 3,
         "shuffle": True,
         "random_questions": True,
-        "no_of_random_questions": 50,
+        "no_of_random_questions": 1,
         "question_pagination": 1,
         "is_template": False,
         "template_id": None,
-        "created_by_id": user.id,
         "tag_ids": [tag_a.id, tag_b.id],
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
@@ -2042,10 +2077,9 @@ def test_update_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
-    assert data["created_by_id"] == payload["created_by_id"]
+    assert data["created_by_id"] == user.id
     assert "id" in data
     assert "created_date" in data
-    from datetime import datetime
 
     created_date = datetime.fromisoformat(data["created_date"])
     assert created_date == created_date_original
@@ -2135,7 +2169,7 @@ def test_delete_test(
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     test = Test(
         name=random_lower_string(),
@@ -2173,7 +2207,9 @@ def test_delete_test(
     assert "id" not in data
 
 
-def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
+def test_get_public_test_info(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     """Test the public test endpoint that doesn't require authentication."""
     (
         user,
@@ -2188,7 +2224,7 @@ def test_get_public_test_info(client: TestClient, db: SessionDep) -> None:
         question_two,
         question_revision_one,
         question_revision_two,
-    ) = setup_data(db)
+    ) = setup_data(client, db, get_user_superadmin_token)
 
     # Create a test
     test = Test(
@@ -2267,3 +2303,1283 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     assert response.status_code == 404
     assert "Test not found or not active" in response.json()["detail"]
+
+
+def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -> None:
+    fake_current_time = datetime(2024, 5, 24, 10, 0, 0)  # Fixed time for testing
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        future_start_time = fake_current_time + timedelta(
+            minutes=10
+        )  # 10 minutes from now``
+        test = Test(
+            name="Public Start Timer Test",
+            link="public-test-uuid",
+            is_active=True,
+            is_deleted=False,
+            start_time=future_start_time,
+            created_by_id=create_random_user(db).id,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/{test.link}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "time_left" in data
+        time_left = data["time_left"]
+        assert isinstance(time_left, int)
+        assert time_left == 600
+
+
+def test_public_timer_when_test_already_started(
+    client: TestClient, db: SessionDep
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)  # Fixed time for testing
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        test = Test(
+            name="Public Start Timer Test",
+            link="public-test-uuid1",
+            is_active=True,
+            is_deleted=False,
+            start_time=datetime(2024, 5, 24, 9, 0, 0),
+            end_time=fake_current_time + timedelta(days=1),
+            created_by_id=create_random_user(db).id,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/{test.link}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "time_left" in data
+        assert data["time_left"] == 0
+
+
+def test_public_timer_test_not_found_or_not_active(
+    client: TestClient, db: SessionDep
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)  # Fixed time for testing
+    with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/nonexistent-test-link"
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Test not found or not active"
+        user = create_random_user(db)
+        deleted_test = Test(
+            name="Deleted Test",
+            link="deleted-test-link",
+            start_time=fake_current_time + timedelta(minutes=10),
+            end_time=fake_current_time + timedelta(hours=2),
+            time_limit=60,
+            is_active=True,
+            is_deleted=True,  # Marked as deleted
+            created_by_id=user.id,
+        )
+        db.add(deleted_test)
+        db.commit()
+        response = client.get(
+            f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Test not found or not active"
+
+
+def test_public_timer_returns_zero_if_start_time_none(
+    client: TestClient, db: SessionDep
+) -> None:
+    test = Test(
+        name="Test with no start time",
+        link="test-no-start-time",
+        is_active=True,
+        is_deleted=False,
+        start_time=None,  # This is the key for this test
+        created_by_id=create_random_user(db).id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {"time_left": 0}
+
+
+def test_get_inactive_tests_listed(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 15,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "is_active": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    test_id = data["id"]
+    assert data["is_active"] is False
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert any(item["id"] == test_id for item in data)
+
+
+def test_clone_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user1 = create_random_user(db)
+    superadmin = get_current_user_data(client, get_user_superadmin_token)
+    test = Test(
+        name="Original Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user1.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add_all(
+        [
+            TestTag(test_id=test.id, tag_id=tag_hindi.id),
+            TestTag(test_id=test.id, tag_id=tag_marathi.id),
+            TestState(test_id=test.id, state_id=punjab.id),
+            TestState(test_id=test.id, state_id=goa.id),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_one.id
+            ),
+            TestQuestion(
+                test_id=test.id, question_revision_id=question_revision_two.id
+            ),
+        ]
+    )
+    db.commit()
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != test.id
+    assert data["name"].startswith("Copy of ")
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["marks"] == test.marks
+    assert data["completion_message"] == test.completion_message
+    assert data["start_instructions"] == test.start_instructions
+    assert data["no_of_attempts"] == test.no_of_attempts
+    assert data["shuffle"] == test.shuffle
+    assert data["random_questions"] == test.random_questions
+    assert data["no_of_random_questions"] == test.no_of_random_questions
+    assert data["question_pagination"] == test.question_pagination
+    assert data["is_template"] == test.is_template
+    assert data["created_by_id"] != test.created_by_id
+    assert data["created_by_id"] == superadmin["id"]
+    assert data["link"] is not None
+    assert data["link"] != test.link
+    assert len(data["tags"]) == 2
+    tag_ids = [tag["id"] for tag in data["tags"]]
+    assert set(tag_ids) == {tag_hindi.id, tag_marathi.id}
+    assert len(data["states"]) == 2
+    state_ids = [state["id"] for state in data["states"]]
+    assert set(state_ids) == {punjab.id, goa.id}
+    assert len(data["question_revisions"]) == 2
+    qrev_ids = [q["id"] for q in data["question_revisions"]]
+    assert set(qrev_ids) == {question_revision_one.id, question_revision_two.id}
+
+
+def test_clone_soft_deleted_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name="Soft Deleted Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+        is_deleted=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test not found"
+
+
+def test_clone_template_test_link_not_copied(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    tag = create_random_tag(db)
+    state = create_random_state(db)
+    question_revision = create_random_question_revision(db)
+
+    # Create a template test
+    test = Test(
+        name="Template Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add(TestTag(test_id=test.id, tag_id=tag.id))
+    db.add(TestState(test_id=test.id, state_id=state.id))
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    # Clone the template test
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != test.id
+    assert data["is_template"] is True
+    assert data["name"].startswith("Copy of ")
+    assert data.get("link") is None
+
+
+def test_get_test_by_filter_case_insensitive_name(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    test_1 = Test(
+        name="python test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+
+    test_2 = Test(
+        name="PyThon advanced test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+
+    test_3 = Test(
+        name=" beginner test PYTHON",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=python",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 3
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=PYTHON",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+
+def test_get_tests_by_tags_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    tag_type = TagType(
+        name="Skill Category",
+        description="Example tag type",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag_1 = Tag(
+        name="aptitude",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    tag_2 = Tag(
+        name="logic",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    tag_3 = Tag(
+        name="english",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    db.add_all([tag_1, tag_2, tag_3])
+    db.commit()
+    test_1 = Test(
+        name="test with aptitude tag",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name="test with logic tag",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name="test with english tag",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_4 = Test(
+        name="another aptitude test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_5 = Test(
+        name="test with logic and english",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3, test_4, test_5])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+    test_tag_link_1 = TestTag(test_id=test_1.id, tag_id=tag_1.id)
+    test_tag_link_2 = TestTag(test_id=test_2.id, tag_id=tag_2.id)
+    test_tag_link_3 = TestTag(test_id=test_3.id, tag_id=tag_3.id)
+    test_tag_link_4 = TestTag(test_id=test_4.id, tag_id=tag_1.id)
+    test_tag_link_5 = TestTag(test_id=test_5.id, tag_id=tag_2.id)
+    test_tag_link_6 = TestTag(test_id=test_5.id, tag_id=tag_3.id)
+
+    db.add_all(
+        [
+            test_tag_link_1,
+            test_tag_link_2,
+            test_tag_link_3,
+            test_tag_link_4,
+            test_tag_link_5,
+            test_tag_link_6,
+        ]
+    )
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_1.id, test_4.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_2.id, test_5.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_3.id, test_5.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+
+def test_get_tests_by_state_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_1 = State(name="Maharashtra", is_active=True, country_id=country.id)
+    state_2 = State(name="Karnataka", is_active=True, country_id=country.id)
+    db.add_all([state_1, state_2])
+    db.commit()
+    db.refresh(state_1)
+    db.refresh(state_2)
+    test_1 = Test(
+        name="test for Maharashtra",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name="test for Karnataka",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name="test for both states",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+    test_state_1 = TestState(test_id=test_1.id, state_id=state_1.id)
+    test_state_2 = TestState(test_id=test_2.id, state_id=state_2.id)
+    test_state_3a = TestState(test_id=test_3.id, state_id=state_1.id)
+    test_state_3b = TestState(test_id=test_3.id, state_id=state_2.id)
+    db.add_all([test_state_1, test_state_2, test_state_3a, test_state_3b])
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_1.id, test_3.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?state_ids={state_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_2.id, test_3.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}&state_ids={state_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    assert {test["id"] for test in data} == {test_1.id, test_2.id, test_3.id}
+
+
+def test_get_tests_by_combined_name_tag_state_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name="Maharashtra", is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    tag_type = TagType(
+        name="Skill Type",
+        description="type",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag = Tag(
+        name="aptitude",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    test_1 = Test(
+        name="Python Aptitude Test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add(test_1)
+    db.commit()
+    db.refresh(test_1)
+    db.add_all(
+        [
+            TestTag(test_id=test_1.id, tag_id=tag.id),
+            TestState(test_id=test_1.id, state_id=state.id),
+        ]
+    )
+    db.commit()
+    test_2 = Test(
+        name="Java Test",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add(test_2)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?name=python&tag_ids={tag.id}&state_ids={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == test_1.id
+
+
+def test_get_tests_by_case_insensitive_description_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    keyword = "importantDescription"
+    test_1 = Test(
+        name=random_lower_string(),
+        description=keyword,  # exact case
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name=random_lower_string(),
+        description="someText" + keyword.upper() + "moreText",  # upper case
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name=random_lower_string(),
+        description="completely different",
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3])
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?description={keyword}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    returned_ids = {test["id"] for test in data}
+    assert test_1.id in returned_ids
+    assert test_2.id in returned_ids
+    assert test_3.id not in returned_ids
+
+
+def test_get_tests_filtered_by_organization(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    test1 = Test(
+        name="Org Test",
+        description=random_lower_string(),
+        organization_id=org_id,
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test1)
+    other_org = create_random_organization(db)
+    other_user = create_random_user(db, organization_id=other_org.id)
+    test2 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=other_org.id,
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=other_user.id,
+    )
+    db.add(test2)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    ids = [item["id"] for item in data]
+    assert test1.id in ids
+    assert test2.id not in ids
+
+
+def test_get_all_tests_includes_active_and_inactive(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    active_test = Test(
+        name="Active Test",
+        is_active=True,
+        is_deleted=False,
+        created_by_id=user_id,
+    )
+    db.add(active_test)
+    inactive_test = Test(
+        name="Inactive Test",
+        is_active=False,
+        is_deleted=False,
+        created_by_id=user_id,
+    )
+    db.add(inactive_test)
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    test_names = [test["name"] for test in data]
+    assert "Active Test" in test_names
+    assert "Inactive Test" in test_names
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?is_active=true",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    names = [test["name"] for test in data]
+    assert "Active Test" in names
+    assert "Inactive Test" not in names
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    name = [test["name"] for test in data]
+    assert "Inactive Test" in name
+    assert "Active Test" not in name
+
+
+def test_create_test_end_time_before_start_time(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    start_time = "2025-07-19T10:00:00Z"
+    end_time = "2025-07-18T12:00:00Z"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time,
+        "end_time": end_time,
+        "time_limit": 10,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_create_test_time_limit_exceeds_duration(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    start_time = "2025-07-19T10:00:00Z"
+    end_time = "2025-07-19T10:30:00Z"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time,
+        "end_time": end_time,
+        "time_limit": 70,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert (
+        "Time limit cannot be more than the duration between start and end time"
+        in response.json()["detail"]
+    )
+
+
+def test_update_test_time_limit_exceeds_duration(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        start_time="2025-07-19T10:00:00Z",
+        end_time="2025-07-19T10:30:00Z",
+        time_limit=30,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 60,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "Time limit cannot be more than the duration" in data["detail"]
+
+
+def test_update_test_end_time_before_start_time(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        start_time="2025-07-19T10:00:00Z",
+        end_time="2025-07-19T11:00:00Z",
+        time_limit=60,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "name": random_lower_string(),
+        "start_time": "2025-07-20T10:00:00Z",
+        "end_time": "2025-07-19T10:00:00Z",
+        "time_limit": 10,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_create_test_start_and_end_time_same(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    start_time = "2025-07-19T10:00:00Z"
+    end_time = "2025-07-19T10:00:00Z"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time,
+        "end_time": end_time,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_create_test_valid_data_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": "2025-07-19T10:00:00Z",
+        "end_time": "2025-07-19T11:00:00Z",
+        "time_limit": 30,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+
+def test_get_public_test_info_expire_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        marks=80,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        start_time=get_current_time() - timedelta(hours=1),
+        end_time=get_current_time() - timedelta(minutes=10),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 400
+    assert data["detail"] == "Test has already ended"
+
+
+def test_random_questions_validation(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 20,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "marks_level": None,
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": True,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+        "state_ids": [punjab.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "cannot be greater than total questions added" in response.json()["detail"]
+
+
+def test_random_questions_valid_case(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 30,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": True,
+        "no_of_random_questions": 2,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [
+            question_revision_one.id,
+            question_revision_two.id,
+        ],
+        "state_ids": [punjab.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["random_questions"] is True
+    assert data["no_of_random_questions"] == 2
+    assert len(data["question_revisions"]) == 2
+
+
+def test_update_test_random_question_validation_fails(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        state_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name="Sample Test",
+        description="Initial test",
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=2,
+        shuffle=False,
+        random_questions=False,
+        no_of_random_questions=None,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {
+        "name": "Sample Test",
+        "random_questions": True,
+        "no_of_random_questions": 5,
+        "tag_ids": [tag_a.id],
+        "state_ids": [state_a.id],
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "No. of random questions (5) cannot be greater than total questions added (1)"
+    )
+
+
+def test_update_test_random_question_success(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        state_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name="Sample Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link="test-link",
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision_one.id))
+
+    db.commit()
+
+    payload = {
+        "name": "Sample Test Updated",
+        "random_questions": True,
+        "no_of_random_questions": 2,
+        "tag_ids": [tag_a.id, tag_b.id],
+        "state_ids": [state_a.id, state_b.id],
+        "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["random_questions"] is True
+    assert data["no_of_random_questions"] == 2
+
+
+def test_get_public_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        random_questions=True,
+        no_of_random_questions=4,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_question_ids = []
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=user.organization_id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        q = QuestionRevision(
+            question_text=f"Q{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        all_question_ids.append(q.id)
+        question.last_revision_id = q.id
+        db.add(question)
+        tq = TestQuestion(test_id=test.id, question_revision_id=q.id)
+        db.add(tq)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["total_questions"] == 4

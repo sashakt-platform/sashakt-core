@@ -2,7 +2,9 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
+from pydantic import model_validator
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
+from typing_extensions import Self
 
 from app.models import CandidateTest
 
@@ -41,7 +43,6 @@ class TestQuestion(SQLModel, table=True):
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
-
     question_revision: "QuestionRevision" = Relationship(
         back_populates="test_questions"
     )
@@ -149,11 +150,12 @@ class TestBase(SQLModel):
         title="Template ID",
         description="ID of the template from which the test is created.",
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        title="User ID",
-        description="ID of the user who created the test.",
+    show_result: bool = Field(
+        default=True,
+        sa_column_kwargs={"server_default": "true"},
+        description="Whether result should be visible after test submission",
     )
+    is_active: bool = Field(default=True)
 
 
 class Test(TestBase, table=True):
@@ -166,7 +168,7 @@ class Test(TestBase, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    is_active: bool | None = Field(default=None, nullable=True)
+
     is_deleted: bool = Field(default=False, nullable=False)
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
@@ -183,6 +185,11 @@ class Test(TestBase, table=True):
     candidates: list["Candidate"] | None = Relationship(
         back_populates="tests", link_model=CandidateTest
     )
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class TestCreate(TestBase):
@@ -190,17 +197,27 @@ class TestCreate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
 
+    @model_validator(mode="after")
+    def check_link_for_template(self) -> Self:
+        if self.is_template and self.link:
+            raise ValueError("Templates should not have a link.")
+        return self
+
 
 class TestPublic(TestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_active: bool | None
     is_deleted: bool
     tags: list["Tag"]
     question_revisions: list["QuestionRevision"]
     states: list["State"]
     total_questions: int | None = None
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
 
 
 class TestUpdate(TestBase):

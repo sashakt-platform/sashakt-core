@@ -1,30 +1,36 @@
 import csv
+import re
 from datetime import datetime
 from io import StringIO
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, Query, UploadFile
-from sqlalchemy import desc
-from sqlmodel import or_, select
+from fastapi import (
+    APIRouter,
+    Body,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+)
+from sqlalchemy import desc, func
+from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import SessionDep
+from app.api.deps import CurrentUser, SessionDep
 from app.models import (
-    Block,
     CandidateTest,
-    District,
     Message,
     Organization,
     Question,
     QuestionCreate,
     QuestionLocation,
-    QuestionLocationCreate,
     QuestionLocationPublic,
+    QuestionLocationsUpdate,
     QuestionPublic,
     QuestionRevision,
     QuestionRevisionCreate,
     QuestionTag,
-    QuestionTagCreate,
+    QuestionTagsUpdate,
     QuestionUpdate,
     State,
     Tag,
@@ -33,12 +39,12 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import Option
+from app.models.question import BulkUploadQuestionsResponse, Option
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
-def get_tag_type_by_id(session: SessionDep, tag_type_id: int) -> TagType | None:
+def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
     if not tag_type or tag_type.is_deleted:
@@ -87,7 +93,9 @@ def build_question_response(
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type=tag_type,
+                tag_type=get_tag_type_by_id(session, tag_type_id=tag.tag_type_id)
+                if tag.tag_type_id
+                else None,
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -97,7 +105,6 @@ def build_question_response(
                 is_deleted=tag.is_deleted,
             )
             for tag in tags
-            if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
         ]
 
     # Prepare location information
@@ -180,14 +187,53 @@ def prepare_for_db(
     return options, marking_scheme, media
 
 
+def is_duplicate_question(
+    session: SessionDep, question_text: str, tag_ids: list[int] | None
+) -> bool:
+    normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
+    existing_questions = session.exec(
+        select(Question)
+        .where(Question.is_deleted is None or not_(Question.is_deleted))
+        .join(QuestionRevision)
+        .where(Question.last_revision_id == QuestionRevision.id)
+        .where(
+            func.lower(
+                func.regexp_replace(QuestionRevision.question_text, r"\s+", " ", "g")
+            )
+            == normalized_text,
+        )
+    ).all()
+    new_tag_ids = set(tag_ids or [])
+    for question in existing_questions:
+        existing_tag_ids = {
+            qt.tag_id
+            for qt in session.exec(
+                select(QuestionTag).where(QuestionTag.question_id == question.id)
+            ).all()
+        }
+        if new_tag_ids & existing_tag_ids:
+            return True
+    return False
+
+
 @router.post("/", response_model=QuestionPublic)
 def create_question(
-    question_create: QuestionCreate, session: SessionDep
+    question_create: QuestionCreate,
+    session: SessionDep,
+    current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
+    if is_duplicate_question(
+        session, question_create.question_text, question_create.tag_ids
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Duplicate question: Same question text and tags already exist.",
+        )
     # Create the main question record
     question = Question(
         organization_id=question_create.organization_id,
+        is_active=question_create.is_active,
     )
     session.add(question)
     session.flush()
@@ -197,7 +243,7 @@ def create_question(
 
     revision = QuestionRevision(
         question_id=question.id,
-        created_by_id=question_create.created_by_id,
+        created_by_id=current_user.id,
         question_text=question_create.question_text,
         instructions=question_create.instructions,
         question_type=question_create.question_type,
@@ -208,6 +254,7 @@ def create_question(
         marking_scheme=marking_scheme,
         solution=question_create.solution,
         media=media,
+        is_active=question_create.is_active,
     )
     session.add(revision)
     session.flush()
@@ -329,9 +376,10 @@ class CandidateTestInfoDict(TypedDict):
 @router.get("/", response_model=list[QuestionPublic])
 def get_questions(
     session: SessionDep,
+    current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
-    organization_id: int | None = None,
+    question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
@@ -342,7 +390,17 @@ def get_questions(
 ) -> list[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-    query = select(Question)
+
+    query = select(Question).where(
+        Question.organization_id == current_user.organization_id
+    )
+    if question_text:
+        query = query.join(QuestionRevision).where(
+            Question.last_revision_id == QuestionRevision.id
+        )
+        query = query.where(
+            func.lower(QuestionRevision.question_text).contains(question_text.lower())
+        )
 
     # Apply filters only if they're provided
     if is_deleted is not None:
@@ -350,9 +408,6 @@ def get_questions(
 
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
-
-    if organization_id is not None:
-        query = query.where(Question.organization_id == organization_id)
 
     # Handle tag-based filtering with multiple tags
     if tag_ids:
@@ -609,6 +664,7 @@ def create_question_revision(
     question_id: int,
     revision_data: QuestionRevisionCreate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new revision for an existing question."""
     question = session.get(Question, question_id)
@@ -620,7 +676,7 @@ def create_question_revision(
 
     new_revision = QuestionRevision(
         question_id=question_id,
-        created_by_id=revision_data.created_by_id,
+        created_by_id=current_user.id,
         question_text=revision_data.question_text,
         instructions=revision_data.instructions,
         question_type=revision_data.question_type,
@@ -631,11 +687,13 @@ def create_question_revision(
         marking_scheme=marking_scheme,  # Now serialized
         solution=revision_data.solution,
         media=media,  # Now serialized
+        is_active=revision_data.is_active,
     )
     session.add(new_revision)
     session.flush()
 
     question.last_revision_id = new_revision.id
+    question.is_active = revision_data.is_active
     # No need to set modified_date manually
     session.add(question)
     session.commit()
@@ -765,144 +823,72 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     )
 
 
-@router.post("/{question_id}/locations", response_model=QuestionLocationPublic)
-def add_question_location(
+@router.put("/{question_id}/locations", response_model=list[QuestionLocationPublic])
+def update_question_locations(
     question_id: int,
-    location_data: QuestionLocationCreate,
+    location_data: QuestionLocationsUpdate,
     session: SessionDep,
-) -> QuestionLocationPublic:
-    """Add a new location to a question."""
+) -> list[QuestionLocationPublic]:
+    """
+    Update all locations for a question by syncing the provided list.
+    This will add new locations and remove any existing ones not in the list.
+    """
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Create separate location entries for state, district, block
-    # to maintain unique constraints and allow individual deletion
-
-    # Determine which location type is being added
-    location = None
-
-    if location_data.state_id:
-        # Check if this state is already associated
-        existing_query = select(QuestionLocation).where(
-            QuestionLocation.question_id == question_id,
-            QuestionLocation.state_id == location_data.state_id,
-        )
-        if session.exec(existing_query).first():
-            raise HTTPException(
-                status_code=400,
-                detail="This state is already associated with the question",
-            )
-
-        location = QuestionLocation(
-            question_id=question_id,
-            state_id=location_data.state_id,
-            district_id=None,
-            block_id=None,
-        )
-    elif location_data.district_id:
-        # Check if this district is already associated
-        existing_query = select(QuestionLocation).where(
-            QuestionLocation.question_id == question_id,
-            QuestionLocation.district_id == location_data.district_id,
-        )
-        if session.exec(existing_query).first():
-            raise HTTPException(
-                status_code=400,
-                detail="This district is already associated with the question",
-            )
-
-        location = QuestionLocation(
-            question_id=question_id,
-            state_id=None,
-            district_id=location_data.district_id,
-            block_id=None,
-        )
-    elif location_data.block_id:
-        # Check if this block is already associated
-        existing_query = select(QuestionLocation).where(
-            QuestionLocation.question_id == question_id,
-            QuestionLocation.block_id == location_data.block_id,
-        )
-        if session.exec(existing_query).first():
-            raise HTTPException(
-                status_code=400,
-                detail="This block is already associated with the question",
-            )
-
-        location = QuestionLocation(
-            question_id=question_id,
-            state_id=None,
-            district_id=None,
-            block_id=location_data.block_id,
-        )
-    else:
-        raise HTTPException(
-            status_code=400, detail="At least one location type must be specified"
-        )
-
-    session.add(location)
-    session.commit()
-    session.refresh(location)
-
-    # Ensure we have a valid ID after refresh
-    if location.id is None:
-        raise HTTPException(status_code=500, detail="Failed to create location")
-
-    # Get related location names for response
-    state_name = None
-    district_name = None
-    block_name = None
-
-    if location.state_id:
-        state = session.get(State, location.state_id)
-        if state:
-            state_name = state.name
-
-    if location.district_id:
-        district = session.get(District, location.district_id)
-        if district:
-            district_name = district.name
-
-    if location.block_id:
-        block = session.get(Block, location.block_id)
-        if block:
-            block_name = block.name
-
-    return QuestionLocationPublic(
-        id=location.id,
-        state_id=location.state_id,
-        district_id=location.district_id,
-        block_id=location.block_id,
-        state_name=state_name,
-        district_name=district_name,
-        block_name=block_name,
+    # Get current locations
+    current_locations_query = select(QuestionLocation).where(
+        QuestionLocation.question_id == question_id
     )
+    current_locations = session.exec(current_locations_query).all()
+    current_location_set = {
+        (loc.state_id, loc.district_id, loc.block_id): loc for loc in current_locations
+    }
 
-
-@router.delete("/{question_id}/locations/{location_id}", response_model=Message)
-def remove_question_location(
-    question_id: int,
-    location_id: int,
-    session: SessionDep,
-) -> Message:
-    """Remove a location from a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Find the location
-    location = session.get(QuestionLocation, location_id)
-    if not location or location.question_id != question_id:
-        raise HTTPException(
-            status_code=404, detail="Location not found for this question"
+    # Get desired locations from the request
+    desired_location_set = {
+        (
+            loc.state_id,
+            loc.district_id,
+            loc.block_id,
         )
+        for loc in location_data.locations
+    }
 
-    # Delete the location
-    session.delete(location)
+    # Determine locations to remove
+    locations_to_remove = [
+        loc
+        for key, loc in current_location_set.items()
+        if key not in desired_location_set
+    ]
+    for loc in locations_to_remove:
+        session.delete(loc)
+
+    # Determine locations to add
+    current_simple_set = set(current_location_set.keys())
+    for loc_item in location_data.locations:
+        key = (loc_item.state_id, loc_item.district_id, loc_item.block_id)
+        if key not in current_simple_set:
+            new_location = QuestionLocation(
+                question_id=question_id,
+                state_id=loc_item.state_id,
+                district_id=loc_item.district_id,
+                block_id=loc_item.block_id,
+            )
+            session.add(new_location)
+
     session.commit()
 
-    return Message(message="Location removed from question successfully")
+    # Return the new state of locations
+    final_locations_query = select(QuestionLocation).where(
+        QuestionLocation.question_id == question_id
+    )
+    final_locations = session.exec(final_locations_query).all()
+    return [
+        QuestionLocationPublic.model_validate(loc, from_attributes=True)
+        for loc in final_locations
+    ]
 
 
 @router.get("/{question_id}/tags", response_model=list[TagPublic])
@@ -939,96 +925,58 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     return result
 
 
-@router.post("/{question_id}/tags", response_model=QuestionTagResponse)
-def add_question_tag(
+@router.put("/{question_id}/tags", response_model=list[TagPublic])
+def update_question_tags(
     question_id: int,
-    tag_data: QuestionTagCreate,
+    tag_data: QuestionTagsUpdate,
     session: SessionDep,
-) -> QuestionTagResponse:
-    """Add a new tag to a question."""
+) -> list[TagPublic]:
+    """
+    Update all tags for a question by syncing the provided list of tag IDs.
+    This will add new tags and remove any existing ones not in the list.
+    """
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # Check if tag exists
-    tag = session.get(Tag, tag_data.tag_id)
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-    # Check if relationship already exists
-    existing_query = select(QuestionTag).where(
-        QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_data.tag_id
+    # Get current tags
+    current_tags_query = select(QuestionTag).where(
+        QuestionTag.question_id == question_id
     )
-    existing = session.exec(existing_query).first()
-    if existing and existing.id is not None and existing.created_date is not None:
-        return QuestionTagResponse(
-            id=existing.id,
-            question_id=existing.question_id,
-            tag_id=existing.tag_id,
-            tag_name=tag.name,
-            created_date=existing.created_date,
-        )
+    current_tags = session.exec(current_tags_query).all()
+    current_tag_ids = {qt.tag_id for qt in current_tags}
 
-    # Create new relationship
-    question_tag = QuestionTag(
-        question_id=question_id,
-        tag_id=tag_data.tag_id,
-    )
-    session.add(question_tag)
-    session.commit()
-    session.refresh(question_tag)
+    # Get desired tags from the request
+    desired_tag_ids = set(tag_data.tag_ids)
 
-    # Ensure we have valid ID and created_date after refresh
-    if question_tag.id is None or question_tag.created_date is None:
-        raise HTTPException(status_code=500, detail="Failed to create tag relationship")
+    # Determine tags to remove
+    tags_to_remove_ids = current_tag_ids - desired_tag_ids
+    if tags_to_remove_ids:
+        for qt in current_tags:
+            if qt.tag_id in tags_to_remove_ids:
+                session.delete(qt)
 
-    return QuestionTagResponse(
-        id=question_tag.id,
-        question_id=question_tag.question_id,
-        tag_id=question_tag.tag_id,
-        tag_name=tag.name,
-        created_date=question_tag.created_date,
-    )
+    # Determine tags to add
+    tags_to_add_ids = desired_tag_ids - current_tag_ids
+    for tag_id in tags_to_add_ids:
+        # Optional: Check if tag exists
+        tag = session.get(Tag, tag_id)
+        if tag:
+            question_tag = QuestionTag(question_id=question_id, tag_id=tag_id)
+            session.add(question_tag)
 
-
-@router.delete("/{question_id}/tags/{tag_id}", response_model=Message)
-def remove_question_tag(
-    question_id: int,
-    tag_id: int,
-    session: SessionDep,
-) -> Message:
-    """Remove a tag from a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
-
-    # Find the tag
-    tag = session.get(Tag, tag_id)
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-    # Find the question-tag relationship
-    question_tag_query = select(QuestionTag).where(
-        QuestionTag.question_id == question_id, QuestionTag.tag_id == tag_id
-    )
-    question_tag = session.exec(question_tag_query).first()
-
-    if not question_tag:
-        raise HTTPException(
-            status_code=404, detail="Tag not associated with this question"
-        )
-
-    # Delete the relationship
-    session.delete(question_tag)
     session.commit()
 
-    return Message(message="Tag removed from question successfully")
+    # Return the new list of tags for the question
+    return get_question_tags(question_id=question_id, session=session)
 
 
-@router.post("/bulk-upload", response_model=Message)
+@router.post("/bulk-upload", response_model=BulkUploadQuestionsResponse)
 async def upload_questions_csv(
-    session: SessionDep, file: UploadFile = File(...), user_id: int = Form(...)
-) -> Message:
+    session: SessionDep,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> BulkUploadQuestionsResponse:
     """
     Bulk upload questions from a CSV file.
     The CSV should include columns:
@@ -1039,12 +987,13 @@ async def upload_questions_csv(
     - State: State name or comma-separated list of states (optional)
     """
     # Verify user exists
+    user_id = current_user.id
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Verify organization exists
-    organization_id = user.organization_id
+    organization_id = current_user.organization_id
     organization = session.get(Organization, organization_id)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -1119,7 +1068,6 @@ async def upload_questions_csv(
                     {"id": letter_map[key], "key": key, "value": value}
                     for key, value in zip(letter_map.keys(), options, strict=True)
                 ]
-                print("The valid options are:", valid_options)
                 # Process tags if present
                 tag_ids = []
                 tagtype_error = False
@@ -1136,22 +1084,23 @@ async def upload_questions_csv(
                             tag_name = parts[1].strip()
                         else:
                             # Default tag type if no colon present
-                            tag_type_name = "Training Tag"
+                            tag_type_name = None
                             tag_name = tag_entry
 
                         cache_key = f"{tag_type_name}:{tag_name}"
                         if cache_key in tag_cache:
                             tag_ids.append(tag_cache[cache_key])
                             continue
+                        tag_type = None
+                        if tag_type_name:
+                            tag_type_query = select(TagType).where(
+                                TagType.name == tag_type_name,
+                                TagType.organization_id == organization_id,
+                            )
 
-                        tag_type_query = select(TagType).where(
-                            TagType.name == tag_type_name,
-                            TagType.organization_id == organization_id,
-                        )
+                            tag_type = session.exec(tag_type_query).first()
 
-                        tag_type = session.exec(tag_type_query).first()
-
-                        if not tag_type:
+                        if tag_type_name and not tag_type:
                             failed_tagtypes.add(tag_type_name)
                             tagtype_error = True
                             continue
@@ -1163,22 +1112,28 @@ async def upload_questions_csv(
                                 Tag.tag_type_id == tag_type.id,
                                 Tag.organization_id == organization_id,
                             )
-                            tag = session.exec(tag_query).first()
+                        else:
+                            tag_query = select(Tag).where(
+                                Tag.name == tag_name,
+                                Tag.tag_type_id is None,
+                                Tag.organization_id == organization_id,
+                            )
+                        tag = session.exec(tag_query).first()
 
-                            if not tag:
-                                tag = Tag(
-                                    name=tag_name,
-                                    description=f"Tag for {tag_name}",
-                                    tag_type_id=tag_type.id,
-                                    created_by_id=user_id,
-                                    organization_id=organization_id,
-                                )
-                                session.add(tag)
-                                session.flush()
+                        if not tag:
+                            tag = Tag(
+                                name=tag_name,
+                                description=f"Tag for {tag_name}",
+                                tag_type_id=tag_type.id if tag_type else None,
+                                created_by_id=user_id,
+                                organization_id=organization_id,
+                            )
+                            session.add(tag)
+                            session.flush()
 
-                            if tag and tag.id:
-                                tag_ids.append(tag.id)
-                                tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
+                        if tag and tag.id:
+                            tag_ids.append(tag.id)
+                            tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
 
                 if tagtype_error:
                     questions_failed += 1
@@ -1213,7 +1168,9 @@ async def upload_questions_csv(
                             state_cache[state_name] = state.id
 
                 # Skip this question if states weren't found
-                if state_error:
+                if state_error or is_duplicate_question(
+                    session, question_text, tag_ids
+                ):
                     questions_failed += 1
                     continue
 
@@ -1246,7 +1203,7 @@ async def upload_questions_csv(
                 # Create the revision with serialized data
                 revision = QuestionRevision(
                     question_id=question.id,
-                    created_by_id=question_create.created_by_id,
+                    created_by_id=user_id,
                     question_text=question_create.question_text,
                     instructions=question_create.instructions,
                     question_type=question_create.question_type,
@@ -1304,8 +1261,12 @@ async def upload_questions_csv(
                 f" The following tag types were not found: {', '.join(failed_tagtypes)}"
             )
 
-        return Message(message=message)
-
+        return BulkUploadQuestionsResponse(
+            message=message,
+            uploaded_questions=questions_created + questions_failed,
+            success_questions=questions_created,
+            failed_questions=questions_failed,
+        )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised
         raise

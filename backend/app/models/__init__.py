@@ -1,5 +1,6 @@
 from .auth import NewPassword, Token, TokenPayload
 from .candidate import (
+    BatchAnswerSubmitRequest,
     Candidate,
     CandidateAnswerSubmitRequest,
     CandidateAnswerUpdateRequest,
@@ -49,17 +50,20 @@ from .permission import (
     PermissionUpdate,
 )
 from .question import (
+    Option,
     Question,
+    QuestionBase,
     QuestionCandidatePublic,
     QuestionCreate,
     QuestionLocation,
-    QuestionLocationCreate,
     QuestionLocationPublic,
+    QuestionLocationsUpdate,
+    QuestionLocationUpdateItem,
     QuestionPublic,
     QuestionRevision,
     QuestionRevisionCreate,
     QuestionTag,
-    QuestionTagCreate,
+    QuestionTagsUpdate,
     QuestionUpdate,
 )
 from .role import Role, RoleCreate, RolePermission, RolePublic, RolesPublic, RoleUpdate
@@ -139,17 +143,17 @@ __all__ = [
     "TestQuestion",
     "TestTag",
     "TestState",
+    "Option",
     "Question",
+    "QuestionBase",
     "QuestionCandidatePublic",
     "QuestionCreate",
     "QuestionLocation",
-    "QuestionLocationCreate",
     "QuestionLocationPublic",
     "QuestionPublic",
     "QuestionRevision",
     "QuestionRevisionCreate",
     "QuestionTag",
-    "QuestionTagCreate",
     "QuestionUpdate",
     "Tag",
     "TagPublic",
@@ -161,6 +165,7 @@ __all__ = [
     "TagTypePublic",
     "Candidate",
     "CandidateAnswerSubmitRequest",
+    "BatchAnswerSubmitRequest",
     "CandidateAnswerUpdateRequest",
     "CandidateCreate",
     "CandidatePublic",
@@ -188,6 +193,9 @@ __all__ = [
     "PermissionsPublic",
     "PermissionUpdate",
     "RolePermission",
+    "QuestionLocationUpdateItem",
+    "QuestionLocationsUpdate",
+    "QuestionTagsUpdate",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete

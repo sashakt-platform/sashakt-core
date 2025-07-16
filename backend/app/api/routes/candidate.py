@@ -1,12 +1,15 @@
+import random
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import SQLModel, not_, select
+from sqlmodel import SQLModel, col, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
+from app.api.routes.utils import get_current_time
 from app.models import (
+    BatchAnswerSubmitRequest,
     Candidate,
     CandidateAnswerSubmitRequest,
     CandidateCreate,
@@ -28,6 +31,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import Result
+from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -60,6 +64,27 @@ def start_test_for_candidate(
     test = session.get(Test, start_test_request.test_id)
     if not test or test.is_deleted or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
+    question_revision_ids = [
+        q.question_revision_id
+        for q in session.exec(
+            select(TestQuestion).where(TestQuestion.test_id == test.id)
+        ).all()
+    ]
+
+    if test.random_questions and test.no_of_random_questions:
+        question_revision_ids = random.sample(
+            question_revision_ids,
+            min(test.no_of_random_questions, len(question_revision_ids)),
+        )
+    if test.shuffle:
+        random.shuffle(question_revision_ids)
+
+    current_time = get_current_time()
+    if test.start_time and test.start_time > current_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test has not started yet. Please wait until the scheduled start time.",
+        )
 
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
@@ -81,6 +106,7 @@ def start_test_for_candidate(
         start_time=start_time,
         end_time=None,  # Will be set when test is actually submitted
         is_submitted=False,
+        question_revision_ids=question_revision_ids,
     )
     session.add(candidate_test)
     session.commit()
@@ -163,6 +189,65 @@ def submit_answer_for_qr_candidate(
         return candidate_test_answer
 
 
+@router.post(
+    "/submit_answers/{candidate_test_id}",
+    response_model=list[CandidateTestAnswerPublic],
+)
+def submit_batch_answers_for_qr_candidate(
+    candidate_test_id: int,
+    session: SessionDep,
+    batch_request: BatchAnswerSubmitRequest = Body(...),
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> list[CandidateTestAnswer]:
+    """
+    Submit multiple answers for QR code candidates using UUID authentication.
+    Creates new answers or updates existing ones in a single transaction.
+    """
+    # Verify UUID access
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+
+    results = []
+    for answer in batch_request.answers:
+        # Check if answer already exists for this question
+        existing_answer = session.exec(
+            select(CandidateTestAnswer)
+            .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+            .where(
+                CandidateTestAnswer.question_revision_id == answer.question_revision_id
+            )
+        ).first()
+
+        if existing_answer:
+            # Update existing answer
+            existing_answer.response = answer.response
+            existing_answer.visited = answer.visited
+            existing_answer.time_spent = answer.time_spent
+            session.add(existing_answer)
+            results.append(existing_answer)
+        else:
+            # Create new answer
+            new_answer = CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=answer.question_revision_id,
+                response=answer.response,
+                visited=answer.visited,
+                time_spent=answer.time_spent,
+            )
+            session.add(new_answer)
+            results.append(new_answer)
+
+    # Commit all changes in a single transaction
+    session.commit()
+
+    # Refresh all results
+    for result in results:
+        session.refresh(result)
+
+    return results
+
+
 @router.post("/submit_test/{candidate_test_id}", response_model=CandidateTestPublic)
 def submit_test_for_qr_candidate(
     candidate_test_id: int,
@@ -230,15 +315,22 @@ def get_test_questions(
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()
 
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-
     state_query = select(State).join(TestState).where(TestState.test_id == test.id)
     states = session.exec(state_query).all()
+    assigned_ids = candidate_test.question_revision_ids
+    if not assigned_ids:
+        raise HTTPException(status_code=404, detail="No questions assigned")
+    question_revision_query = select(QuestionRevision).where(
+        col(QuestionRevision.id).in_(assigned_ids)
+    )
+    question_revisions_map = {
+        q.id: q for q in session.exec(question_revision_query).all()
+    }
+    ordered_questions = [
+        question_revisions_map[qid]
+        for qid in assigned_ids
+        if qid in question_revisions_map
+    ]
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
@@ -252,7 +344,7 @@ def get_test_questions(
             is_mandatory=q.is_mandatory,
             media=q.media,
         )
-        for q in question_revisions
+        for q in ordered_questions
     ]
 
     return TestCandidatePublic(
@@ -260,7 +352,7 @@ def get_test_questions(
         question_revisions=candidate_questions,
         tags=tags,
         states=states,
-        total_questions=len(question_revisions),
+        total_questions=len(candidate_questions),
         candidate_test=candidate_test,
     )
 
@@ -538,12 +630,32 @@ def get_test_result(
 
     if not candidate_test:
         raise HTTPException(status_code=404, detail="Candidate test not found")
+    test = session.get(Test, candidate_test.test_id)
+    if test is None:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if not test.show_result:
+        raise HTTPException(
+            status_code=403, detail="Results are not visible for this test"
+        )
+
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-    joined_data = session.exec(
-        select(CandidateTestAnswer, QuestionRevision)
-        .join(QuestionRevision)
-        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
-    ).all()
+    if test.random_questions and candidate_test.question_revision_ids:
+        joined_data = session.exec(
+            select(CandidateTestAnswer, QuestionRevision)
+            .join(QuestionRevision)
+            .where(
+                CandidateTestAnswer.candidate_test_id == candidate_test_id,
+                col(CandidateTestAnswer.question_revision_id).in_(
+                    candidate_test.question_revision_ids
+                ),
+            )
+        ).all()
+    else:
+        joined_data = session.exec(
+            select(CandidateTestAnswer, QuestionRevision)
+            .join(QuestionRevision)
+            .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        ).all()
 
     correct = 0
     incorrect = 0
@@ -571,3 +683,41 @@ def get_test_result(
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
     )
+
+
+@router.get("/time_left/{candidate_test_id}", response_model=TimeLeft)
+def get_time_left(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> TimeLeft:
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = session.exec(
+        select(CandidateTest).where(CandidateTest.id == candidate_test_id)
+    ).first()
+    if not candidate_test:
+        raise HTTPException(status_code=404, detail="Candidate test not found")
+    test = session.exec(select(Test).where(Test.id == candidate_test.test_id)).first()
+
+    if not test:
+        raise HTTPException(status_code=404, detail="Associated test not found")
+    current_time = get_current_time()
+
+    elapsed_time = current_time - candidate_test.start_time
+    remaining_times = []
+    if test.time_limit is not None:
+        remaining_by_limit = timedelta(minutes=float(test.time_limit)) - elapsed_time
+        remaining_times.append(remaining_by_limit)
+    if test.end_time is not None:
+        remaining_by_endtime = test.end_time - current_time
+        remaining_times.append(remaining_by_endtime)
+    if not remaining_times:
+        return TimeLeft(time_left=None)
+    final_time_left = min(remaining_times)
+    if final_time_left.total_seconds() <= 0:
+        return TimeLeft(time_left=0)
+
+    time_left = int(final_time_left.total_seconds())
+    return TimeLeft(time_left=time_left)

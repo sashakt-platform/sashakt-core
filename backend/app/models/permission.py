@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class PermissionBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
+    is_active: bool = Field(default=True)
 
 
 # Properties to receive on name creation
@@ -27,7 +28,6 @@ class PermissionUpdate(PermissionBase):
 # Database model, database table inferred from class name
 class Permission(PermissionBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    is_active: bool = Field(default=True, nullable=False)
     roles: list["Role"] | None = Relationship(
         back_populates="permissions", link_model=RolePermission
     )
@@ -36,7 +36,6 @@ class Permission(PermissionBase, table=True):
 # Properties to return via API, id is always required
 class PermissionPublic(PermissionBase):
     id: int
-    is_active: bool
 
 
 class PermissionsPublic(SQLModel):

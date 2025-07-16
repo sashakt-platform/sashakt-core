@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -20,11 +22,18 @@ def user_authentication_headers(
     return headers
 
 
-def create_random_user(db: Session) -> User:
+def create_random_user(db: Session, organization_id: int | None = None) -> User:
     role = Role(name=random_lower_string(), label=random_lower_string())
-    organization = create_random_organization(session=db)
+    if organization_id is not None:
+        organization = db.get(Organization, organization_id)
+        if not organization:
+            raise ValueError(f"Organization with ID {organization_id} not found")
+    else:
+        organization = create_random_organization(session=db)
     db.add_all([organization, role])
     db.commit()
+    db.refresh(organization)
+    db.refresh(role)
     email = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
@@ -106,3 +115,15 @@ def authentication_token_from_email(
         user = crud.update_user(session=db, db_user=user, user_in=user_in_update)
 
     return user_authentication_headers(client=client, email=email, password=password)
+
+
+def get_current_user_data(
+    client: TestClient, auth_header: dict[str, Any]
+) -> dict[str, Any]:
+    response = client.get(
+        f"{settings.API_V1_STR}/users/me",
+        headers=auth_header,
+    )
+    assert response.status_code == 200, f"Failed to fetch user info: {response.text}"
+    user_data = cast(dict[str, Any], response.json())
+    return user_data

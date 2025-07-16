@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
 from pydantic.networks import EmailStr
 
@@ -29,3 +31,8 @@ def test_email(email_to: EmailStr) -> Message:
 @router.get("/health-check/")
 async def health_check() -> bool:
     return True
+
+
+def get_current_time() -> datetime:
+    """Returns the current datetime."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
