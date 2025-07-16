@@ -336,7 +336,7 @@ class RevisionDetailDict(TypedDict):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool = False
+    is_deleted: bool
     question_text: str
     instructions: str | None
     question_type: str
