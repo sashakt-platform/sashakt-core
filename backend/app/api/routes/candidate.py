@@ -1,9 +1,11 @@
+import json
 import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from sqlmodel import SQLModel, col, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
@@ -31,6 +33,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import Result
+from app.models.question import QuestionType
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -38,6 +41,40 @@ router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Tes
 router_candidate_test_answer = APIRouter(
     prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
+
+
+def validate_question_response_format(
+    response: Any, question_type: QuestionType
+) -> Any:
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError:
+            pass
+    if question_type == QuestionType.single_choice:
+        if (
+            not isinstance(response, list)
+            or len(response) != 1
+            or not all(isinstance(x, int) for x in response)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Response Format. Kindly submit _Single-choice question_ as list of length 1 (e.g., [1])",
+            )
+
+        return response
+    elif question_type == QuestionType.multi_choice:
+        if (
+            not isinstance(response, list)
+            or not all(isinstance(x, int) for x in response)
+            or len(response) > 4
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])",
+            )
+
+        return response
 
 
 # Simple request/response models for start_test
@@ -147,14 +184,22 @@ def submit_answer_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTestAnswer:
+) -> CandidateTestAnswer | Response:
     """
     Submit answer for QR code candidates using UUID authentication.
     Creates new answer or updates existing one.
     """
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    question_revision = session.get(
+        QuestionRevision, answer_request.question_revision_id
+    )
+    if not question_revision:
+        return Response(status_code=204)
 
+    answer_request.response = validate_question_response_format(
+        answer_request.response, question_revision.question_type
+    )
     # Check if answer already exists for this question
     existing_answer = session.exec(
         select(CandidateTestAnswer)
@@ -210,6 +255,16 @@ def submit_batch_answers_for_qr_candidate(
 
     results = []
     for answer in batch_request.answers:
+        question_revision = session.exec(
+            select(QuestionRevision).where(
+                QuestionRevision.id == answer.question_revision_id
+            )
+        ).first()
+        if not question_revision:
+            continue
+        answer.response = validate_question_response_format(
+            answer.response, question_revision.question_type
+        )
         # Check if answer already exists for this question
         existing_answer = session.exec(
             select(CandidateTestAnswer)
