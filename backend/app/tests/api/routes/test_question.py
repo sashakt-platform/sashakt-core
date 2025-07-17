@@ -3230,12 +3230,38 @@ def test_check_question_duplication_if_deleted(
     assert another_duplicate_response.status_code == 400
 
 
+def test_create_question_is_deleted_defaults_to_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "is_deleted" in data
+    assert data["is_deleted"] is False
+
+
 def test_create_duplicate_questions_with_same_text_and_no_tags(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
-
     question1_data = {
         "organization_id": org_id,
         "question_text": "Explain Java basics.",
