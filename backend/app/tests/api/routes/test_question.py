@@ -3230,7 +3230,7 @@ def test_check_question_duplication_if_deleted(
     assert another_duplicate_response.status_code == 400
 
 
-def test_create_duplicate_questions_with_same_text_and_no_tags_should_fail_or_pass(
+def test_create_duplicate_questions_with_same_text_and_no_tags(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
@@ -3286,7 +3286,7 @@ def test_create_duplicate_questions_with_same_text_and_no_tags_should_fail_or_pa
     )
 
 
-def test_create_same_text_one_with_tags_one_without_should_pass(
+def test_create_same_text_one_with_tags_one_without(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
