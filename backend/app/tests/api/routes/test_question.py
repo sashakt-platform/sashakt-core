@@ -3255,3 +3255,137 @@ def test_create_question_is_deleted_defaults_to_false(
     data = response.json()
     assert "is_deleted" in data
     assert data["is_deleted"] is False
+
+
+def test_create_duplicate_questions_with_same_text_and_no_tags(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "Explain Java basics.",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],
+    }
+
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "Explain Java basics."
+    assert data1["tags"] == []
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "Explain Java basics.",  # same text
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],  # also no tags
+    }
+
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response2.status_code == 400
+    data2 = response2.json()
+    assert (
+        data2["detail"]
+        == "Duplicate question: Same question text and tags already exist."
+    )
+
+
+def test_create_same_text_one_with_tags_one_without(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    tag_type = TagType(
+        name="Language",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag1 = Tag(
+        name="Java",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    tag2 = Tag(
+        name="Backend",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "What are the features of Python",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Object-oriented language"},
+            {"id": 2, "key": "B", "value": "Database"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],
+    }
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "What are the features of Python"
+    assert data1["tags"] == []
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "What are the features of Python",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Object-oriented language"},
+            {"id": 2, "key": "B", "value": "Database"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag1.id, tag2.id],
+    }
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response2.status_code == 200
+    data2 = response2.json()
+    assert data2["question_text"] == "What are the features of Python"
+    assert len(data2["tags"]) == 2
