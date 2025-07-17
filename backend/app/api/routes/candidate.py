@@ -46,11 +46,8 @@ router_candidate_test_answer = APIRouter(
 def validate_question_response_format(
     response: Any, question_type: QuestionType
 ) -> Any:
-    if isinstance(response, str):
-        try:
-            response = json.loads(response)
-        except json.JSONDecodeError:
-            pass
+    response = json.loads(response)
+
     if question_type == QuestionType.single_choice:
         if (
             not isinstance(response, list)

@@ -3481,6 +3481,7 @@ def test_submit_answer_for_multi_choice_should_validate_responses_correctly(
     question.last_revision_id = question_revision.id
     db.commit()
     db.refresh(question_revision)
+    assert question_revision.question_type == QuestionType.multi_choice
 
     test = Test(
         name=random_lower_string(),
