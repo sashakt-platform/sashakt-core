@@ -3416,7 +3416,8 @@ Which option is missing?,,10,20,30,A,Math,Punjab
 What is 2 + 2?,4,5,6,7,Z,Math,Punjab
 ,1,2,3,4,A,Math,Punjab
 What is 9+1?,10,20,30,40,A,Math,NonExistentState
-Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab"""
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab
+What is 10+10?,20,10,30,40,A,Math,Punjab"""
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -3431,10 +3432,10 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab""
             )
         assert response.status_code == 200
         data = response.json()
-        assert data["uploaded_questions"] == 9
+        assert data["uploaded_questions"] == 10
         assert data["success_questions"] == 2
-        assert data["failed_questions"] == 7
-        assert "Failed to create 7 questions." in data["message"]
+        assert data["failed_questions"] == 8
+        assert "Failed to create 8 questions." in data["message"]
         expected_errors = {
             3: "Invalid tag type",
             4: "Invalid tag type",
@@ -3443,6 +3444,7 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab""
             7: "Question text is missing",
             8: "Invalid states: NonExistentState",
             9: "Correct option is missing",
+            10: "Questions Already Exist",
         }
         assert (
             "Download failed questions: data:text/csv;base64,"
@@ -3453,7 +3455,7 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab""
         csv_text = csv_bytes.decode("utf-8")
         csv_reader = csv.DictReader(io.StringIO(csv_text))
         rows = list(csv_reader)
-        assert len(rows) == 7
+        assert len(rows) == 8
         for row in rows:
             assert "row_number" in row
             assert "question_text" in row

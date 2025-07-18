@@ -1182,9 +1182,7 @@ async def upload_questions_csv(
                             state_cache[state_name] = state.id
 
                 # Skip this question if states weren't found
-                if state_error or is_duplicate_question(
-                    session, question_text, tag_ids
-                ):
+                if state_error:
                     questions_failed += 1
                     failed_question_details.append(
                         {
@@ -1194,6 +1192,8 @@ async def upload_questions_csv(
                         }
                     )
                     continue
+                if is_duplicate_question(session, question_text, tag_ids):
+                    raise ValueError("Questions Already Exist")
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
