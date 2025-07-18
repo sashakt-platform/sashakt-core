@@ -215,9 +215,10 @@ class Question(SQLModel, table=True):
         description="When this question was last modified",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool | None = Field(
+    is_deleted: bool = Field(
         default=False,
-        nullable=True,
+        nullable=False,
+        sa_column_kwargs={"server_default": "false"},
         description="Whether this question is marked as deleted",
     )
 
@@ -264,9 +265,10 @@ class QuestionRevision(QuestionBase, table=True):
         description="When this revision was last modified",
     )
 
-    is_deleted: bool | None = Field(
+    is_deleted: bool = Field(
         default=False,
-        nullable=True,
+        nullable=False,
+        sa_column_kwargs={"server_default": "false"},
         description="Whether this revision is marked as deleted",
     )
     # Relationships
@@ -430,8 +432,8 @@ class QuestionPublic(DatePublic):
     created_date: datetime = Field(description="When this question was created")
     modified_date: datetime = Field(description="When this question was last modified")
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool | None = Field(
-        description="Whether this question is marked as deleted"
+    is_deleted: bool = Field(
+        default=False, description="Whether this question is marked as deleted"
     )
 
     # Current revision data
@@ -483,8 +485,8 @@ class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool | None = Field(
-        default=None, description="Whether this question is marked as deleted"
+    is_deleted: bool = Field(
+        default=False, description="Whether this question is marked as deleted"
     )
 
 
