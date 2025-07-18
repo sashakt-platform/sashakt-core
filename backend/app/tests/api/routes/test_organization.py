@@ -4,7 +4,10 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.organization import Organization
+from app.models.question import Question, QuestionRevision
+from app.models.test import Test
 from app.tests.utils.organization import create_random_organization
+from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
 
@@ -452,3 +455,107 @@ def test_inactive_organization_not_listed(
     )
     data = response.json()
     assert all(item["id"] != org_id for item in data)
+
+
+def test_get_aggregated_data_for_organization(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+    user_a = create_random_user(db, org_id)
+    user_b = create_random_user(db, org_id)
+    db.add(user_a)
+    db.add(user_b)
+    db.commit()
+    db.refresh(user_a)
+    db.refresh(user_b)
+    user_b.is_deleted = True
+    db.add(user_b)
+    db.commit()
+    questions = []
+    for i in range(5):
+        q = Question(
+            created_by_id=user_id,
+            organization_id=org_id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        q_rev = QuestionRevision(
+            question_text=f"Sample question {i + 1}?",
+            created_by_id=user_id,
+            question_id=q.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option A"}],
+            correct_answer=[1],
+        )
+        db.add(q_rev)
+        db.flush()
+        db.refresh(q_rev)
+
+        q.last_revision_id = q_rev.id
+        db.add(q)
+        questions.append(q)
+    questions[0].is_deleted = True
+    db.add(questions[0])
+    test = Test(
+        name="Sample Test",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=50,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        random_questions=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test2 = Test(
+        name="Sample Test2",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=60,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=True,
+        random_questions=False,
+    )
+    db.add(test2)
+    db.commit()
+    db.refresh(test2)
+    test3 = Test(
+        name="template test2",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=60,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        random_questions=False,
+        is_template=True,
+    )
+    db.add(test3)
+    db.commit()
+    db.refresh(test3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/aggregated_data",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_questions"] == 4
+    assert data["total_users"] == 2
+    assert data["total_tests"] == 1

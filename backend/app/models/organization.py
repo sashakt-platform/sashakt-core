@@ -49,3 +49,9 @@ class OrganizationPublic(OrganizationBase):
 
 class OrganizationUpdate(OrganizationBase):
     pass
+
+
+class AggregatedData(SQLModel):
+    total_questions: int
+    total_users: int
+    total_tests: int
