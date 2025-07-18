@@ -8,7 +8,7 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.api.routes.utils import get_current_time
-from app.core.config import settings
+from app.core.config import CURRENT_ZONE, settings
 from app.models import (
     Country,
     Organization,
@@ -29,7 +29,7 @@ from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import check_created_modified_date, random_lower_string
 
 
 def setup_data(
@@ -1894,8 +1894,19 @@ def test_get_test_by_id(
     assert data["is_active"] == test.is_active
     assert data["id"] == test.id
 
-    assert datetime.fromisoformat(data["created_date"]) == test.created_date
-    assert datetime.fromisoformat(data["modified_date"]) == test.modified_date
+    assert (
+        datetime.fromisoformat(data["created_date"])
+        == test.created_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if test.created_date
+        else None
+    )
+
+    assert (
+        datetime.fromisoformat(data["modified_date"])
+        == test.modified_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if test.modified_date
+        else None
+    )
 
     assert len(data["states"]) == len(states)
     assert len(data["tags"]) == len(tags)
@@ -1954,8 +1965,18 @@ def test_get_test_by_id(
     assert data["created_by_id"] == test_2.created_by_id
     assert data["is_template"] == test_2.is_template
     assert data["is_active"] == test_2.is_active
-    assert datetime.fromisoformat(data["created_date"]) == test_2.created_date
-    assert datetime.fromisoformat(data["modified_date"]) == test_2.modified_date
+    assert (
+        datetime.fromisoformat(data["created_date"])
+        == test_2.created_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if test_2.created_date
+        else None
+    )
+    assert (
+        datetime.fromisoformat(data["modified_date"])
+        == test_2.modified_date.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if test_2.modified_date
+        else None
+    )
 
     assert data["tags"] == []
     assert data["states"] == []
@@ -2082,7 +2103,12 @@ def test_update_test(
     assert "created_date" in data
 
     created_date = datetime.fromisoformat(data["created_date"])
-    assert created_date == created_date_original
+    assert (
+        created_date
+        == created_date_original.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if created_date_original
+        else None
+    )
     modified_date = datetime.fromisoformat(data["modified_date"])
     assert modified_date != modified_date_original
     assert "modified_date" in data
@@ -2283,6 +2309,53 @@ def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> No
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
     assert response.status_code == 404
     assert "Test not found or not active" in response.json()["detail"]
+
+
+def test_check_public_start_end_time_timezone(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that public test start and end times are in UTC."""
+
+    payload = {
+        "start_time": "2024-05-24T10:00:00",
+        "end_time": "2024-05-24T12:00:00",
+        "name": random_lower_string(),
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test = response.json()
+    assert "id" in test
+    assert test["start_time"] == "2024-05-24T10:00:00"
+    assert test["end_time"] == "2024-05-24T12:00:00"
+
+    db_test = db.exec(select(Test).where(Test.id == test["id"])).first()
+
+    # Verify db_test is not None before accessing its attributes
+    assert db_test is not None
+    # Convert start_time from UTC to IST
+    assert db_test.start_time is not None
+    assert db_test.end_time is not None
+
+    # The datetime from DB is in UTC
+    start_time_utc = db_test.start_time
+    end_time_utc = db_test.end_time
+
+    # Convert to IST (which is what the API returns)
+    start_time_ist = start_time_utc.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+    end_time_ist = end_time_utc.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+
+    # Parse the API response times (which are in string format)
+    api_start_time = datetime.fromisoformat(test["start_time"])
+    api_end_time = datetime.fromisoformat(test["end_time"])
+
+    # Compare the times
+    assert api_start_time == start_time_ist
+    assert api_end_time == end_time_ist
 
 
 def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> None:
@@ -3512,6 +3585,53 @@ def test_update_test_random_question_success(
     assert data["no_of_random_questions"] == 2
 
 
+def test_check_start_time_end_time_validation(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    start_time_str = "2025-07-19T10:00:00"
+    end_time_str = "2025-07-19T11:00:00"
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "start_time": start_time_str,
+        "end_time": end_time_str,
+        "time_limit": 30,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["start_time"] == start_time_str
+    assert data["end_time"] == end_time_str
+    assert data["time_limit"] == 30
+    db_test = db.exec(select(Test).filter(Test.id == data["id"])).first()
+    # Verify db_test is not None before accessing its attributes
+    assert db_test is not None
+    # Convert start_time from UTC to IST
+    assert db_test.start_time is not None
+    assert db_test.end_time is not None
+
+    # The datetime from DB is in UTC
+    start_time_utc = db_test.start_time
+    end_time_utc = db_test.end_time
+
+    # Convert to IST (which is what the API returns)
+    start_time_ist = start_time_utc.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+    end_time_ist = end_time_utc.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+
+    # Parse the API response times (which are in string format)
+    api_start_time = datetime.fromisoformat(data["start_time"])
+    api_end_time = datetime.fromisoformat(data["end_time"])
+
+    # Compare the times
+    assert api_start_time == start_time_ist
+    assert api_end_time == end_time_ist
+
+
 def test_get_public_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -3583,3 +3703,116 @@ def test_get_public_test(
     assert data["name"] == test.name
     assert data["description"] == test.description
     assert data["total_questions"] == 4
+
+
+def test_create_modified_date_timezone_check(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    payload = {
+        "name": random_lower_string(),
+        "link": random_lower_string(),
+        "random_questions": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data_response = response.json()
+
+    data_db = db.exec(select(Test).where(Test.id == data_response["id"])).first()
+    assert data_db is not None
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"}),
+        data_response["created_date"],
+        data_response["modified_date"],
+    )
+
+
+def test_start_end_date_test_timezone_check(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    start_time = "2025-07-19T10:00:00"
+    end_time = "2025-07-19T11:00:00"
+    payload = {
+        "name": random_lower_string(),
+        "start_time": start_time,
+        "end_time": end_time,
+        "time_limit": 30,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["start_time"] == start_time
+    assert data["end_time"] == end_time
+    db_test = db.exec(select(Test).filter(Test.id == data["id"])).first()
+    # Verify db_test is not None before accessing its attributes
+    assert db_test is not None
+
+    db_test_start_time = db_test.start_time
+    db_test_end_time = db_test.end_time
+
+    # Convert the datetime from DB to IST
+    start_time_ist = (
+        db_test_start_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if db_test_start_time
+        else None
+    )
+    end_time_ist = (
+        db_test_end_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if db_test_end_time
+        else None
+    )
+
+    if start_time_ist:
+        assert start_time_ist.isoformat() == start_time
+    if end_time_ist:
+        assert end_time_ist.isoformat() == end_time
+
+    updated_start_time = "2025-07-19T12:00:00"
+    updated_end_time = "2025-07-19T13:00:00"
+    payload = {
+        "name": random_lower_string(),
+        "start_time": updated_start_time,
+        "end_time": updated_end_time,
+        "time_limit": 30,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{data['id']}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    updated_data = response.json()
+    assert updated_data["start_time"] == updated_start_time
+    assert updated_data["end_time"] == updated_end_time
+    db.commit()
+    updated_db_test = db.exec(
+        select(Test).filter(Test.id == updated_data["id"])
+    ).first()
+    # Verify updated_db_test is not None before accessing its attributes
+    assert updated_db_test is not None
+    updated_db_test_start_time = updated_db_test.start_time
+    updated_db_test_end_time = updated_db_test.end_time
+    # Convert the datetime from DB to IST
+    updated_start_time_ist = (
+        updated_db_test_start_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if updated_db_test_start_time
+        else None
+    )
+    updated_end_time_ist = (
+        updated_db_test_end_time.astimezone(CURRENT_ZONE).replace(tzinfo=None)
+        if updated_db_test_end_time
+        else None
+    )
+    if updated_start_time_ist:
+        assert updated_start_time_ist.isoformat() == updated_start_time
+    if updated_end_time_ist:
+        assert updated_end_time_ist.isoformat() == updated_end_time

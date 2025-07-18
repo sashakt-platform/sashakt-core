@@ -1,11 +1,12 @@
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import check_created_modified_date, random_lower_string
 
 
 def test_create_country(
@@ -905,3 +906,130 @@ def test_get_is_active_country(
     data = response.json()
     assert len(data) == 10  # default limit is 10
     assert all(item["is_active"] is True for item in data)
+
+
+def test_created_modified_time_country(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/location/country/",
+        json={
+            "name": random_lower_string(),
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    data_db = db.exec(select(Country).where(Country.id == data["id"])).first()
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"})
+        if data_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )
+
+
+def test_created_modified_time_state(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/state/",
+        json={
+            "name": random_lower_string(),
+            "country_id": country.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    data_db = db.exec(select(State).where(State.id == data["id"])).first()
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"})
+        if data_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )
+
+
+def test_created_modified_time_district(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/district/",
+        json={
+            "name": random_lower_string(),
+            "state_id": state.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    data_db = db.exec(select(District).where(District.id == data["id"])).first()
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"})
+        if data_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )
+
+
+def test_created_modified_time_block(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/block/",
+        json={
+            "name": random_lower_string(),
+            "district_id": district.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    data_db = db.exec(select(Block).where(Block.id == data["id"])).first()
+    check_created_modified_date(
+        data_db.model_dump(include={"created_date", "modified_date"})
+        if data_db
+        else {},
+        data["created_date"],
+        data["modified_date"],
+    )

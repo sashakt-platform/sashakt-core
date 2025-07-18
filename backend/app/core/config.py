@@ -1,6 +1,7 @@
 import secrets
 import warnings
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import (
     AnyUrl,
@@ -120,5 +121,7 @@ class Settings(BaseSettings):
 
 PAGINATION_SIZE: int = 10
 
+CURRENT_ZONE: ZoneInfo = ZoneInfo("Asia/Kolkata")
+UTC_ZONE: ZoneInfo = ZoneInfo("UTC")
 
 settings = Settings()  # type: ignore
