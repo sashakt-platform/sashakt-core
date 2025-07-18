@@ -472,6 +472,10 @@ def test_get_aggregated_data_for_organization(
     db.commit()
     db.refresh(user_a)
     db.refresh(user_b)
+    user_b.is_deleted = True
+    db.add(user_b)
+    db.commit()
+    questions = []
     for i in range(5):
         q = Question(
             created_by_id=user_id,
@@ -496,6 +500,9 @@ def test_get_aggregated_data_for_organization(
 
         q.last_revision_id = q_rev.id
         db.add(q)
+        questions.append(q)
+    questions[0].is_deleted = True
+    db.add(questions[0])
     test = Test(
         name="Sample Test",
         description=random_lower_string(),
@@ -511,12 +518,44 @@ def test_get_aggregated_data_for_organization(
     db.add(test)
     db.commit()
     db.refresh(test)
+    test2 = Test(
+        name="Sample Test2",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=60,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=True,
+        random_questions=False,
+    )
+    db.add(test2)
+    db.commit()
+    db.refresh(test2)
+    test3 = Test(
+        name="template test2",
+        description=random_lower_string(),
+        time_limit=30,
+        marks=60,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        random_questions=False,
+        is_template=True,
+    )
+    db.add(test3)
+    db.commit()
+    db.refresh(test3)
+
     response = client.get(
         f"{settings.API_V1_STR}/organization/aggregated_data",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["total_questions"] == 5
-    assert data["total_users"] == 3
+    assert data["total_questions"] == 4
+    assert data["total_users"] == 2
     assert data["total_tests"] == 1

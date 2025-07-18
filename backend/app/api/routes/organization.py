@@ -104,19 +104,29 @@ def get_organization_aggregated_stats_for_current_user(
     organization_id = current_user.organization_id
 
     total_questions = session.exec(
-        select(func.count()).where(Question.organization_id == organization_id)
+        select(func.count()).where(
+            not_(Question.is_deleted), Question.organization_id == organization_id
+        )
     ).one()
 
     total_users = session.exec(
-        select(func.count()).where(User.organization_id == organization_id)
+        select(func.count()).where(
+            User.organization_id == organization_id, not_(User.is_deleted)
+        )
     ).one()
 
     query = (
         select(func.count())
         .select_from(Test)
         .join(User)
-        .where(Test.created_by_id == User.id)
-        .where(User.organization_id == current_user.organization_id)
+        .where(
+            Test.created_by_id == User.id,
+            not_(Test.is_deleted),
+            not_(Test.is_template),
+        )
+        .where(
+            User.organization_id == current_user.organization_id,
+        )
     )
 
     total_tests = session.exec(query).one()
