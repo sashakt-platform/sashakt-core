@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -6,6 +6,7 @@ from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import TypedDict
 
+from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
 
@@ -184,7 +185,7 @@ class QuestionTag(SQLModel, table=True):
     )
 
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this relationship was created",
     )
 
@@ -205,12 +206,12 @@ class Question(SQLModel, table=True):
     )
 
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this question was created",
     )
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
         description="When this question was last modified",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
@@ -255,12 +256,12 @@ class QuestionRevision(QuestionBase, table=True):
         description="ID of the user who created this revision",
     )
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this revision was created",
     )
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
         description="When this revision was last modified",
     )
 
@@ -335,7 +336,7 @@ class QuestionLocation(SQLModel, table=True):
         description="ID of the block this question is associated with",
     )
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this location was created",
     )
 
