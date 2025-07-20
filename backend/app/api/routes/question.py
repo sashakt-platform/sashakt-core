@@ -19,6 +19,7 @@ from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import PAGINATION_SIZE
 from app.models import (
     CandidateTest,
     Message,
@@ -44,8 +45,8 @@ from app.models import (
 from app.models.question import BulkUploadQuestionsResponse, Option
 
 
-class CustomParams(Params):
-    size: int = 25
+class Pagination(Params):
+    size: int = PAGINATION_SIZE
 
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -384,7 +385,7 @@ class CandidateTestInfoDict(TypedDict):
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
-    params: CustomParams = Depends(),
+    params: Pagination = Depends(),
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts

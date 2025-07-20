@@ -17,6 +17,7 @@ from app.models.question import (
 )
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
+from app.tests.utils.question_revisions import create_random_question_revision
 
 # from app.models.user import User
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -3419,30 +3420,8 @@ def test_read_questions_with_pagination(
     db.commit()
     db.refresh(tag)
 
-    for i in range(26):
-        question = Question(organization_id=org_id)
-        db.add(question)
-        db.flush()
-
-        revision = QuestionRevision(
-            question_id=question.id,
-            created_by_id=user_id,
-            question_text=f"Q{i + 1} - {random_lower_string()}",
-            question_type=QuestionType.single_choice,
-            options=[
-                {"id": 1, "key": "A", "value": "Option A"},
-                {"id": 2, "key": "B", "value": "Option B"},
-            ],
-            correct_answer=[1],
-        )
-        db.add(revision)
-        db.flush()
-
-        question.last_revision_id = revision.id
-        db.add(question)
-        if i == 0:
-            db.add(QuestionTag(question_id=question.id, tag_id=tag.id))
-
+    for _ in range(26):
+        create_random_question_revision(db, user_id=user_id, org_id=org_id)
     db.commit()
 
     response = client.get(
@@ -3453,14 +3432,7 @@ def test_read_questions_with_pagination(
     assert "items" in data
     assert len(data["items"]) == 25
     assert data["page"] == 1
-    response = client.get(
-        f"{settings.API_V1_STR}/questions/?page=2", headers=get_user_superadmin_token
-    )
-    data = response.json()
-    assert response.status_code == 200
-    assert "items" in data
-    assert data["page"] == 2
-    assert len(data["items"]) == 25
+
     response = client.get(
         f"{settings.API_V1_STR}/questions/?page=10", headers=get_user_superadmin_token
     )

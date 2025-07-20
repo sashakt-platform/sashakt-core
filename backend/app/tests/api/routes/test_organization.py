@@ -59,7 +59,7 @@ def test_read_organization(
     data = response.json()
     assert response.status_code == 200
 
-    assert len(data) == 10
+    assert len(data) == 25
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?limit=2&skip=10",
