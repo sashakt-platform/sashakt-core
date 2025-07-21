@@ -1,4 +1,7 @@
 # test_helpers.py
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
@@ -1352,3 +1355,50 @@ def test_get_tags_includes_with_and_without_tag_types(
         elif tag["name"] in ["Easy", "Medium"]:
             assert tag["tag_type"] is not None
             assert tag["tag_type"]["name"] == "Difficulty"
+
+
+def test_create_tag_and_validate_created_date_in_UTC(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    user_b = create_random_user(db)
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "tag_type_id": tagtype.id,
+        "created_by_id": user_b.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    assert response_data["description"] == data["description"]
+    assert response_data["tag_type"]["name"] == tagtype.name
+    assert response_data["tag_type"]["id"] == tagtype.id
+    assert response_data["tag_type"]["description"] == tagtype.description
+    assert response_data["tag_type"]["organization_id"] == tagtype.organization_id
+    assert response_data["tag_type"]["created_by_id"] == tagtype.created_by_id
+    assert response_data["organization_id"] == tagtype.organization_id
+    assert response_data["is_deleted"] is False
+    assert "created_date" in response_data
+    assert "modified_date" in response_data
+    expected = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
+    created_date = datetime.fromisoformat(response_data["created_date"])
+    assert abs((expected - created_date).total_seconds()) < 1
