@@ -1359,9 +1359,10 @@ def test_get_tags_includes_with_and_without_tag_types(
 
 def test_create_tag_and_validate_created_date_in_IST(
     client: TestClient,
+    db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user = create_random_user()
+    user = create_random_user(db)
     data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
