@@ -1,4 +1,7 @@
 # test_helpers.py
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
@@ -1352,3 +1355,44 @@ def test_get_tags_includes_with_and_without_tag_types(
         elif tag["name"] in ["Easy", "Medium"]:
             assert tag["tag_type"] is not None
             assert tag["tag_type"]["name"] == "Difficulty"
+
+
+def test_create_tag_and_validate_created_date_in_IST(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "created_by_id": user.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    tag_id = response_data["id"]
+    assert "created_date" in response_data
+    assert "modified_date" in response_data
+    expected = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+    created_date = datetime.fromisoformat(response_data["created_date"])
+    assert abs((expected - created_date).total_seconds()) < 1
+    update_payload = {"name": data["name"], "tag_type_id": None}
+    update_response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    update_data = update_response.json()
+    assert update_response.status_code == 200
+    assert update_data["id"] == tag_id
+    assert update_data["tag_type"] is None
+    assert update_data["name"] == data["name"]
+    expected_modified = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+    modified_date = datetime.fromisoformat(update_data["modified_date"])
+    assert abs((expected_modified - modified_date).total_seconds()) < 1

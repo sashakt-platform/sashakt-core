@@ -102,6 +102,7 @@ def generate_new_account_email(
 
 def generate_password_reset_token(email: str) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
+    # Password reset tokens should use UTC for consistency across timezones
     now = datetime.now(timezone.utc)
     expires = now + delta
     exp = expires.timestamp()

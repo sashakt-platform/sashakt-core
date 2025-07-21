@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.timezone import get_timezone_aware_now
 from app.models.test import Test, TestState
 
 if TYPE_CHECKING:
@@ -17,12 +18,10 @@ class CountryBase(SQLModel):
 
 class Country(CountryBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     states: list["State"] | None = Relationship(back_populates="country")
 
@@ -55,12 +54,10 @@ class StateBase(SQLModel):
 
 class State(StateBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     country: Country | None = Relationship(back_populates="states")
     districts: list["District"] | None = Relationship(back_populates="state")
@@ -98,12 +95,10 @@ class DistrictBase(SQLModel):
 
 class District(DistrictBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     state: State | None = Relationship(back_populates="districts")
     blocks: list["Block"] | None = Relationship(back_populates="district")
@@ -142,12 +137,10 @@ class BlockBase(SQLModel):
 
 class Block(BlockBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     district: District | None = Relationship(back_populates="blocks")
     question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
