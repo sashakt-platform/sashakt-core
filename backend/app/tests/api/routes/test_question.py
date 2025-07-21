@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -3471,3 +3472,16 @@ def test_get_questions_with_invalid_fields_returns_empty(
     assert response.status_code == 200
     assert data["items"] == []
     assert data["total"] == 0
+
+
+def test_create_random_question_revision_invalid_org_and_user(
+    db: SessionDep,
+) -> None:
+    user = -100
+    org = -100
+    with pytest.raises(Exception) as excinfo:
+        create_random_question_revision(db, user_id=user)
+    assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
+    with pytest.raises(Exception) as excinfo:
+        create_random_question_revision(db, org_id=org)
+    assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
