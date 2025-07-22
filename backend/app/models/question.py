@@ -150,7 +150,9 @@ class QuestionBase(SQLModel):
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
     marking_scheme: MarkingSchemeDict | None = Field(
-        sa_type=JSON, default=None, description="Scoring rules for this question"
+        default={"correct": 1, "wrong": 0, "skipped": 0},
+        sa_type=JSON,
+        description="Scoring rules for this question",
     )
     solution: str | None = Field(
         default=None, nullable=True, description="Explanation of the correct answer"
