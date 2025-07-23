@@ -228,7 +228,11 @@ def test_read_questions(
 
     assert response.status_code == 200
     items = data["items"]
-    assert len(data) >= 2
+    assert len(items) >= 2
+    assert data["page"] == 1
+    assert data["size"] == 25
+    assert data["pages"] == 1
+    assert data["total"] == 2
 
     # Check that the questions have the expected properties
     question_ids = [q["id"] for q in items]
@@ -3515,6 +3519,8 @@ def test_read_questions_with_pagination(
     assert "items" in data
     assert len(data["items"]) == 25
     assert data["page"] == 1
+    assert data["pages"] == 2
+    assert data["size"] == 25
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/?page=10", headers=get_user_superadmin_token
@@ -3522,9 +3528,10 @@ def test_read_questions_with_pagination(
     data = response.json()
     assert response.status_code == 200
     assert "items" in data
-    assert "items" in data
     assert len(data["items"]) == 0
     assert data["page"] == 10
+    assert data["pages"] == 2
+    assert data["size"] == 25
 
 
 def test_get_questions_with_invalid_fields_returns_empty(
