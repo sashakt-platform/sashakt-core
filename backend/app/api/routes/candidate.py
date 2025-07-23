@@ -1,13 +1,14 @@
 import random
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import SQLModel, col, not_, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
+from app.core.timezone import get_timezone_aware_now
 from app.models import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -95,7 +96,7 @@ def start_test_for_candidate(
     session.refresh(candidate)
 
     # Set start_time when test begins, end_time will be set when test is submitted
-    start_time = datetime.now(timezone.utc)
+    start_time = get_timezone_aware_now()
 
     # Create CandidateTest link
     candidate_test = CandidateTest(
@@ -269,7 +270,7 @@ def submit_test_for_qr_candidate(
 
     # Mark test as submitted and set end time
     candidate_test.is_submitted = True
-    candidate_test.end_time = datetime.now(timezone.utc)
+    candidate_test.end_time = get_timezone_aware_now()
 
     session.add(candidate_test)
     session.commit()

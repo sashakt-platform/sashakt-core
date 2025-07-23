@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.timezone import get_timezone_aware_now
 from app.models.location import State
 from app.models.question import QuestionRevision, QuestionTag
 from app.models.test import TestPublic, TestTag
@@ -26,12 +27,10 @@ class TagTypeBase(SQLModel):
 
 class TagType(TagTypeBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     is_deleted: bool = Field(default=False, nullable=False)
     tags: list["Tag"] = Relationship(back_populates="tag_type")
@@ -72,12 +71,10 @@ class TagBase(SQLModel):
 
 class Tag(TagBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     tag_type_id: int | None = Field(
         default=None,

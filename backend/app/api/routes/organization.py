@@ -1,16 +1,20 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import col, not_, select
+from sqlmodel import col, func, not_, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.core.config import PAGINATION_SIZE
 from app.models import (
+    AggregatedData,
     Message,
     Organization,
     OrganizationCreate,
     OrganizationPublic,
     OrganizationUpdate,
+    Question,
+    Test,
+    User,
 )
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
@@ -86,6 +90,51 @@ def get_organization(
     organization = session.exec(query).all()
 
     return organization
+
+
+@router.get(
+    "/aggregated_data",
+    response_model=AggregatedData,
+    dependencies=[Depends(permission_dependency("read_organization"))],
+)
+def get_organization_aggregated_stats_for_current_user(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> AggregatedData:
+    organization_id = current_user.organization_id
+
+    total_questions = session.exec(
+        select(func.count()).where(
+            not_(Question.is_deleted), Question.organization_id == organization_id
+        )
+    ).one()
+
+    total_users = session.exec(
+        select(func.count()).where(
+            User.organization_id == organization_id, not_(User.is_deleted)
+        )
+    ).one()
+
+    query = (
+        select(func.count())
+        .select_from(Test)
+        .join(User)
+        .where(
+            Test.created_by_id == User.id,
+            not_(Test.is_deleted),
+            not_(Test.is_template),
+        )
+        .where(
+            User.organization_id == current_user.organization_id,
+        )
+    )
+
+    total_tests = session.exec(query).one()
+    return AggregatedData(
+        total_questions=total_questions,
+        total_users=total_users,
+        total_tests=total_tests,
+    )
 
 
 # Get Organization by ID
