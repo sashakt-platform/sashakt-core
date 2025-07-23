@@ -1,11 +1,12 @@
 import enum
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from pydantic import model_validator
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import Self
 
+from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 
 
@@ -24,9 +25,7 @@ class TestTag(SQLModel, table=True):
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "tag_id"),)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
     tag_id: int = Field(foreign_key="tag.id", ondelete="CASCADE")
 
@@ -36,9 +35,7 @@ class TestQuestion(SQLModel, table=True):
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "question_revision_id"),)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
@@ -53,9 +50,7 @@ class TestState(SQLModel, table=True):
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     __table_args__ = (UniqueConstraint("test_id", "state_id"),)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
     state_id: int = Field(foreign_key="state.id", ondelete="CASCADE")
 
@@ -161,12 +156,10 @@ class TestBase(SQLModel):
 class Test(TestBase, table=True):
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
 
     is_deleted: bool = Field(default=False, nullable=False)

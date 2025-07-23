@@ -1,9 +1,11 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
+
+from app.core.timezone import get_timezone_aware_now
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
@@ -30,12 +32,10 @@ class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
     __tablename__ = "candidate_test_answer"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     # Add relationship to QuestionRevision
     question_revision: "QuestionRevision" = Relationship(
@@ -103,12 +103,10 @@ class CandidateTest(CandidateTestBase, table=True):
     __test__ = False
     __table_args__ = (UniqueConstraint("test_id", "candidate_id"),)
     id: int | None = Field(default=None, primary_key=True)
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     # Updated relationship to reference QuestionRevision instead of Question
     question_revisions: list["QuestionRevision"] = Relationship(
@@ -157,12 +155,10 @@ class Candidate(CandidateBase, table=True):
     identity: uuid.UUID | None = Field(
         default=None, unique=True, index=True, nullable=True
     )  # Only for anonymous QR code users
-    created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     is_deleted: bool = Field(default=False, nullable=False)
     user: "User" = Relationship(back_populates="candidates")

@@ -1,3 +1,6 @@
+import base64
+import csv
+import io
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
@@ -2614,7 +2617,7 @@ def test_bulk_upload_questions_with_invalid_tagtype(
     What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
     What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
     What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
-    """
+"""
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -2943,8 +2946,9 @@ def test_bulk_upload_questions_with_duplicate(
     What is PYTHON?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag,Punjab
     What is Python?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag |BulkTag 2,Punjab
     What is Python?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag 2,Punjab
-    What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
-    """
+
+    What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab"""
+
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -3228,3 +3232,242 @@ def test_check_question_duplication_if_deleted(
         headers=get_user_superadmin_token,
     )
     assert another_duplicate_response.status_code == 400
+
+
+def test_create_question_is_deleted_defaults_to_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "is_deleted" in data
+    assert data["is_deleted"] is False
+
+
+def test_create_duplicate_questions_with_same_text_and_no_tags(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "Explain Java basics.",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],
+    }
+
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "Explain Java basics."
+    assert data1["tags"] == []
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "Explain Java basics.",  # same text
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],  # also no tags
+    }
+
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response2.status_code == 400
+    data2 = response2.json()
+    assert (
+        data2["detail"]
+        == "Duplicate question: Same question text and tags already exist."
+    )
+
+
+def test_create_same_text_one_with_tags_one_without(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    tag_type = TagType(
+        name="Language",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag1 = Tag(
+        name="Java",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    tag2 = Tag(
+        name="Backend",
+        description=random_lower_string(),
+        organization_id=org_id,
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "What are the features of Python",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Object-oriented language"},
+            {"id": 2, "key": "B", "value": "Database"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],
+    }
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["question_text"] == "What are the features of Python"
+    assert data1["tags"] == []
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "What are the features of Python",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Object-oriented language"},
+            {"id": 2, "key": "B", "value": "Database"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag1.id, tag2.id],
+    }
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response2.status_code == 200
+    data2 = response2.json()
+    assert data2["question_text"] == "What are the features of Python"
+    assert len(data2["tags"]) == 2
+
+
+def test_bulk_upload_questions_with_multiple_errors_report(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+What is 10+10?,20,10,30,40,A,Math,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
+What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
+Which option is missing?,,10,20,30,A,Math,Punjab
+What is 2 + 2?,4,5,6,7,Z,Math,Punjab
+,1,2,3,4,A,Math,Punjab
+What is 9+1?,10,20,30,40,A,Math,NonExistentState
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math,Punjab
+What is 10+10?,20,10,30,40,A,Math,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uploaded_questions"] == 10
+        assert data["success_questions"] == 2
+        assert data["failed_questions"] == 8
+        assert "Failed to create 8 questions." in data["message"]
+        expected_errors = {
+            3: "Invalid tag type",
+            4: "Invalid tag type",
+            5: "one or more options (a-d) are missing",
+            6: "Invalid correct option",
+            7: "Question text is missing",
+            8: "Invalid states: NonExistentState",
+            9: "Correct option is missing",
+            10: "Questions Already Exist",
+        }
+        assert (
+            "Download failed questions: data:text/csv;base64,"
+            in data["failed_question_details"]
+        )
+        base64_csv = data["failed_question_details"].split("base64,")[-1]
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        rows = list(csv_reader)
+        assert len(rows) == 8
+        for row in rows:
+            assert "row_number" in row
+            assert "question_text" in row
+            assert "error" in row
+            assert row["error"]
+            row_number = int(row["row_number"])
+            expected_error = expected_errors.get(row_number)
+            assert expected_error is not None
+            assert expected_error.lower() in row["error"].lower()
+
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)

@@ -37,6 +37,7 @@ from .location import (
     StateUpdate,
 )
 from .organization import (
+    AggregatedData,
     Organization,
     OrganizationCreate,
     OrganizationPublic,
@@ -119,6 +120,7 @@ __all__ = [
     "OrganizationCreate",
     "OrganizationPublic",
     "OrganizationUpdate",
+    "AggregatedData",
     "Country",
     "CountryPublic",
     "CountryCreate",

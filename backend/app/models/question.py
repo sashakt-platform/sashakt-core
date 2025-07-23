@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -6,6 +6,7 @@ from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import TypedDict
 
+from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
 
@@ -76,6 +77,12 @@ class Option(TypedDict):
     id: int
     key: str
     value: str
+
+
+class FailedQuestion(TypedDict):
+    row_number: int
+    question_text: str
+    error: str
 
 
 # Type aliases for cleaner annotations
@@ -184,7 +191,7 @@ class QuestionTag(SQLModel, table=True):
     )
 
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this relationship was created",
     )
 
@@ -205,18 +212,19 @@ class Question(SQLModel, table=True):
     )
 
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this question was created",
     )
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
         description="When this question was last modified",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool | None = Field(
+    is_deleted: bool = Field(
         default=False,
-        nullable=True,
+        nullable=False,
+        sa_column_kwargs={"server_default": "false"},
         description="Whether this question is marked as deleted",
     )
 
@@ -254,18 +262,19 @@ class QuestionRevision(QuestionBase, table=True):
         description="ID of the user who created this revision",
     )
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this revision was created",
     )
     modified_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
         description="When this revision was last modified",
     )
 
-    is_deleted: bool | None = Field(
+    is_deleted: bool = Field(
         default=False,
-        nullable=True,
+        nullable=False,
+        sa_column_kwargs={"server_default": "false"},
         description="Whether this revision is marked as deleted",
     )
     # Relationships
@@ -333,7 +342,7 @@ class QuestionLocation(SQLModel, table=True):
         description="ID of the block this question is associated with",
     )
     created_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=get_timezone_aware_now,
         description="When this location was created",
     )
 
@@ -429,8 +438,8 @@ class QuestionPublic(SQLModel):
     created_date: datetime = Field(description="When this question was created")
     modified_date: datetime = Field(description="When this question was last modified")
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool | None = Field(
-        description="Whether this question is marked as deleted"
+    is_deleted: bool = Field(
+        default=False, description="Whether this question is marked as deleted"
     )
 
     # Current revision data
@@ -482,8 +491,8 @@ class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool | None = Field(
-        default=None, description="Whether this question is marked as deleted"
+    is_deleted: bool = Field(
+        default=False, description="Whether this question is marked as deleted"
     )
 
 
@@ -492,6 +501,7 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
+    failed_question_details: str | None
 
 
 # Force model rebuild to handle forward references
