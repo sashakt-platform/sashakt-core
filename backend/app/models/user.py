@@ -123,8 +123,8 @@ class UserPublic(UserBase):
     modified_date: datetime
     is_deleted: bool
     created_by_id: int | None
-    state_ids: list[int] | None = Field(
-        default=None, description="States associated with this user"
+    states: list["State"] | None = Field(
+        default=None, description="states associated with this user"
     )
 
 

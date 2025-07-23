@@ -86,6 +86,7 @@ def create_user(
     user = crud.create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
+    _ = user.states
     role = session.exec(select(Role).where(Role.id == user_in.role_id)).first()
     if role and role.name == "state_admin":
         if not user_in.state_ids:
@@ -98,10 +99,6 @@ def create_user(
             session.add(user_state)
 
     session.commit()
-    user_state_links = session.exec(
-        select(UserState.state_id).where(UserState.user_id == user.id)
-    ).all()
-    state_ids = user_state_links
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -112,10 +109,7 @@ def create_user(
             subject=email_data.subject,
             html_content=email_data.html_content,
         )
-    return UserPublic(
-        **user.model_dump(),
-        state_ids=state_ids,
-    )
+    return user
 
 
 @router.patch(
@@ -236,7 +230,7 @@ def read_user_by_id(
         or user.organization_id != current_user.organization_id
     ):
         raise HTTPException(status_code=404, detail="User not found")
-
+    _ = user.states
     return user
 
 

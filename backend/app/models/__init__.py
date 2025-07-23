@@ -200,3 +200,4 @@ __all__ = [
 
 # Rebuild models to resolve forward references after all imports are complete
 TestCandidatePublic.model_rebuild()
+UserPublic.model_rebuild()
