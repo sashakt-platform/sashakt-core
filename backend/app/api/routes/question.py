@@ -1,3 +1,4 @@
+import base64
 import csv
 import re
 from datetime import datetime
@@ -1039,16 +1040,17 @@ async def upload_questions_csv(
         # Start processing rows
         questions_created = 0
         questions_failed = 0
+        failed_question_details = []
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
         failed_states = set()
         failed_tagtypes = set()
 
-        for row in csv_reader:
+        for row_number, row in enumerate(csv_reader, start=1):
             try:
                 # Skip empty rows
                 if not row.get("Questions", "").strip():
-                    continue
+                    raise ValueError("Question text is missing.")
 
                 # Extract data
                 question_text = row.get("Questions", "").strip()
@@ -1058,11 +1060,16 @@ async def upload_questions_csv(
                     row.get("Option C", "").strip(),
                     row.get("Option D", "").strip(),
                 ]
-
+                if not all(options):
+                    raise ValueError("One or more options (A-D) are missing.")
                 # Convert option letter to index
-                correct_letter = row.get("Correct Option", "A").strip()
+                correct_letter = (row.get("Correct Option") or "").strip().upper()
+                if not correct_letter:
+                    raise ValueError("Correct option is missing.")
                 letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
-                correct_answer = letter_map.get(correct_letter, 1)
+                if correct_letter not in letter_map:
+                    raise ValueError(f"Invalid correct option: {correct_letter}")
+                correct_answer = letter_map[correct_letter]
 
                 valid_options = [
                     {"id": letter_map[key], "key": key, "value": value}
@@ -1137,6 +1144,13 @@ async def upload_questions_csv(
 
                 if tagtype_error:
                     questions_failed += 1
+                    failed_question_details.append(
+                        {
+                            "row_number": row_number,
+                            "question_text": question_text,
+                            "error": f"Invalid tag types: {', '.join(failed_tagtypes)}",
+                        }
+                    )
                     continue
 
                 # Process state information if present
@@ -1168,11 +1182,18 @@ async def upload_questions_csv(
                             state_cache[state_name] = state.id
 
                 # Skip this question if states weren't found
-                if state_error or is_duplicate_question(
-                    session, question_text, tag_ids
-                ):
+                if state_error:
                     questions_failed += 1
+                    failed_question_details.append(
+                        {
+                            "row_number": row_number,
+                            "question_text": question_text,
+                            "error": f"Invalid states: {', '.join(failed_states)}",
+                        }
+                    )
                     continue
+                if is_duplicate_question(session, question_text, tag_ids):
+                    raise ValueError("Questions Already Exist")
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
@@ -1246,7 +1267,13 @@ async def upload_questions_csv(
             except Exception as e:
                 questions_failed += 1
                 # Optionally log the error
-                print(f"Error processing row: {str(e)}")
+                failed_question_details.append(
+                    {
+                        "row_number": row_number,
+                        "question_text": row.get("Questions", "").strip(),
+                        "error": str(e),
+                    }
+                )
                 continue
 
         # Commit all changes at once
@@ -1260,12 +1287,28 @@ async def upload_questions_csv(
             message += (
                 f" The following tag types were not found: {', '.join(failed_tagtypes)}"
             )
+        if questions_failed > 0:
+            csv_buffer = StringIO()
+            csv_writer = csv.DictWriter(
+                csv_buffer, fieldnames=["row_number", "question_text", "error"]
+            )
+            csv_writer.writeheader()
+            for row in failed_question_details:
+                csv_writer.writerow(row)
+            csv_buffer.seek(0)
+            csv_bytes = csv_buffer.getvalue().encode("utf-8")
+            base64_csv = base64.b64encode(csv_bytes).decode("utf-8")
+            data_link = f"data:text/csv;base64,{base64_csv}"
+            failed_message = f"Download failed questions: {data_link}"
+        else:
+            failed_message = "No failed questions. No CSV generated."
 
         return BulkUploadQuestionsResponse(
             message=message,
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
+            failed_question_details=failed_message,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised

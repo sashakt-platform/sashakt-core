@@ -79,6 +79,12 @@ class Option(TypedDict):
     value: str
 
 
+class FailedQuestion(TypedDict):
+    row_number: int
+    question_text: str
+    error: str
+
+
 # Type aliases for cleaner annotations
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
@@ -495,6 +501,7 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
+    failed_question_details: str | None
 
 
 # Force model rebuild to handle forward references
