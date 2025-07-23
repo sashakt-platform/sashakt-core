@@ -7,6 +7,8 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import Role, User, UserCreate
+from app.models.location import Country, State
+from app.models.user import UserState
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -749,3 +751,93 @@ def test_create_inactive_user_not_listed(
     )
     all_users = r.json()["data"]
     assert all(item["id"] != user_id for item in all_users)
+
+
+def test_create_state_admin_without_state_id(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        email = random_email()
+        full_name = random_lower_string()
+        password = random_lower_string()
+        phone = random_lower_string()
+        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+        assert role is not None
+        organization = create_random_organization(db)
+        data = {
+            "email": email,
+            "password": password,
+            "phone": phone,
+            "role_id": role.id,
+            "full_name": full_name,
+            "organization_id": organization.id,
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=superuser_token_headers,
+            json=data,
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert (
+            data["detail"] == "State ID is required for a user with role 'state_admin'."
+        )
+
+
+def test_create_state_admin_with_state_id(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        email = random_email()
+        full_name = random_lower_string()
+        password = random_lower_string()
+        phone = random_lower_string()
+        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+        assert role is not None
+        country = Country(name="India", is_active=True)
+        db.add(country)
+        db.commit()
+        db.refresh(country)
+
+        state1 = State(name="TestState", is_active=True, country_id=country.id)
+        db.add(state1)
+        db.commit()
+        state2 = State(name="TestState2", is_active=True, country_id=country.id)
+        db.add(state2)
+        db.commit()
+        organization = create_random_organization(db)
+        data = {
+            "email": email,
+            "password": password,
+            "phone": phone,
+            "role_id": role.id,
+            "full_name": full_name,
+            "organization_id": organization.id,
+            "state_ids": [state1.id, state2.id],
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=superuser_token_headers,
+            json=data,
+        )
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["email"] == email
+        assert response_data["role_id"] == role.id
+        assert role.name == "state_admin"
+        user_id = response_data["id"]
+        user_states = list(
+            db.exec(select(UserState).where(UserState.user_id == user_id))
+        )
+        state_ids_linked = {us.state_id for us in user_states}
+        assert state1.id in state_ids_linked
+        assert state2.id in state_ids_linked
+        assert len(state_ids_linked) == 2

@@ -22,6 +22,8 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
+from app.models.role import Role
+from app.models.user import UserState
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -84,6 +86,23 @@ def create_user(
     user = crud.create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
+    role = session.exec(select(Role).where(Role.id == user_in.role_id)).first()
+    if role and role.name == "state_admin":
+        if not user_in.state_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="State ID is required for a user with role 'state_admin'.",
+            )
+        for state_id in user_in.state_ids:
+            user_state = UserState(user_id=user.id, state_id=state_id)
+            session.add(user_state)
+
+    session.commit()
+    user_state_links = session.exec(
+        select(UserState.state_id).where(UserState.user_id == user.id)
+    ).all()
+    state_ids = user_state_links
+
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
             email_to=user_in.email, username=user_in.email, password=user_in.password
@@ -93,7 +112,10 @@ def create_user(
             subject=email_data.subject,
             html_content=email_data.html_content,
         )
-    return user
+    return UserPublic(
+        **user.model_dump(),
+        state_ids=state_ids,
+    )
 
 
 @router.patch(
