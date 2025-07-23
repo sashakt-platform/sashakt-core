@@ -6,16 +6,16 @@ from sqlmodel import col, func, not_, select
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.core.config import PAGINATION_SIZE
 from app.models import (
+    AggregatedData,
     Message,
     Organization,
     OrganizationCreate,
     OrganizationPublic,
     OrganizationUpdate,
+    Question,
+    Test,
+    User,
 )
-from app.models.organization import AggregatedData
-from app.models.question import Question
-from app.models.test import Test
-from app.models.user import User
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
 
