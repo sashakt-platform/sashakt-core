@@ -3521,6 +3521,7 @@ def test_read_questions_with_pagination(
     assert data["page"] == 1
     assert data["pages"] == 2
     assert data["size"] == 25
+    assert data["total"] >= 26
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/?page=10", headers=get_user_superadmin_token
@@ -3532,6 +3533,7 @@ def test_read_questions_with_pagination(
     assert data["page"] == 10
     assert data["pages"] == 2
     assert data["size"] == 25
+    assert data["total"] >= 26
 
 
 def test_get_questions_with_invalid_fields_returns_empty(
