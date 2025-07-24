@@ -3,21 +3,24 @@ import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Any
+from typing import Any, cast
 
 from fastapi import (
     APIRouter,
     Body,
+    Depends,
     File,
     HTTPException,
     Query,
     UploadFile,
 )
+from fastapi_pagination import Page, Params, paginate
 from sqlalchemy import desc, func
 from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import PAGINATION_SIZE
 from app.models import (
     CandidateTest,
     Message,
@@ -41,6 +44,11 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+
+
+class Pagination(Params):
+    size: int = PAGINATION_SIZE
+
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -374,12 +382,11 @@ class CandidateTestInfoDict(TypedDict):
     is_submitted: bool
 
 
-@router.get("/", response_model=list[QuestionPublic])
+@router.get("/", response_model=Page[QuestionPublic])
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    params: Pagination = Depends(),
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
@@ -388,7 +395,7 @@ def get_questions(
     created_by_id: int | None = None,
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
-) -> list[QuestionPublic]:
+) -> Page[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
 
@@ -420,7 +427,7 @@ def get_questions(
             query = query.where(Question.id.in_(question_ids_with_tags))  # type: ignore
         else:
             # If no questions have these tags, return empty list
-            return []
+            return cast(Page[QuestionPublic], paginate([], params))
 
     # Handle creator-based filtering
     if created_by_id is not None:
@@ -437,7 +444,7 @@ def get_questions(
         if questions_by_creator:
             query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
         else:
-            return []
+            return cast(Page[QuestionPublic], paginate([], params))
 
     # Handle location-based filtering with multiple locations
     if any([state_ids, district_ids, block_ids]):
@@ -458,10 +465,10 @@ def get_questions(
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))  # type: ignore
             else:
-                return []
+                return cast(Page[QuestionPublic], paginate([], params))
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    # query = query.offset(skip).limit(limit)
 
     # Execute query and get all questions
     questions = session.exec(query).all()
@@ -492,7 +499,7 @@ def get_questions(
         )
         result.append(question_data)
 
-    return result
+    return cast(Page[QuestionPublic], paginate(result, params))
 
 
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])

@@ -3,6 +3,7 @@ import csv
 import io
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -20,6 +21,7 @@ from app.models.question import (
 )
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
+from app.tests.utils.question_revisions import create_random_question_revision
 
 # from app.models.user import User
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -225,15 +227,20 @@ def test_read_questions(
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) >= 2
+    items = data["items"]
+    assert len(items) >= 2
+    assert data["page"] == 1
+    assert data["size"] == 25
+    assert data["pages"] == 1
+    assert data["total"] == 2
 
     # Check that the questions have the expected properties
-    question_ids = [q["id"] for q in data]
+    question_ids = [q["id"] for q in items]
     assert q1.id in question_ids
     assert q2.id in question_ids
 
     # Find q1 in response
-    q1_data = next(q for q in data if q["id"] == q1.id)
+    q1_data = next(q for q in items if q["id"] == q1.id)
     # Check created_by_id
     assert q1_data["created_by_id"] == user_id
     # Check tag information
@@ -246,9 +253,10 @@ def test_read_questions(
         headers=get_user_superadmin_token,
     )
     data = response.json()
+    items = data["items"]
     assert response.status_code == 200
-    assert len(data) == 1
-    assert data[0]["id"] == q1.id
+    assert len(data["items"]) == 1
+    assert items[0]["id"] == q1.id
 
     # Test filtering by created_by
     response = client.get(
@@ -257,7 +265,8 @@ def test_read_questions(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     # Verify that filtering works
     response = client.get(
@@ -266,15 +275,8 @@ def test_read_questions(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-
-    # Check pagination
-    response = client.get(
-        f"{settings.API_V1_STR}/questions/?limit=1", headers=get_user_superadmin_token
-    )
-    data = response.json()
-    assert response.status_code == 200
-    assert len(data) <= 1
+    items = data["items"]
+    assert len(items) == 2
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
@@ -1196,7 +1198,9 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             f"{settings.API_V1_STR}/questions/",
             headers=get_user_superadmin_token,
         )
-        questions = response.json()
+        data = response.json()
+        questions = data["items"]
+
         assert len(questions) >= 4  # Updated to reflect 4 questions
 
         # Check for specific question content
@@ -2192,7 +2196,7 @@ def test_inactive_question_listed(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert all(item["id"] != question_id for item in data)
+    assert all(item["id"] != question_id for item in data["items"])
 
 
 def test_deactivate_question_with_new_revision(
@@ -2265,7 +2269,7 @@ def test_deactivate_question_with_new_revision(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert any(item["id"] == question_id for item in data)
+    assert any(item["id"] == question_id for item in data["items"])
 
 
 def test_filter_questions_by_latest_revision_text(
@@ -2317,7 +2321,7 @@ def test_filter_questions_by_latest_revision_text(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert q.id in ids
     response = client.get(
         f"{settings.API_V1_STR}/questions/?question_text=First+revision+text",
@@ -2325,7 +2329,7 @@ def test_filter_questions_by_latest_revision_text(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert q.id not in ids
 
 
@@ -2377,7 +2381,7 @@ def test_filter_questions_by_latest_revision_subtext(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert question.id in ids
     response = client.get(
         f"{settings.API_V1_STR}/questions/?question_text=First+revision+text",
@@ -2385,7 +2389,7 @@ def test_filter_questions_by_latest_revision_subtext(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert question.id not in ids
 
 
@@ -2501,7 +2505,7 @@ def test_get_questions_by_is_active_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [q["id"] for q in data]
+    ids = [q["id"] for q in data["items"]]
     assert active_question.id in ids
     assert inactive_question.id in ids
     response = client.get(
@@ -2510,7 +2514,7 @@ def test_get_questions_by_is_active_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [q["id"] for q in data]
+    ids = [q["id"] for q in data["items"]]
     assert active_question.id in ids
     assert inactive_question.id not in ids
     response = client.get(
@@ -2519,7 +2523,7 @@ def test_get_questions_by_is_active_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [q["id"] for q in data]
+    ids = [q["id"] for q in data["items"]]
     assert inactive_question.id in ids
     assert active_question.id not in ids
 
@@ -2574,7 +2578,8 @@ What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Subject:Geography,P
             f"{settings.API_V1_STR}/questions/",
             headers=get_user_superadmin_token,
         )
-        questions = response.json()
+        data = response.json()
+        questions = data["items"]
         question_texts = [q["question_text"] for q in questions]
         assert "What is 10+10?" in question_texts
         assert "What is the color of the sky?" in question_texts
@@ -3471,3 +3476,103 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
 
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_read_questions_with_pagination(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag_type = TagType(
+        name="Question Category",
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag = Tag(
+        name="Math",
+        description=random_lower_string(),
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    for _ in range(26):
+        create_random_question_revision(db, user_id=user_id, org_id=org_id)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/", headers=get_user_superadmin_token
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "items" in data
+    assert len(data["items"]) == 25
+    assert data["page"] == 1
+    assert data["pages"] == 2
+    assert data["size"] == 25
+    assert data["total"] >= 26
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?page=10", headers=get_user_superadmin_token
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "items" in data
+    assert len(data["items"]) == 0
+    assert data["page"] == 10
+    assert data["pages"] == 2
+    assert data["size"] == 25
+    assert data["total"] >= 26
+
+
+def test_get_questions_with_invalid_fields_returns_empty(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?created_by_id=-99999",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["items"] == []
+    assert data["total"] == 0
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?state_ids=-99999",  # assuming this state ID doesn't exist
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["items"] == []
+    assert data["total"] == 0
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_ids=-99999",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["items"] == []
+    assert data["total"] == 0
+
+
+def test_create_random_question_revision_invalid_org_and_user(
+    db: SessionDep,
+) -> None:
+    user = -100
+    org = -100
+    with pytest.raises(Exception) as excinfo:
+        create_random_question_revision(db, user_id=user)
+    assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
+    with pytest.raises(Exception) as excinfo:
+        create_random_question_revision(db, org_id=org)
+    assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
