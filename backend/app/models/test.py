@@ -3,11 +3,13 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from pydantic import model_validator
-from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
+from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import Self
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
+
+MarkingSchemeDict = dict[str, float]
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -83,7 +85,7 @@ class TestBase(SQLModel):
         description="The maximum time allowed for the test in minutes.",
     )
     marks_level: MarksLevelEnum | None = Field(
-        default=None,
+        default=MarksLevelEnum.QUESTION,
         title="Marks Level as Question or Test",
         description="Field to set the marks level as question or test. If set to question, then the marks will be calculated as per the question level. If set to test, then the marks will be calculated as per the test level.",
     )
@@ -151,6 +153,11 @@ class TestBase(SQLModel):
         description="Whether result should be visible after test submission",
     )
     is_active: bool = Field(default=True)
+    marking_scheme: MarkingSchemeDict | None = Field(
+        default={"correct": 1, "wrong": 0, "skipped": 0},
+        sa_type=JSON,
+        description="Scoring rules for this test",
+    )
 
 
 class Test(TestBase, table=True):
