@@ -1,9 +1,11 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from fastapi_pagination import Params
 from pydantic.networks import EmailStr
 
 from app.api.deps import get_current_active_superuser
+from app.core.config import PAGINATION_SIZE
 from app.core.timezone import get_timezone_aware_now
 from app.models import Message
 from app.utils import generate_test_email, send_email
@@ -37,3 +39,7 @@ async def health_check() -> bool:
 def get_current_time() -> datetime:
     """Returns the current datetime in the configured timezone."""
     return get_timezone_aware_now()
+
+
+class Pagination(Params):
+    size: int = PAGINATION_SIZE
