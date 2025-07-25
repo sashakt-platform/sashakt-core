@@ -23,7 +23,13 @@ def test_get_access_token(client: TestClient) -> None:
     tokens = r.json()
     assert r.status_code == 200
     assert "access_token" in tokens
+    assert "refresh_token" in tokens
+    assert "expires_in" in tokens
+    assert "token_type" in tokens
     assert tokens["access_token"]
+    assert tokens["refresh_token"]
+    assert tokens["expires_in"] == settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    assert tokens["token_type"] == "bearer"
 
 
 def test_get_access_token_incorrect_password(client: TestClient) -> None:
@@ -33,6 +39,57 @@ def test_get_access_token_incorrect_password(client: TestClient) -> None:
     }
     r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
     assert r.status_code == 400
+
+
+def test_refresh_token(client: TestClient) -> None:
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+    }
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    tokens = r.json()
+    assert r.status_code == 200
+
+    refresh_data = {"refresh_token": tokens["refresh_token"]}
+    r = client.post(f"{settings.API_V1_STR}/login/refresh-token", json=refresh_data)
+    new_tokens = r.json()
+    assert r.status_code == 200
+    assert "access_token" in new_tokens
+    assert "refresh_token" in new_tokens
+    assert "expires_in" in new_tokens
+    assert new_tokens["access_token"]
+    assert new_tokens["refresh_token"]
+    assert new_tokens["expires_in"] == settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # New refresh token should be different (token rotation)
+    assert new_tokens["refresh_token"] != tokens["refresh_token"]
+
+
+def test_refresh_token_invalid(client: TestClient) -> None:
+    refresh_data = {"refresh_token": "invalid_token"}
+    r = client.post(f"{settings.API_V1_STR}/login/refresh-token", json=refresh_data)
+    assert r.status_code == 401
+
+
+def test_refresh_token_reuse_prevention(client: TestClient) -> None:
+    """Test that old refresh tokens cannot be reused after refresh"""
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+    }
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    tokens = r.json()
+    assert r.status_code == 200
+
+    # Use refresh token once
+    refresh_data = {"refresh_token": tokens["refresh_token"]}
+    r = client.post(f"{settings.API_V1_STR}/login/refresh-token", json=refresh_data)
+    # new_tokens = r.json()
+    assert r.status_code == 200
+
+    # Try to use the old refresh token again - should fail
+    r = client.post(f"{settings.API_V1_STR}/login/refresh-token", json=refresh_data)
+    assert r.status_code == 401
 
 
 def test_use_access_token(
