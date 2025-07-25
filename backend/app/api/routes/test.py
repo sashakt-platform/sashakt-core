@@ -1,11 +1,12 @@
-from collections.abc import Sequence
 from datetime import datetime
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.api.routes.utils import get_current_time
+from app.api.routes.utils import Pagination, get_current_time
 from app.models import (
     Message,
     QuestionRevision,
@@ -183,14 +184,13 @@ def create_test(
 # Get All Tests
 @router.get(
     "/",
-    response_model=list[TestPublic],
+    response_model=Page[TestPublic],
     dependencies=[Depends(permission_dependency("read_test"))],
 )
 def get_test(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    params: Pagination = Depends(),
     marks_level: MarksLevelEnum | None = None,
     name: str | None = None,
     description: str | None = None,
@@ -223,7 +223,7 @@ def get_test(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Sequence[TestPublic]:
+) -> Page[TestPublic]:
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
 
@@ -318,7 +318,7 @@ def get_test(
         if test_ids_with_tags:
             query = query.where(col(Test.id).in_(test_ids_with_tags))
         else:
-            return []
+            return cast(Page[TestPublic], paginate([], params))
     if state_ids:
         state_subquery = select(TestState.test_id).where(
             col(TestState.state_id).in_(state_ids)
@@ -327,10 +327,7 @@ def get_test(
         if test_ids_with_states:
             query = query.where(col(Test.id).in_(test_ids_with_states))
         else:
-            return []
-
-    # Apply pagination
-    query = query.offset(skip).limit(limit)
+            return cast(Page[TestPublic], paginate([], params))
 
     # Execute query and get all questions
     tests = session.exec(query).all()
@@ -360,7 +357,7 @@ def get_test(
             )
         )
 
-    return test_public
+    return cast(Page[TestPublic], paginate(test_public, params))
 
 
 @router.get(
