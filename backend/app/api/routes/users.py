@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
 from app import crud
 from app.api.deps import (
@@ -22,6 +22,7 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
+from app.models.location import State
 from app.models.role import Role
 from app.models.user import UserState
 from app.utils import generate_new_account_email, send_email
@@ -88,17 +89,23 @@ def create_user(
     )
     _ = user.states
     role = session.exec(select(Role).where(Role.id == user_in.role_id)).first()
-    if role and role.name == "state_admin":
-        if not user_in.state_ids:
+    if role and role.name == "state_admin" and not user_in.state_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="State ID is required for a user with role 'state_admin'.",
+        )
+    if user_in.state_ids:
+        existing_states = session.exec(
+            select(State).where(col(State.id).in_(user_in.state_ids))
+        ).all()
+        if len(existing_states) != len(user_in.state_ids):
             raise HTTPException(
                 status_code=400,
-                detail="State ID is required for a user with role 'state_admin'.",
+                detail="One or more state IDs are invalid.",
             )
         for state_id in user_in.state_ids:
             user_state = UserState(user_id=user.id, state_id=state_id)
             session.add(user_state)
-
-    session.commit()
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -109,6 +116,7 @@ def create_user(
             subject=email_data.subject,
             html_content=email_data.html_content,
         )
+    session.commit()
     return user
 
 
@@ -261,6 +269,41 @@ def update_user(
             raise HTTPException(
                 status_code=409, detail="User with this email already exists"
             )
+    current_role = db_user.role
+
+    if user_in.role_id:
+        new_role = session.get(Role, user_in.role_id)
+        if not new_role:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid role ID provided.",
+            )
+
+    final_role = new_role if user_in.role_id else current_role
+    is_final_role_state_admin = final_role and final_role.name == "state_admin"
+    if is_final_role_state_admin:
+        if user_in.state_ids is None and not db_user.states:
+            raise HTTPException(
+                status_code=400,
+                detail="State IDs are required for user with role 'state_admin'.",
+            )
+
+    if user_in.state_ids is not None:
+        if user_in.state_ids == []:
+            db_user.states = []
+
+        else:
+            existing_states = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+            if len(existing_states) != len(user_in.state_ids):
+                raise HTTPException(
+                    status_code=400,
+                    detail="One or more provided state IDs do not exist.",
+                )
+            db_user.states = existing_states
 
     db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
     return db_user

@@ -23,10 +23,10 @@ class UserState(SQLModel, table=True):
     __tablename__ = "userstate"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
-    __table_args__ = (UniqueConstraint("user_id", "state_id"),)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
     state_id: int = Field(foreign_key="state.id", ondelete="CASCADE")
+    __table_args__ = (UniqueConstraint("user_id", "state_id"),)
 
 
 # Shared properties
@@ -60,7 +60,7 @@ class UserCreate(UserBase):
         description="Create password of minumum 8 charaters and maximum 40 characters",
     )
     state_ids: list[int] | None = Field(
-        default=None, description="IDs of tags to associate with the question"
+        default=None, description="IDs of states to associate with the user"
     )
 
 
@@ -68,6 +68,7 @@ class UserCreate(UserBase):
 class UserUpdate(UserBase):
     email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
     password: str | None = Field(default=None, min_length=8, max_length=40)
+    state_ids: list[int] | None = None
 
 
 class UserUpdateMe(SQLModel):
