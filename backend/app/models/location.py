@@ -5,6 +5,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.test import Test, TestState
+from app.models.user import User, UserState
 
 if TYPE_CHECKING:
     from app.models.question import QuestionLocation
@@ -65,6 +66,9 @@ class State(StateBase, table=True):
         back_populates="states", link_model=TestState
     )
     question_locations: list["QuestionLocation"] = Relationship(back_populates="state")
+    users: list["User"] | None = Relationship(
+        back_populates="states", link_model=UserState
+    )
 
 
 class StatePublic(StateBase):
