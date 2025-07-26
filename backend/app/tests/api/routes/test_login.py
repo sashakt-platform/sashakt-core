@@ -92,6 +92,52 @@ def test_refresh_token_reuse_prevention(client: TestClient) -> None:
     assert r.status_code == 401
 
 
+def test_logout(client: TestClient) -> None:
+    """Test logout functionality"""
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+    }
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    tokens = r.json()
+    assert r.status_code == 200
+
+    # Create authorization header
+    auth_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    # Logout should work with valid token
+    r = client.post(f"{settings.API_V1_STR}/login/logout", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {"message": "Successfully logged out"}
+
+
+def test_logout_revokes_tokens(client: TestClient) -> None:
+    """Test that logout revokes both access and refresh tokens"""
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+    }
+    r = client.post(f"{settings.API_V1_STR}/login/access-token", data=login_data)
+    tokens = r.json()
+    assert r.status_code == 200
+
+    # Create authorization header
+    auth_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    # Logout
+    r = client.post(f"{settings.API_V1_STR}/login/logout", headers=auth_headers)
+    assert r.status_code == 200
+
+    # Try to use access token after logout - should fail
+    r = client.post(f"{settings.API_V1_STR}/login/test-token", headers=auth_headers)
+    assert r.status_code == 401  # Token has been revoked
+
+    # Try to use refresh token after logout - should fail
+    refresh_data = {"refresh_token": tokens["refresh_token"]}
+    r = client.post(f"{settings.API_V1_STR}/login/refresh-token", json=refresh_data)
+    assert r.status_code == 401  # Invalid refresh token
+
+
 def test_use_access_token(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
