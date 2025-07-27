@@ -28,14 +28,17 @@ def assert_paginated_response(
 ) -> None:
     assert response.status_code == 200
     data = response.json()
+    required_fields = ["page", "size", "pages", "total", "items"]
+    for field in required_fields:
+        assert field in data
 
     assert data["page"] == expected_page
     assert data["size"] == expected_size
     if min_expected_pages is not None:
         assert data["pages"] >= min_expected_pages
-    elif expected_pages is not None:
+    else:
         assert data["pages"] == expected_pages
     if min_expected_total is not None:
         assert data["total"] >= min_expected_total
-    elif expected_total is not None:
+    else:
         assert data["total"] == expected_total
