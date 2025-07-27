@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.api.routes.utils import Pagination, get_current_time
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.routes.utils import get_current_time
 from app.models import (
     Message,
     QuestionRevision,

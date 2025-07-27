@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 from fastapi import status
 from fastapi.testclient import TestClient
-from httpx import Response
 from sqlmodel import select
 
 from app.api.deps import SessionDep
@@ -26,35 +25,14 @@ from app.models import (
 )
 from app.models.question import QuestionType
 from app.tests.utils.location import create_random_state
-from app.tests.utils.organization import create_random_organization
+from app.tests.utils.organization import (
+    assert_paginated_response,
+    create_random_organization,
+)
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_lower_string
-
-
-def assert_paginated_response(
-    response: Response,
-    expected_total: int = 1,
-    expected_page: int = 1,
-    expected_pages: int = 1,
-    expected_size: int = 25,
-    min_expected_total: int | None = None,
-    min_expected_pages: int | None = None,
-) -> None:
-    assert response.status_code == 200
-    data = response.json()
-
-    assert data["page"] == expected_page
-    assert data["size"] == expected_size
-    if min_expected_pages is not None:
-        assert data["pages"] >= min_expected_pages
-    elif expected_pages is not None:
-        assert data["pages"] == expected_pages
-    if min_expected_total is not None:
-        assert data["total"] >= min_expected_total
-    elif expected_total is not None:
-        assert data["total"] == expected_total
 
 
 def setup_data(

@@ -14,13 +14,12 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi_pagination import Page, Params, paginate
+from fastapi_pagination import Page, paginate
 from sqlalchemy import desc, func
 from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, SessionDep
-from app.core.config import PAGINATION_SIZE
+from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
     CandidateTest,
     Message,
@@ -44,11 +43,6 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
-
-
-class Pagination(Params):
-    size: int = PAGINATION_SIZE
-
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
