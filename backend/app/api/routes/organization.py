@@ -60,7 +60,7 @@ def get_organization(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Page[OrganizationPublic]:
+) -> Page[Organization]:
     query = select(Organization).where(not_(Organization.is_deleted))
 
     if name:
@@ -83,7 +83,7 @@ def get_organization(
     # Execute query and get all organization
     organization = session.exec(query).all()
 
-    return cast(Page[OrganizationPublic], paginate(organization, params))
+    return cast(Page[Organization], paginate(organization, params))
 
 
 @router.get(
