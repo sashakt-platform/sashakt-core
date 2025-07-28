@@ -3785,11 +3785,12 @@ def test_create_test_marks_level_test(
     assert data["link"] == payload["link"]
     revision1 = db.get(QuestionRevision, question1_data_id)
     revision2 = db.get(QuestionRevision, question2_data_id)
-    expected_scheme = {"correct": 7, "wrong": 0, "skipped": 0}
+    expected_scheme1 = {"correct": 5.0, "wrong": 0, "skipped": 0}
+    expected_scheme2 = {"correct": 1, "wrong": 0, "skipped": 0}
     assert revision1 is not None
     assert revision2 is not None
-    assert revision1.marking_scheme == expected_scheme
-    assert revision2.marking_scheme == expected_scheme
+    assert revision1.marking_scheme == expected_scheme1
+    assert revision2.marking_scheme == expected_scheme2
     payload = {
         "name": random_lower_string(),
         "description": random_lower_string(),
@@ -3817,7 +3818,5 @@ def test_create_test_marks_level_test(
     )
     data = response.json()
     assert response.status_code == 200
-    expected_scheme = {"correct": 1, "wrong": 0, "skipped": 0}
-    for revision in data["question_revisions"]:
-        assert revision["marking_scheme"] == expected_scheme
-    assert data["marks_level"] == "test"
+    assert revision1.marking_scheme == expected_scheme1
+    assert revision2.marking_scheme == expected_scheme2

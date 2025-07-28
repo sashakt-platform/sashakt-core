@@ -149,17 +149,7 @@ def create_test(
 
         session.add_all(question_links)
         session.commit()
-    if (
-        test.marks_level == "test"
-        and test_data.get("marking_scheme")
-        and test_create.question_revision_ids
-    ):
-        for revision_id in test_create.question_revision_ids:
-            revision = session.get(QuestionRevision, revision_id)
-            if revision:
-                revision.marking_scheme = test_data["marking_scheme"]
-                session.add(revision)
-        session.commit()
+
     if test_create.state_ids:
         state_ids = test_create.state_ids
         state_links = [

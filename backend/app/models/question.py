@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
+from app.models.utils import MarkingScheme
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -49,17 +50,6 @@ class OptionBase:
 
     value: str
     image: dict[str, Any] | None = None
-
-
-# SQLModel implementations
-class MarkingScheme(SQLModel):
-    """Defines scoring rules for a question"""
-
-    correct: float = Field(description="Points awarded for a correct answer")
-    wrong: float = Field(description="Points deducted for a wrong answer")
-    skipped: float = Field(
-        description="Points awarded/deducted when question is skipped"
-    )
 
 
 class Image(SQLModel):
@@ -155,7 +145,7 @@ class QuestionBase(SQLModel):
         description="Whether the question must be answered",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
-    marking_scheme: MarkingSchemeDict | None = Field(
+    marking_scheme: MarkingScheme | None = Field(
         default={"correct": 1, "wrong": 0, "skipped": 0},
         sa_type=JSON,
         description="Scoring rules for this question",
@@ -456,7 +446,7 @@ class QuestionPublic(SQLModel):
         description="Character limit for subjective answers"
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
-    marking_scheme: MarkingSchemeDict | None = Field(description="Scoring rules")
+    marking_scheme: MarkingScheme | None = Field(description="Scoring rules")
     solution: str | None = Field(description="Explanation of the answer")
     media: dict[str, Any] | None = Field(description="Associated media")
     latest_question_revision_id: int = Field(
@@ -487,6 +477,7 @@ class QuestionCandidatePublic(SQLModel):
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
     media: dict[str, Any] | None = Field(description="Associated media")
+    marking_scheme: MarkingScheme | None = Field(description="Scoring rules")
 
 
 class QuestionUpdate(SQLModel):

@@ -332,7 +332,12 @@ def get_test_questions(
         for qid in assigned_ids
         if qid in question_revisions_map
     ]
-
+    if test.marks_level == "test":
+        for q in ordered_questions:
+            q.marking_scheme = test.marking_scheme
+    else:
+        for q in ordered_questions:
+            q.marking_scheme = q.marking_scheme
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(
@@ -344,6 +349,7 @@ def get_test_questions(
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
             media=q.media,
+            marking_scheme=q.marking_scheme,
         )
         for q in ordered_questions
     ]

@@ -8,6 +8,7 @@ from typing_extensions import Self
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
+from app.models.utils import MarkingScheme
 
 MarkingSchemeDict = dict[str, float]
 
@@ -153,7 +154,7 @@ class TestBase(SQLModel):
         description="Whether result should be visible after test submission",
     )
     is_active: bool = Field(default=True)
-    marking_scheme: MarkingSchemeDict | None = Field(
+    marking_scheme: MarkingScheme | None = Field(
         default={"correct": 1, "wrong": 0, "skipped": 0},
         sa_type=JSON,
         description="Scoring rules for this test",

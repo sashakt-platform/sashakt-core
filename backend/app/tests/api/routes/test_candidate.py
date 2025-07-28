@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.question import QuestionType
 from app.models.test import TestQuestion
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import create_random_user
 
@@ -3369,3 +3370,162 @@ def test_get_test_result_with_random_question_true(
     assert data["incorrect_answer"] == 3
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+
+
+def test_test_level_marking_scheme_applied_on_questions(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test the test_questions endpoint with candidate UUID verification."""
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    # Create question with revision
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="what is functions in cpp",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        marking_scheme={"correct": 10, "wrong": -5, "skipped": 0},
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create test
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="test",
+        marking_scheme={"correct": 5, "wrong": -1, "skipped": 1},
+    )
+    db.add(test)
+    db.commit()
+
+    # Link question to test
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Create candidate and candidate_test using start_test endpoint
+    payload = {"test_id": test.id, "device_info": " Test Marks level Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Test get_test_questions endpoint
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "id" in data
+    assert "name" in data
+    assert "question_revisions" in data
+    assert "candidate_test" in data
+    assert data["id"] == test.id
+    assert isinstance(data["question_revisions"], list)
+    assert data["candidate_test"]["id"] == candidate_test_id
+    for question_data in data["question_revisions"]:
+        assert question_data["marking_scheme"] == test.marking_scheme
+
+
+def test_question_level_marking_scheme_applied_on_questions(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that question-level marking scheme is applied when marks_level is 'question'."""
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    # Create question with custom marking scheme
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_level_scheme = {"correct": 3, "wrong": -2, "skipped": 0}
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="Define polymorphism in C++",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Runtime"},
+            {"id": 2, "key": "B", "value": "Compile-time"},
+            {"id": 3, "key": "C", "value": "Both"},
+        ],
+        marking_scheme=question_level_scheme,
+        correct_answer=[3],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create test with marks_level = 'question'
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+        marking_scheme={"correct": 5, "wrong": -1, "skipped": 1},  # should not be used
+    )
+    db.add(test)
+    db.commit()
+
+    # Link the question to the test
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id, "device_info": "Question Marks level Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert isinstance(data["question_revisions"], list)
+    assert data["candidate_test"]["id"] == candidate_test_id
+
+    for question_data in data["question_revisions"]:
+        assert question_data["marking_scheme"] == question_level_scheme
