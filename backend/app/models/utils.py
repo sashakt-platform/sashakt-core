@@ -9,3 +9,11 @@ class Message(SQLModel):
 
 class TimeLeft(TypedDict):
     time_left: int | None
+
+
+class MarkingScheme(TypedDict):
+    """Defines scoring rules for a question"""
+
+    correct: float
+    wrong: float
+    skipped: float
