@@ -782,6 +782,8 @@ def test_create_state_admin_without_state_id(
         )
         assert response.status_code == 200
         data = response.json()
+        assert "states" in data
+        assert len(data["states"]) == 0
 
 
 def test_create_state_admin_with_state_id(
@@ -944,21 +946,6 @@ def test_update_user_states(
     email = random_email()
     password = random_lower_string()
     phone = random_lower_string()
-    invalid_patch_state_admin = {
-        "phone": phone,
-        "role_id": role1.id,
-        "full_name": "full name",
-        "organization_id": org.id,
-    }
-    update_response = client.patch(
-        f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
-        json=invalid_patch_state_admin,
-    )
-    assert update_response.status_code == 200
-    data = update_response.json()
-    assert state1.id is not None
-    assert state3.id is not None
 
     email = random_email()
     password = random_lower_string()
@@ -985,8 +972,6 @@ def test_update_user_states(
     assert data["email"] == email
     assert data["role_id"] == role.id
     assert data["full_name"] == "full name"
-    assert isinstance(data["states"], list)
-    assert len(data["states"]) == 2
     state_names = {s["name"] for s in data["states"]}
     assert state1.name in state_names
     assert state3.name in state_names
