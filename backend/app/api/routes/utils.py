@@ -1,9 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from pydantic.networks import EmailStr
 
 from app.api.deps import get_current_active_superuser
+from app.core.timezone import get_timezone_aware_now
 from app.models import Message
 from app.utils import generate_test_email, send_email
 
@@ -34,5 +35,5 @@ async def health_check() -> bool:
 
 
 def get_current_time() -> datetime:
-    """Returns the current datetime."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    """Returns the current datetime in the configured timezone."""
+    return get_timezone_aware_now()
