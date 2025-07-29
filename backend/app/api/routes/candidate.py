@@ -335,9 +335,7 @@ def get_test_questions(
     if test.marks_level == "test":
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
-    else:
-        for q in ordered_questions:
-            q.marking_scheme = q.marking_scheme
+
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(

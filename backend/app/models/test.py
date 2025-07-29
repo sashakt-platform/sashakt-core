@@ -10,8 +10,6 @@ from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.utils import MarkingScheme
 
-MarkingSchemeDict = dict[str, float]
-
 
 class MarksLevelEnum(str, enum.Enum):
     QUESTION = "question"
@@ -155,7 +153,7 @@ class TestBase(SQLModel):
     )
     is_active: bool = Field(default=True)
     marking_scheme: MarkingScheme | None = Field(
-        default={"correct": 1, "wrong": 0, "skipped": 0},
+        default=None,
         sa_type=JSON,
         description="Scoring rules for this test",
     )
