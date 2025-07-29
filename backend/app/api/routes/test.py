@@ -214,6 +214,7 @@ def get_test(
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
     tag_ids: list[int] | None = Query(None),
+    tag_type_ids: list[int] | None = Query(None),
     state_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
@@ -319,6 +320,19 @@ def get_test(
             query = query.where(col(Test.id).in_(test_ids_with_tags))
         else:
             return []
+    if tag_type_ids:
+        tag_type_query = (
+            select(TestTag.test_id)
+            .join(Tag)
+            .where(Tag.id == TestTag.tag_id)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        )
+        test_ids_with_tag_types = session.exec(tag_type_query).all()
+        if test_ids_with_tag_types:
+            query = query.where(col(Test.id).in_(test_ids_with_tag_types))
+        else:
+            return []
+
     if state_ids:
         state_subquery = select(TestState.test_id).where(
             col(TestState.state_id).in_(state_ids)
