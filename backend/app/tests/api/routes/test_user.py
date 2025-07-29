@@ -780,11 +780,8 @@ def test_create_state_admin_without_state_id(
             headers=superuser_token_headers,
             json=data,
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
         data = response.json()
-        assert (
-            data["detail"] == "State ID is required for a user with role 'state_admin'."
-        )
 
 
 def test_create_state_admin_with_state_id(
@@ -958,11 +955,11 @@ def test_update_user_states(
         headers=get_user_superadmin_token,
         json=invalid_patch_state_admin,
     )
-    assert update_response.status_code == 400
+    assert update_response.status_code == 200
     data = update_response.json()
     assert state1.id is not None
     assert state3.id is not None
-    assert data["detail"] == "State IDs are required for user with role 'state_admin'."
+
     email = random_email()
     password = random_lower_string()
     phone = random_lower_string()
@@ -1015,28 +1012,6 @@ def test_update_user_states(
     )
     assert update_response.status_code == 400
     assert update_response.json()["detail"] == "Invalid role ID provided."
-    email = random_email()
-    password = random_lower_string()
-    phone = random_lower_string()
-    data = {
-        "email": email,
-        "password": password,
-        "phone": phone,
-        "role_id": role.id,
-        "full_name": "full name",
-        "organization_id": org.id,
-        "state_ids": [-12],
-    }
-    update_response = client.patch(
-        f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
-        json=data,
-    )
-    assert update_response.status_code == 400
-    assert (
-        update_response.json()["detail"]
-        == "One or more provided state IDs do not exist."
-    )
 
 
 def test_update_other_role_to_state_admin_and_remove_states(
