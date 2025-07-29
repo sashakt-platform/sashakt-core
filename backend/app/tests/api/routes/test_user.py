@@ -783,6 +783,7 @@ def test_create_state_admin_without_state_id(
         assert response.status_code == 200
         data = response.json()
         assert "states" in data
+        assert isinstance(data["states"], list)
         assert len(data["states"]) == 0
 
 
