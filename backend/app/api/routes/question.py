@@ -16,7 +16,7 @@ from fastapi import (
 )
 from fastapi_pagination import Page, Params, paginate
 from sqlalchemy import desc, func
-from sqlmodel import not_, or_, select
+from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
@@ -392,6 +392,7 @@ def get_questions(
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
     tag_ids: list[int] = Query(None),  # Support multiple tags
+    tag_type_ids: list[int] = Query(None),  # Support multiple tag types
     created_by_id: int | None = None,
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
@@ -418,15 +419,21 @@ def get_questions(
         query = query.where(Question.is_active == is_active)
 
     # Handle tag-based filtering with multiple tags
-    if tag_ids:
-        tag_query = select(QuestionTag.question_id).where(
-            QuestionTag.tag_id.in_(tag_ids)  # type: ignore
+    if tag_ids or tag_type_ids:
+        tag_query = (
+            select(QuestionTag.question_id)
+            .join(Tag)
+            .where(QuestionTag.tag_id == Tag.id)
         )
+        if tag_ids:
+            tag_query = tag_query.where(col(QuestionTag.tag_id).in_(tag_ids))
+
+        if tag_type_ids:
+            tag_query = tag_query.where(col(Tag.tag_type_id).in_(tag_type_ids))
         question_ids_with_tags = session.exec(tag_query).all()
-        if question_ids_with_tags:  # Only apply filter if we found matching tags
-            query = query.where(Question.id.in_(question_ids_with_tags))  # type: ignore
+        if question_ids_with_tags:
+            query = query.where(col(Question.id).in_(question_ids_with_tags))
         else:
-            # If no questions have these tags, return empty list
             return cast(Page[QuestionPublic], paginate([], params))
 
     # Handle creator-based filtering
