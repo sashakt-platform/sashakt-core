@@ -289,7 +289,7 @@ def test_read_questions_filter_by_tag_type_ids(
     org_id = user_data["organization_id"]
 
     tag_type1 = TagType(
-        name="Question Category",
+        name="Science Category",
         description="Categories for questions",
         created_by_id=user_id,
         organization_id=org_id,
@@ -297,7 +297,7 @@ def test_read_questions_filter_by_tag_type_ids(
     db.add(tag_type1)
     db.flush()
     tag_type2 = TagType(
-        name="Question Category",
+        name="General Category",
         description="Categories for questions",
         created_by_id=user_id,
         organization_id=org_id,
@@ -313,7 +313,7 @@ def test_read_questions_filter_by_tag_type_ids(
     )
 
     tag2 = Tag(
-        name="science",
+        name="Science",
         description="science questions",
         tag_type_id=tag_type2.id,
         created_by_id=user_id,
@@ -384,6 +384,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert response.status_code == 200
     assert len(data["items"]) == 1
     assert items[0]["id"] == q1.id
+    assert any(tag["tag_type"]["id"] == tag_type1.id for tag in items[0]["tags"])
     response = client.get(
         f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type2.id}",
         headers=get_user_superadmin_token,

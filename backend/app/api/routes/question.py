@@ -419,20 +419,26 @@ def get_questions(
         query = query.where(Question.is_active == is_active)
 
     # Handle tag-based filtering with multiple tags
-    if tag_ids or tag_type_ids:
-        tag_query = (
-            select(QuestionTag.question_id)
-            .join(Tag)
-            .where(QuestionTag.tag_id == Tag.id)
+    if tag_ids:
+        tag_query = select(QuestionTag.question_id).where(
+            col(QuestionTag.tag_id).in_(tag_ids)
         )
-        if tag_ids:
-            tag_query = tag_query.where(col(QuestionTag.tag_id).in_(tag_ids))
-
-        if tag_type_ids:
-            tag_query = tag_query.where(col(Tag.tag_type_id).in_(tag_type_ids))
         question_ids_with_tags = session.exec(tag_query).all()
         if question_ids_with_tags:
             query = query.where(col(Question.id).in_(question_ids_with_tags))
+        else:
+            return cast(Page[QuestionPublic], paginate([], params))
+
+    if tag_type_ids:
+        tag_type_query = (
+            select(QuestionTag.question_id)
+            .join(Tag)
+            .where(Tag.id == QuestionTag.tag_id)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        )
+        question_ids_with_tag_types = session.exec(tag_type_query).all()
+        if question_ids_with_tag_types:
+            query = query.where(col(Question.id).in_(question_ids_with_tag_types))
         else:
             return cast(Page[QuestionPublic], paginate([], params))
 
