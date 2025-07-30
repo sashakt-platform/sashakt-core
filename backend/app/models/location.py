@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
-from app.models.test import Test, TestState
+from app.models.test import Test, TestDistrict, TestState
 
 if TYPE_CHECKING:
     from app.models.question import QuestionLocation
@@ -104,6 +104,10 @@ class District(DistrictBase, table=True):
     blocks: list["Block"] | None = Relationship(back_populates="district")
     question_locations: list["QuestionLocation"] = Relationship(
         back_populates="district"
+    )
+
+    tests: list["Test"] | None = Relationship(
+        back_populates="districts", link_model=TestDistrict
     )
 
 

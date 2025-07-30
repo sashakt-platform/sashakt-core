@@ -23,7 +23,9 @@ from app.models import (
     TestTag,
     User,
 )
+from app.models.location import District
 from app.models.question import QuestionType
+from app.models.test import TestDistrict
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
@@ -165,6 +167,10 @@ def test_create_test(
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
+    district_a = District(name=random_lower_string(), state_id=punjab.id)
+    db.add(district_a)
+    db.commit()
+
     payload = {
         "name": random_lower_string(),
         "description": random_lower_string(),
@@ -182,6 +188,7 @@ def test_create_test(
         "tag_ids": [tag_hindi.id, tag_marathi.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
         "state_ids": [punjab.id],
+        "district_ids": [district_a.id],
     }
 
     response = client.post(
@@ -206,6 +213,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["created_by_id"] == user_id
+    assert len(data["districts"]) == 1
     assert "id" in data
     assert "created_date" in data
     assert "modified_date" in data
@@ -539,7 +547,10 @@ def test_get_tests(
         question_revision_one,
         question_revision_two,
     ) = setup_data(client, db, get_user_superadmin_token)
-
+    district = District(name="Test District", state_id=state_a.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -570,7 +581,8 @@ def test_get_tests(
 
     test_state_link = TestState(test_id=test.id, state_id=state_a.id)
     db.add(test_state_link)
-
+    test_district_link = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district_link)
     db.commit()
 
     response = client.get(
@@ -604,6 +616,10 @@ def test_get_tests(
     )
     assert any(
         len(item["states"]) == 1 and item["states"][0]["id"] == state_a.id
+        for item in data
+    )
+    assert any(
+        len(item["districts"]) == 1 and item["districts"][0]["id"] == district.id
         for item in data
     )
 
