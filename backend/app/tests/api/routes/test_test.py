@@ -1990,7 +1990,12 @@ def test_update_test(
         question_revision_one,
         question_revision_two,
     ) = setup_data(client, db, get_user_superadmin_token)
-
+    district_a = District(name=random_lower_string(), state_id=state_b.id)
+    db.add(district_a)
+    db.commit()
+    district_b = District(name=random_lower_string(), state_id=state_b.id)
+    db.add(district_b)
+    db.commit()
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -2019,6 +2024,10 @@ def test_update_test(
 
     test_tag_link = TestTag(test_id=test.id, tag_id=tag_b.id)
     db.add(test_tag_link)
+    db.commit()
+
+    test_district_b = TestDistrict(test_id=test.id, district_id=district_b.id)
+    db.add(test_district_b)
     db.commit()
 
     # Create TestQuestion with question_revision_id
@@ -2060,6 +2069,7 @@ def test_update_test(
         "tag_ids": [tag_a.id, tag_b.id],
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
+        "district_ids": [district_a.id],
     }
 
     response = client.put(
@@ -2097,6 +2107,9 @@ def test_update_test(
     modified_date = datetime.fromisoformat(data["modified_date"])
     assert modified_date != modified_date_original
     assert "modified_date" in data
+    assert "districts" in data
+    assert len(data["districts"]) == 1
+    assert data["districts"][0]["id"] == district_a.id
 
     assert "tags" in data
     assert len(data["tags"]) == 2
