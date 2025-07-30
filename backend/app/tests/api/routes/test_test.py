@@ -2490,6 +2490,10 @@ def test_clone_test(
     ) = setup_data(client, db, get_user_superadmin_token)
     user1 = create_random_user(db)
     superadmin = get_current_user_data(client, get_user_superadmin_token)
+    district = District(name="Ludhiana", state_id=punjab.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
     test = Test(
         name="Original Test",
         description=random_lower_string(),
@@ -2515,6 +2519,7 @@ def test_clone_test(
             TestTag(test_id=test.id, tag_id=tag_marathi.id),
             TestState(test_id=test.id, state_id=punjab.id),
             TestState(test_id=test.id, state_id=goa.id),
+            TestDistrict(test_id=test.id, district_id=district.id),
             TestQuestion(
                 test_id=test.id, question_revision_id=question_revision_one.id
             ),
@@ -2556,6 +2561,9 @@ def test_clone_test(
     assert len(data["question_revisions"]) == 2
     qrev_ids = [q["id"] for q in data["question_revisions"]]
     assert set(qrev_ids) == {question_revision_one.id, question_revision_two.id}
+    assert len(data["districts"]) == 1
+    district_ids = [d["id"] for d in data["districts"]]
+    assert district.id in district_ids
 
 
 def test_clone_soft_deleted_test(
