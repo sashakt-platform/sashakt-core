@@ -394,6 +394,39 @@ def test_read_questions_filter_by_tag_type_ids(
     items = data["items"]
     assert len(items) == 1
     assert items[0]["id"] == q2.id
+    assert any(tag["tag_type"]["id"] == tag_type2.id for tag in items[0]["tags"])
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) >= 2
+    returned_ids = [item["id"] for item in items]
+    assert q1.id in returned_ids
+    assert q2.id in returned_ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) >= 2
+    returned_tag_type_ids = {
+        tag["tag_type"]["id"] for item in items for tag in item["tags"]
+    }
+    assert tag_type1.id in returned_tag_type_ids
+    assert tag_type2.id in returned_tag_type_ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids=-10",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["items"] == []
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:

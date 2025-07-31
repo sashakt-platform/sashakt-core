@@ -2813,6 +2813,15 @@ def test_get_tests_by_tags_type_filter(
     db.add(tag_type2)
     db.commit()
     db.refresh(tag_type2)
+    tag_type3 = TagType(
+        name="skills",
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type3)
+    db.commit()
+    db.refresh(tag_type3)
     tag_1 = Tag(
         name="aptitude",
         organization_id=user.organization_id,
@@ -2863,7 +2872,13 @@ def test_get_tests_by_tags_type_filter(
         link=random_lower_string(),
         no_of_random_questions=1,
     )
-    db.add_all([test_1, test_2, test_3, test_4, test_5])
+    test_6 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3, test_4, test_5, test_6])
     db.commit()
     db.refresh(test_1)
     db.refresh(test_2)
@@ -2909,6 +2924,13 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 5
+    assert test_6.id not in (test["id"] for test in data)
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_get_tests_by_state_filter(
