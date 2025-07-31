@@ -7,7 +7,10 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import Role, User, UserCreate
-from app.tests.utils.organization import create_random_organization
+from app.tests.utils.organization import (
+    assert_paginated_response,
+    create_random_organization,
+)
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_email, random_lower_string
@@ -254,10 +257,10 @@ def test_retrieve_users(
 
     r = client.get(f"{settings.API_V1_STR}/users/", headers=superuser_token_headers)
     all_users = r.json()
+    assert len(all_users["items"]) > 2
 
-    assert len(all_users["data"]) > 2
-    assert "count" in all_users
-    for item in all_users["data"]:
+    assert_paginated_response(r, min_expected_total=1)
+    for item in all_users["items"]:
         assert "email" in item
         assert "full_name" in item
         assert "phone" in item
@@ -747,5 +750,6 @@ def test_create_inactive_user_not_listed(
         f"{settings.API_V1_STR}/users/",
         headers=superuser_token_headers,
     )
-    all_users = r.json()["data"]
-    assert all(item["id"] != user_id for item in all_users)
+    all_users = r.json()
+    assert all(item["id"] != user_id for item in all_users["items"])
+    assert_paginated_response(r, min_expected_total=1)

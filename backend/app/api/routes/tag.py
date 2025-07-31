@@ -1,9 +1,10 @@
-from collections.abc import Sequence
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi_pagination import Page, paginate
 from sqlmodel import not_, select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
     Message,
     Tag,
@@ -48,18 +49,19 @@ def create_tagtype(
     return tag_type
 
 
-@router_tagtype.get("/", response_model=list[TagTypePublic])
+@router_tagtype.get("/", response_model=Page[TagTypePublic])
 def get_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
-) -> Sequence[TagType]:
+    params: Pagination = Depends(),
+) -> Page[TagType]:
     tagtype = session.exec(
         select(TagType).where(
             TagType.organization_id == current_user.organization_id,
             not_(TagType.is_deleted),
         )
     ).all()
-    return tagtype
+    return cast(Page[TagType], paginate(tagtype, params=params))
 
 
 @router_tagtype.get("/{tagtype_id}", response_model=TagTypePublic)
@@ -158,17 +160,18 @@ def create_tag(
 
 
 # Get all Tags
-@router_tag.get("/", response_model=list[TagPublic])
+@router_tag.get("/", response_model=Page[TagPublic])
 def get_tags(
     session: SessionDep,
     current_user: CurrentUser,
+    params: Pagination = Depends(),
     order_by: list[str] = Query(
         default=["tag_type_name", "name"],
         title="Order by",
         description="Order by fields: tag_type_name, name. Prefix with '-' for descending.",
         examples=["-name", "tag_type_name"],
     ),
-) -> Sequence[TagPublic]:
+) -> Page[TagPublic]:
     query = select(Tag).where(
         Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
     )
@@ -208,7 +211,7 @@ def get_tags(
             TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
         )
 
-    return tag_public
+    return cast(Page[TagPublic], paginate(tag_public, params=params))
 
 
 # Get Tag by ID

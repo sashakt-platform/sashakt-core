@@ -6,7 +6,10 @@ from app.core.config import settings
 from app.models.organization import Organization
 from app.models.question import Question, QuestionRevision
 from app.models.test import Test
-from app.tests.utils.organization import create_random_organization
+from app.tests.utils.organization import (
+    assert_paginated_response,
+    create_random_organization,
+)
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
@@ -61,16 +64,20 @@ def test_read_organization(
     )
     data = response.json()
     assert response.status_code == 200
-
-    assert len(data) == 25
+    assert_paginated_response(
+        response,
+        expected_page=1,
+        expected_size=25,
+        min_expected_total=12,
+        min_expected_pages=1,
+    )
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?limit=2&skip=10",
+        f"{settings.API_V1_STR}/organization/?page=2",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
 
     jal_vikas = Organization(name=random_lower_string())
     maha_vikas = Organization(
@@ -81,18 +88,19 @@ def test_read_organization(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?limit=1000",
+        f"{settings.API_V1_STR}/organization/?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
+    items = data["items"]
     assert response.status_code == 200
-    assert any(item["name"] == jal_vikas.name for item in data)
-    assert any(item["id"] == jal_vikas.id for item in data)
-    assert any(item["id"] == maha_vikas.id for item in data)
-    assert any(item["name"] == maha_vikas.name for item in data)
-    assert any(item["description"] == maha_vikas.description for item in data)
+    assert any(item["name"] == jal_vikas.name for item in items)
+    assert any(item["id"] == jal_vikas.id for item in items)
+    assert any(item["id"] == maha_vikas.id for item in items)
+    assert any(item["name"] == maha_vikas.name for item in items)
+    assert any(item["description"] == maha_vikas.description for item in items)
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization/?size=100",
         headers=get_user_candidate_token,
     )
     data = response.json()
@@ -125,7 +133,8 @@ def test_read_organization_filter_by_name(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?name={organization_name_2}",
@@ -133,7 +142,8 @@ def test_read_organization_filter_by_name(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 1
+    items = data["items"]
+    assert len(items) == 1
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?name={random_lower_string()}",
@@ -141,7 +151,8 @@ def test_read_organization_filter_by_name(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 0
+    items = data["items"]
+    assert len(items) == 0
 
 
 def test_read_organization_filter_by_description(
@@ -173,7 +184,8 @@ def test_read_organization_filter_by_description(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?description={organization_description_2}",
@@ -181,7 +193,8 @@ def test_read_organization_filter_by_description(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 1
+    items = data["items"]
+    assert len(items) == 1
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?description={random_lower_string()}",
@@ -189,7 +202,8 @@ def test_read_organization_filter_by_description(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 0
+    items = data["items"]
+    assert len(items) == 0
 
 
 def test_read_organization_order_by(
@@ -207,8 +221,9 @@ def test_read_organization_order_by(
         headers=get_user_superadmin_token,
     )
     data = response.json()
+    items = data["items"]
 
-    organization_created_date = [item["created_date"] for item in data]
+    organization_created_date = [item["created_date"] for item in items]
 
     sorted_organization_created_date = sorted(organization_created_date)
 
@@ -219,8 +234,8 @@ def test_read_organization_order_by(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-
-    organization_created_date = [item["created_date"] for item in data]
+    items = data["items"]
+    organization_created_date = [item["created_date"] for item in items]
 
     sorted_organization_created_date = sorted(organization_created_date, reverse=True)
 
@@ -231,8 +246,8 @@ def test_read_organization_order_by(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-
-    organization_name = [item["name"] for item in data]
+    items = data["items"]
+    organization_name = [item["name"] for item in items]
 
     sorted_organization_name = sorted(organization_name, key=str.lower)
 
@@ -243,8 +258,8 @@ def test_read_organization_order_by(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-
-    organization_name = [item["name"] for item in data]
+    items = data["items"]
+    organization_name = [item["name"] for item in items]
 
     sorted_organization_name = sorted(organization_name, key=str.lower, reverse=True)
 
@@ -255,9 +270,9 @@ def test_read_organization_order_by(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-
+    items = data["items"]
     organization_name_date = [
-        {"name": item["name"], "created_date": item["created_date"]} for item in data
+        {"name": item["name"], "created_date": item["created_date"]} for item in items
     ]
 
     sort_by_date = sorted(organization_name_date, key=lambda x: x["created_date"])
@@ -454,7 +469,8 @@ def test_inactive_organization_not_listed(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert all(item["id"] != org_id for item in data)
+    items = data["items"]
+    assert all(item["id"] != org_id for item in items)
 
 
 def test_get_aggregated_data_for_organization(
