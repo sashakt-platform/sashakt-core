@@ -195,16 +195,23 @@ def visibility_organization(
 
 # Delete a Organization
 @router.delete(
-    "/{organization_id}",
+    "/",
     dependencies=[Depends(permission_dependency("delete_organization"))],
 )
-def delete_organization(organization_id: int, session: SessionDep) -> Message:
-    organization = session.get(Organization, organization_id)
-    if not organization or organization.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Organization not found")
-    organization.is_deleted = True
-    session.add(organization)
-    session.commit()
-    session.refresh(organization)
+def delete_organization(
+    session: SessionDep, organization_ids: list[int] = Query(...)
+) -> Message:
+    organizations = session.exec(
+        select(Organization).where(col(Organization.id).in_(organization_ids))
+    ).all()
+    if not organizations:
+        raise HTTPException(status_code=404, detail="No organizations found to delete")
+    deleted_count = 0
+    for organization in organizations:
+        if not organization.is_deleted:
+            organization.is_deleted = True
+            session.add(organization)
+            deleted_count += 1
 
-    return Message(message="Organization deleted successfully")
+    session.commit()
+    return Message(message=f"{deleted_count} organization(s) deleted successfully")

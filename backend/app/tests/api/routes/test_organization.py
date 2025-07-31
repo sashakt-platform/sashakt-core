@@ -403,24 +403,22 @@ def test_delete_organization(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     response = client.delete(
-        f"{settings.API_V1_STR}/organization/0",
+        f"{settings.API_V1_STR}/organization/?organization_ids=0",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 404
-    assert response.json() == {"detail": "Organization not found"}
+    assert response.json() == {"detail": "No organizations found to delete"}
     jal_vikas = Organization(name=random_lower_string())
     db.add(jal_vikas)
     db.commit()
     assert jal_vikas.is_deleted is False
     response = client.delete(
-        f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
+        f"{settings.API_V1_STR}/organization/?organization_ids={jal_vikas.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
-
-    assert "delete" in data["message"]
-
+    assert data == {"message": "1 organization(s) deleted successfully"}
     response = client.get(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
         headers=get_user_superadmin_token,
