@@ -61,6 +61,10 @@ class TagTypeUpdate(TagTypeBase):
     pass
 
 
+class DeleteTagTypes(SQLModel):
+    tagtype_ids: list[int]
+
+
 class TagBase(SQLModel):
     name: str = Field(nullable=False, index=True, description="Name of the Tag")
     description: str | None = Field(
