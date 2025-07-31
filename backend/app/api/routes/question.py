@@ -44,6 +44,7 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.utils import MarkingScheme
 
 
 class Pagination(Params):
@@ -83,11 +84,7 @@ def build_question_response(
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
@@ -160,7 +157,7 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, MarkingScheme | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
     options: list[Option] | None = None
@@ -176,15 +173,8 @@ def prepare_for_db(
             for opt in data.options
         ]
 
-    marking_scheme: dict[str, float] | None = None
-    if (
-        data.marking_scheme
-        and hasattr(data.marking_scheme, "dict")
-        and callable(data.marking_scheme.dict)
-    ):
-        marking_scheme = data.marking_scheme.dict()
-    else:
-        marking_scheme = data.marking_scheme
+    marking_scheme: MarkingScheme | None = None
+    marking_scheme = data.marking_scheme if data.marking_scheme else None
 
     # Handle media
     media: dict[str, Any] | None = None
@@ -353,7 +343,7 @@ class RevisionDetailDict(TypedDict):
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
-    marking_scheme: dict[str, float] | None  # Updated type to float
+    marking_scheme: MarkingScheme | None  # Updated type to float
     solution: str | None
     media: dict[str, Any] | None
     is_current: bool
@@ -809,11 +799,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()

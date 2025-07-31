@@ -172,7 +172,6 @@ def test_create_test(
         "marks": 3,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "marks_level": None,
         "link": random_lower_string(),
         "no_of_attempts": 1,
         "shuffle": False,
@@ -198,7 +197,7 @@ def test_create_test(
     assert data["marks"] == payload["marks"]
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
-    assert data["marks_level"] == payload["marks_level"]
+    assert data["marks_level"] == "question"
     assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
@@ -260,7 +259,6 @@ def test_create_test(
         "marks": 3,
         "completion_message": "Congratulations!!",
         "start_instructions": "Please keep your mobile phones away",
-        "marks_level": None,
         "link": "string",
         "no_of_attempts": 1,
         "shuffle": False,
@@ -286,7 +284,7 @@ def test_create_test(
     assert data["marks"] == payload["marks"]
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
-    assert data["marks_level"] == payload["marks_level"]
+    assert data["marks_level"] == "question"
     assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
@@ -325,7 +323,6 @@ def test_create_test(
         "marks": 3,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "marks_level": None,
         "link": "string",
         "no_of_attempts": 1,
         "shuffle": False,
@@ -350,7 +347,7 @@ def test_create_test(
     assert data["marks"] == payload["marks"]
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
-    assert data["marks_level"] == payload["marks_level"]
+    assert data["marks_level"] == "question"
     assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
@@ -1809,7 +1806,6 @@ def test_get_test_by_id(
         marks=5,
         completion_message=random_lower_string(),
         start_instructions=random_lower_string(),
-        marks_level=None,
         link=random_lower_string(),
         no_of_attempts=1,
         shuffle=False,
@@ -1881,7 +1877,7 @@ def test_get_test_by_id(
     assert data["marks"] == test.marks
     assert data["completion_message"] == test.completion_message
     assert data["start_instructions"] == test.start_instructions
-    assert data["marks_level"] is None
+    assert data["marks_level"] == "question"
     assert data["no_of_attempts"] == test.no_of_attempts
     assert data["shuffle"] == test.shuffle
     assert data["random_questions"] == test.random_questions
@@ -1929,7 +1925,6 @@ def test_get_test_by_id(
 
     test_2 = Test(
         name=random_lower_string(),
-        marks_level=None,
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=1,
@@ -3706,3 +3701,245 @@ def test_get_public_test(
     assert data["name"] == test.name
     assert data["description"] == test.description
     assert data["total_questions"] == 4
+
+
+def test_default_marks_level_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    question_one = Question(organization_id=org_id)
+    question_two = Question(organization_id=org_id)
+    db.add(question_one)
+    db.add(question_two)
+    db.commit()
+    question_revision1 = QuestionRevision(
+        question_id=question_one.id,
+        created_by_id=user_id,
+        question_text="what is pen",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+
+    question_revision2 = QuestionRevision(
+        question_id=question_two.id,
+        created_by_id=user_id,
+        question_text="what is paper",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        marking_scheme={"correct": 2.0, "wrong": 0.0, "skipped": 0.0},
+    )
+
+    db.add(question_revision1)
+    db.add(question_revision2)
+    db.commit()
+    db.flush()
+
+    question_one.last_revision_id = question_revision1.id
+    question_two.last_revision_id = question_revision2.id
+    db.commit()
+    db.refresh(question_one)
+    db.refresh(question_two)
+    db.refresh(question_revision1)
+    db.refresh(question_revision2)
+
+    payload = {
+        "name": "test for default marking scheme",
+        "description": random_lower_string(),
+        "time_limit": 2,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [question_revision1.id, question_revision2.id],
+        "state_ids": [punjab.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["marks_level"] == "question"
+    assert len(data["question_revisions"]) == 2
+    assert data["question_revisions"][0]["marking_scheme"] == {
+        "correct": 1.0,
+        "wrong": 0.0,
+        "skipped": 0.0,
+    }
+    assert data["question_revisions"][1]["marking_scheme"] == {
+        "correct": 2.0,
+        "wrong": 0.0,
+        "skipped": 0.0,
+    }
+
+
+def test_create_test_marks_level_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+
+    org_id = user_data["organization_id"]
+    question1_data = {
+        "organization_id": org_id,
+        "question_text": "What is dict in Python",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Object-oriented language"},
+            {"id": 2, "key": "B", "value": "Database"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [],
+        "marking_scheme": {"correct": 5.0, "wrong": 0.0, "skipped": 0.0},
+    }
+    response1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question1_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+
+    question1_data_id = data1["latest_question_revision_id"]
+    assert data1["question_text"] == "What is dict in Python"
+    assert data1["tags"] == []
+
+    question2_data = {
+        "organization_id": org_id,
+        "question_text": "What are the concept of Python",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Object-oriented language"},
+            {"id": 2, "key": "B", "value": "Database"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+    }
+    response2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question2_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response2.status_code == 200
+
+    data2 = response2.json()
+    assert data2["question_text"] == "What are the concept of Python"
+    question2_data_id = data2["latest_question_revision_id"]
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 20,
+        "marks": 4,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [question1_data_id, question2_data_id],
+        "state_ids": [punjab.id],
+        "marks_level": "test",
+        "marking_scheme": {"correct": 7, "wrong": 0, "skipped": 0},
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["name"] == payload["name"]
+    assert data["description"] == payload["description"]
+    assert data["marks_level"] == "test"
+    assert data["link"] == payload["link"]
+    revision1 = db.get(QuestionRevision, question1_data_id)
+    revision2 = db.get(QuestionRevision, question2_data_id)
+    expected_scheme1 = {"correct": 5.0, "wrong": 0, "skipped": 0}
+    expected_scheme2 = {"correct": 1, "wrong": 0, "skipped": 0}
+    assert revision1 is not None
+    assert revision2 is not None
+    assert revision1.marking_scheme == expected_scheme1
+    assert revision2.marking_scheme == expected_scheme2
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 20,
+        "marks": 4,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 4,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id, tag_marathi.id],
+        "question_revision_ids": [question1_data_id, question2_data_id],
+        "state_ids": [punjab.id],
+        "marks_level": "test",
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert revision1.marking_scheme == expected_scheme1
+    assert revision2.marking_scheme == expected_scheme2
