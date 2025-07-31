@@ -118,7 +118,7 @@ class Settings(BaseSettings):
         return self
 
 
-PAGINATION_SIZE: int = 10
+PAGINATION_SIZE: int = 25
 
 
 settings = Settings()  # type: ignore

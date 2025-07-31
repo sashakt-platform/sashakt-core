@@ -1,22 +1,26 @@
+import base64
 import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Any
+from typing import Any, cast
 
 from fastapi import (
     APIRouter,
     Body,
+    Depends,
     File,
     HTTPException,
     Query,
     UploadFile,
 )
+from fastapi_pagination import Page, Params, paginate
 from sqlalchemy import desc, func
 from sqlmodel import not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import PAGINATION_SIZE
 from app.models import (
     CandidateTest,
     Message,
@@ -40,6 +44,12 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.utils import MarkingScheme
+
+
+class Pagination(Params):
+    size: int = PAGINATION_SIZE
+
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -74,11 +84,7 @@ def build_question_response(
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
@@ -151,7 +157,7 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, MarkingScheme | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
     options: list[Option] | None = None
@@ -167,15 +173,8 @@ def prepare_for_db(
             for opt in data.options
         ]
 
-    marking_scheme: dict[str, float] | None = None
-    if (
-        data.marking_scheme
-        and hasattr(data.marking_scheme, "dict")
-        and callable(data.marking_scheme.dict)
-    ):
-        marking_scheme = data.marking_scheme.dict()
-    else:
-        marking_scheme = data.marking_scheme
+    marking_scheme: MarkingScheme | None = None
+    marking_scheme = data.marking_scheme if data.marking_scheme else None
 
     # Handle media
     media: dict[str, Any] | None = None
@@ -344,7 +343,7 @@ class RevisionDetailDict(TypedDict):
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
-    marking_scheme: dict[str, float] | None  # Updated type to float
+    marking_scheme: MarkingScheme | None  # Updated type to float
     solution: str | None
     media: dict[str, Any] | None
     is_current: bool
@@ -373,12 +372,11 @@ class CandidateTestInfoDict(TypedDict):
     is_submitted: bool
 
 
-@router.get("/", response_model=list[QuestionPublic])
+@router.get("/", response_model=Page[QuestionPublic])
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    params: Pagination = Depends(),
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
@@ -387,7 +385,7 @@ def get_questions(
     created_by_id: int | None = None,
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
-) -> list[QuestionPublic]:
+) -> Page[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
 
@@ -419,7 +417,7 @@ def get_questions(
             query = query.where(Question.id.in_(question_ids_with_tags))  # type: ignore
         else:
             # If no questions have these tags, return empty list
-            return []
+            return cast(Page[QuestionPublic], paginate([], params))
 
     # Handle creator-based filtering
     if created_by_id is not None:
@@ -436,7 +434,7 @@ def get_questions(
         if questions_by_creator:
             query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
         else:
-            return []
+            return cast(Page[QuestionPublic], paginate([], params))
 
     # Handle location-based filtering with multiple locations
     if any([state_ids, district_ids, block_ids]):
@@ -457,10 +455,10 @@ def get_questions(
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))  # type: ignore
             else:
-                return []
+                return cast(Page[QuestionPublic], paginate([], params))
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    # query = query.offset(skip).limit(limit)
 
     # Execute query and get all questions
     questions = session.exec(query).all()
@@ -491,7 +489,7 @@ def get_questions(
         )
         result.append(question_data)
 
-    return result
+    return cast(Page[QuestionPublic], paginate(result, params))
 
 
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])
@@ -788,11 +786,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
@@ -1039,16 +1033,17 @@ async def upload_questions_csv(
         # Start processing rows
         questions_created = 0
         questions_failed = 0
+        failed_question_details = []
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
         failed_states = set()
         failed_tagtypes = set()
 
-        for row in csv_reader:
+        for row_number, row in enumerate(csv_reader, start=1):
             try:
                 # Skip empty rows
                 if not row.get("Questions", "").strip():
-                    continue
+                    raise ValueError("Question text is missing.")
 
                 # Extract data
                 question_text = row.get("Questions", "").strip()
@@ -1058,11 +1053,16 @@ async def upload_questions_csv(
                     row.get("Option C", "").strip(),
                     row.get("Option D", "").strip(),
                 ]
-
+                if not all(options):
+                    raise ValueError("One or more options (A-D) are missing.")
                 # Convert option letter to index
-                correct_letter = row.get("Correct Option", "A").strip()
+                correct_letter = (row.get("Correct Option") or "").strip().upper()
+                if not correct_letter:
+                    raise ValueError("Correct option is missing.")
                 letter_map = {"A": 1, "B": 2, "C": 3, "D": 4}
-                correct_answer = letter_map.get(correct_letter, 1)
+                if correct_letter not in letter_map:
+                    raise ValueError(f"Invalid correct option: {correct_letter}")
+                correct_answer = letter_map[correct_letter]
 
                 valid_options = [
                     {"id": letter_map[key], "key": key, "value": value}
@@ -1137,6 +1137,13 @@ async def upload_questions_csv(
 
                 if tagtype_error:
                     questions_failed += 1
+                    failed_question_details.append(
+                        {
+                            "row_number": row_number,
+                            "question_text": question_text,
+                            "error": f"Invalid tag types: {', '.join(failed_tagtypes)}",
+                        }
+                    )
                     continue
 
                 # Process state information if present
@@ -1168,11 +1175,18 @@ async def upload_questions_csv(
                             state_cache[state_name] = state.id
 
                 # Skip this question if states weren't found
-                if state_error or is_duplicate_question(
-                    session, question_text, tag_ids
-                ):
+                if state_error:
                     questions_failed += 1
+                    failed_question_details.append(
+                        {
+                            "row_number": row_number,
+                            "question_text": question_text,
+                            "error": f"Invalid states: {', '.join(failed_states)}",
+                        }
+                    )
                     continue
+                if is_duplicate_question(session, question_text, tag_ids):
+                    raise ValueError("Questions Already Exist")
 
                 # Create QuestionCreate object
                 question_create = QuestionCreate(
@@ -1246,7 +1260,13 @@ async def upload_questions_csv(
             except Exception as e:
                 questions_failed += 1
                 # Optionally log the error
-                print(f"Error processing row: {str(e)}")
+                failed_question_details.append(
+                    {
+                        "row_number": row_number,
+                        "question_text": row.get("Questions", "").strip(),
+                        "error": str(e),
+                    }
+                )
                 continue
 
         # Commit all changes at once
@@ -1260,12 +1280,28 @@ async def upload_questions_csv(
             message += (
                 f" The following tag types were not found: {', '.join(failed_tagtypes)}"
             )
+        if questions_failed > 0:
+            csv_buffer = StringIO()
+            csv_writer = csv.DictWriter(
+                csv_buffer, fieldnames=["row_number", "question_text", "error"]
+            )
+            csv_writer.writeheader()
+            for row in failed_question_details:
+                csv_writer.writerow(row)
+            csv_buffer.seek(0)
+            csv_bytes = csv_buffer.getvalue().encode("utf-8")
+            base64_csv = base64.b64encode(csv_bytes).decode("utf-8")
+            data_link = f"data:text/csv;base64,{base64_csv}"
+            failed_message = f"Download failed questions: {data_link}"
+        else:
+            failed_message = "No failed questions. No CSV generated."
 
         return BulkUploadQuestionsResponse(
             message=message,
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
+            failed_question_details=failed_message,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised
