@@ -111,16 +111,22 @@ def visibility_tagtype(
     return tagtype
 
 
-@router_tagtype.delete("/{tagtype_id}")
-def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
-    tagtype = session.get(TagType, tagtype_id)
-    if not tagtype or tagtype.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Tag Type not found")
-    tagtype.is_deleted = True
-    session.add(tagtype)
-    session.commit()
-    session.refresh(tagtype)
-    return Message(message="Tag Type deleted successfully")
+@router_tagtype.delete("/")
+def delete_tagtype(session: SessionDep, tagtype_ids: list[int] = Query(...)) -> Message:
+    not_found_ids = []
+    for tagtype_id in tagtype_ids:
+        tagtype = session.get(TagType, tagtype_id)
+        if not tagtype or tagtype.is_deleted:
+            not_found_ids.append(tagtype_id)
+            continue
+        tagtype.is_deleted = True
+        session.add(tagtype)
+        session.commit()
+    if not_found_ids:
+        return Message(
+            message=f"Some TagTypes not found or already deleted: {not_found_ids}"
+        )
+    return Message(message="Tag Types deleted successfully")
 
 
 # Routers for Tags
@@ -289,13 +295,20 @@ def visibility_tag(
 
 
 # Delete a Tag
-@router_tag.delete("/{tag_id}")
-def delete_tag(tag_id: int, session: SessionDep) -> Message:
-    tag = session.get(Tag, tag_id)
-    if not tag or tag.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Tag not found")
-    tag.is_deleted = True
-    session.add(tag)
+@router_tag.delete("/")
+def delete_tag(session: SessionDep, tag_ids: list[int] = Query(...)) -> Message:
+    not_found_ids = []
+    for tag_id in tag_ids:
+        tag = session.get(Tag, tag_id)
+        if not tag or tag.is_deleted:
+            not_found_ids.append(tag_id)
+            continue
+        tag.is_deleted = True
+        session.add(tag)
     session.commit()
-    session.refresh(tag)
-    return Message(message="Tag deleted successfully")
+    if not_found_ids:
+        return Message(
+            message=f"Some Tags not found or already deleted: {not_found_ids}"
+        )
+
+    return Message(message="Tags deleted successfully")
