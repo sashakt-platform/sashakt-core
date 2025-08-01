@@ -279,6 +279,156 @@ def test_read_questions(
     assert len(items) == 2
 
 
+def test_read_questions_filter_by_tag_type_ids(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag_type1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type1)
+    db.flush()
+    tag_type2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type2)
+    db.flush()
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type1.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type2.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+    q1 = Question(organization_id=org_id)
+    db.add(q1)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    q1_tag = QuestionTag(
+        question_id=q1.id,
+        tag_id=tag1.id,
+    )
+    db.add(q1_tag)
+
+    q2 = Question(organization_id=org_id)
+    db.add(q2)
+    db.flush()
+
+    rev2 = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(rev2)
+    db.flush()
+
+    q2.last_revision_id = rev2.id
+    q2_tag = QuestionTag(question_id=q2.id, tag_id=tag2.id)
+    db.add(q2_tag)
+
+    db.commit()
+    db.refresh(q1)
+    db.refresh(q2)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    items = data["items"]
+    assert response.status_code == 200
+    assert len(data["items"]) == 1
+    assert items[0]["id"] == q1.id
+    assert any(tag["tag_type"]["id"] == tag_type1.id for tag in items[0]["tags"])
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == q2.id
+    assert any(tag["tag_type"]["id"] == tag_type2.id for tag in items[0]["tags"])
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) >= 2
+    returned_ids = [item["id"] for item in items]
+    assert q1.id in returned_ids
+    assert q2.id in returned_ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 2
+    returned_tag_type_ids = {
+        tag["tag_type"]["id"] for item in items for tag in item["tags"]
+    }
+    assert tag_type1.id in returned_tag_type_ids
+    assert tag_type2.id in returned_tag_type_ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids=-10",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["items"] == []
+
+
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     # Create organization
     org = Organization(name=random_lower_string())

@@ -2674,8 +2674,8 @@ def test_get_tests_by_tags_filter(
     user = create_random_user(db, organization_id=org_id)
     db.refresh(user)
     tag_type = TagType(
-        name="Skill Category",
-        description="Example tag type",
+        name=random_lower_string(),
+        description=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
     )
@@ -2683,13 +2683,13 @@ def test_get_tests_by_tags_filter(
     db.commit()
     db.refresh(tag_type)
     tag_1 = Tag(
-        name="aptitude",
+        name=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
         tag_type_id=tag_type.id,
     )
     tag_2 = Tag(
-        name="logic",
+        name=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
         tag_type_id=tag_type.id,
@@ -2703,31 +2703,31 @@ def test_get_tests_by_tags_filter(
     db.add_all([tag_1, tag_2, tag_3])
     db.commit()
     test_1 = Test(
-        name="test with aptitude tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
-        name="test with logic tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
-        name="test with english tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_4 = Test(
-        name="another aptitude test",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_5 = Test(
-        name="test with logic and english",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
@@ -2788,6 +2788,151 @@ def test_get_tests_by_tags_filter(
     assert len(data) == 3
 
 
+def test_get_tests_by_tags_type_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    tag_type1 = TagType(
+        name="Skill Category",
+        description="Example tag type",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type1)
+    db.commit()
+    db.refresh(tag_type1)
+    tag_type2 = TagType(
+        name="proficiency",
+        description="Example tag type for proficiency",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type2)
+    db.commit()
+    db.refresh(tag_type2)
+    tag_type3 = TagType(
+        name="skills",
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(tag_type3)
+    db.commit()
+    db.refresh(tag_type3)
+    tag_1 = Tag(
+        name="aptitude",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type1.id,
+    )
+    tag_2 = Tag(
+        name="logic",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type1.id,
+    )
+    tag_3 = Tag(
+        name="english",
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        tag_type_id=tag_type2.id,
+    )
+    db.add_all([tag_1, tag_2, tag_3])
+    db.commit()
+    test_1 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_3 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_4 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_5 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    test_6 = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+    )
+    db.add_all([test_1, test_2, test_3, test_4, test_5, test_6])
+    db.commit()
+    db.refresh(test_1)
+    db.refresh(test_2)
+    db.refresh(test_3)
+    test_tag_link_1 = TestTag(test_id=test_1.id, tag_id=tag_1.id)
+    test_tag_link_2 = TestTag(test_id=test_2.id, tag_id=tag_2.id)
+    test_tag_link_3 = TestTag(test_id=test_3.id, tag_id=tag_3.id)
+    test_tag_link_4 = TestTag(test_id=test_4.id, tag_id=tag_1.id)
+    test_tag_link_5 = TestTag(test_id=test_5.id, tag_id=tag_2.id)
+    test_tag_link_6 = TestTag(test_id=test_5.id, tag_id=tag_3.id)
+
+    db.add_all(
+        [
+            test_tag_link_1,
+            test_tag_link_2,
+            test_tag_link_3,
+            test_tag_link_4,
+            test_tag_link_5,
+            test_tag_link_6,
+        ]
+    )
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 4
+    assert {test["id"] for test in data} == {test_1.id, test_2.id, test_4.id, test_5.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert {test["id"] for test in data} == {test_3.id, test_5.id}
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_type_ids={tag_type1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 5
+    assert test_6.id not in (test["id"] for test in data)
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_get_tests_by_state_filter(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2799,26 +2944,26 @@ def test_get_tests_by_state_filter(
     db.add(country)
     db.commit()
     db.refresh(country)
-    state_1 = State(name="Maharashtra", is_active=True, country_id=country.id)
-    state_2 = State(name="Karnataka", is_active=True, country_id=country.id)
+    state_1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add_all([state_1, state_2])
     db.commit()
     db.refresh(state_1)
     db.refresh(state_2)
     test_1 = Test(
-        name="test for Maharashtra",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
-        name="test for Karnataka",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
-        name="test for both states",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
@@ -2871,13 +3016,13 @@ def test_get_tests_by_combined_name_tag_state_filter(
     db.add(country)
     db.commit()
     db.refresh(country)
-    state = State(name="Maharashtra", is_active=True, country_id=country.id)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add(state)
     db.commit()
     db.refresh(state)
     tag_type = TagType(
-        name="Skill Type",
-        description="type",
+        name=random_lower_string(),
+        description=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
     )
