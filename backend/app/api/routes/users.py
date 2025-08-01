@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
 from app import crud
 from app.api.deps import (
@@ -22,6 +22,9 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
+from app.models.location import State
+from app.models.role import Role
+from app.models.user import UserState
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -70,7 +73,7 @@ def create_user(
     session: SessionDep,
     user_in: UserCreate,
     current_user: CurrentUser,
-) -> Any:
+) -> UserPublic:
     """
     Create new user.
     """
@@ -84,6 +87,16 @@ def create_user(
     user = crud.create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
+
+    if user_in.state_ids:
+        existing_states = session.exec(
+            select(State).where(col(State.id).in_(user_in.state_ids))
+        ).all()
+        user_states = [
+            UserState(user_id=user.id, state_id=state.id) for state in existing_states
+        ]
+        session.add_all(user_states)
+
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
             email_to=user_in.email, username=user_in.email, password=user_in.password
@@ -93,7 +106,10 @@ def create_user(
             subject=email_data.subject,
             html_content=email_data.html_content,
         )
-    return user
+    session.commit()
+    state_query = select(State).join(UserState).where(UserState.user_id == user.id)
+    states = session.exec(state_query).all()
+    return UserPublic(**user.model_dump(), states=states)
 
 
 @router.patch(
@@ -214,7 +230,7 @@ def read_user_by_id(
         or user.organization_id != current_user.organization_id
     ):
         raise HTTPException(status_code=404, detail="User not found")
-
+    _ = user.states
     return user
 
 
@@ -246,8 +262,30 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
-    return db_user
+    if user_in.role_id:
+        new_role = session.get(Role, user_in.role_id)
+        if not new_role:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid role ID provided.",
+            )
+
+    if user_in.state_ids is not None:
+        if user_in.state_ids == []:
+            db_user.states = []
+
+        else:
+            existing_states = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+            db_user.states = existing_states
+    updated_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
+    state_query = select(State).join(UserState).where(UserState.user_id == db_user.id)
+    states = session.exec(state_query).all()
+
+    return UserPublic(**updated_user.model_dump(), states=states)
 
 
 @router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
