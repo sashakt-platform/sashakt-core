@@ -17,7 +17,7 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, QuestionRevision, State, User
+    from app.models import Candidate, District, QuestionRevision, State, User
     from app.models.tag import Tag
 
 
@@ -54,6 +54,16 @@ class TestState(SQLModel, table=True):
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
     state_id: int = Field(foreign_key="state.id", ondelete="CASCADE")
+
+
+class TestDistrict(SQLModel, table=True):
+    __tablename__ = "test_district"
+    __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
+    __table_args__ = (UniqueConstraint("test_id", "district_id"),)
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    district_id: int = Field(foreign_key="district.id", ondelete="CASCADE")
 
 
 class TestBase(SQLModel):
@@ -180,6 +190,9 @@ class Test(TestBase, table=True):
     states: list["State"] | None = Relationship(
         back_populates="tests", link_model=TestState
     )
+    districts: list["District"] | None = Relationship(
+        back_populates="tests", link_model=TestDistrict
+    )
     created_by: Optional["User"] = Relationship(back_populates="tests")
     candidates: list["Candidate"] | None = Relationship(
         back_populates="tests", link_model=CandidateTest
@@ -195,6 +208,7 @@ class TestCreate(TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
+    district_ids: list[int] = []
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -211,6 +225,7 @@ class TestPublic(TestBase):
     tags: list["Tag"]
     question_revisions: list["QuestionRevision"]
     states: list["State"]
+    districts: list["District"]
     total_questions: int | None = None
     created_by_id: int = Field(
         foreign_key="user.id",
@@ -223,6 +238,7 @@ class TestUpdate(TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
+    district_ids: list[int] = []
 
 
 class TestPublicLimited(TestBase):
