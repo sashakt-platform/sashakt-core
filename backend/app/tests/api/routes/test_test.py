@@ -3976,3 +3976,100 @@ def test_mapping_test_with_district(
     assert district_2.id in fetched_districts_ids
     assert district_3.id in fetched_districts_ids
     assert district_1.id not in fetched_districts_ids
+
+
+def test_get_tests_by_district_filter(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_1 = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add(district_1)
+    db.commit()
+    db.refresh(district_1)
+
+    district_2 = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add(district_2)
+    db.commit()
+    db.refresh(district_2)
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "link": random_lower_string(),
+            "district_ids": [district_1.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_1.status_code == 200
+    test_data_1 = response_1.json()
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "link": random_lower_string(),
+            "district_ids": [district_1.id, district_2.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_2.status_code == 200
+    test_data_2 = response_2.json()
+
+    response_3 = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "link": random_lower_string(),
+            "district_ids": [district_2.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_3.status_code == 200
+    test_data_3 = response_3.json()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?district_ids={district_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert any(test_data_1["id"] == item["id"] for item in data)
+    assert any(test_data_2["id"] == item["id"] for item in data)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?district_ids={district_2.id}&&district_ids={district_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    assert any(test_data_1["id"] == item["id"] for item in data)
+    assert any(test_data_2["id"] == item["id"] for item in data)
+    assert any(test_data_3["id"] == item["id"] for item in data)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?district_ids=-1",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 0

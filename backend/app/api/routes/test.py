@@ -229,6 +229,7 @@ def get_test(
     created_by: list[int] | None = Query(None),
     tag_ids: list[int] | None = Query(None),
     state_ids: list[int] | None = Query(None),
+    district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
@@ -340,6 +341,16 @@ def get_test(
         test_ids_with_states = session.exec(state_subquery).all()
         if test_ids_with_states:
             query = query.where(col(Test.id).in_(test_ids_with_states))
+        else:
+            return []
+
+    if district_ids:
+        district_subquery = select(TestDistrict.test_id).where(
+            col(TestDistrict.district_id).in_(district_ids)
+        )
+        test_ids_with_districts = session.exec(district_subquery).all()
+        if test_ids_with_districts:
+            query = query.where(col(Test.id).in_(test_ids_with_districts))
         else:
             return []
 
