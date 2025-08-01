@@ -289,32 +289,32 @@ def test_read_questions_filter_by_tag_type_ids(
     org_id = user_data["organization_id"]
 
     tag_type1 = TagType(
-        name="Science Category",
-        description="Categories for questions",
+        name=random_lower_string(),
+        description=random_lower_string(),
         created_by_id=user_id,
         organization_id=org_id,
     )
     db.add(tag_type1)
     db.flush()
     tag_type2 = TagType(
-        name="General Category",
-        description="Categories for questions",
+        name=random_lower_string(),
+        description=random_lower_string(),
         created_by_id=user_id,
         organization_id=org_id,
     )
     db.add(tag_type2)
     db.flush()
     tag1 = Tag(
-        name="Physics",
-        description="Physics questions",
+        name=random_lower_string(),
+        description=random_lower_string(),
         tag_type_id=tag_type1.id,
         created_by_id=user_id,
         organization_id=org_id,
     )
 
     tag2 = Tag(
-        name="Science",
-        description="science questions",
+        name=random_lower_string(),
+        description=random_lower_string(),
         tag_type_id=tag_type2.id,
         created_by_id=user_id,
         organization_id=org_id,
@@ -413,7 +413,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) >= 2
+    assert len(items) == 2
     returned_tag_type_ids = {
         tag["tag_type"]["id"] for item in items for tag in item["tags"]
     }

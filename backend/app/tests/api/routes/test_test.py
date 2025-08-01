@@ -2674,8 +2674,8 @@ def test_get_tests_by_tags_filter(
     user = create_random_user(db, organization_id=org_id)
     db.refresh(user)
     tag_type = TagType(
-        name="Skill Category",
-        description="Example tag type",
+        name=random_lower_string(),
+        description=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
     )
@@ -2683,13 +2683,13 @@ def test_get_tests_by_tags_filter(
     db.commit()
     db.refresh(tag_type)
     tag_1 = Tag(
-        name="aptitude",
+        name=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
         tag_type_id=tag_type.id,
     )
     tag_2 = Tag(
-        name="logic",
+        name=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
         tag_type_id=tag_type.id,
@@ -2703,31 +2703,31 @@ def test_get_tests_by_tags_filter(
     db.add_all([tag_1, tag_2, tag_3])
     db.commit()
     test_1 = Test(
-        name="test with aptitude tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
-        name="test with logic tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
-        name="test with english tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_4 = Test(
-        name="another aptitude test",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_5 = Test(
-        name="test with logic and english",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
@@ -2843,31 +2843,31 @@ def test_get_tests_by_tags_type_filter(
     db.add_all([tag_1, tag_2, tag_3])
     db.commit()
     test_1 = Test(
-        name="test with aptitude tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
-        name="test with logic tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
-        name="test with english tag",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_4 = Test(
-        name="another aptitude test",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_5 = Test(
-        name="test with logic and english",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
@@ -2944,26 +2944,26 @@ def test_get_tests_by_state_filter(
     db.add(country)
     db.commit()
     db.refresh(country)
-    state_1 = State(name="Maharashtra", is_active=True, country_id=country.id)
-    state_2 = State(name="Karnataka", is_active=True, country_id=country.id)
+    state_1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add_all([state_1, state_2])
     db.commit()
     db.refresh(state_1)
     db.refresh(state_2)
     test_1 = Test(
-        name="test for Maharashtra",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_2 = Test(
-        name="test for Karnataka",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
     )
     test_3 = Test(
-        name="test for both states",
+        name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
@@ -3016,13 +3016,13 @@ def test_get_tests_by_combined_name_tag_state_filter(
     db.add(country)
     db.commit()
     db.refresh(country)
-    state = State(name="Maharashtra", is_active=True, country_id=country.id)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add(state)
     db.commit()
     db.refresh(state)
     tag_type = TagType(
-        name="Skill Type",
-        description="type",
+        name=random_lower_string(),
+        description=random_lower_string(),
         organization_id=user.organization_id,
         created_by_id=user.id,
     )
