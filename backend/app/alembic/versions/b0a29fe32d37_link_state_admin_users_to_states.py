@@ -1,8 +1,8 @@
-"""Link state_admin users to states
+"""link state_admin_users to states
 
-Revision ID: 6243d8eb2d19
-Revises: 5df93aaac93f
-Create Date: 2025-07-23 12:49:45.734078
+Revision ID: b0a29fe32d37
+Revises: 5b60a85a7810
+Create Date: 2025-08-02 19:02:57.980228
 
 """
 from alembic import op
@@ -11,8 +11,8 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '6243d8eb2d19'
-down_revision = '5df93aaac93f'
+revision = 'b0a29fe32d37'
+down_revision = '5b60a85a7810'
 branch_labels = None
 depends_on = None
 

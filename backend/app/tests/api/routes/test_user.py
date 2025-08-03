@@ -783,8 +783,7 @@ def test_create_state_admin_without_state_id(
         assert response.status_code == 200
         data = response.json()
         assert "states" in data
-        assert isinstance(data["states"], list)
-        assert len(data["states"]) == 0
+        assert data["states"] is None
 
 
 def test_create_state_admin_with_state_id(
@@ -968,14 +967,11 @@ def test_update_user_states(
     )
     assert update_response.status_code == 200
     data = update_response.json()
-    assert isinstance(data["states"], list)
-    assert len(data["states"]) == 2
+    assert data["states"] is None
     assert data["email"] == email
     assert data["role_id"] == role.id
     assert data["full_name"] == "full name"
-    state_names = {s["name"] for s in data["states"]}
-    assert state1.name in state_names
-    assert state3.name in state_names
+
     email = random_email()
     password = random_lower_string()
     phone = random_lower_string()
@@ -1029,7 +1025,6 @@ def test_update_other_role_to_state_admin_and_remove_states(
         "role_id": other_role.id,
         "full_name": "State Admin User",
         "organization_id": org.id,
-        "state_ids": [state1.id, state2.id],
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
@@ -1040,13 +1035,14 @@ def test_update_other_role_to_state_admin_and_remove_states(
     user_data = response.json()
     user_id = user_data["id"]
     assert user_data["role_id"] == other_role.id
-    assert len(user_data["states"]) == 2
+    assert user_data["states"] is None
 
     patch_data = {
         "role_id": state_admin_role.id,
         "organization_id": org.id,
         "full_name": "State Admin User",
         "phone": random_lower_string(),
+        "state_ids": [state1.id, state2.id],
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
@@ -1120,7 +1116,4 @@ def test_update_state_admin_to_other_role_and_remove_states(
     assert patch_response.status_code == 200
     updated_data = patch_response.json()
     assert updated_data["role_id"] == other_role.id
-    assert len(updated_data["states"]) == 0
-    state_ids = {s["id"] for s in updated_data["states"]}
-    assert state1.id not in state_ids
-    assert state2.id not in state_ids
+    assert updated_data["states"] is None

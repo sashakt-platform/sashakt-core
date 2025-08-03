@@ -87,8 +87,10 @@ def create_user(
     user = crud.create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
+    states = None
+    role = session.exec(select(Role).where(Role.id == user.role_id)).first()
 
-    if user_in.state_ids:
+    if role and role.name == "state_admin" and user_in.state_ids:
         existing_states = session.exec(
             select(State).where(col(State.id).in_(user_in.state_ids))
         ).all()
@@ -96,6 +98,8 @@ def create_user(
             UserState(user_id=user.id, state_id=state.id) for state in existing_states
         ]
         session.add_all(user_states)
+        state_query = select(State).join(UserState).where(UserState.user_id == user.id)
+        states = session.exec(state_query).all()
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -107,9 +111,8 @@ def create_user(
             html_content=email_data.html_content,
         )
     session.commit()
-    state_query = select(State).join(UserState).where(UserState.user_id == user.id)
-    states = session.exec(state_query).all()
-    return UserPublic(**user.model_dump(), states=states)
+    user_data = UserPublic.model_validate(user)
+    return user_data.model_copy(update={"states": states})
 
 
 @router.patch(
@@ -262,28 +265,27 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    if user_in.role_id:
-        new_role = session.get(Role, user_in.role_id)
-        if not new_role:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid role ID provided.",
-            )
+    final_role_id = user_in.role_id or db_user.role_id
+    final_role = session.get(Role, final_role_id)
 
-    if user_in.state_ids is not None:
+    if not final_role:
+        raise HTTPException(status_code=400, detail="Invalid role ID provided.")
+
+    is_state_admin = final_role.name == "state_admin"
+
+    if is_state_admin and user_in.state_ids is not None:
         if user_in.state_ids == []:
             db_user.states = []
 
         else:
-            existing_states = list(
+            db_user.states = list(
                 session.exec(
                     select(State).where(col(State.id).in_(user_in.state_ids))
                 ).all()
             )
-            db_user.states = existing_states
+
     updated_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
-    state_query = select(State).join(UserState).where(UserState.user_id == db_user.id)
-    states = session.exec(state_query).all()
+    states = db_user.states if is_state_admin else None
 
     return UserPublic(**updated_user.model_dump(), states=states)
 
