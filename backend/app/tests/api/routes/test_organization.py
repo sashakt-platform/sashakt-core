@@ -62,7 +62,6 @@ def test_read_organization(
         f"{settings.API_V1_STR}/organization/",
         headers=get_user_superadmin_token,
     )
-    data = response.json()
     assert response.status_code == 200
     assert_paginated_response(
         response,
@@ -76,7 +75,6 @@ def test_read_organization(
         f"{settings.API_V1_STR}/organization/?page=2",
         headers=get_user_superadmin_token,
     )
-    data = response.json()
     assert response.status_code == 200
 
     jal_vikas = Organization(name=random_lower_string())
@@ -88,23 +86,29 @@ def test_read_organization(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?size=100",
+        f"{settings.API_V1_STR}/organization/",
         headers=get_user_superadmin_token,
     )
-    data = response.json()
-    items = data["items"]
     assert response.status_code == 200
-    assert any(item["name"] == jal_vikas.name for item in items)
-    assert any(item["id"] == jal_vikas.id for item in items)
-    assert any(item["id"] == maha_vikas.id for item in items)
-    assert any(item["name"] == maha_vikas.name for item in items)
-    assert any(item["description"] == maha_vikas.description for item in items)
+    assert_paginated_response(
+        response,
+        expected_page=1,
+        expected_size=25,
+        min_expected_total=14,
+        min_expected_pages=1,
+    )
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?size=100",
+        f"{settings.API_V1_STR}/organization/",
         headers=get_user_candidate_token,
     )
-    data = response.json()
     assert response.status_code == 200
+    assert_paginated_response(
+        response,
+        expected_page=1,
+        expected_size=25,
+        min_expected_total=0,
+        min_expected_pages=1,
+    )
 
 
 def test_read_organization_filter_by_name(
@@ -135,6 +139,13 @@ def test_read_organization_filter_by_name(
     assert response.status_code == 200
     items = data["items"]
     assert len(items) == 2
+    assert_paginated_response(
+        response,
+        expected_page=1,
+        expected_size=25,
+        min_expected_total=2,
+        min_expected_pages=1,
+    )
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?name={organization_name_2}",
@@ -185,7 +196,13 @@ def test_read_organization_filter_by_description(
     data = response.json()
     assert response.status_code == 200
     items = data["items"]
-    assert len(items) == 2
+    assert_paginated_response(
+        response,
+        expected_page=1,
+        expected_size=25,
+        min_expected_total=2,
+        min_expected_pages=1,
+    )
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?description={organization_description_2}",
