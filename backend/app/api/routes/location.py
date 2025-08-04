@@ -155,7 +155,9 @@ def get_state(
         query = query.where(State.country_id == country)
 
     if name:
-        query = query.where(func.lower(State.name).like(f"%{name.strip().lower()}%"))
+        query = query.where(
+            func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
+        )
 
     query = query.offset(skip).limit(limit)
 

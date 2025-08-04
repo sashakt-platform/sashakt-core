@@ -59,7 +59,9 @@ def get_tagtype(
         not_(TagType.is_deleted),
     )
     if name:
-        query = query.where(func.lower(TagType.name).like(f"%{name.strip().lower()}%"))
+        query = query.where(
+            func.trim(func.lower(TagType.name)).like(f"%{name.strip().lower()}%")
+        )
 
     tagtype = session.exec(query).all()
     return tagtype

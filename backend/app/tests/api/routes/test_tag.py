@@ -123,6 +123,7 @@ def test_get_tagtype(
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
+    assert any(item["name"].lower() == "sample" for item in data)
     response = client.get(
         f"{settings.API_V1_STR}/tagtype/?name= SaMPlE",
         headers=get_user_superadmin_token,
@@ -130,6 +131,7 @@ def test_get_tagtype(
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
+    assert any(item["name"].lower() == "sample" for item in data)
 
 
 def test_get_tagtype_by_id(
