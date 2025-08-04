@@ -803,15 +803,19 @@ def test_create_state_admin_with_state_id(
         phone = random_lower_string()
         role = db.exec(select(Role).where(Role.name == "state_admin")).first()
         assert role is not None
-        country = Country(name="India", is_active=True)
+        country = Country(name=random_lower_string(), is_active=True)
         db.add(country)
         db.commit()
         db.refresh(country)
 
-        state1 = State(name="TestState", is_active=True, country_id=country.id)
+        state1 = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
         db.add(state1)
         db.commit()
-        state2 = State(name="TestState2", is_active=True, country_id=country.id)
+        state2 = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
         db.add(state2)
         db.commit()
 
@@ -916,13 +920,13 @@ def test_update_user_states(
     org = create_random_organization(db)
     role = db.exec(select(Role).where(Role.name != "state_admin")).first()
     assert role is not None
-    country = Country(name="India", is_active=True)
+    country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
     db.refresh(country)
-    state1 = State(name="State1", country_id=country.id, is_active=True)
-    state2 = State(name="State2", country_id=country.id, is_active=True)
-    state3 = State(name="State3", country_id=country.id, is_active=True)
+    state1 = State(name=random_lower_string(), country_id=country.id, is_active=True)
+    state2 = State(name=random_lower_string(), country_id=country.id, is_active=True)
+    state3 = State(name=random_lower_string(), country_id=country.id, is_active=True)
     db.add_all([state1, state2, state3])
     db.commit()
     create_payload = {
@@ -980,7 +984,7 @@ def test_update_user_states(
         "password": password,
         "phone": phone,
         "role_id": -10,
-        "full_name": "full name",
+        "full_name": random_lower_string(),
         "organization_id": org.id,
         "state_ids": [
             state1.id,
@@ -1005,13 +1009,13 @@ def test_update_other_role_to_state_admin_and_remove_states(
     assert state_admin_role is not None
     assert other_role is not None
 
-    country = Country(name="India", is_active=True)
+    country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
     db.refresh(country)
 
-    state1 = State(name="TestStateC", is_active=True, country_id=country.id)
-    state2 = State(name="TestStateD", is_active=True, country_id=country.id)
+    state1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add(state1)
     db.add(state2)
     db.commit()
@@ -1023,7 +1027,7 @@ def test_update_other_role_to_state_admin_and_remove_states(
         "password": random_lower_string(),
         "phone": random_lower_string(),
         "role_id": other_role.id,
-        "full_name": "State Admin User",
+        "full_name": random_lower_string(),
         "organization_id": org.id,
     }
     response = client.post(
@@ -1040,7 +1044,7 @@ def test_update_other_role_to_state_admin_and_remove_states(
     patch_data = {
         "role_id": state_admin_role.id,
         "organization_id": org.id,
-        "full_name": "State Admin User",
+        "full_name": random_lower_string(),
         "phone": random_lower_string(),
         "state_ids": [state1.id, state2.id],
     }
@@ -1064,13 +1068,13 @@ def test_update_state_admin_to_other_role_and_remove_states(
     assert state_admin_role is not None
     assert other_role is not None
 
-    country = Country(name="India", is_active=True)
+    country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
     db.refresh(country)
 
-    state1 = State(name="TestStateA", is_active=True, country_id=country.id)
-    state2 = State(name="TestStateB", is_active=True, country_id=country.id)
+    state1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add(state1)
     db.add(state2)
     db.commit()
@@ -1082,7 +1086,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
         "password": random_lower_string(),
         "phone": random_lower_string(),
         "role_id": state_admin_role.id,
-        "full_name": "State Admin User",
+        "full_name": random_lower_string(),
         "organization_id": org.id,
         "state_ids": [state1.id, state2.id],
     }
@@ -1104,7 +1108,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
     data = {
         "role_id": other_role.id,
         "organization_id": org.id,
-        "full_name": "other role user",
+        "full_name": random_lower_string(),
         "phone": random_lower_string(),
         "state_ids": [],
     }
