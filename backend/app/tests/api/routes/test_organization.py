@@ -7,11 +7,10 @@ from app.models.organization import Organization
 from app.models.question import Question, QuestionRevision
 from app.models.test import Test
 from app.tests.utils.organization import (
-    assert_paginated_response,
     create_random_organization,
 )
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import assert_paginated_response, random_lower_string
 
 
 def test_create_organization(

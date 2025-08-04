@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
-from app.tests.utils.organization import assert_paginated_response
+from app.tests.utils.utils import assert_paginated_response
 
 from ...utils.utils import random_lower_string
 

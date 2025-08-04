@@ -1,4 +1,3 @@
-from httpx import Response
 from sqlmodel import Session
 
 from app.models import Organization, OrganizationCreate
@@ -15,30 +14,3 @@ def create_random_organization(session: Session) -> Organization:
     session.commit()
     session.refresh(organization)
     return organization
-
-
-def assert_paginated_response(
-    response: Response,
-    expected_total: int = 1,
-    expected_page: int = 1,
-    expected_pages: int = 1,
-    expected_size: int = 25,
-    min_expected_total: int | None = None,
-    min_expected_pages: int | None = None,
-) -> None:
-    assert response.status_code == 200
-    data = response.json()
-    required_fields = ["page", "size", "pages", "total", "items"]
-    for field in required_fields:
-        assert field in data
-
-    assert data["page"] == expected_page
-    assert data["size"] == expected_size
-    if min_expected_pages is not None:
-        assert data["pages"] >= min_expected_pages
-    else:
-        assert data["pages"] == expected_pages
-    if min_expected_total is not None:
-        assert data["total"] >= min_expected_total
-    else:
-        assert data["total"] == expected_total

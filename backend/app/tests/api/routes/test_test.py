@@ -28,13 +28,12 @@ from app.models.question import QuestionType
 from app.models.test import TestDistrict
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
-    assert_paginated_response,
     create_random_organization,
 )
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import assert_paginated_response, random_lower_string
 
 
 def setup_data(

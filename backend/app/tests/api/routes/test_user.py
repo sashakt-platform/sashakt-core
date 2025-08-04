@@ -9,12 +9,15 @@ from app.core.security import verify_password
 from app.models import Role, User, UserCreate
 from app.models.location import Country, State
 from app.tests.utils.organization import (
-    assert_paginated_response,
     create_random_organization,
 )
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_email, random_lower_string
+from app.tests.utils.utils import (
+    assert_paginated_response,
+    random_email,
+    random_lower_string,
+)
 
 
 def test_get_users_superuser_me(
