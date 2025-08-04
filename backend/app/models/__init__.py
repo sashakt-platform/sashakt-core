@@ -81,6 +81,7 @@ from .tag import (
 from .test import (
     Test,
     TestCreate,
+    TestDistrict,
     TestPublic,
     TestPublicLimited,
     TestQuestion,
@@ -198,7 +199,9 @@ __all__ = [
     "QuestionLocationUpdateItem",
     "QuestionLocationsUpdate",
     "QuestionTagsUpdate",
+    "TestDistrict",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
 TestCandidatePublic.model_rebuild()
+TestPublic.model_rebuild()

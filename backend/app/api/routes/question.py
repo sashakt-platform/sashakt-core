@@ -16,7 +16,7 @@ from fastapi import (
 )
 from fastapi_pagination import Page, paginate
 from sqlalchemy import desc, func
-from sqlmodel import not_, or_, select
+from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
@@ -43,6 +43,7 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.utils import MarkingScheme
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -77,11 +78,7 @@ def build_question_response(
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
@@ -154,7 +151,7 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, MarkingScheme | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
     options: list[Option] | None = None
@@ -170,15 +167,8 @@ def prepare_for_db(
             for opt in data.options
         ]
 
-    marking_scheme: dict[str, float] | None = None
-    if (
-        data.marking_scheme
-        and hasattr(data.marking_scheme, "dict")
-        and callable(data.marking_scheme.dict)
-    ):
-        marking_scheme = data.marking_scheme.dict()
-    else:
-        marking_scheme = data.marking_scheme
+    marking_scheme: MarkingScheme | None = None
+    marking_scheme = data.marking_scheme if data.marking_scheme else None
 
     # Handle media
     media: dict[str, Any] | None = None
@@ -347,7 +337,7 @@ class RevisionDetailDict(TypedDict):
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
-    marking_scheme: dict[str, float] | None  # Updated type to float
+    marking_scheme: MarkingScheme | None  # Updated type to float
     solution: str | None
     media: dict[str, Any] | None
     is_current: bool
@@ -386,6 +376,7 @@ def get_questions(
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
     tag_ids: list[int] = Query(None),  # Support multiple tags
+    tag_type_ids: list[int] = Query(None),  # Support multiple tag types
     created_by_id: int | None = None,
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
@@ -414,13 +405,25 @@ def get_questions(
     # Handle tag-based filtering with multiple tags
     if tag_ids:
         tag_query = select(QuestionTag.question_id).where(
-            QuestionTag.tag_id.in_(tag_ids)  # type: ignore
+            col(QuestionTag.tag_id).in_(tag_ids)
         )
         question_ids_with_tags = session.exec(tag_query).all()
-        if question_ids_with_tags:  # Only apply filter if we found matching tags
-            query = query.where(Question.id.in_(question_ids_with_tags))  # type: ignore
+        if question_ids_with_tags:
+            query = query.where(col(Question.id).in_(question_ids_with_tags))
         else:
-            # If no questions have these tags, return empty list
+            return cast(Page[QuestionPublic], paginate([], params))
+
+    if tag_type_ids:
+        tag_type_query = (
+            select(QuestionTag.question_id)
+            .join(Tag)
+            .where(Tag.id == QuestionTag.tag_id)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        )
+        question_ids_with_tag_types = session.exec(tag_type_query).all()
+        if question_ids_with_tag_types:
+            query = query.where(col(Question.id).in_(question_ids_with_tag_types))
+        else:
             return cast(Page[QuestionPublic], paginate([], params))
 
     # Handle creator-based filtering
@@ -790,11 +793,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
