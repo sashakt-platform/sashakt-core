@@ -242,6 +242,7 @@ def get_test(
 ) -> Page[TestPublic]:
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
+    empty_result = cast(Page[TestPublic], paginate([], params))
 
     for order in order_by:
         is_desc = order.startswith("-")
@@ -334,7 +335,7 @@ def get_test(
         if test_ids_with_tags:
             query = query.where(col(Test.id).in_(test_ids_with_tags))
         else:
-            return cast(Page[TestPublic], paginate([], params))
+            return empty_result
     if tag_type_ids:
         tag_type_query = (
             select(TestTag.test_id)
@@ -346,7 +347,7 @@ def get_test(
         if test_ids_with_tag_types:
             query = query.where(col(Test.id).in_(test_ids_with_tag_types))
         else:
-            return cast(Page[TestPublic], paginate([], params))
+            return empty_result
 
     if state_ids:
         state_subquery = select(TestState.test_id).where(
@@ -356,7 +357,7 @@ def get_test(
         if test_ids_with_states:
             query = query.where(col(Test.id).in_(test_ids_with_states))
         else:
-            return cast(Page[TestPublic], paginate([], params))
+            return empty_result
 
     if district_ids:
         district_subquery = select(TestDistrict.test_id).where(
@@ -366,7 +367,7 @@ def get_test(
         if test_ids_with_districts:
             query = query.where(col(Test.id).in_(test_ids_with_districts))
         else:
-            return cast(Page[TestPublic], paginate([], params))
+            return empty_result
 
     # Execute query and get all questions
     tests = session.exec(query).all()
