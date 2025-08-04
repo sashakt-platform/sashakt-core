@@ -1,11 +1,13 @@
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import col, func, select
+from fastapi_pagination import Page, paginate
+from sqlmodel import col, select
 
 from app import crud
 from app.api.deps import (
     CurrentUser,
+    Pagination,
     SessionDep,
     get_current_active_superuser,
     permission_dependency,
@@ -18,7 +20,6 @@ from app.models import (
     User,
     UserCreate,
     UserPublic,
-    UsersPublic,
     UserUpdate,
     UserUpdateMe,
 )
@@ -33,34 +34,22 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get(
     "/",
     dependencies=[Depends(permission_dependency("read_user"))],
-    response_model=UsersPublic,
+    response_model=Page[UserPublic],
 )
 def read_users(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
-) -> Any:
+    param: Pagination = Depends(),
+) -> Page[UserPublic]:
     """
     Retrieve users.
     """
     current_user_organization_id = current_user.organization_id
-    count_statement = (
-        select(func.count())
-        .select_from(User)
-        .where(User.organization_id == current_user_organization_id)
-    )
-    count = session.exec(count_statement).one()
 
-    statement = (
-        select(User)
-        .where(User.organization_id == current_user_organization_id)
-        .offset(skip)
-        .limit(limit)
-    )
+    statement = select(User).where(User.organization_id == current_user_organization_id)
     users = session.exec(statement).all()
 
-    return UsersPublic(data=users, count=count)
+    return cast(Page[UserPublic], paginate(users, params=param))
 
 
 @router.post(

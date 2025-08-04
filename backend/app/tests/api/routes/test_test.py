@@ -27,11 +27,13 @@ from app.models.location import District
 from app.models.question import QuestionType
 from app.models.test import TestDistrict
 from app.tests.utils.location import create_random_state
-from app.tests.utils.organization import create_random_organization
+from app.tests.utils.organization import (
+    create_random_organization,
+)
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import assert_paginated_response, random_lower_string
 
 
 def setup_data(
@@ -585,13 +587,13 @@ def test_get_tests(
     db.add(test_district_link)
     db.commit()
 
-    response = client.get(
+    get_response = client.get(
         f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
     )
-    data = response.json()
-
-    assert response.status_code == 200
+    response = get_response.json()
+    data = response["items"]
+    assert_paginated_response(get_response, min_expected_total=1)
 
     assert any(item["name"] == test.name for item in data)
     assert any(item["description"] == test.description for item in data)
@@ -664,9 +666,7 @@ def test_get_test_by_filter_name(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
@@ -674,8 +674,7 @@ def test_get_test_by_filter_name(
     )
 
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) >= 3
+    assert_paginated_response(response, min_expected_total=3)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?name={test_name_2}",
@@ -683,8 +682,7 @@ def test_get_test_by_filter_name(
     )
 
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response)
 
 
 def test_get_test_by_filter_description(
@@ -730,27 +728,21 @@ def test_get_test_by_filter_description(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) >= 3
+    assert_paginated_response(response, min_expected_total=3)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?description={random_text_2}",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
 
 def test_get_test_by_filter_start_time(
@@ -801,73 +793,57 @@ def test_get_test_by_filter_start_time(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-
-    assert len(data) == 4
+    assert_paginated_response(response, expected_total=4)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
+    assert_paginated_response(response, expected_total=2)
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-
+    assert_paginated_response(response, expected_total=1)
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
-
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 0
+
+    assert_paginated_response(
+        response, expected_total=0, expected_page=1, expected_pages=0
+    )
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-24T00:00:00Z&start_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T12:30:00Z&start_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_lte=2025-07-28T15:30:00Z&start_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_test_by_filter_end_time(
@@ -917,71 +893,51 @@ def test_get_test_by_filter_end_time(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 4
-
+    assert_paginated_response(response, expected_total=4)
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
-
+    assert_paginated_response(response, expected_total=3)
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
+    assert_paginated_response(response, expected_total=2)
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-
+    assert_paginated_response(response, expected_total=1)
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 0
+    assert_paginated_response(
+        response, expected_total=0, expected_page=1, expected_pages=0
+    )
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-24T00:00:00Z&end_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-
+    assert_paginated_response(response, expected_total=1)
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T12:30:00Z&end_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
+    assert_paginated_response(response, expected_total=2)
     response = client.get(
         f"{settings.API_V1_STR}/test/?end_time_lte=2025-07-28T15:30:00Z&end_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_test_by_filter_start_end_time(
@@ -1036,18 +992,14 @@ def test_get_test_by_filter_start_end_time(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_time_lte=2025-04-28T00:00:00Z&end_time_gte=2025-04-27T12:30:00Z",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
 
 def test_get_test_by_filter_time_limit(
@@ -1097,27 +1049,21 @@ def test_get_test_by_filter_time_limit(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?time_limit_gte=31&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?time_limit_lte=40&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
 
 def test_get_test_by_filter_completion_message(
@@ -1161,34 +1107,28 @@ def test_get_test_by_filter_completion_message(
         f"{settings.API_V1_STR}/test/?completion_message={random_text_1}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, min_expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?completion_message={random_text_2}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) >= 3
+    assert_paginated_response(response, min_expected_total=3, min_expected_pages=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?completion_message={random_lower_string()}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 0
+    assert_paginated_response(
+        response, expected_total=0, expected_page=1, expected_pages=0
+    )
 
 
 def test_get_test_by_filter_start_instructions(
@@ -1232,33 +1172,27 @@ def test_get_test_by_filter_start_instructions(
         f"{settings.API_V1_STR}/test/?start_instructions={random_text_1}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, min_expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_instructions={random_text_2}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) >= 3
+    assert_paginated_response(response, min_expected_total=3, min_expected_pages=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?start_instructions={random_lower_string()}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 0
+    assert_paginated_response(
+        response, expected_total=0, expected_page=1, expected_pages=0
+    )
 
 
 def test_get_test_by_filter_no_of_attempts(
@@ -1296,42 +1230,31 @@ def test_get_test_by_filter_no_of_attempts(
         f"{settings.API_V1_STR}/test/?no_of_attempts_gte=1&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?no_of_attempts_gte=2&no_of_attempts_lte=3&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
+    assert_paginated_response(response, expected_total=2)
     response = client.get(
         f"{settings.API_V1_STR}/test/?no_of_attempts_lte=2&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?no_of_attempts=1&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?no_of_attempts=7&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 0
+    assert_paginated_response(response, expected_total=0, expected_pages=0)
 
 
 def test_get_test_by_filter_shuffle(
@@ -1376,25 +1299,17 @@ def test_get_test_by_filter_shuffle(
         f"{settings.API_V1_STR}/test/?shuffle=true&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
+    assert_paginated_response(response, expected_total=2)
     response = client.get(
         f"{settings.API_V1_STR}/test/?shuffle=false&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
-
+    assert_paginated_response(response, expected_total=2)
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 4
+    assert_paginated_response(response, expected_total=4)
 
 
 def test_get_test_by_filter_random_questions(
@@ -1439,25 +1354,19 @@ def test_get_test_by_filter_random_questions(
         f"{settings.API_V1_STR}/test/?random_questions=true&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?random_questions=false&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 4
+    assert_paginated_response(response, expected_total=4)
 
 
 def test_get_test_by_filter_no_random_questions(
@@ -1491,33 +1400,25 @@ def test_get_test_by_filter_no_random_questions(
         f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=10&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?no_of_random_questions_lte=10&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=20&no_of_random_questions_lte=45&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_test_by_filter_question_pagination(
@@ -1553,25 +1454,19 @@ def test_get_test_by_filter_question_pagination(
         f"{settings.API_V1_STR}/test/?question_pagination=1&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?question_pagination=2&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) >= 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_test_by_filter_is_template(
@@ -1609,25 +1504,19 @@ def test_get_test_by_filter_is_template(
         f"{settings.API_V1_STR}/test/?is_template=true&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?is_template=false&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
+    assert_paginated_response(response, expected_total=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) >= 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_test_by_filter_created_by(
@@ -1663,17 +1552,13 @@ def test_get_test_by_filter_created_by(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user_1.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, expected_total=2)
 
 
 def test_get_test_order_by(
@@ -1713,8 +1598,9 @@ def test_get_test_order_by(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    item = response.json()
+    data = item["items"]
+    assert_paginated_response(response, expected_total=3)
     assert data[0]["name"] == test_names[0]
     assert data[1]["name"] == test_names[1]
     assert data[2]["name"] == test_names[2]
@@ -1726,7 +1612,8 @@ def test_get_test_order_by(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    data = data["items"]
+    assert_paginated_response(response, expected_total=3)
     assert data[0]["name"] == test_names[2]
     assert data[1]["name"] == test_names[1]
     assert data[2]["name"] == test_names[0]
@@ -1737,6 +1624,7 @@ def test_get_test_order_by(
     )
     assert response.status_code == 200
     data = response.json()
+    data = data["items"]
 
     test_created_date = [item["created_date"] for item in data]
 
@@ -1750,7 +1638,7 @@ def test_get_test_order_by(
     )
     assert response.status_code == 200
     data = response.json()
-
+    data = data["items"]
     test_created_date = [item["created_date"] for item in data]
 
     sorted_test_created_date = sorted(test_created_date, reverse=True)
@@ -1763,7 +1651,7 @@ def test_get_test_order_by(
     )
 
     data = response.json()
-
+    data = data["items"]
     test_name_date = [
         {"created_date": item["created_date"], "name": item["name"]} for item in data
     ]
@@ -2466,9 +2354,11 @@ def test_get_inactive_tests_listed(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-
+    assert_paginated_response(response, expected_total=1)
+    assert "items" in data
+    items = data["items"]
     assert response.status_code == 200
-    assert any(item["id"] == test_id for item in data)
+    assert any(item["id"] == test_id for item in items)
 
 
 def test_clone_test(
@@ -2683,7 +2573,8 @@ def test_get_test_by_filter_case_insensitive_name(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    items = data["items"]
+    assert len(items) == 3
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
@@ -2692,15 +2583,14 @@ def test_get_test_by_filter_case_insensitive_name(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) >= 3
+    items = data["items"]
+    assert len(items) >= 3
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?name=PYTHON",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_tests_by_tags_filter(
@@ -2798,31 +2688,32 @@ def test_get_tests_by_tags_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert {test["id"] for test in data} == {test_1.id, test_4.id}
+    items = data["items"]
+    assert len(items) == 2
+    assert {test["id"] for test in items} == {test_1.id, test_4.id}
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert {test["id"] for test in data} == {test_2.id, test_5.id}
+    items = data["items"]
+    assert len(items) == 2
+    assert {test["id"] for test in items} == {test_2.id, test_5.id}
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert {test["id"] for test in data} == {test_3.id, test_5.id}
+    items = data["items"]
+    assert len(items) == 2
+    assert {test["id"] for test in items} == {test_3.id, test_5.id}
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 3
+    assert_paginated_response(response, expected_total=3)
 
 
 def test_get_tests_by_tags_type_filter(
@@ -2944,30 +2835,36 @@ def test_get_tests_by_tags_type_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 4
-    assert {test["id"] for test in data} == {test_1.id, test_2.id, test_4.id, test_5.id}
+    assert len(data["items"]) == 4
+    assert {test["id"] for test in data["items"]} == {
+        test_1.id,
+        test_2.id,
+        test_4.id,
+        test_5.id,
+    }
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert {test["id"] for test in data} == {test_3.id, test_5.id}
+    assert len(data["items"]) == 2
+    assert {test["id"] for test in data["items"]} == {test_3.id, test_5.id}
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_type_ids={tag_type1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 5
-    assert test_6.id not in (test["id"] for test in data)
+    assert len(data["items"]) == 5
+    assert test_6.id not in (test["id"] for test in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert data["items"] == []
 
 
 def test_get_tests_by_state_filter(
@@ -3022,24 +2919,27 @@ def test_get_tests_by_state_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert {test["id"] for test in data} == {test_1.id, test_3.id}
+    items = data["items"]
+    assert len(items) == 2
+    assert {test["id"] for test in items} == {test_1.id, test_3.id}
     response = client.get(
         f"{settings.API_V1_STR}/test/?state_ids={state_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert {test["id"] for test in data} == {test_2.id, test_3.id}
+    items = data["items"]
+    assert len(items) == 2
+    assert {test["id"] for test in items} == {test_2.id, test_3.id}
     response = client.get(
         f"{settings.API_V1_STR}/test/?state_ids={state_1.id}&state_ids={state_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
-    assert {test["id"] for test in data} == {test_1.id, test_2.id, test_3.id}
+    items = data["items"]
+    assert len(items) == 3
+    assert {test["id"] for test in items} == {test_1.id, test_2.id, test_3.id}
 
 
 def test_get_tests_by_combined_name_tag_state_filter(
@@ -3105,8 +3005,10 @@ def test_get_tests_by_combined_name_tag_state_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["id"] == test_1.id
+    items = data["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == test_1.id
+    assert_paginated_response(response, expected_total=1)
 
 
 def test_get_tests_by_case_insensitive_description_filter(
@@ -3146,8 +3048,9 @@ def test_get_tests_by_case_insensitive_description_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    returned_ids = {test["id"] for test in data}
+    items = data["items"]
+    assert len(items) == 2
+    returned_ids = {test["id"] for test in items}
     assert test_1.id in returned_ids
     assert test_2.id in returned_ids
     assert test_3.id not in returned_ids
@@ -3199,12 +3102,14 @@ def test_get_tests_filtered_by_organization(
     db.add(test2)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test/?size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    assert "items" in data
+    items = data["items"]
+    ids = [item["id"] for item in items]
     assert test1.id in ids
     assert test2.id not in ids
 
@@ -3232,30 +3137,33 @@ def test_get_all_tests_includes_active_and_inactive(
     db.add(inactive_test)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test/?size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    test_names = [test["name"] for test in data]
+    items = data["items"]
+    test_names = [test["name"] for test in items]
     assert "Active Test" in test_names
     assert "Inactive Test" in test_names
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_active=true",
+        f"{settings.API_V1_STR}/test/?is_active=true&size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    names = [test["name"] for test in data]
+    items = data["items"]
+    names = [test["name"] for test in items]
     assert "Active Test" in names
     assert "Inactive Test" not in names
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_active=false",
+        f"{settings.API_V1_STR}/test/?is_active=false&size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    name = [test["name"] for test in data]
+    items = data["items"]
+    name = [test["name"] for test in items]
     assert "Inactive Test" in name
     assert "Active Test" not in name
 
@@ -4196,9 +4104,9 @@ def test_get_tests_by_district_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
-    assert any(test_data_1["id"] == item["id"] for item in data)
-    assert any(test_data_2["id"] == item["id"] for item in data)
+    assert len(data["items"]) == 2
+    assert any(test_data_1["id"] == item["id"] for item in data["items"])
+    assert any(test_data_2["id"] == item["id"] for item in data["items"])
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?district_ids={district_2.id}&&district_ids={district_1.id}",
@@ -4206,10 +4114,10 @@ def test_get_tests_by_district_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
-    assert any(test_data_1["id"] == item["id"] for item in data)
-    assert any(test_data_2["id"] == item["id"] for item in data)
-    assert any(test_data_3["id"] == item["id"] for item in data)
+    assert len(data["items"]) == 3
+    assert any(test_data_1["id"] == item["id"] for item in data["items"])
+    assert any(test_data_2["id"] == item["id"] for item in data["items"])
+    assert any(test_data_3["id"] == item["id"] for item in data["items"])
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?district_ids=-1",
@@ -4217,4 +4125,4 @@ def test_get_tests_by_district_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 0
+    assert len(data["items"]) == 0

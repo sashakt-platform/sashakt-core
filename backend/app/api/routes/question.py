@@ -14,13 +14,12 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi_pagination import Page, Params, paginate
+from fastapi_pagination import Page, paginate
 from sqlalchemy import desc, func
 from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, SessionDep
-from app.core.config import PAGINATION_SIZE
+from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
     CandidateTest,
     Message,
@@ -45,11 +44,6 @@ from app.models import (
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
 from app.models.utils import MarkingScheme
-
-
-class Pagination(Params):
-    size: int = PAGINATION_SIZE
-
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -389,7 +383,7 @@ def get_questions(
 ) -> Page[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-
+    empty_result = cast(Page[QuestionPublic], paginate([], params))
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
@@ -417,7 +411,7 @@ def get_questions(
         if question_ids_with_tags:
             query = query.where(col(Question.id).in_(question_ids_with_tags))
         else:
-            return cast(Page[QuestionPublic], paginate([], params))
+            return empty_result
 
     if tag_type_ids:
         tag_type_query = (
@@ -430,7 +424,7 @@ def get_questions(
         if question_ids_with_tag_types:
             query = query.where(col(Question.id).in_(question_ids_with_tag_types))
         else:
-            return cast(Page[QuestionPublic], paginate([], params))
+            return empty_result
 
     # Handle creator-based filtering
     if created_by_id is not None:
@@ -447,7 +441,7 @@ def get_questions(
         if questions_by_creator:
             query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
         else:
-            return cast(Page[QuestionPublic], paginate([], params))
+            return empty_result
 
     # Handle location-based filtering with multiple locations
     if any([state_ids, district_ids, block_ids]):
@@ -468,7 +462,7 @@ def get_questions(
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))  # type: ignore
             else:
-                return cast(Page[QuestionPublic], paginate([], params))
+                return empty_result
 
     # Apply pagination
     # query = query.offset(skip).limit(limit)
