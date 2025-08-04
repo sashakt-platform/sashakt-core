@@ -243,6 +243,49 @@ def test_get_state(
     assert len(data) == 2
 
 
+def test_get_state_filter_by_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_1 = State(name=" Maharashtra", country_id=country.id)
+    state_2 = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_1, state_2])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?name=maharashtra",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data) >= 1
+    assert any(state["name"].strip().lower() == "maharashtra" for state in data)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?name=maha",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) >= 1
+    assert any(state["name"].strip().lower() == "maharashtra" for state in data)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?name=randomnonmatch",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 0
+
+
 def test_get_state_by_id(
     client: TestClient,
     db: SessionDep,

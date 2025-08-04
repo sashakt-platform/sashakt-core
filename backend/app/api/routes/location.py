@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import select
+from sqlmodel import func, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.models import (
@@ -140,6 +140,7 @@ def create_state(
 )
 def get_state(
     session: SessionDep,
+    name: str | None = None,
     skip: int = 0,
     limit: int = 10,
     is_active: bool | None = None,
@@ -153,7 +154,9 @@ def get_state(
     if country is not None:
         query = query.where(State.country_id == country)
 
-    # Apply apgination
+    if name:
+        query = query.where(func.lower(State.name).like(f"%{name.strip().lower()}%"))
+
     query = query.offset(skip).limit(limit)
 
     states = session.exec(query).all()
