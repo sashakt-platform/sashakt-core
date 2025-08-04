@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import EmailStr
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
 
@@ -12,10 +12,21 @@ if TYPE_CHECKING:
         Organization,
         QuestionRevision,
         Role,
+        State,
         Tag,
         TagType,
         Test,
     )
+
+
+class UserState(SQLModel, table=True):
+    __tablename__ = "userstate"
+    __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
+    state_id: int = Field(foreign_key="state.id", ondelete="CASCADE")
+    __table_args__ = (UniqueConstraint("user_id", "state_id"),)
 
 
 # Shared properties
@@ -48,12 +59,16 @@ class UserCreate(UserBase):
         title="Enter Password",
         description="Create password of minumum 8 charaters and maximum 40 characters",
     )
+    state_ids: list[int] | None = Field(
+        default=None, description="IDs of states to associate with the user"
+    )
 
 
 # Properties to receive via API on update, all are optional
 class UserUpdate(UserBase):
     email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
     password: str | None = Field(default=None, min_length=8, max_length=40)
+    state_ids: list[int] | None = None
 
 
 class UserUpdateMe(SQLModel):
@@ -93,6 +108,9 @@ class User(UserBase, table=True):
         sa_relationship_kwargs={"remote_side": "User.id"},
     )
     created_users: list["User"] = Relationship(back_populates="created_by")
+    states: list["State"] | None = Relationship(
+        back_populates="users", link_model=UserState
+    )
 
     # TODO : We need to save tokens post user creation
     # token: str
@@ -106,6 +124,9 @@ class UserPublic(UserBase):
     modified_date: datetime
     is_deleted: bool
     created_by_id: int | None
+    states: list["State"] | None = Field(
+        default=None, description="states associated with this user"
+    )
 
 
 class UsersPublic(SQLModel):
