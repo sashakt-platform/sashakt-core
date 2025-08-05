@@ -3601,11 +3601,8 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
             9: "Correct option is missing",
             10: "Questions Already Exist",
         }
-        assert (
-            "Download failed questions: data:text/csv;base64,"
-            in data["failed_question_details"]
-        )
-        base64_csv = data["failed_question_details"].split("base64,")[-1]
+        assert "data:text/csv;base64," in data["error_log"]
+        base64_csv = data["error_log"].split("base64,")[-1]
         csv_bytes = base64.b64decode(base64_csv)
         csv_text = csv_bytes.decode("utf-8")
         csv_reader = csv.DictReader(io.StringIO(csv_text))
@@ -3726,3 +3723,139 @@ def test_create_random_question_revision_invalid_org_and_user(
     with pytest.raises(Exception) as excinfo:
         create_random_question_revision(db, org_id=org)
     assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
+
+
+def test_bulk_upload_questions_without_tag_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,State,
+What is 10+10?,20,10,30,40,A,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Punjab
+What is 5x5?,25,10,15,20,A,Punjab
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Punjab
+Which option is missing?,25,10,20,30,A,Punjab
+What is 2 + 2?,4,5,6,7,Z,Punjab
+What is 9+1?,10,20,30,40,A,NonExistentState
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 5
+        assert data["failed_questions"] == 3
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_without_state_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Science
+What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography
+Which option is missing?,25,10,20,30,A,Math
+What is 2 + 2?,4,5,6,7,Z,Math
+What is 9+1?,10,20,30,40,A,Math
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math
+What is 10+10?,20,10,30,40,A,Math"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 4
+        assert data["failed_questions"] == 4
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_with_extra_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Training Tags,State,ABCD
+What is 10+10?,20,10,30,40,A,ABCD,Math,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,ABCD,Science,Punjab
+Which option is missing?,25,10,20,30,A,ABCD,Math,Punjab
+What is 2 + 2?,4,5,6,7,A,ABCD,Math,Punjab
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 5
+        assert data["success_questions"] == 5
+        assert data["failed_questions"] == 0
+        assert data["error_log"] is None
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
