@@ -15,6 +15,8 @@ from app.models import (
     TagTypeUpdate,
     TagUpdate,
 )
+from app.models.question import Question, QuestionTag
+from app.models.test import Test, TestTag
 
 router_tagtype = APIRouter(
     prefix="/tagtype",
@@ -116,6 +118,13 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype or tagtype.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag Type not found")
+
+    active_tags = [tag for tag in tagtype.tags if not tag.is_deleted]
+
+    if active_tags:
+        raise HTTPException(
+            status_code=400, detail="Cannot delete Tag Type as it has associated Tags"
+        )
     tagtype.is_deleted = True
     session.add(tagtype)
     session.commit()
@@ -294,8 +303,40 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
     tag = session.get(Tag, tag_id)
     if not tag or tag.is_deleted is True:
         raise HTTPException(status_code=404, detail="Tag not found")
+
+    has_questions = session.exec(
+        select(QuestionTag)
+        .join(Question)
+        .where(Question.id == QuestionTag.question_id)
+        .where(not_(Question.is_deleted), QuestionTag.tag_id == tag_id)
+    ).first()
+    has_tests = session.exec(
+        select(TestTag)
+        .join(Test)
+        .where(Test.id == TestTag.test_id)
+        .where(
+            not_(Test.is_deleted),
+            TestTag.tag_id == tag_id,
+        )
+    ).first()
+
+    if has_questions or has_tests:
+        raise HTTPException(
+            status_code=400,
+            detail="Tag is associated with a question or test and cannot be deleted.",
+        )
     tag.is_deleted = True
     session.add(tag)
     session.commit()
     session.refresh(tag)
+    question_tags = session.exec(
+        select(QuestionTag).where(QuestionTag.tag_id == tag_id)
+    ).all()
+    for qt in question_tags:
+        session.delete(qt)
+    test_tags = session.exec(select(TestTag).where(TestTag.tag_id == tag_id)).all()
+    for tt in test_tags:
+        session.delete(tt)
+
+    session.commit()
     return Message(message="Tag deleted successfully")

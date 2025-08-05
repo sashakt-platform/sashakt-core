@@ -3,10 +3,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
+from app.models.question import QuestionTag, QuestionType
 from app.tests.utils.user import create_random_user, get_current_user_data
 
 from ...utils.utils import random_lower_string
@@ -353,15 +355,8 @@ def test_create_tag(
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
-        headers=get_user_superadmin_token,
-    )
-
-    response_data = response.json()
-
-    assert response.status_code == 200
-    assert "delete" in response_data["message"]
+    db.delete(tagtype)
+    db.commit()
 
     response = client.post(
         f"{settings.API_V1_STR}/tag/",
@@ -447,13 +442,8 @@ def test_read_tag(
     db.refresh(tag_2)
     db.flush()
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype_2.id}",
-        headers=get_user_superadmin_token,
-    )
-    response_data = response.json()
-    assert response.status_code == 200
-    assert "delete" in response_data["message"]
+    db.delete(tagtype)
+    db.commit()
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
@@ -516,13 +506,8 @@ def test_read_tag_by_id(
     assert response.status_code == 404
     assert response_data["detail"] == "Tag not found"
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
-        headers=get_user_superadmin_token,
-    )
-    response_data = response.json()
-    assert response.status_code == 200
-    assert "delete" in response_data["message"]
+    db.delete(tagtype)
+    db.commit()
 
     response = client.get(
         f"{settings.API_V1_STR}/tag/{tag.id}",
@@ -684,14 +669,8 @@ def test_visibility_tag_by_id(
     assert response.status_code == 404
     assert "not found" in response_data["detail"]
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
-        headers=get_user_superadmin_token,
-    )
-    response_data = response.json()
-    assert response.status_code == 200
-    assert "delete" in response_data["message"]
-
+    db.delete(tagtype)
+    db.commit()
     response = client.patch(
         f"{settings.API_V1_STR}/tag/{tag.id}",
         json={"is_active": False},
@@ -1396,3 +1375,129 @@ def test_create_tag_and_validate_created_date_in_IST(
     expected_modified = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
     modified_date = datetime.fromisoformat(update_data["modified_date"])
     assert abs((expected_modified - modified_date).total_seconds()) < 1
+
+
+def test_delete_tagtype_with_existing_tags(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag)
+    db.commit()
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 400
+    assert response_data["detail"] == "Cannot delete Tag Type as it has associated Tags"
+
+
+def test_delete_tag_after_associated_question_is_deleted(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    tag_type = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.flush()
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type.id,
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.flush()
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "tag_ids": [tag.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question_data = response.json()
+    question_id = question_data["id"]
+    question_tags = db.exec(
+        select(QuestionTag).where(QuestionTag.question_id == question_id)
+    ).all()
+    assert len(question_tags) == 1
+    assert question_tags[0].tag_id == tag.id
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert delete_response.status_code == 400
+    assert (
+        delete_response.json()["detail"]
+        == "Tag is associated with a question or test and cannot be deleted."
+    )
+    del_q_response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert del_q_response.status_code == 200
+    del_tag_response = client.delete(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    del_tag_data = del_tag_response.json()
+    assert del_tag_response.status_code == 200
+    assert "deleted" in del_tag_data["message"]
+    remaining_links = db.exec(
+        select(QuestionTag).where(QuestionTag.tag_id == tag.id)
+    ).all()
+    assert len(remaining_links) == 0
+
+    tag_in_db = db.get(Tag, tag.id)
+    db.refresh(tag_in_db)
+    assert tag_in_db is not None
+    assert tag_in_db.is_deleted is True
