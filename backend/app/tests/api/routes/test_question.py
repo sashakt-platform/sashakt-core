@@ -1,6 +1,7 @@
 import base64
 import csv
 import io
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -1448,7 +1449,7 @@ What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geog
         # Cleanup
         import os
 
-        if os.path.exists(temp_file_path):
+        with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
 
 
@@ -3857,5 +3858,5 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Pu
     finally:
         import os
 
-        if os.path.exists(temp_file_path):
+        with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
