@@ -42,6 +42,7 @@ def create_tagtype(
         select(TagType)
         .where(func.lower(func.trim(TagType.name)) == normalized_name)
         .where(TagType.organization_id == tagtype_create.organization_id)
+        .where(not_(TagType.is_deleted))
     ).first()
     if existing:
         raise HTTPException(
@@ -158,6 +159,7 @@ def create_tag(
             and_(
                 func.lower(func.trim(Tag.name)) == tag_create.name.strip().lower(),
                 Tag.organization_id == organization_id,
+                not_(Tag.is_deleted),
                 or_(
                     and_(
                         Tag.tag_type_id is None,
