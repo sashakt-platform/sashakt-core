@@ -64,13 +64,18 @@ def create_tagtype(
 def get_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
+    name: str | None = None,
 ) -> Sequence[TagType]:
-    tagtype = session.exec(
-        select(TagType).where(
-            TagType.organization_id == current_user.organization_id,
-            not_(TagType.is_deleted),
+    query = select(TagType).where(
+        TagType.organization_id == current_user.organization_id,
+        not_(TagType.is_deleted),
+    )
+    if name:
+        query = query.where(
+            func.trim(func.lower(TagType.name)).like(f"%{name.strip().lower()}%")
         )
-    ).all()
+
+    tagtype = session.exec(query).all()
     return tagtype
 
 
@@ -196,6 +201,7 @@ def create_tag(
 def get_tags(
     session: SessionDep,
     current_user: CurrentUser,
+    name: str | None = None,
     order_by: list[str] = Query(
         default=["tag_type_name", "name"],
         title="Order by",
@@ -206,6 +212,10 @@ def get_tags(
     query = select(Tag).where(
         Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
     )
+    if name:
+        query = query.where(
+            func.trim(func.lower(Tag.name)).like(f"%{name.strip().lower()}%")
+        )
     join_tag_type = any("tag_type_name" in field for field in order_by)
     if join_tag_type:
         query = query.outerjoin(TagType)
