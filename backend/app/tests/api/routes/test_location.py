@@ -285,6 +285,18 @@ def test_get_state_filter_by_name(
     assert response.status_code == 200
     assert len(data) == 0
 
+    state_3 = State(name=" RandomstateAnother", country_id=country.id)
+    db.add(state_3)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?name=random",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
+
 
 def test_get_state_by_id(
     client: TestClient,

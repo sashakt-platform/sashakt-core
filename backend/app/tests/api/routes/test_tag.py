@@ -133,6 +133,24 @@ def test_get_tagtype(
     assert len(data) == 1
     assert any(item["name"].lower() == "sample" for item in data)
 
+    tagtype = TagType(
+        name="sampleAnother",
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=SAMPLE",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
 
 def test_get_tagtype_by_id(
     client: TestClient,
@@ -535,6 +553,28 @@ def test_read_tag_filter_by_tag_name(
 
     assert response.status_code == 200
     assert any(tag["name"] == "FilterMatch" for tag in data)
+    assert len(data) == 1
+
+    tag_2 = Tag(
+        name="AnotherFilterMatch",
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    db.add(tag_2)
+    db.commit()
+    db.refresh(tag_2)
+    db.flush()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?name=filter",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data) == 2
 
 
 def test_get_tags_filter_no_match(
