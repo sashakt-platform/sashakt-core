@@ -9,6 +9,7 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
 from app.models.question import QuestionTag, QuestionType
+from app.models.test import Test, TestTag
 from app.tests.utils.user import create_random_user, get_current_user_data
 
 from ...utils.utils import random_lower_string
@@ -1501,3 +1502,99 @@ def test_delete_tag_after_associated_question_is_deleted(
     db.refresh(tag_in_db)
     assert tag_in_db is not None
     assert tag_in_db.is_deleted is True
+
+
+def test_delete_tag_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_tag_id = -999999
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tag/{non_existent_tag_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tag not found"
+
+
+def test_delete_tag_after_associated_test_is_deleted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.flush()
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "no_of_attempts": 1,
+        "is_active": True,
+        "tag_ids": [tag.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_data = response.json()
+    test_id = test_data["id"]
+    test_tag_exists = db.exec(
+        select(TestTag).where(TestTag.tag_id == tag.id, TestTag.test_id == test_id)
+    ).first()
+    assert test_tag_exists is not None
+
+    tag_delete_response = client.delete(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert tag_delete_response.status_code == 400
+    assert (
+        tag_delete_response.json()["detail"]
+        == "Tag is associated with a question or test and cannot be deleted."
+    )
+
+    del_test_response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert del_test_response.status_code == 200
+    deleted_test = db.get(Test, test_id)
+    db.refresh(deleted_test)
+    assert deleted_test is not None
+    assert deleted_test.is_deleted is True
+
+    del_tag_response = client.delete(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert del_tag_response.status_code == 200
+    del_tag_data = del_tag_response.json()
+    assert "deleted" in del_tag_data["message"]
+
+    tag_in_db = db.get(Tag, tag.id)
+    db.refresh(tag_in_db)
+    assert tag_in_db is not None
+    assert tag_in_db.is_deleted is True
+
+    test_tag_links = db.exec(select(TestTag).where(TestTag.tag_id == tag.id)).all()
+    assert len(test_tag_links) == 0
