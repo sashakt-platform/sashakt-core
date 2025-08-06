@@ -459,7 +459,6 @@ def test_prevent_duplicate_tag_creation(
         organization_id=organization.id,
         created_by_id=user.id,
     )
-    user_b = create_random_user(db)
     db.add(tagtype)
     db.commit()
     db.refresh(tagtype)
@@ -477,7 +476,6 @@ def test_prevent_duplicate_tag_creation(
         "name": name,
         "description": random_lower_string(),
         "tag_type_id": tagtype.id,
-        "created_by_id": user_b.id,
     }
     response = client.post(
         f"{settings.API_V1_STR}/tag/",
@@ -499,7 +497,6 @@ def test_prevent_duplicate_tag_creation(
     data2 = {
         "name": name,
         "tag_type_id": tagtype2.id,
-        "created_by_id": user_b.id,
     }
     response = client.post(
         f"{settings.API_V1_STR}/tag/",
@@ -520,7 +517,6 @@ def test_prevent_duplicate_tag_creation(
 
     data = {
         "name": name,
-        "created_by_id": user_b.id,
     }
     response = client.post(
         f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
