@@ -253,29 +253,29 @@ def test_get_state_filter_by_name(
     db.commit()
     db.refresh(country)
 
-    state_1 = State(name=" Maharashtra", country_id=country.id)
+    state_1 = State(name=" Randomstate", country_id=country.id)
     state_2 = State(name=random_lower_string(), country_id=country.id)
     db.add_all([state_1, state_2])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?name=maharashtra",
+        f"{settings.API_V1_STR}/location/state/?name=randomstate",
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) >= 1
-    assert any(state["name"].strip().lower() == "maharashtra" for state in data)
+    assert len(data) == 1
+    assert any(state["name"].strip().lower() == "randomstate" for state in data)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?name=maha",
+        f"{settings.API_V1_STR}/location/state/?name=random",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) >= 1
-    assert any(state["name"].strip().lower() == "maharashtra" for state in data)
+    assert len(data) == 1
+    assert any(state["name"].strip().lower() == "randomstate" for state in data)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/state/?name=randomnonmatch",
@@ -452,6 +452,64 @@ def test_get_district(
     data = response.json()
 
     assert len(data) == 2
+
+
+def test_get_district_by_name_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.flush()
+
+    district_1 = District(name="North Zone", state_id=state.id)
+    district_2 = District(name="North Zone Extension", state_id=state.id)
+    district_3 = District(name="East Wing", state_id=state.id)
+    db.add_all([district_1, district_2, district_3])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?name=north zone extension",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    print("help", data)
+    assert response.status_code == 200
+    assert len(data) == 1
+    assert data[0]["name"] == "North Zone Extension"
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?name=North Zone",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
+    names = [d["name"] for d in data]
+    assert "North Zone" in names
+    assert "North Zone Extension" in names
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?name=Central Zone",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 0
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?name=north zone",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data) == 2
+    assert any(d["name"].lower() == "north zone" for d in data)
 
 
 def test_get_district_by_id(

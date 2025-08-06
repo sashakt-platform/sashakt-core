@@ -236,6 +236,7 @@ def get_district(
     session: SessionDep,
     skip: int = 0,
     limit: int = 10,
+    name: str | None = None,
     is_active: bool | None = None,
     state: int | None = None,
 ) -> Sequence[District]:
@@ -246,6 +247,9 @@ def get_district(
 
     if state is not None:
         query = query.where(District.state_id == state)
+
+    if name:
+        query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
 
     # Apply apgination
     query = query.offset(skip).limit(limit)
