@@ -965,7 +965,6 @@ def test_question_validation_no_correct_answer_for_multi_choice(
         "Multi-choice questions must have at least one correct answer." in response.text
     )
     assert question_data["question_type"] == QuestionType.multi_choice
-    assert question_data["question_type"] == "multi-choice"
 
 
 def test_question_validation_invalid_question_type(
