@@ -123,6 +123,29 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
+
+    @model_validator(mode="after")
+    def validate_correct_answers(self) -> "QuestionBase":
+        if self.question_type == QuestionType.single_choice:
+            if (
+                not isinstance(self.correct_answer, list)
+                or len(self.correct_answer) != 1
+            ):
+                raise ValueError(
+                    "Single-choice questions must have exactly one correct answer."
+                )
+
+        elif self.question_type == QuestionType.multi_choice:
+            if (
+                not isinstance(self.correct_answer, list)
+                or len(self.correct_answer) < 1
+            ):
+                raise ValueError(
+                    "Multi-choice questions must have at least one correct answer."
+                )
+
+        return self
+
     options: list[Option] | None = Field(
         sa_type=JSON,
         default=None,

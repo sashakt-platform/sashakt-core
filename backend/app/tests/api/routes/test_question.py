@@ -903,6 +903,109 @@ def test_question_tag_operations(
     assert tags[0]["id"] == tag2.id
 
 
+def test_question_validation_multiple_correct_answers_for_single_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1, 2],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Single-choice questions must have exactly one correct answer." in response.text
+    )
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.multi_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Multi-choice questions must have at least one correct answer." in response.text
+    )
+
+
+def test_update_question_validation_multiple_correct_answers_for_single_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": "Initial Question",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    question = create_response.json()
+    question_id = question["id"]
+
+    revision_payload = {
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1, 2],
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 422
+    assert (
+        "Single-choice questions must have exactly one correct answer."
+        in revision_response.text
+    )
+
+
 def test_question_location_operations(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
