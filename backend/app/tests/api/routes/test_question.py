@@ -914,7 +914,7 @@ def test_question_validation_multiple_correct_answers_for_single_choice(
     question_data = {
         "organization_id": org.id,
         "question_text": random_lower_string(),
-        "question_type": QuestionType.single_choice,
+        "question_type": "single-choice",
         "options": [
             {"id": 1, "key": "A", "value": "Option 1"},
             {"id": 2, "key": "B", "value": "Option 2"},
@@ -935,7 +935,7 @@ def test_question_validation_multiple_correct_answers_for_single_choice(
     question_data = {
         "organization_id": org.id,
         "question_text": random_lower_string(),
-        "question_type": QuestionType.multi_choice,
+        "question_type": "multi-choice",
         "options": [
             {"id": 1, "key": "A", "value": "Option 1"},
             {"id": 2, "key": "B", "value": "Option 2"},
@@ -953,6 +953,7 @@ def test_question_validation_multiple_correct_answers_for_single_choice(
     assert (
         "Multi-choice questions must have at least one correct answer." in response.text
     )
+    assert question_data["question_type"] == QuestionType.multi_choice
 
 
 def test_update_question_validation_multiple_correct_answers_for_single_choice(
