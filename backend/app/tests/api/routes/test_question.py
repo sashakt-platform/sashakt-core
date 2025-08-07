@@ -932,6 +932,17 @@ def test_question_validation_multiple_correct_answers_for_single_choice(
     assert (
         "Single-choice questions must have exactly one correct answer." in response.text
     )
+    assert question_data["question_type"] == "single-choice"
+
+
+def test_question_validation_no_correct_answer_for_multi_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
     question_data = {
         "organization_id": org.id,
         "question_text": random_lower_string(),
@@ -954,6 +965,34 @@ def test_question_validation_multiple_correct_answers_for_single_choice(
         "Multi-choice questions must have at least one correct answer." in response.text
     )
     assert question_data["question_type"] == QuestionType.multi_choice
+    assert question_data["question_type"] == "multi-choice"
+
+
+def test_question_validation_invalid_question_type(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "invalid-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 422
 
 
 def test_update_question_validation_multiple_correct_answers_for_single_choice(
