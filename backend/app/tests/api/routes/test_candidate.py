@@ -1901,6 +1901,8 @@ def test_get_test_result(
     assert data["incorrect_answer"] == 2
     assert data["mandatory_not_attempted"] == 0
     assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 4
 
 
 def test_result_with_no_answers(
@@ -2025,6 +2027,390 @@ def test_result_with_no_answers(
     assert data["incorrect_answer"] == 0
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 1
+    assert data["marks_maximum"] == 2
+
+
+def test_result_with_mixed_answers_test_level_marking(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="test",
+        marking_scheme={
+            "correct": 5,
+            "wrong": -2,
+            "skipped": 0,
+        },
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Create candidate
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    # Create candidate test
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    revisions = []
+    for i in range(3):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision_data = {
+            "created_by_id": user.id,
+            "question_id": question.id,
+            "question_text": f"Question {i + 1}",
+            "question_type": QuestionType.single_choice,
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            "correct_answer": [2],
+            "is_mandatory": True,
+            "is_active": True,
+            "is_deleted": False,
+        }
+        revision = QuestionRevision(**revision_data)
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions.append(revision)
+
+    # Candidate Answers
+    # Q1: Skipped
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revisions[0].id,
+            response="",
+            visited=True,
+            time_spent=10,
+        )
+    )
+
+    # Q2: Correct
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revisions[1].id,
+            response=[2],
+            visited=True,
+            time_spent=10,
+        )
+    )
+
+    # Q3: Wrong
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revisions[2].id,
+            response=[1],
+            visited=True,
+            time_spent=10,
+        )
+    )
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # 1 correct = +5, 1 wrong = -2, 1 skipped = 0
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 3  # 5 - 2 + 0
+    assert data["marks_maximum"] == 15  # 3 questions × 5 each
+
+
+def test_result_with_mixed_answers_question_level_marking(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Create candidate
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    # Create candidate test
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    revisions = []
+
+    marking_schemes = [
+        {"correct": 2, "wrong": -1, "skipped": 0},  # Q1
+        {"correct": 5, "wrong": -2, "skipped": 0},  # Q2
+        {"correct": 3, "wrong": -1, "skipped": 0},  # Q3
+    ]
+
+    for i in range(3):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision_data = {
+            "created_by_id": user.id,
+            "question_id": question.id,
+            "question_text": f"Q{i + 1}",
+            "question_type": QuestionType.single_choice,
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            "correct_answer": [2],
+            "is_mandatory": True,
+            "is_active": True,
+            "is_deleted": False,
+            "marking_scheme": marking_schemes[i],
+        }
+        revision = QuestionRevision(**revision_data)
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions.append(revision)
+
+    # Candidate answers:
+    db.add_all(
+        [
+            # Q1: Skipped
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[0].id,
+                response="",
+                visited=True,
+                time_spent=5,
+            ),
+            # Q2: Correct
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[1].id,
+                response=[2],
+                visited=True,
+                time_spent=5,
+            ),
+            # Q3: Wrong
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[2].id,
+                response=[1],
+                visited=True,
+                time_spent=5,
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 4  # 0+5-1
+    assert data["marks_maximum"] == 10  # 2 + 5 + 3
+
+
+def test_result_with_default_question_level_when_test_marks_level_not_set(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Create candidate
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    # Create candidate test
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    revisions = []
+
+    for i in range(3):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision_data = {
+            "created_by_id": user.id,
+            "question_id": question.id,
+            "question_text": f"Q{i + 1}",
+            "question_type": QuestionType.single_choice,
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            "correct_answer": [2],
+            "is_mandatory": True,
+            "is_active": True,
+            "is_deleted": False,
+        }
+
+        revision = QuestionRevision(**revision_data)
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions.append(revision)
+
+    # Candidate answers:
+    db.add_all(
+        [
+            # Q1:Correct ( +10)
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[0].id,
+                response=[2],
+                visited=True,
+                time_spent=5,
+            ),
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[1].id,
+                response="",
+                visited=True,
+                time_spent=5,
+            ),
+            # Q3: Wrong (default: 0)
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[2].id,
+                response=[1],
+                visited=True,
+                time_spent=5,
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 1
+    assert data["marks_maximum"] == 3
 
 
 def test_get_test_result_not_found(
@@ -2155,6 +2541,8 @@ def test_convert_to_list_with_int_reponse(
     assert data["incorrect_answer"] == 1
     assert data["mandatory_not_attempted"] == 0
     assert data["optional_not_attempted"] == 1
+    assert data["marks_obtained"] == 0
+    assert data["marks_maximum"] == 2
 
 
 def test_submit_batch_answers_for_qr_candidate(
@@ -3370,6 +3758,8 @@ def test_get_test_result_with_random_question_true(
     assert data["incorrect_answer"] == 3
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 6
 
 
 def test_test_level_marking_scheme_applied_on_questions(
