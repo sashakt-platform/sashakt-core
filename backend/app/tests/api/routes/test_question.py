@@ -1007,6 +1007,62 @@ def test_update_question_validation_multiple_correct_answers_for_single_choice(
     )
 
 
+def test_question_validation_valid_single_and_multi_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    valid_single_question = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "single-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=valid_single_question,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == valid_single_question["question_text"]
+    assert data["correct_answer"] == valid_single_question["correct_answer"]
+    assert data["question_type"] == valid_single_question["question_type"]
+
+    valid_multi_question = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "multi-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
+        ],
+        "correct_answer": [2, 3],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=valid_multi_question,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == valid_multi_question["question_text"]
+    assert data["correct_answer"] == valid_multi_question["correct_answer"]
+    assert data["question_type"] == valid_multi_question["question_type"]
+
+
 def test_question_location_operations(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
