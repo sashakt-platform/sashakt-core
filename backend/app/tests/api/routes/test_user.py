@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.security import verify_password
 from app.models import Role, User, UserCreate
 from app.models.location import Country, State
+from app.models.question import Question, QuestionRevision, QuestionType
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -1121,3 +1122,53 @@ def test_update_state_admin_to_other_role_and_remove_states(
     updated_data = patch_response.json()
     assert updated_data["role_id"] == other_role.id
     assert updated_data["states"] is None
+
+
+def test_cannot_delete_user_if_linked_to_question(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    org = create_random_organization(db)
+    role = create_random_role(db)
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    user_data = response.json()
+    user_id = user_data["id"]
+    q2 = Question(organization_id=org.id)
+    db.add(q2)
+    db.flush()
+    rev2 = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(rev2)
+    db.flush()
+    q2.last_revision_id = rev2.id
+    db.commit()
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert delete_response.status_code == 400
+    assert "failed to delete user" in delete_response.json()["detail"].lower()

@@ -304,6 +304,13 @@ def delete_user(
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
-    session.delete(user)
-    session.commit()
-    return Message(message="User deleted successfully")
+    try:
+        session.delete(user)
+        session.commit()
+        return Message(message="User deleted successfully")
+    except Exception as e:
+        session.rollback()
+
+        raise HTTPException(
+            status_code=400, detail=f"Failed to delete user. Reason: {str(e)}"
+        )
