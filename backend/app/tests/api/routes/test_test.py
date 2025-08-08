@@ -4385,10 +4385,11 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
     assert response.status_code == 200
     test_id = response.json()["id"]
     test_question_link = db.exec(
-        select(TestQuestion).filter_by(
-            test_id=test_id, question_revision_id=revision.id
+        select(TestQuestion).where(
+            TestQuestion.test_id == test_id,
+            TestQuestion.question_revision_id == revision.id,
         )
-    )
+    ).first()
     assert test_question_link is not None
     test_tag_links = db.exec(
         select(TestTag).where(TestTag.test_id == test_id, TestTag.tag_id == tag.id)

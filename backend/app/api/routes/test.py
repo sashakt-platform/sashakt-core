@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import col, func, select
+from sqlmodel import and_, col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -704,21 +704,28 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
-    question_ids: list[int] = [
-        qr.id for qr in test.question_revisions or [] if qr.id is not None
-    ]
-
-    if question_ids:
-        attempted_answer_exists = session.exec(
-            select(CandidateTestAnswer).where(
-                col(CandidateTestAnswer.question_revision_id).in_(question_ids)
+    attempted_answer_exists = (
+        session.exec(
+            select(1)
+            .select_from(CandidateTestAnswer)
+            .join(
+                TestQuestion,
+                and_(
+                    CandidateTestAnswer.question_revision_id
+                    == TestQuestion.question_revision_id
+                ),
             )
+            .where(TestQuestion.test_id == test.id)
+            .limit(1)
         ).first()
-        if attempted_answer_exists:
-            raise HTTPException(
-                status_code=422,
-                detail="Cannot delete test. One or more answers have already been submitted for its questions.",
-            )
+        is not None
+    )
+
+    if attempted_answer_exists:
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot delete test. One or more answers have already been submitted for its questions.",
+        )
 
     test.is_deleted = True
     session.add(test)

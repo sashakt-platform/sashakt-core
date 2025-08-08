@@ -1871,6 +1871,7 @@ def test_delete_tag_after_associated_test_is_deleted(
     )
 
     test = db.get(Test, test_id)
+    assert test is not None
     test.is_deleted = True
     db.add(test)
     db.commit()
