@@ -19,6 +19,7 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
+from app.models.candidate import CandidateTestAnswer
 from app.models.location import District
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum, TestDistrict
@@ -703,9 +704,45 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
     if not test or test.is_deleted is True:
         raise HTTPException(status_code=404, detail="Test is not available")
+    question_ids: list[int] = [
+        qr.id for qr in test.question_revisions or [] if qr.id is not None
+    ]
+
+    if question_ids:
+        attempted_answer_exists = session.exec(
+            select(CandidateTestAnswer).where(
+                col(CandidateTestAnswer.question_revision_id).in_(question_ids)
+            )
+        ).first()
+        if attempted_answer_exists:
+            raise HTTPException(
+                status_code=422,
+                detail="Cannot delete test. One or more answers have already been submitted for its questions.",
+            )
 
     test.is_deleted = True
     session.add(test)
+    test_tags = session.exec(select(TestTag).where(TestTag.test_id == test.id)).all()
+    for tt in test_tags:
+        session.delete(tt)
+
+    test_states = session.exec(
+        select(TestState).where(TestState.test_id == test.id)
+    ).all()
+    for ts in test_states:
+        session.delete(ts)
+
+    test_districts = session.exec(
+        select(TestDistrict).where(TestDistrict.test_id == test.id)
+    ).all()
+    for td in test_districts:
+        session.delete(td)
+
+    test_questions = session.exec(
+        select(TestQuestion).where(TestQuestion.test_id == test.id)
+    ).all()
+    for tq in test_questions:
+        session.delete(tq)
     session.commit()
     session.refresh(test)
 

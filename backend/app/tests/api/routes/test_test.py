@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import patch
@@ -23,6 +24,7 @@ from app.models import (
     TestTag,
     User,
 )
+from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import District
 from app.models.question import QuestionType
 from app.models.test import TestDistrict
@@ -4218,3 +4220,199 @@ def test_get_tests_by_district_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 0
+
+
+def test_delete_test_with_attempted_candidate_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+        is_mandatory=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 100,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test_id,
+        candidate_id=candidate.id,
+        device="Laptop",
+        consent=True,
+        start_time="2025-01-01T10:00:00Z",
+        is_submitted=True,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response=[2],
+            visited=True,
+            time_spent=15,
+        )
+    )
+    db.commit()
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Cannot delete test. One or more answers have already been submitted for its questions."
+    )
+
+
+def test_delete_test_with_no_attempted_candidates_should_pass(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 45,
+        "marks": 50,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+        "tag_ids": [tag.id],
+        "state_ids": [state.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+    test_question_link = db.exec(
+        select(TestQuestion).filter_by(
+            test_id=test_id, question_revision_id=revision.id
+        )
+    )
+    assert test_question_link is not None
+    test_tag_links = db.exec(
+        select(TestTag).where(TestTag.test_id == test_id, TestTag.tag_id == tag.id)
+    ).all()
+    assert len(test_tag_links) == 1
+
+    test_state_links = db.exec(
+        select(TestState).where(
+            TestState.test_id == test_id, TestState.state_id == state.id
+        )
+    ).all()
+    assert len(test_state_links) == 1
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Test deleted successfully"
+    test_question_links = db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == test_id)
+    ).all()
+    assert len(test_question_links) == 0
+
+    test_tag_links = db.exec(select(TestTag).where(TestTag.test_id == test_id)).all()
+    assert len(test_tag_links) == 0
+
+    test_state_links = db.exec(
+        select(TestState).where(TestState.test_id == test_id)
+    ).all()
+    assert len(test_state_links) == 0
