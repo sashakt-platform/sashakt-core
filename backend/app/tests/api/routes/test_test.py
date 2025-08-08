@@ -4327,6 +4327,10 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
     db.add(state)
     db.commit()
     db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
     tag = Tag(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -4370,6 +4374,7 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
         "question_revision_ids": [revision.id],
         "tag_ids": [tag.id],
         "state_ids": [state.id],
+        "district_ids": [district.id],
     }
 
     response = client.post(
@@ -4396,6 +4401,12 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
         )
     ).all()
     assert len(test_state_links) == 1
+    test_district_links = db.exec(
+        select(TestDistrict).where(
+            TestDistrict.test_id == test_id, TestDistrict.district_id == district.id
+        )
+    ).all()
+    assert len(test_district_links) == 1
 
     response = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -4416,3 +4427,7 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
         select(TestState).where(TestState.test_id == test_id)
     ).all()
     assert len(test_state_links) == 0
+    test_district_links = db.exec(
+        select(TestDistrict).where(TestDistrict.test_id == test_id)
+    ).all()
+    assert len(test_district_links) == 0

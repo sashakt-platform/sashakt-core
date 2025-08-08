@@ -1801,6 +1801,21 @@ def test_delete_tag_not_found(
     assert response.json()["detail"] == "Tag not found"
 
 
+def test_delete_tagtype_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_tag_id = -999999
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{non_existent_tag_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tag Type not found"
+
+
 def test_delete_tag_after_associated_test_is_deleted(
     client: TestClient,
     db: SessionDep,
@@ -1855,11 +1870,10 @@ def test_delete_tag_after_associated_test_is_deleted(
         == "Tag is associated with a question or test and cannot be deleted."
     )
 
-    del_test_response = client.delete(
-        f"{settings.API_V1_STR}/test/{test_id}",
-        headers=get_user_superadmin_token,
-    )
-    assert del_test_response.status_code == 200
+    test = db.get(Test, test_id)
+    test.is_deleted = True
+    db.add(test)
+    db.commit()
     deleted_test = db.get(Test, test_id)
     db.refresh(deleted_test)
     assert deleted_test is not None
