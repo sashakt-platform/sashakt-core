@@ -379,13 +379,32 @@ def test_delete_tagtype_by_id(
     )
     db.add(tagtype)
     db.commit()
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype2)
+    db.commit()
     response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids={tagtype.id}&tagtype_ids={tagtype2.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
     assert response.status_code == 200
+    assert response_data == {"message": "Tag Types deleted successfully"}
     assert "delete" in response_data["message"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids=-10",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data == {
+        "message": "Some TagTypes not found or already deleted: [-10]"
+    }
     response = client.get(
         f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
         headers=get_user_superadmin_token,
@@ -469,7 +488,7 @@ def test_create_tag(
     assert "modified_date" in response_data
 
     response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids={tagtype.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -647,7 +666,7 @@ def test_read_tag(
     db.flush()
 
     response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype_2.id}",
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids={tagtype_2.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -799,7 +818,7 @@ def test_read_tag_by_id(
     assert response_data["detail"] == "Tag not found"
 
     response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids={tagtype.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -967,7 +986,7 @@ def test_visibility_tag_by_id(
     assert "not found" in response_data["detail"]
 
     response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids={tagtype.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -1020,7 +1039,15 @@ def test_delete_tag_by_id(
     assert "id" in response_data
 
     response = client.delete(
-        f"{settings.API_V1_STR}/tag/{tag.id}",
+        f"{settings.API_V1_STR}/tag/?tag_ids=-10",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert "delete" in response_data["message"]
+    assert response_data == {"message": "Some Tags not found or already deleted: [-10]"}
+    response = client.delete(
+        f"{settings.API_V1_STR}/tag/?tag_ids={tag.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
