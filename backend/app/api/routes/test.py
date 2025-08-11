@@ -727,31 +727,8 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
             detail="Cannot delete test. One or more answers have already been submitted for its questions.",
         )
 
-    test.is_deleted = True
-    session.add(test)
-    test_tags = session.exec(select(TestTag).where(TestTag.test_id == test.id)).all()
-    for tt in test_tags:
-        session.delete(tt)
-
-    test_states = session.exec(
-        select(TestState).where(TestState.test_id == test.id)
-    ).all()
-    for ts in test_states:
-        session.delete(ts)
-
-    test_districts = session.exec(
-        select(TestDistrict).where(TestDistrict.test_id == test.id)
-    ).all()
-    for td in test_districts:
-        session.delete(td)
-
-    test_questions = session.exec(
-        select(TestQuestion).where(TestQuestion.test_id == test.id)
-    ).all()
-    for tq in test_questions:
-        session.delete(tq)
+    session.delete(test)
     session.commit()
-    session.refresh(test)
 
     return Message(message="Test deleted successfully")
 

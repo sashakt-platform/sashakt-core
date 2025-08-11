@@ -144,10 +144,8 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
         raise HTTPException(
             status_code=400, detail="Cannot delete Tag Type as it has associated Tags"
         )
-    tagtype.is_deleted = True
-    session.add(tagtype)
+    session.delete(tagtype)
     session.commit()
-    session.refresh(tagtype)
     return Message(message="Tag Type deleted successfully")
 
 
@@ -379,26 +377,7 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
             detail="Tag is associated with a question or test and cannot be deleted.",
         )
 
-    try:
-        # Soft delete the tag
-        tag.is_deleted = True
-        session.add(tag)
+    session.delete(tag)  # Hard delete
+    session.commit()
 
-        # Clean up associations
-        question_tags = session.exec(
-            select(QuestionTag).where(QuestionTag.tag_id == tag_id)
-        ).all()
-        for qt in question_tags:
-            session.delete(qt)
-
-        test_tags = session.exec(select(TestTag).where(TestTag.tag_id == tag_id)).all()
-        for tt in test_tags:
-            session.delete(tt)
-
-        # Commit all changes atomically
-        session.commit()
-        session.refresh(tag)
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete tag: {str(e)}")
     return Message(message="Tag deleted successfully")

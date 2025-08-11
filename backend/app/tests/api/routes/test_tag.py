@@ -1780,11 +1780,6 @@ def test_delete_tag_after_associated_question_is_deleted(
     ).all()
     assert len(remaining_links) == 0
 
-    tag_in_db = db.get(Tag, tag.id)
-    db.refresh(tag_in_db)
-    assert tag_in_db is not None
-    assert tag_in_db.is_deleted is True
-
 
 def test_delete_tag_not_found(
     client: TestClient,
@@ -1887,11 +1882,6 @@ def test_delete_tag_after_associated_test_is_deleted(
     assert del_tag_response.status_code == 200
     del_tag_data = del_tag_response.json()
     assert "deleted" in del_tag_data["message"]
-
-    tag_in_db = db.get(Tag, tag.id)
-    db.refresh(tag_in_db)
-    assert tag_in_db is not None
-    assert tag_in_db.is_deleted is True
 
     test_tag_links = db.exec(select(TestTag).where(TestTag.tag_id == tag.id)).all()
     assert len(test_tag_links) == 0
