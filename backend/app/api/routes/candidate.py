@@ -390,7 +390,11 @@ def get_candidate(session: SessionDep) -> Sequence[Candidate]:
     return candidate
 
 
-@router.get("/summary", response_model=TestStatusSummary)
+@router.get(
+    "/summary",
+    response_model=TestStatusSummary,
+    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+)
 def get_test_summary(
     session: SessionDep,
     current_user: CurrentUser,
@@ -401,23 +405,17 @@ def get_test_summary(
         None, description="End date in YYYY-MM-DD format"
     ),
 ) -> TestStatusSummary:
-    user_ids_in_org = session.exec(
-        select(User.id).where(User.organization_id == current_user.organization_id)
-    ).all()
-    test_ids_created_by_org = session.exec(
-        select(Test.id).where(col(Test.created_by_id).in_(user_ids_in_org))
-    ).all()
     query = (
         select(CandidateTest, Test)
         .join(Test)
         .where(CandidateTest.test_id == Test.id)
-        .where(col(CandidateTest.test_id).in_(test_ids_created_by_org))
+        .join(User)
+        .where(Test.created_by_id == User.id)
+        .where(User.organization_id == current_user.organization_id)
     )
 
     if start_date and Test.start_time is not None:
-        query = query.where(
-            Test.start_time >= start_date,
-        )
+        query = query.where(Test.start_time >= start_date)
 
     if end_date and Test.end_time is not None:
         query = query.where(Test.end_time <= end_date)
