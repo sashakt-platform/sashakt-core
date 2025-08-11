@@ -1,12 +1,12 @@
 import random
 import uuid
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import SQLModel, col, not_, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
@@ -31,7 +31,8 @@ from app.models import (
     TestCandidatePublic,
     TestQuestion,
 )
-from app.models.candidate import Result
+from app.models.candidate import Result, TestStatusSummary
+from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -387,6 +388,85 @@ def create_candidate(
 def get_candidate(session: SessionDep) -> Sequence[Candidate]:
     candidate = session.exec(select(Candidate).where(not_(Candidate.is_deleted))).all()
     return candidate
+
+
+@router.get("/summary", response_model=TestStatusSummary)
+def get_test_summary(
+    session: SessionDep,
+    current_user: CurrentUser,
+    start_date: datetime | None = Query(
+        None, description="Start date in YYYY-MM-DD format"
+    ),
+    end_date: datetime | None = Query(
+        None, description="End date in YYYY-MM-DD format"
+    ),
+) -> TestStatusSummary:
+    user_ids_in_org = session.exec(
+        select(User.id).where(User.organization_id == current_user.organization_id)
+    ).all()
+    test_ids_created_by_org = session.exec(
+        select(Test.id).where(col(Test.created_by_id).in_(user_ids_in_org))
+    ).all()
+    query = (
+        select(CandidateTest, Test)
+        .join(Test)
+        .where(CandidateTest.test_id == Test.id)
+        .where(col(CandidateTest.test_id).in_(test_ids_created_by_org))
+    )
+
+    if start_date and Test.start_time is not None:
+        query = query.where(
+            Test.start_time >= start_date,
+        )
+
+    if end_date and Test.end_time is not None:
+        query = query.where(Test.end_time <= end_date)
+
+    results = session.exec(query).all()
+    submitted = 0
+    not_submitted = 0
+    not_submitted_active = 0
+    not_submitted_inactive = 0
+    now = get_current_time()
+    for candidate_test, test in results:
+        c_start = candidate_test.start_time
+        c_end = candidate_test.end_time
+        t_start = test.start_time
+        t_end = test.end_time
+        time_limit = getattr(test, "time_limit", None)
+        if candidate_test.is_submitted or c_end:
+            submitted += 1
+            continue
+        not_submitted += 1
+
+        potential_time_spent = (now - c_start).total_seconds() / 60 if c_start else None
+
+        if not t_start or not t_end:
+            if (
+                not time_limit
+                or potential_time_spent is None
+                or potential_time_spent < time_limit
+            ):
+                not_submitted_active += 1
+            else:
+                not_submitted_inactive += 1
+        elif t_end and now < t_end:
+            if time_limit:
+                if potential_time_spent is None or potential_time_spent < time_limit:
+                    not_submitted_active += 1
+                else:
+                    not_submitted_inactive += 1
+            else:
+                not_submitted_active += 1
+        else:
+            not_submitted_inactive += 1
+
+    return TestStatusSummary(
+        total_test_submitted=submitted,
+        total_test_not_submitted=not_submitted,
+        not_submitted_active=not_submitted_active,
+        not_submitted_inactive=not_submitted_inactive,
+    )
 
 
 # Get Candidate by ID
