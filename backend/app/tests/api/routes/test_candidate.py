@@ -4194,3 +4194,19 @@ def test_candidate_inactive_due_to_time_limit_exceeded(
         )
         assert after["not_submitted_active"] - before["not_submitted_active"] == 0
         assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 1
+
+
+def test_candidate_summary_invalid_date_range(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    start_date = "2025-08-10T10:00:00"
+    end_date = "2025-08-09T10:00:00"
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/summary",
+        headers=get_user_superadmin_token,
+        params={"start_date": start_date, "end_date": end_date},
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "End date must be after start date"

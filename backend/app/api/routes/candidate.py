@@ -419,7 +419,8 @@ def get_test_summary(
 
     if end_date and Test.end_time is not None:
         query = query.where(Test.end_time <= end_date)
-
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(status_code=400, detail="End date must be after start date")
     results = session.exec(query).all()
     submitted = 0
     not_submitted = 0
@@ -429,7 +430,7 @@ def get_test_summary(
     for candidate_test, test in results:
         c_start = candidate_test.start_time
         c_end = candidate_test.end_time
-        t_start = test.start_time
+
         t_end = test.end_time
         time_limit = getattr(test, "time_limit", None)
         if candidate_test.is_submitted or c_end:
@@ -439,7 +440,7 @@ def get_test_summary(
 
         potential_time_spent = (now - c_start).total_seconds() / 60 if c_start else None
 
-        if not t_start or not t_end:
+        if not t_end:
             if (
                 not time_limit
                 or potential_time_spent is None
