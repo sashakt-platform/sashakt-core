@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import SQLModel, col, not_, select
+from sqlmodel import SQLModel, and_, col, not_, outerjoin, select
 
 from app.api.deps import SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -644,23 +644,23 @@ def get_test_result(
         )
 
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-    if test.random_questions and candidate_test.question_revision_ids:
-        joined_data = session.exec(
-            select(CandidateTestAnswer, QuestionRevision)
-            .join(QuestionRevision)
-            .where(
-                CandidateTestAnswer.candidate_test_id == candidate_test_id,
-                col(CandidateTestAnswer.question_revision_id).in_(
-                    candidate_test.question_revision_ids
+
+    query = (
+        select(QuestionRevision, CandidateTestAnswer)
+        .select_from(
+            outerjoin(
+                QuestionRevision,
+                CandidateTestAnswer,
+                and_(
+                    CandidateTestAnswer.question_revision_id == QuestionRevision.id,
+                    CandidateTestAnswer.candidate_test_id == candidate_test_id,
                 ),
             )
-        ).all()
-    else:
-        joined_data = session.exec(
-            select(CandidateTestAnswer, QuestionRevision)
-            .join(QuestionRevision)
-            .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
-        ).all()
+        )
+        .where(col(QuestionRevision.id).in_(candidate_test.question_revision_ids))
+    )
+
+    joined_data = session.exec(query).all()
 
     correct = 0
     incorrect = 0
@@ -669,7 +669,7 @@ def get_test_result(
     marks_obtained = 0.0
     marks_maximum = 0.0
 
-    for answer, revision in joined_data:
+    for revision, answer in joined_data:
         if test.marks_level == "test":
             marking_scheme = test.marking_scheme
         else:
@@ -678,7 +678,7 @@ def get_test_result(
         if not marking_scheme:
             continue
         marks_maximum += marking_scheme["correct"]
-        if not answer.response:
+        if answer is None or not answer.response:
             marks_obtained += marking_scheme["skipped"]
             if revision.is_mandatory:
                 mandatory_not_attempted += 1
