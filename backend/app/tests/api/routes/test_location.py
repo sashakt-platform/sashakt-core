@@ -397,7 +397,8 @@ def test_create_district(
     data = response.json()
     assert response.status_code == 200
     assert data["name"] == district_name
-    assert data["state_id"] == kerala.id
+    assert data["state"]["id"] == kerala.id
+    assert data["state"]["name"] == kerala.name
 
 
 def test_get_district(
@@ -431,7 +432,7 @@ def test_get_district(
     assert any(item["name"] == thrissur.name for item in data)
     assert any(item["id"] == ernakulam.id for item in data)
     assert any(item["id"] == thrissur.id for item in data)
-    assert any(item["state_id"] == kerala.id for item in data)
+    assert any(item["state"]["id"] == kerala.id for item in data)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/district/",
@@ -546,8 +547,8 @@ def test_get_district_by_id(
     assert response.status_code == 200
     assert data["name"] == ernakulam.name
     assert data["id"] == ernakulam.id
-    assert data["state_id"] == ernakulam.state_id
-    assert data["state_id"] == kerala.id
+    assert data["state"]["id"] == ernakulam.state_id
+    assert data["state"]["id"] == kerala.id
     response = client.get(
         f"{settings.API_V1_STR}/location/district/-1", headers=get_user_superadmin_token
     )
@@ -593,8 +594,8 @@ def test_update_district(
     data = response.json()
     assert data["name"] == updated_name
     assert data["id"] == ernakulam.id
-    assert data["state_id"] == andhra_pradesh.id
-    assert data["state_id"] != kerala.id
+    assert data["state"]["id"] == andhra_pradesh.id
+    assert data["state"]["id"] != kerala.id
 
     response = client.put(
         f"{settings.API_V1_STR}/location/district/-1",

@@ -93,7 +93,6 @@ class StateUpdate(StateBase):
 
 class DistrictBase(SQLModel):
     name: str = Field(nullable=False, index=True)
-    state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
     is_active: bool = Field(default=True)
 
 
@@ -113,20 +112,22 @@ class District(DistrictBase, table=True):
     tests: list["Test"] | None = Relationship(
         back_populates="districts", link_model=TestDistrict
     )
+    state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
 
 
 class DistrictPublic(DistrictBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    state: State
 
 
 class DistrictCreate(DistrictBase):
-    pass
+    state_id: int
 
 
 class DistrictUpdate(DistrictBase):
-    pass
+    state_id: int
 
 
 # -----Models for District-----
