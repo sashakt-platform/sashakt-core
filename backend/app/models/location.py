@@ -119,7 +119,7 @@ class DistrictPublic(DistrictBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    state: State
+    state: StatePublic
 
 
 class DistrictCreate(DistrictBase):

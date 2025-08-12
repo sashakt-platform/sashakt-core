@@ -491,7 +491,7 @@ def test_get_district_by_name_filter(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    print("help", data)
+
     assert response.status_code == 200
     assert len(data) == 1
     assert data[0]["name"] == "North Zone Extension"
@@ -548,7 +548,7 @@ def test_get_district_by_id(
     assert data["name"] == ernakulam.name
     assert data["id"] == ernakulam.id
     assert data["state"]["id"] == ernakulam.state_id
-    assert data["state"]["id"] == kerala.id
+    assert data["state"]["name"] == kerala.name
     response = client.get(
         f"{settings.API_V1_STR}/location/district/-1", headers=get_user_superadmin_token
     )
@@ -595,6 +595,7 @@ def test_update_district(
     assert data["name"] == updated_name
     assert data["id"] == ernakulam.id
     assert data["state"]["id"] == andhra_pradesh.id
+    assert data["state"]["name"] == andhra_pradesh.name
     assert data["state"]["id"] != kerala.id
 
     response = client.put(
