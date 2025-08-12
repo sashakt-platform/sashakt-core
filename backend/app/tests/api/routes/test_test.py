@@ -2217,17 +2217,23 @@ def test_delete_test(
     db.add(test)
     db.commit()
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/test/{test.id}",
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
+        json=[test.id],
     )
-    assert response.status_code == 200
     data = response.json()
-    assert "delete" in data["message"]
+    assert data["delete_success_count"] == 1
+    assert data["delete_failure_list"] is None
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/test/{test.id}",
+    assert response.status_code == 200
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
+        json=[test.id],
     )
     assert response.status_code == 404
     assert "id" not in data
@@ -4056,7 +4062,7 @@ def test_mapping_test_with_district(
     data = response.json()
     assert data["name"] == test_payload["name"]
     assert data["description"] == test_payload["description"]
-    print("districts:", data["districts"])
+
     assert len(data["districts"]) == 2
     districts_ids = [d["id"] for d in data["districts"]]
     districts_names = [d["name"] for d in data["districts"]]
@@ -4271,6 +4277,7 @@ def test_delete_test_with_attempted_candidate_should_fail(
     )
     assert response.status_code == 200
     test_id = response.json()["id"]
+    test_name = response.json()["name"]
     candidate = Candidate(identity=uuid.uuid4())
     db.add(candidate)
     db.commit()
@@ -4299,16 +4306,18 @@ def test_delete_test_with_attempted_candidate_should_fail(
     )
     db.commit()
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/test/{test_id}",
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
+        json=[test_id],
     )
 
-    assert response.status_code == 422
-    assert (
-        response.json()["detail"]
-        == "Cannot delete test. One or more answers have already been submitted for its questions."
-    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["delete_success_count"] == 0
+    assert any(item["id"] == test_id for item in data["delete_failure_list"])
+    assert any(item["name"] == test_name for item in data["delete_failure_list"])
 
 
 def test_delete_test_with_no_attempted_candidates_should_pass(
@@ -4409,13 +4418,19 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
     ).all()
     assert len(test_district_links) == 1
 
-    response = client.delete(
-        f"{settings.API_V1_STR}/test/{test_id}",
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
         headers=get_user_superadmin_token,
+        json=[test_id],
     )
 
     assert response.status_code == 200
-    assert response.json()["message"] == "Test deleted successfully"
+    data = response.json()
+
+    assert data["delete_success_count"] == 1
+    assert data["delete_failure_list"] is None
+
     test_question_links = db.exec(
         select(TestQuestion).where(TestQuestion.test_id == test_id)
     ).all()

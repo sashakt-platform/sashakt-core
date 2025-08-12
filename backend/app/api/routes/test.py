@@ -1,13 +1,12 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import and_, col, func, select
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
-    Message,
     QuestionRevision,
     State,
     Test,
@@ -22,7 +21,7 @@ from app.models import (
 from app.models.candidate import CandidateTestAnswer
 from app.models.location import District
 from app.models.tag import Tag
-from app.models.test import MarksLevelEnum, TestDistrict
+from app.models.test import DeleteTest, MarksLevelEnum, TestDistrict
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -697,40 +696,47 @@ def visibility_test(
 
 
 @router.delete(
-    "/{test_id}",
+    "/",
+    response_model=DeleteTest,
     dependencies=[Depends(permission_dependency("delete_test"))],
 )
-def delete_test(test_id: int, session: SessionDep) -> Message:
-    test = session.get(Test, test_id)
-    if not test or test.is_deleted is True:
-        raise HTTPException(status_code=404, detail="Test is not available")
-    attempted_answer_exists = (
-        session.exec(
-            select(1)
-            .select_from(CandidateTestAnswer)
-            .join(
-                TestQuestion,
-                and_(
-                    CandidateTestAnswer.question_revision_id
-                    == TestQuestion.question_revision_id
-                ),
-            )
-            .where(TestQuestion.test_id == test.id)
-            .limit(1)
-        ).first()
-        is not None
-    )
+def delete_test(session: SessionDep, test_ids: list[int] = Body(...)) -> DeleteTest:
+    success_count = 0
+    failure_list = []
+    db_tests = session.exec(select(Test).where(col(Test.id).in_(test_ids))).all()
 
-    if attempted_answer_exists:
+    found_ids = {test.id for test in db_tests}
+    missing_ids = set(test_ids) - found_ids
+    if missing_ids:
         raise HTTPException(
-            status_code=422,
-            detail="Cannot delete test. One or more answers have already been submitted for its questions.",
+            status_code=404, detail=f"Test IDs not found in DB: {missing_ids}"
         )
 
-    session.delete(test)
+    tests_with_answers = session.exec(
+        select(TestQuestion.test_id)
+        .join(
+            CandidateTestAnswer,
+            CandidateTestAnswer.question_revision_id
+            == TestQuestion.question_revision_id,  # type: ignore
+        )
+        .where(col(TestQuestion.test_id).in_([test.id for test in db_tests]))
+        .distinct()
+    ).all()
+
+    tests_with_answers_set = set(tests_with_answers)
+
+    for test in db_tests:
+        if test.id in tests_with_answers_set:
+            failure_list.append(test)
+        else:
+            session.delete(test)
+            success_count += 1
+
     session.commit()
 
-    return Message(message="Test deleted successfully")
+    return DeleteTest(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 @router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)
