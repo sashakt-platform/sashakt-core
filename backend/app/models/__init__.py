@@ -1,4 +1,9 @@
-from .auth import NewPassword, Token, TokenPayload
+from .auth import (
+    NewPassword,
+    RefreshTokenRequest,
+    Token,
+    TokenPayload,
+)
 from .candidate import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -102,6 +107,7 @@ from .utils import Message
 
 __all__ = [
     "NewPassword",
+    "RefreshTokenRequest",
     "Token",
     "TokenPayload",
     "Role",

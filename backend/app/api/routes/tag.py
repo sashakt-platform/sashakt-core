@@ -2,7 +2,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import not_, select
+from sqlmodel import and_, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -38,6 +38,18 @@ def create_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TagType:
+    normalized_name = tagtype_create.name.strip().lower()
+    existing = session.exec(
+        select(TagType)
+        .where(func.lower(func.trim(TagType.name)) == normalized_name)
+        .where(TagType.organization_id == tagtype_create.organization_id)
+        .where(not_(TagType.is_deleted))
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"TagType with name '{tagtype_create.name}' already exists in this organization.",
+        )
     tag_type = TagType(
         **tagtype_create.model_dump(),
         created_by_id=current_user.id,
@@ -54,13 +66,18 @@ def get_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
     params: Pagination = Depends(),
+    name: str | None = None,
 ) -> Page[TagType]:
-    tagtype = session.exec(
-        select(TagType).where(
-            TagType.organization_id == current_user.organization_id,
-            not_(TagType.is_deleted),
+    query = select(TagType).where(
+        TagType.organization_id == current_user.organization_id,
+        not_(TagType.is_deleted),
+    )
+    if name:
+        query = query.where(
+            func.trim(func.lower(TagType.name)).like(f"%{name.strip().lower()}%")
         )
-    ).all()
+
+    tagtype = session.exec(query).all()
     return cast(Page[TagType], paginate(tagtype, params=params))
 
 
@@ -144,6 +161,28 @@ def create_tag(
         organization_id = tag_type.organization_id
     else:
         organization_id = current_user.organization_id
+    existing_tag = session.exec(
+        select(Tag).where(
+            and_(
+                func.lower(func.trim(Tag.name)) == tag_create.name.strip().lower(),
+                Tag.organization_id == organization_id,
+                not_(Tag.is_deleted),
+                or_(
+                    and_(
+                        Tag.tag_type_id is None,
+                        tag_type_id is None,
+                    ),
+                    Tag.tag_type_id == tag_type_id,
+                ),
+            )
+        )
+    ).first()
+
+    if existing_tag:
+        raise HTTPException(
+            status_code=400,
+            detail="A tag with the same name and tag type already exists.",
+        )
 
     tag_data = tag_create.model_dump(exclude_unset=True)
 
@@ -165,6 +204,7 @@ def get_tags(
     session: SessionDep,
     current_user: CurrentUser,
     params: Pagination = Depends(),
+    name: str | None = None,
     order_by: list[str] = Query(
         default=["tag_type_name", "name"],
         title="Order by",
@@ -175,6 +215,10 @@ def get_tags(
     query = select(Tag).where(
         Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
     )
+    if name:
+        query = query.where(
+            func.trim(func.lower(Tag.name)).like(f"%{name.strip().lower()}%")
+        )
     join_tag_type = any("tag_type_name" in field for field in order_by)
     if join_tag_type:
         query = query.outerjoin(TagType)

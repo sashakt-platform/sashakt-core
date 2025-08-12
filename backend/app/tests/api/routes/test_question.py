@@ -46,7 +46,7 @@ def test_create_question(
     tag_type_response = client.post(
         f"{settings.API_V1_STR}/tagtype/",
         json={
-            "name": "Test Tag Type",
+            "name": random_lower_string(),
             "description": "For testing",
             "organization_id": org_id,
         },
@@ -2810,7 +2810,7 @@ def test_create_duplicate_question(
     tag_type_response = client.post(
         f"{settings.API_V1_STR}/tagtype/",
         json={
-            "name": "Test Tag Type",
+            "name": random_lower_string(),
             "description": "For testing",
             "organization_id": org_id,
         },

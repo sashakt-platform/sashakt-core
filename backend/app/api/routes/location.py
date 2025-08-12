@@ -2,7 +2,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page, paginate
-from sqlmodel import select
+from sqlmodel import func, select
 
 from app.api.deps import Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -136,6 +136,7 @@ def create_state(
 )
 def get_state(
     session: SessionDep,
+    name: str | None = None,
     params: Pagination = Depends(),
     is_active: bool | None = None,
     country: int | None = None,
@@ -147,6 +148,11 @@ def get_state(
 
     if country is not None:
         query = query.where(State.country_id == country)
+
+    if name:
+        query = query.where(
+            func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
+        )
 
     states = session.exec(query).all()
 
@@ -221,6 +227,7 @@ def create_district(
 )
 def get_district(
     session: SessionDep,
+    name: str | None = None,
     is_active: bool | None = None,
     params: Pagination = Depends(),
     state: int | None = None,
@@ -232,6 +239,11 @@ def get_district(
 
     if state is not None:
         query = query.where(District.state_id == state)
+
+    if name:
+        query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
+
+    # Apply apgination
 
     districts = session.exec(query).all()
 
