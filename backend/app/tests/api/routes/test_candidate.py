@@ -2377,7 +2377,6 @@ def test_result_with_Marks_level_None(
         is_active=True,
         is_deleted=False,
         marks_level=None,
-        # marking_scheme=None,
     )
     db.add(test)
     db.commit()
@@ -2474,6 +2473,125 @@ def test_result_with_Marks_level_None(
     assert data["optional_not_attempted"] == 0
     assert data["marks_obtained"] is None
     assert data["marks_maximum"] is None
+
+
+def test_result_with_some_questions_marks_scheme_None(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    revisions = []
+
+    for i in range(3):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision_data = {
+            "created_by_id": user.id,
+            "question_id": question.id,
+            "question_text": f"Q{i + 1}",
+            "question_type": QuestionType.single_choice,
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            "correct_answer": [2],
+            "is_mandatory": True,
+            "is_active": True,
+            "is_deleted": False,
+            "marking_scheme": None
+            if i < 1
+            else {"correct": 2, "wrong": 0, "skipped": 0},
+        }
+        revision = QuestionRevision(**revision_data)
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions.append(revision)
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+        question_revision_ids=[rev.id for rev in revisions],
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    db.add_all(
+        [
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[0].id,
+                response=[2],
+                visited=True,
+                time_spent=5,
+            ),
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[1].id,
+                response=[2],
+                visited=True,
+                time_spent=5,
+            ),
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revisions[2].id,
+                response=[2],
+                visited=True,
+                time_spent=5,
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 3
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 0
+    assert data["optional_not_attempted"] == 0
+    assert data["marks_obtained"] == 4
+    assert data["marks_maximum"] == 4
 
 
 def test_get_test_result_not_found(
@@ -3982,7 +4100,6 @@ def test_test_level_marking_scheme_applied_on_questions(
     db.commit()
 
     # Link question to test
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
