@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
+from app.tests.utils.utils import assert_paginated_response
 
 from ...utils.utils import random_lower_string
 
@@ -57,9 +58,10 @@ def test_get_country(
         f"{settings.API_V1_STR}/location/country/", headers=get_user_superadmin_token
     )
     data = response.json()
+    items = data["items"]
     assert response.status_code == 200
-    assert any(item["name"] == dubai.name for item in data)
-    assert any(item["name"] == austria.name for item in data)
+    assert any(item["name"] == dubai.name for item in items)
+    assert any(item["name"] == austria.name for item in items)
 
     for _ in range(1, 11):
         country = Country(name=random_lower_string())
@@ -71,16 +73,14 @@ def test_get_country(
     db.add_all([country_1, country_2])
     db.commit()
 
-    limit = 8
-
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?skip=0&&limit={limit}",
+        f"{settings.API_V1_STR}/location/country/?page=2",
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == limit
+    assert data["page"] == 2
 
     response = client.get(
         f"{settings.API_V1_STR}/location/country/",
@@ -89,7 +89,7 @@ def test_get_country(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 10  # Default value for pagination
+    assert_paginated_response(response, min_expected_total=12)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/country/?is_active=False",
@@ -98,7 +98,7 @@ def test_get_country(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    assert_paginated_response(response, min_expected_total=2)
 
 
 def test_get_country_by_id(
@@ -190,8 +190,9 @@ def test_get_state(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-
-    assert len(data) == 10
+    items = data["items"]
+    assert len(items) >= 10
+    assert_paginated_response(response, min_expected_total=10, min_expected_pages=1)
 
     india = Country(name=random_lower_string())
     db.add(india)
@@ -206,17 +207,18 @@ def test_get_state(
     db.refresh(goa)
     db.refresh(punjab)
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?limit=1000",
+        f"{settings.API_V1_STR}/location/state/?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) >= 2
+    items = data["items"]
+    assert len(items) >= 2
 
-    assert any(item["name"] == goa.name for item in data)
-    assert any(item["name"] == punjab.name for item in data)
-    assert any(item["country_id"] == india.id for item in data)
+    assert any(item["name"] == goa.name for item in items)
+    assert any(item["name"] == punjab.name for item in items)
+    assert any(item["country_id"] == india.id for item in items)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/state/?country={india.id}",
@@ -225,7 +227,8 @@ def test_get_state(
 
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     state_3 = State(name=random_lower_string(), country_id=india.id, is_active=False)
     state_4 = State(name=random_lower_string(), country_id=india.id, is_active=False)
@@ -239,8 +242,8 @@ def test_get_state(
 
     data = response.json()
     assert response.status_code == 200
-
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
 
 def test_get_state_filter_by_name(
@@ -265,8 +268,10 @@ def test_get_state_filter_by_name(
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) == 1
-    assert any(state["name"].strip().lower() == "randomstate" for state in data)
+    assert len(data["items"]) == 1
+    assert any(
+        state["name"].strip().lower() == "randomstate" for state in data["items"]
+    )
 
     response = client.get(
         f"{settings.API_V1_STR}/location/state/?name=random",
@@ -274,8 +279,10 @@ def test_get_state_filter_by_name(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 1
-    assert any(state["name"].strip().lower() == "randomstate" for state in data)
+    assert len(data["items"]) == 1
+    assert any(
+        state["name"].strip().lower() == "randomstate" for state in data["items"]
+    )
 
     response = client.get(
         f"{settings.API_V1_STR}/location/state/?name=randomnonmatch",
@@ -283,7 +290,7 @@ def test_get_state_filter_by_name(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 0
+    assert len(data["items"]) == 0
 
     state_3 = State(name=" RandomstateAnother", country_id=country.id)
     db.add(state_3)
@@ -295,7 +302,7 @@ def test_get_state_filter_by_name(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
 
 def test_get_state_by_id(
@@ -421,10 +428,11 @@ def test_get_district(
     db.refresh(ernakulam)
     db.refresh(thrissur)
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?limit=10000",
+        f"{settings.API_V1_STR}/location/district/?size=100&state={kerala.id}",
         headers=get_user_superadmin_token,
     )
-    data = response.json()
+    response_data = response.json()
+    data = response_data["items"]
     assert response.status_code == 200
 
     assert any(item["name"] == ernakulam.name for item in data)
@@ -439,7 +447,8 @@ def test_get_district(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert len(data) == 10
+    assert len(data["items"]) >= 10
+    assert_paginated_response(response, min_expected_total=10, min_expected_pages=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/district/?state={kerala.id}",
@@ -447,7 +456,7 @@ def test_get_district(
     )
     data = response.json()
 
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
     district_a = District(
         name=random_lower_string(), state_id=kerala.id, is_active=False
@@ -464,7 +473,7 @@ def test_get_district(
     )
     data = response.json()
 
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
 
 def test_get_district_by_name_filter(
@@ -493,8 +502,8 @@ def test_get_district_by_name_filter(
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) == 1
-    assert data[0]["name"] == "North Zone Extension"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == "North Zone Extension"
 
     response = client.get(
         f"{settings.API_V1_STR}/location/district/?name=North Zone",
@@ -502,8 +511,8 @@ def test_get_district_by_name_filter(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-    names = [d["name"] for d in data]
+    assert len(data["items"]) == 2
+    names = [d["name"] for d in data["items"]]
     assert "North Zone" in names
     assert "North Zone Extension" in names
 
@@ -513,7 +522,7 @@ def test_get_district_by_name_filter(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 0
+    assert len(data["items"]) == 0
 
     response = client.get(
         f"{settings.API_V1_STR}/location/district/?name=north zone",
@@ -521,8 +530,8 @@ def test_get_district_by_name_filter(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
-    assert any(d["name"].lower() == "north zone" for d in data)
+    assert len(data["items"]) == 2
+    assert any(d["name"].lower() == "north zone" for d in data["items"])
 
 
 def test_get_district_by_id(
@@ -668,7 +677,7 @@ def test_get_block(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert len(data) == 10
+    assert len(data["items"]) >= 10
 
     kovil = Block(name=random_lower_string(), district_id=ernakulam.id)
     mayani = Block(name=random_lower_string(), district_id=ernakulam.id)
@@ -679,10 +688,11 @@ def test_get_block(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?limit=10000",
+        f"{settings.API_V1_STR}/location/block/?size=100&block={kovil.id}&block={mayani.id}&block={kumuram.id}",
         headers=get_user_superadmin_token,
     )
-    data = response.json()
+    response_data = response.json()
+    data = response_data["items"]
     assert response.status_code == 200
 
     assert any(item["name"] == kovil.name for item in data)
@@ -699,7 +709,7 @@ def test_get_block(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 1
+    assert len(data["items"]) == 1
 
     block_a = Block(
         name=random_lower_string(), district_id=thrissur.id, is_active=False
@@ -717,7 +727,7 @@ def test_get_block(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
 
 def test_get_block_by_id(
@@ -835,8 +845,9 @@ def test_create_inactive_country_not_listed(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert all(item["is_active"] is True for item in data)
-    assert all(item["id"] != country_id for item in data)
+    items = data["items"]
+    assert all(item["is_active"] is True for item in items)
+    assert all(item["id"] != country_id for item in items)
 
 
 def test_create_inactive_state_not_listed(
@@ -862,21 +873,21 @@ def test_create_inactive_state_not_listed(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert all(item["id"] != state_id for item in data)
-    assert all(item["is_active"] is True for item in data)
+    assert all(item["id"] != state_id for item in data["items"])
+    assert all(item["is_active"] is True for item in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/location/state/?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert any(item["id"] == state_id for item in data)
-    assert all(item["is_active"] is False for item in data)
+    assert any(item["id"] == state_id for item in data["items"])
+    assert all(item["is_active"] is False for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?limit=100",
+        f"{settings.API_V1_STR}/location/state/?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert any(item["id"] == state_id for item in data)
+    assert any(item["id"] == state_id for item in data["items"])
 
 
 def test_create_inactive_district_not_listed(
@@ -911,14 +922,14 @@ def test_create_inactive_district_not_listed(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert all(item["id"] != district_id for item in data)
+    assert all(item["id"] != district_id for item in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/location/district/?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert any(item["id"] == district_id for item in data)
-    assert all(item["is_active"] is False for item in data)
+    assert any(item["id"] == district_id for item in data["items"])
+    assert all(item["is_active"] is False for item in data["items"])
 
 
 def test_create_inactive_block_not_listed(
@@ -956,14 +967,14 @@ def test_create_inactive_block_not_listed(
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert all(item["id"] != block_id for item in data)
+    assert all(item["id"] != block_id for item in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/location/block/?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
-    assert any(item["id"] == block_id for item in data)
-    assert all(item["is_active"] is False for item in data)
+    assert any(item["id"] == block_id for item in data["items"])
+    assert all(item["is_active"] is False for item in data["items"])
 
 
 def test_get_is_active_country(
@@ -981,13 +992,13 @@ def test_get_is_active_country(
     db.refresh(austria)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?limit=100",
+        f"{settings.API_V1_STR}/location/country/?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
-    assert any(item["name"] == dubai.name for item in data)
-    assert any(item["name"] == austria.name for item in data)
+    assert any(item["name"] == dubai.name for item in data["items"])
+    assert any(item["name"] == austria.name for item in data["items"])
 
     for _ in range(1, 11):
         country = Country(name=random_lower_string(), is_active=True)
@@ -1006,11 +1017,11 @@ def test_get_is_active_country(
 
     assert response.status_code == 200
     data = response.json()
-    names = [item["name"] for item in data]
+    names = [item["name"] for item in data["items"]]
 
     assert country_1.name in names
     assert country_2.name in names
-    assert all(item["is_active"] is False for item in data)
+    assert all(item["is_active"] is False for item in data["items"])
     data = response.json()
     response = client.get(
         f"{settings.API_V1_STR}/location/country/?is_active=true",
@@ -1018,5 +1029,5 @@ def test_get_is_active_country(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 10  # default limit is 10
-    assert all(item["is_active"] is True for item in data)
+    assert len(data["items"]) >= 10
+    assert all(item["is_active"] is True for item in data["items"])

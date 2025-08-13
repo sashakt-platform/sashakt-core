@@ -1,10 +1,10 @@
-from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi_pagination import Page, paginate
 from sqlmodel import func, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import Pagination, SessionDep, permission_dependency
 from app.models import (
     Block,
     BlockCreate,
@@ -52,26 +52,22 @@ def create_country(
 # Get all Countries
 @country_router.get(
     "/",
-    response_model=list[CountryPublic],
+    response_model=Page[CountryPublic],
     dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_countries(
     session: SessionDep,
-    skip: int = 0,
-    limit: int = 10,
+    params: Pagination = Depends(),
     is_active: bool | None = None,
-) -> Sequence[Country]:
+) -> Page[Country]:
     query = select(Country)
 
     if is_active is not None:
         query = query.where(Country.is_active == is_active)
 
-    # Apply pagination
-    query = query.offset(skip).limit(limit)
-
     countries = session.exec(query).all()
 
-    return countries
+    return cast(Page[Country], paginate(countries, params=params))
 
 
 # Get Country by ID
@@ -135,17 +131,16 @@ def create_state(
 # Get all States
 @state_router.get(
     "/",
-    response_model=list[StatePublic],
+    response_model=Page[StatePublic],
     dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state(
     session: SessionDep,
     name: str | None = None,
-    skip: int = 0,
-    limit: int = 10,
+    params: Pagination = Depends(),
     is_active: bool | None = None,
     country: int | None = None,
-) -> Sequence[State]:
+) -> Page[State]:
     query = select(State)
 
     if is_active is not None:
@@ -159,11 +154,9 @@ def get_state(
             func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
         )
 
-    query = query.offset(skip).limit(limit)
-
     states = session.exec(query).all()
 
-    return states
+    return cast(Page[State], paginate(states, params=params))
 
 
 # Get State by ID
@@ -229,17 +222,16 @@ def create_district(
 # Get all Districts
 @district_router.get(
     "/",
-    response_model=list[DistrictPublic],
+    response_model=Page[DistrictPublic],
     dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district(
     session: SessionDep,
-    skip: int = 0,
-    limit: int = 10,
     name: str | None = None,
     is_active: bool | None = None,
+    params: Pagination = Depends(),
     state: int | None = None,
-) -> Sequence[District]:
+) -> Page[District]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
@@ -252,7 +244,6 @@ def get_district(
         query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
 
     # Apply apgination
-    query = query.offset(skip).limit(limit)
     results = session.exec(query).all()
 
     districts = []
@@ -260,7 +251,7 @@ def get_district(
         district.state = state_obj
         districts.append(district)
 
-    return districts
+    return cast(Page[District], paginate(districts, params=params))
 
 
 # Get District by ID
@@ -326,16 +317,15 @@ def create_block(
 # Get all Blocks
 @block_router.get(
     "/",
-    response_model=list[BlockPublic],
+    response_model=Page[BlockPublic],
     dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block(
     session: SessionDep,
-    skip: int = 0,
-    limit: int = 10,
+    params: Pagination = Depends(),
     is_active: bool | None = None,
     district: int | None = None,
-) -> Sequence[Block]:
+) -> Page[Block]:
     query = select(Block)
 
     if is_active is not None:
@@ -344,12 +334,9 @@ def get_block(
     if district is not None:
         query = query.where(Block.district_id == district)
 
-    # Apply pagination
-    query = query.offset(skip).limit(limit)
-
     blocks = session.exec(query).all()
 
-    return blocks
+    return cast(Page[Block], paginate(blocks, params=params))
 
 
 # Get Block by ID
