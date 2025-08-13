@@ -87,7 +87,7 @@ def test_get_existing_user(
         full_name=full_name,
         phone=phone,
         role_id=role.id,
-        organization_id=current_user["organization_id"],
+        organization_id=current_user["organization"]["id"],
     )
     user = crud.create_user(session=db, user_create=user_in)
     user_id = user.id
@@ -262,9 +262,15 @@ def test_retrieve_users(
         assert "email" in item
         assert "full_name" in item
         assert "phone" in item
-        assert "role_id" in item
-        assert "organization_id" in item
-        assert item["organization_id"] == current_user["organization_id"]
+        assert "role" in item
+        assert isinstance(item["role"], dict)
+        assert "id" in item["role"]
+        assert "name" in item["role"]
+
+        assert "organization" in item
+        assert isinstance(item["organization"], dict)
+        assert "id" in item["organization"]
+        assert item["organization"]["id"] == current_user["organization"]["id"]
 
 
 def test_update_user_me(
@@ -837,7 +843,7 @@ def test_create_state_admin_with_state_id(
         response_data = response.json()
         user_id = response_data["id"]
         assert response_data["email"] == email
-        assert response_data["role_id"] == role.id
+        assert response_data["role"]["id"] == role.id
         assert role.name == "state_admin"
         assert "states" in response_data
         post_state_names = {s["name"] for s in response_data["states"]}
@@ -854,7 +860,7 @@ def test_create_state_admin_with_state_id(
         data = r.json()
         assert r.status_code == 200
         assert data["email"] == email
-        assert data["role_id"] == role.id
+        assert data["role"]["id"] == role.id
         state_names = {s["name"] for s in data["states"]}
         state_ids = {s["id"] for s in data["states"]}
         assert state1.name in state_names
@@ -898,7 +904,7 @@ def test_create_user_without_states(
         response_data = response.json()
         user_id = response_data["id"]
         assert response_data["email"] == email
-        assert response_data["role_id"] == role.id
+        assert response_data["role"]["id"] == role.id
         assert "states" in response_data
         assert not response_data["states"]
 
@@ -909,7 +915,7 @@ def test_create_user_without_states(
         data = r.json()
         assert r.status_code == 200
         assert data["email"] == email
-        assert data["role_id"] == role.id
+        assert data["role"]["id"] == role.id
         assert "states" in data
         assert not data["states"]
 
@@ -973,7 +979,7 @@ def test_update_user_states(
     data = update_response.json()
     assert data["states"] is None
     assert data["email"] == email
-    assert data["role_id"] == role.id
+    assert data["role"]["id"] == role.id
     assert data["full_name"] == "full name"
 
     email = random_email()
@@ -1038,7 +1044,7 @@ def test_update_other_role_to_state_admin_and_remove_states(
     assert response.status_code == 200
     user_data = response.json()
     user_id = user_data["id"]
-    assert user_data["role_id"] == other_role.id
+    assert user_data["role"]["id"] == other_role.id
     assert user_data["states"] is None
 
     patch_data = {
@@ -1055,7 +1061,9 @@ def test_update_other_role_to_state_admin_and_remove_states(
     )
     assert patch_response.status_code == 200
     updated_data = patch_response.json()
-    assert updated_data["role_id"] == state_admin_role.id
+    assert updated_data["role"] is not None
+    assert isinstance(updated_data["role"], dict)
+    assert updated_data["role"]["id"] == state_admin_role.id
     assert len(updated_data["states"]) == 2
 
 
@@ -1099,7 +1107,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
     user_data = response.json()
     user_id = user_data["id"]
 
-    assert user_data["role_id"] == state_admin_role.id
+    assert user_data["role"]["id"] == state_admin_role.id
     assert len(user_data["states"]) == 2
     state_ids = {s["id"] for s in user_data["states"]}
     assert state1.id in state_ids
@@ -1119,5 +1127,5 @@ def test_update_state_admin_to_other_role_and_remove_states(
     )
     assert patch_response.status_code == 200
     updated_data = patch_response.json()
-    assert updated_data["role_id"] == other_role.id
+    assert updated_data["role"]["id"] == other_role.id
     assert updated_data["states"] is None

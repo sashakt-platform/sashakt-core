@@ -126,4 +126,6 @@ def get_current_user_data(
     )
     assert response.status_code == 200, f"Failed to fetch user info: {response.text}"
     user_data = cast(dict[str, Any], response.json())
+    if isinstance(user_data.get("organization"), dict):
+        user_data["organization_id"] = user_data["organization"]["id"]
     return user_data

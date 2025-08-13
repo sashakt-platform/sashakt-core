@@ -23,6 +23,7 @@ from app.models import (
     UserUpdateMe,
 )
 from app.models.location import State
+from app.models.organization import Organization
 from app.models.role import Role
 from app.models.user import UserState
 from app.utils import generate_new_account_email, send_email
@@ -52,13 +53,24 @@ def read_users(
     )
     count = session.exec(count_statement).one()
 
-    statement = (
-        select(User)
+    query = (
+        select(User, Role, Organization)
+        .join(Role)
+        .where(User.role_id == Role.id)
+        .join(Organization)
+        .where(User.organization_id == Organization.id)
         .where(User.organization_id == current_user_organization_id)
         .offset(skip)
         .limit(limit)
     )
-    users = session.exec(statement).all()
+
+    results = session.exec(query).all()
+
+    users = []
+    for user_obj, role_obj, org_obj in results:
+        user_obj.role = role_obj
+        user_obj.organization = org_obj
+        users.append(user_obj)
 
     return UsersPublic(data=users, count=count)
 
@@ -287,7 +299,11 @@ def update_user(
     updated_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
     states = db_user.states if is_state_admin else None
 
-    return UserPublic(**updated_user.model_dump(), states=states)
+    organization = db_user.organization
+    role = db_user.role
+    return UserPublic(
+        **updated_user.model_dump(), states=states, role=role, organization=organization
+    )
 
 
 @router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])

@@ -5,6 +5,8 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.organization import OrganizationPublic
+from app.models.role import Role
 
 if TYPE_CHECKING:
     from app.models import (
@@ -44,8 +46,6 @@ class UserBase(SQLModel):
         description="Enter Email Address",
     )
     phone: str = Field(max_length=255)
-    role_id: int = Field(foreign_key="role.id")
-    organization_id: int = Field(foreign_key="organization.id")
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
     is_active: bool = Field(default=True)
 
@@ -62,6 +62,8 @@ class UserCreate(UserBase):
     state_ids: list[int] | None = Field(
         default=None, description="IDs of states to associate with the user"
     )
+    organization_id: int
+    role_id: int
 
 
 # Properties to receive via API on update, all are optional
@@ -69,6 +71,8 @@ class UserUpdate(UserBase):
     email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
     password: str | None = Field(default=None, min_length=8, max_length=40)
     state_ids: list[int] | None = None
+    organization_id: int | None = None
+    role_id: int | None = None
 
 
 class UserUpdateMe(SQLModel):
@@ -97,6 +101,8 @@ class User(UserBase, table=True):
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
+    role_id: int = Field(foreign_key="role.id")
+    organization_id: int = Field(foreign_key="organization.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
@@ -124,6 +130,8 @@ class UserPublic(UserBase):
     modified_date: datetime
     is_deleted: bool
     created_by_id: int | None
+    organization: OrganizationPublic | None = None
+    role: Role | None = None
     states: list["State"] | None = Field(
         default=None, description="states associated with this user"
     )
