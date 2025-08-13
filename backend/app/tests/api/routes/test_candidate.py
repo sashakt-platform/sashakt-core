@@ -1848,7 +1848,7 @@ def test_get_test_result(
     candidate_test_answer = CandidateTestAnswer(
         candidate_test_id=candidate_test.id,
         question_revision_id=questions[0].id,
-        response=1,
+        response=2,
         visited=True,
         time_spent=30,
     )

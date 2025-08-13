@@ -232,7 +232,7 @@ def get_district(
     params: Pagination = Depends(),
     state: int | None = None,
 ) -> Page[District]:
-    query = select(District)
+    query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
         query = query.where(District.is_active == is_active)
@@ -244,8 +244,12 @@ def get_district(
         query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
 
     # Apply apgination
+    results = session.exec(query).all()
 
-    districts = session.exec(query).all()
+    districts = []
+    for district, state_obj in results:
+        district.state = state_obj
+        districts.append(district)
 
     return cast(Page[District], paginate(districts, params=params))
 
