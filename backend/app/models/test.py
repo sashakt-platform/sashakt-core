@@ -246,8 +246,3 @@ class TestPublicLimited(TestBase):
 
     id: int
     total_questions: int
-
-
-class DeleteTest(SQLModel):
-    delete_success_count: int
-    delete_failure_list: list[TestPublic] | None = None

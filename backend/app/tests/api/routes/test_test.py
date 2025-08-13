@@ -2217,23 +2217,17 @@ def test_delete_test(
     db.add(test)
     db.commit()
 
-    response = client.request(
-        "DELETE",
-        f"{settings.API_V1_STR}/test/",
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test.id}",
         headers=get_user_superadmin_token,
-        json=[test.id],
     )
-    data = response.json()
-    assert data["delete_success_count"] == 1
-    assert data["delete_failure_list"] is None
-
     assert response.status_code == 200
+    data = response.json()
+    assert "delete" in data["message"]
 
-    response = client.request(
-        "DELETE",
-        f"{settings.API_V1_STR}/test/",
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test.id}",
         headers=get_user_superadmin_token,
-        json=[test.id],
     )
     assert response.status_code == 404
     assert "id" not in data
@@ -4277,7 +4271,6 @@ def test_delete_test_with_attempted_candidate_should_fail(
     )
     assert response.status_code == 200
     test_id = response.json()["id"]
-    test_name = response.json()["name"]
     candidate = Candidate(identity=uuid.uuid4())
     db.add(candidate)
     db.commit()
@@ -4306,18 +4299,16 @@ def test_delete_test_with_attempted_candidate_should_fail(
     )
     db.commit()
 
-    response = client.request(
-        "DELETE",
-        f"{settings.API_V1_STR}/test/",
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
         headers=get_user_superadmin_token,
-        json=[test_id],
     )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["delete_success_count"] == 0
-    assert any(item["id"] == test_id for item in data["delete_failure_list"])
-    assert any(item["name"] == test_name for item in data["delete_failure_list"])
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Cannot delete test. One or more answers have already been submitted for its questions."
+    )
 
 
 def test_delete_test_with_no_attempted_candidates_should_pass(
@@ -4418,19 +4409,13 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
     ).all()
     assert len(test_district_links) == 1
 
-    response = client.request(
-        "DELETE",
-        f"{settings.API_V1_STR}/test/",
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
         headers=get_user_superadmin_token,
-        json=[test_id],
     )
 
     assert response.status_code == 200
-    data = response.json()
-
-    assert data["delete_success_count"] == 1
-    assert data["delete_failure_list"] is None
-
+    assert response.json()["message"] == "Test deleted successfully"
     test_question_links = db.exec(
         select(TestQuestion).where(TestQuestion.test_id == test_id)
     ).all()
