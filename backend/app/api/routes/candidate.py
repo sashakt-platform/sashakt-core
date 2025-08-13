@@ -675,11 +675,10 @@ def get_test_result(
         else:
             marking_scheme = revision.marking_scheme
 
-        if not marking_scheme:
-            continue
-        marks_maximum += marking_scheme["correct"]
+        if marking_scheme:
+            marks_maximum += marking_scheme["correct"]
         if answer is None or not answer.response:
-            marks_obtained += marking_scheme["skipped"]
+            marks_obtained += marking_scheme["skipped"] if marking_scheme else 0
             if revision.is_mandatory:
                 mandatory_not_attempted += 1
             else:
@@ -691,17 +690,17 @@ def get_test_result(
 
                 if set(response_list) == set(correct_list):
                     correct += 1
-                    marks_obtained += marking_scheme["correct"]
+                    marks_obtained += marking_scheme["correct"] if marking_scheme else 0
                 else:
                     incorrect += 1
-                    marks_obtained += marking_scheme["wrong"]
+                    marks_obtained += marking_scheme["wrong"] if marking_scheme else 0
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
-        marks_obtained=marks_obtained,
-        marks_maximum=marks_maximum,
+        marks_obtained=marks_obtained if marking_scheme else None,
+        marks_maximum=marks_maximum if marking_scheme else None,
     )
 
 
