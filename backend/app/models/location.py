@@ -103,6 +103,7 @@ class District(DistrictBase, table=True):
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
+    state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
     state: State | None = Relationship(back_populates="districts")
     blocks: list["Block"] | None = Relationship(back_populates="district")
     question_locations: list["QuestionLocation"] = Relationship(
@@ -112,7 +113,6 @@ class District(DistrictBase, table=True):
     tests: list["Test"] | None = Relationship(
         back_populates="districts", link_model=TestDistrict
     )
-    state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
 
 
 class DistrictPublic(DistrictBase):
