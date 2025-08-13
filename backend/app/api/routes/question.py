@@ -44,6 +44,7 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.test import TestQuestion
 from app.models.utils import MarkingScheme
 
 
@@ -593,6 +594,18 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
+    query = (
+        select(TestQuestion)
+        .join(QuestionRevision)
+        .where(QuestionRevision.id == TestQuestion.question_revision_id)
+        .where(QuestionRevision.question_id == question_id)
+    )
+    linked_tests = session.exec(query).first()
+    if linked_tests:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete question because it is linked to a test",
+        )
 
     # Soft delete
     question.is_deleted = True
