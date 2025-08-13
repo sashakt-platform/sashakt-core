@@ -240,7 +240,7 @@ def get_district(
     is_active: bool | None = None,
     state: int | None = None,
 ) -> Sequence[District]:
-    query = select(District)
+    query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
         query = query.where(District.is_active == is_active)
@@ -253,8 +253,12 @@ def get_district(
 
     # Apply apgination
     query = query.offset(skip).limit(limit)
+    results = session.exec(query).all()
 
-    districts = session.exec(query).all()
+    districts = []
+    for district, state_obj in results:
+        district.state = state_obj
+        districts.append(district)
 
     return districts
 

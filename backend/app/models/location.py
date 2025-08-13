@@ -93,7 +93,6 @@ class StateUpdate(StateBase):
 
 class DistrictBase(SQLModel):
     name: str = Field(nullable=False, index=True)
-    state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
     is_active: bool = Field(default=True)
 
 
@@ -104,6 +103,7 @@ class District(DistrictBase, table=True):
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
+    state_id: int = Field(foreign_key="state.id", nullable=False, ondelete="CASCADE")
     state: State | None = Relationship(back_populates="districts")
     blocks: list["Block"] | None = Relationship(back_populates="district")
     question_locations: list["QuestionLocation"] = Relationship(
@@ -119,14 +119,15 @@ class DistrictPublic(DistrictBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    state: StatePublic
 
 
 class DistrictCreate(DistrictBase):
-    pass
+    state_id: int
 
 
 class DistrictUpdate(DistrictBase):
-    pass
+    state_id: int
 
 
 # -----Models for District-----
