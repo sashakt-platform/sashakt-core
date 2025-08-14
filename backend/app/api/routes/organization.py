@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, not_, select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.core.config import PAGINATION_SIZE
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
     AggregatedData,
     Message,
@@ -39,15 +39,12 @@ def create_organization(
 # Get all Organizations
 @router.get(
     "/",
-    response_model=list[OrganizationPublic],
+    response_model=Page[OrganizationPublic],
     dependencies=[Depends(permission_dependency("read_organization"))],
 )
 def get_organization(
     session: SessionDep,
-    skip: int = Query(0, description="Number of rows to skip"),
-    limit: int = Query(
-        PAGINATION_SIZE, description="Maximum number of entries to return"
-    ),
+    params: Pagination = Depends(),
     name: str | None = Query(
         None,
         title="Filter by Name",
@@ -63,7 +60,7 @@ def get_organization(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Sequence[Organization]:
+) -> Page[Organization]:
     query = select(Organization).where(not_(Organization.is_deleted))
 
     if name:
@@ -83,13 +80,10 @@ def get_organization(
             )
         query = query.order_by(column.desc() if is_desc else column)
 
-    # Apply pagination
-    query = query.offset(skip).limit(limit)
-
     # Execute query and get all organization
     organization = session.exec(query).all()
 
-    return organization
+    return cast(Page[Organization], paginate(organization, params))
 
 
 @router.get(
