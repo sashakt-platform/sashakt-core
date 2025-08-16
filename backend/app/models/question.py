@@ -503,7 +503,7 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
-    failed_question_details: str | None
+    error_log: str | None
 
 
 # Force model rebuild to handle forward references

@@ -1040,6 +1040,7 @@ async def upload_questions_csv(
         # Start processing rows
         questions_created = 0
         questions_failed = 0
+        failed_message = None
         failed_question_details = []
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
@@ -1298,17 +1299,14 @@ async def upload_questions_csv(
             csv_buffer.seek(0)
             csv_bytes = csv_buffer.getvalue().encode("utf-8")
             base64_csv = base64.b64encode(csv_bytes).decode("utf-8")
-            data_link = f"data:text/csv;base64,{base64_csv}"
-            failed_message = f"Download failed questions: {data_link}"
-        else:
-            failed_message = "No failed questions. No CSV generated."
+            failed_message = f"data:text/csv;base64,{base64_csv}"
 
         return BulkUploadQuestionsResponse(
             message=message,
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
-            failed_question_details=failed_message,
+            error_log=failed_message,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised
