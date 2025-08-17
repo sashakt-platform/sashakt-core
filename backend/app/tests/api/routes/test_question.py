@@ -1,6 +1,7 @@
 import base64
 import csv
 import io
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -903,6 +904,204 @@ def test_question_tag_operations(
     assert tags[0]["id"] == tag2.id
 
 
+def test_question_validation_multiple_correct_answers_for_single_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "single-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1, 2],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Single-choice questions must have exactly one correct answer." in response.text
+    )
+    assert question_data["question_type"] == "single-choice"
+
+
+def test_question_validation_no_correct_answer_for_multi_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "multi-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Multi-choice questions must have at least one correct answer." in response.text
+    )
+    assert question_data["question_type"] == QuestionType.multi_choice
+
+
+def test_question_validation_invalid_question_type(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "invalid-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 422
+
+
+def test_update_question_validation_multiple_correct_answers_for_single_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": "Initial Question",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    question = create_response.json()
+    question_id = question["id"]
+
+    revision_payload = {
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1, 2],
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 422
+    assert (
+        "Single-choice questions must have exactly one correct answer."
+        in revision_response.text
+    )
+
+
+def test_question_validation_valid_single_and_multi_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    valid_single_question = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "single-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=valid_single_question,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == valid_single_question["question_text"]
+    assert data["correct_answer"] == valid_single_question["correct_answer"]
+    assert data["question_type"] == valid_single_question["question_type"]
+
+    valid_multi_question = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "multi-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
+        ],
+        "correct_answer": [2, 3],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=valid_multi_question,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == valid_multi_question["question_text"]
+    assert data["correct_answer"] == valid_multi_question["correct_answer"]
+    assert data["question_type"] == valid_multi_question["question_type"]
+
+
 def test_question_location_operations(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -1448,7 +1647,7 @@ What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geog
         # Cleanup
         import os
 
-        if os.path.exists(temp_file_path):
+        with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
 
 
@@ -3601,11 +3800,8 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
             9: "Correct option is missing",
             10: "Questions Already Exist",
         }
-        assert (
-            "Download failed questions: data:text/csv;base64,"
-            in data["failed_question_details"]
-        )
-        base64_csv = data["failed_question_details"].split("base64,")[-1]
+        assert "data:text/csv;base64," in data["error_log"]
+        base64_csv = data["error_log"].split("base64,")[-1]
         csv_bytes = base64.b64decode(base64_csv)
         csv_text = csv_bytes.decode("utf-8")
         csv_reader = csv.DictReader(io.StringIO(csv_text))
@@ -3726,3 +3922,139 @@ def test_create_random_question_revision_invalid_org_and_user(
     with pytest.raises(Exception) as excinfo:
         create_random_question_revision(db, org_id=org)
     assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
+
+
+def test_bulk_upload_questions_without_tag_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,State,
+What is 10+10?,20,10,30,40,A,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Punjab
+What is 5x5?,25,10,15,20,A,Punjab
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Punjab
+Which option is missing?,25,10,20,30,A,Punjab
+What is 2 + 2?,4,5,6,7,Z,Punjab
+What is 9+1?,10,20,30,40,A,NonExistentState
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 5
+        assert data["failed_questions"] == 3
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_without_state_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Science
+What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography
+Which option is missing?,25,10,20,30,A,Math
+What is 2 + 2?,4,5,6,7,Z,Math
+What is 9+1?,10,20,30,40,A,Math
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math
+What is 10+10?,20,10,30,40,A,Math"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 4
+        assert data["failed_questions"] == 4
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_with_extra_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Training Tags,State,ABCD
+What is 10+10?,20,10,30,40,A,ABCD,Math,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,ABCD,Science,Punjab
+Which option is missing?,25,10,20,30,A,ABCD,Math,Punjab
+What is 2 + 2?,4,5,6,7,A,ABCD,Math,Punjab
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 5
+        assert data["success_questions"] == 5
+        assert data["failed_questions"] == 0
+        assert data["error_log"] is None
+    finally:
+        import os
+
+        with suppress(FileNotFoundError):
+            os.unlink(temp_file_path)

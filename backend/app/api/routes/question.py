@@ -14,13 +14,12 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi_pagination import Page, Params, paginate
+from fastapi_pagination import Page, paginate
 from sqlalchemy import desc, func
 from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, SessionDep
-from app.core.config import PAGINATION_SIZE
+from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
     CandidateTest,
     Message,
@@ -45,11 +44,6 @@ from app.models import (
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
 from app.models.utils import MarkingScheme
-
-
-class Pagination(Params):
-    size: int = PAGINATION_SIZE
-
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -389,7 +383,7 @@ def get_questions(
 ) -> Page[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-
+    empty_result = cast(Page[QuestionPublic], paginate([], params))
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
@@ -417,7 +411,7 @@ def get_questions(
         if question_ids_with_tags:
             query = query.where(col(Question.id).in_(question_ids_with_tags))
         else:
-            return cast(Page[QuestionPublic], paginate([], params))
+            return empty_result
 
     if tag_type_ids:
         tag_type_query = (
@@ -430,7 +424,7 @@ def get_questions(
         if question_ids_with_tag_types:
             query = query.where(col(Question.id).in_(question_ids_with_tag_types))
         else:
-            return cast(Page[QuestionPublic], paginate([], params))
+            return empty_result
 
     # Handle creator-based filtering
     if created_by_id is not None:
@@ -447,7 +441,7 @@ def get_questions(
         if questions_by_creator:
             query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
         else:
-            return cast(Page[QuestionPublic], paginate([], params))
+            return empty_result
 
     # Handle location-based filtering with multiple locations
     if any([state_ids, district_ids, block_ids]):
@@ -468,7 +462,7 @@ def get_questions(
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))  # type: ignore
             else:
-                return cast(Page[QuestionPublic], paginate([], params))
+                return empty_result
 
     # Apply pagination
     # query = query.offset(skip).limit(limit)
@@ -1046,6 +1040,7 @@ async def upload_questions_csv(
         # Start processing rows
         questions_created = 0
         questions_failed = 0
+        failed_message = None
         failed_question_details = []
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
@@ -1304,17 +1299,14 @@ async def upload_questions_csv(
             csv_buffer.seek(0)
             csv_bytes = csv_buffer.getvalue().encode("utf-8")
             base64_csv = base64.b64encode(csv_bytes).decode("utf-8")
-            data_link = f"data:text/csv;base64,{base64_csv}"
-            failed_message = f"Download failed questions: {data_link}"
-        else:
-            failed_message = "No failed questions. No CSV generated."
+            failed_message = f"data:text/csv;base64,{base64_csv}"
 
         return BulkUploadQuestionsResponse(
             message=message,
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
-            failed_question_details=failed_message,
+            error_log=failed_message,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised

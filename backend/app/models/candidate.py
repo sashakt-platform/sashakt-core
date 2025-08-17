@@ -224,6 +224,8 @@ class Result(SQLModel):
     incorrect_answer: int
     mandatory_not_attempted: int
     optional_not_attempted: int
+    marks_obtained: float | None
+    marks_maximum: float | None
 
 
 class TestStatusSummary(SQLModel):
