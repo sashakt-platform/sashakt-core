@@ -12,7 +12,7 @@ from app.models.question import QuestionTag, QuestionType
 from app.models.test import Test, TestTag
 from app.tests.utils.user import create_random_user, get_current_user_data
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import assert_paginated_response, random_lower_string
 
 
 def setup_user_organization(
@@ -171,7 +171,9 @@ def test_get_tagtype(
         f"{settings.API_V1_STR}/tagtype/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
+    data = response.json()
+    response_data = data["items"]
+    assert_paginated_response(response)
     assert response.status_code == 200
     total_length = len(response_data) - 1
     assert any(item["name"] == tagtype.name for item in response_data)
@@ -190,24 +192,24 @@ def test_get_tagtype(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert any(item["name"].lower() == "sample" for item in data)
+    assert len(data["items"]) == 1
+    assert any(item["name"].lower() == "sample" for item in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/tagtype/?name=SAMPLE",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert any(item["name"].lower() == "sample" for item in data)
+    assert len(data["items"]) == 1
+    assert any(item["name"].lower() == "sample" for item in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/tagtype/?name= SaMPlE",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert any(item["name"].lower() == "sample" for item in data)
+    assert len(data["items"]) == 1
+    assert any(item["name"].lower() == "sample" for item in data["items"])
 
     tagtype = TagType(
         name="sampleAnother",
@@ -225,7 +227,7 @@ def test_get_tagtype(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
 
 def test_get_tagtype_by_id(
@@ -609,8 +611,9 @@ def test_read_tag(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
-
+    data = response.json()
+    response_data = data["items"]
+    assert_paginated_response(response, min_expected_total=1)
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
@@ -648,8 +651,8 @@ def test_read_tag(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
-
+    data = response.json()
+    response_data = data["items"]
     assert any(item["name"] == tag_2.name for item in response_data)
     assert any(item["description"] == tag_2.description for item in response_data)
 
@@ -692,7 +695,7 @@ def test_read_tag_filter_by_tag_name(
     data = response.json()
 
     assert response.status_code == 200
-    assert any(tag["name"] == "FilterMatch" for tag in data)
+    assert any(tag["name"] == "FilterMatch" for tag in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/tag/?name=Filter",
         headers=get_user_superadmin_token,
@@ -700,8 +703,8 @@ def test_read_tag_filter_by_tag_name(
     data = response.json()
 
     assert response.status_code == 200
-    assert any(tag["name"] == "FilterMatch" for tag in data)
-    assert len(data) == 1
+    assert any(tag["name"] == "FilterMatch" for tag in data["items"])
+    assert len(data["items"]) == 1
 
     tag_2 = Tag(
         name="AnotherFilterMatch",
@@ -722,7 +725,7 @@ def test_read_tag_filter_by_tag_name(
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
 
 def test_get_tags_filter_no_match(
@@ -734,7 +737,7 @@ def test_get_tags_filter_no_match(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 0
+    assert len(data["items"]) == 0
 
 
 def test_read_tag_by_id(
@@ -1043,15 +1046,18 @@ def test_inactive_tag_not_listed(
     )
     assert response.status_code == 200
     created_tag = response.json()
-    tag_id = created_tag["id"]
-    assert created_tag["is_active"] is False
+    items = created_tag
+    tag_id = items["id"]
+    assert items["is_active"] is False
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
+    assert_paginated_response(response, min_expected_total=1)
+    items = response_data["items"]
     # The inactive tag should NOT be in the response
-    assert all(item["id"] != tag_id for item in response_data)
+    assert all(item["id"] != tag_id for item in items)
 
 
 def test_tag_is_active_toggle(
@@ -1137,9 +1143,9 @@ def test_inactive_tagtype_not_listed(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-
+    items = response_data["items"]
     # The inactive tagtype should NOT be in the response
-    assert all(item["id"] != tagtype_id for item in response_data)
+    assert all(item["id"] != tagtype_id for item in items)
 
 
 def test_create_tag_without_tag_type(
@@ -1374,8 +1380,8 @@ def test_get_tag_with_tagtype_of_different_organization_returns_tag_type_none(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
-
+    data = response.json()
+    response_data = data["items"]
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
@@ -1472,13 +1478,15 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
+    data = response.json()
+    response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected)
     response = client.get(
         f"{settings.API_V1_STR}/tag/?order_by=-name",
         headers=get_user_superadmin_token,
     )
-    response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
+    data = response.json()
+    response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected, reverse=True)
 
     response = client.get(
@@ -1486,10 +1494,10 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-
+    data = response.json()
     tagtypes = [
         tag["tag_type"]["name"]
-        for tag in response.json()
+        for tag in data["items"]
         if tag["tag_type"] is not None and tag["tag_type"]["name"] in expected_tagtypes
     ]
     assert set(tagtypes) == set(expected_tagtypes)
@@ -1500,9 +1508,10 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
+    data = response.json()
     tagtypes_desc = [
         tag["tag_type"]["name"]
-        for tag in response.json()
+        for tag in data["items"]
         if tag["tag_type"] is not None and tag["tag_type"]["name"] in expected_tagtypes
     ]
     assert set(tagtypes_desc) == set(expected_tagtypes)
@@ -1516,7 +1525,7 @@ def test_read_tag_with_sort(
     data_both = response.json()
     filtered_both = [
         (tag["tag_type"]["name"], tag["name"])
-        for tag in data_both
+        for tag in data_both["items"]
         if tag["tag_type"]
         and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
     ]
@@ -1556,7 +1565,8 @@ def test_get_tags_with_invalid_sort_field(
     )
     assert response.status_code == 200
     data = response.json()
-    assert any(tag_data["name"] == "SampleTag" for tag_data in data)
+    items = data["items"]
+    assert any(tag_data["name"] == "SampleTag" for tag_data in items)
 
 
 def test_get_tags_includes_with_and_without_tag_types(
@@ -1607,11 +1617,12 @@ def test_get_tags_includes_with_and_without_tag_types(
 
     assert response.status_code == 200
     data = response.json()
-    tag_names = [tag["name"] for tag in data]
+    items = data["items"]
+    tag_names = [tag["name"] for tag in items]
     assert "Easy" in tag_names
     assert "Medium" in tag_names
     assert "General" in tag_names
-    for tag in data:
+    for tag in items:
         if tag["name"] == "General":
             assert tag["tag_type"] is None
         elif tag["name"] in ["Easy", "Medium"]:

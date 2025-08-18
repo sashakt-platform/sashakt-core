@@ -85,34 +85,6 @@ CorrectAnswerType = list[int] | list[str] | float | int | None
 class QuestionBase(SQLModel):
     """Base model with common fields for questions"""
 
-    @model_validator(mode="after")
-    def validate_correct_answer_ids(self) -> "QuestionBase":
-        question_type = self.question_type
-        options = self.options
-        correct_answer = self.correct_answer
-        if (
-            question_type in ["single-choice", "multi-choice"]
-            and options
-            and correct_answer is not None
-        ):
-            option_ids = [
-                opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
-                for opt in options
-            ]
-            if len(option_ids) != len(set(option_ids)):
-                raise ValueError("Option IDs must be unique.")
-            answer_ids = (
-                correct_answer if isinstance(correct_answer, list) else [correct_answer]
-            )
-            for ans_id in answer_ids:
-                if ans_id not in option_ids:
-                    raise ValueError(
-                        f"Correct answer ID {ans_id} does not match any option ID."
-                    )
-        return self
-
-    """Base model with common fields for questions"""
-
     question_text: str = Field(nullable=False, description="The actual question text")
     instructions: str | None = Field(
         default=None,
@@ -123,6 +95,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
+
     options: list[Option] | None = Field(
         sa_type=JSON,
         default=None,
@@ -156,6 +129,42 @@ class QuestionBase(SQLModel):
     media: dict[str, Any] | None = Field(
         sa_type=JSON, default=None, description="Associated media for this question"
     )
+
+    @model_validator(mode="after")
+    def validate_question(self) -> "QuestionBase":
+        question_type = self.question_type
+        options = self.options
+        correct_answer = self.correct_answer
+        if question_type in ["single-choice", "multi-choice"]:
+            if options and correct_answer is not None:
+                option_ids = [
+                    opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
+                    for opt in options
+                ]
+                if len(option_ids) != len(set(option_ids)):
+                    raise ValueError("Option IDs must be unique.")
+                answer_ids = (
+                    correct_answer
+                    if isinstance(correct_answer, list)
+                    else [correct_answer]
+                )
+                for ans_id in answer_ids:
+                    if ans_id not in option_ids:
+                        raise ValueError(
+                            f"Correct answer ID {ans_id} does not match any option ID."
+                        )
+            if question_type == QuestionType.single_choice:
+                if not isinstance(correct_answer, list) or len(correct_answer) != 1:
+                    raise ValueError(
+                        "Single-choice questions must have exactly one correct answer."
+                    )
+            elif question_type == QuestionType.multi_choice:
+                if not isinstance(correct_answer, list) or len(correct_answer) < 1:
+                    raise ValueError(
+                        "Multi-choice questions must have at least one correct answer."
+                    )
+
+        return self
 
 
 class QuestionTag(SQLModel, table=True):
@@ -494,7 +503,7 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
-    failed_question_details: str | None
+    error_log: str | None
 
 
 # Force model rebuild to handle forward references

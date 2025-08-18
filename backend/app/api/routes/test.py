@@ -1,10 +1,11 @@
-from collections.abc import Sequence
 from datetime import datetime
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi_pagination import Page, paginate
 from sqlmodel import and_, col, func, select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
     Message,
@@ -198,14 +199,13 @@ def create_test(
 # Get All Tests
 @router.get(
     "/",
-    response_model=list[TestPublic],
+    response_model=Page[TestPublic],
     dependencies=[Depends(permission_dependency("read_test"))],
 )
 def get_test(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    params: Pagination = Depends(),
     marks_level: MarksLevelEnum | None = None,
     name: str | None = None,
     description: str | None = None,
@@ -240,9 +240,10 @@ def get_test(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Sequence[TestPublic]:
+) -> Page[TestPublic]:
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
+    empty_result = cast(Page[TestPublic], paginate([], params))
 
     for order in order_by:
         is_desc = order.startswith("-")
@@ -335,7 +336,7 @@ def get_test(
         if test_ids_with_tags:
             query = query.where(col(Test.id).in_(test_ids_with_tags))
         else:
-            return []
+            return empty_result
     if tag_type_ids:
         tag_type_query = (
             select(TestTag.test_id)
@@ -347,7 +348,7 @@ def get_test(
         if test_ids_with_tag_types:
             query = query.where(col(Test.id).in_(test_ids_with_tag_types))
         else:
-            return []
+            return empty_result
 
     if state_ids:
         state_subquery = select(TestState.test_id).where(
@@ -357,7 +358,7 @@ def get_test(
         if test_ids_with_states:
             query = query.where(col(Test.id).in_(test_ids_with_states))
         else:
-            return []
+            return empty_result
 
     if district_ids:
         district_subquery = select(TestDistrict.test_id).where(
@@ -367,10 +368,7 @@ def get_test(
         if test_ids_with_districts:
             query = query.where(col(Test.id).in_(test_ids_with_districts))
         else:
-            return []
-
-    # Apply pagination
-    query = query.offset(skip).limit(limit)
+            return empty_result
 
     # Execute query and get all questions
     tests = session.exec(query).all()
@@ -405,7 +403,7 @@ def get_test(
             )
         )
 
-    return test_public
+    return cast(Page[TestPublic], paginate(test_public, params))
 
 
 @router.get(

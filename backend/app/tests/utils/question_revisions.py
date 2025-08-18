@@ -48,6 +48,7 @@ def create_random_question_revision(
         name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
+        correct_answer=[1],
         organization_id=organization.id,
     )
     session.add(question_revision)
