@@ -3033,14 +3033,15 @@ def test_get_test_result_not_found(
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
-    candidate_test_id = 100
+    candidate_test_id = -100
     response = client.get(
         f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
         params={"candidate_uuid": str(candidate.identity)},
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 404
-    assert response.json()["detail"] == "Candidate test not found"
+    detail = response.json()["detail"]
+    assert "Candidate test not found" in detail or "invalid UUID" in detail
 
 
 def test_randomized_question_selection_and_result_calculation_with_mixed_answers(

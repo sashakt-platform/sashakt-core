@@ -104,7 +104,11 @@ def get_score_and_time(
         total_max_score += marking_scheme.get("correct", 0.0)
         answer = answers_map.get(q_id)
 
-        if answer is None or not answer.response or answer.response.strip() == "":
+        if (
+            answer is None
+            or not answer.response
+            or (isinstance(answer.response, str) and answer.response.strip() == "")
+        ):
             total_score_obtained += marking_scheme.get("skipped", 0.0)
         else:
             correct_answer = question_rev.correct_answer
@@ -124,7 +128,11 @@ def get_score_and_time(
     return total_score_obtained, total_max_score, total_time_minutes
 
 
-@router.get("/overall-analytics", response_model=OverallTestAnalyticsResponse)
+@router.get(
+    "/overall-analytics",
+    response_model=OverallTestAnalyticsResponse,
+    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+)
 def get_overall_tests_analytics(
     session: SessionDep,
     current_user: CurrentUser,
