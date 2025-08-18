@@ -1,8 +1,10 @@
 import base64
 import csv
 import io
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
@@ -20,6 +22,7 @@ from app.models.question import (
 )
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
+from app.tests.utils.question_revisions import create_random_question_revision
 
 # from app.models.user import User
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -44,7 +47,7 @@ def test_create_question(
     tag_type_response = client.post(
         f"{settings.API_V1_STR}/tagtype/",
         json={
-            "name": "Test Tag Type",
+            "name": random_lower_string(),
             "description": "For testing",
             "organization_id": org_id,
         },
@@ -225,15 +228,20 @@ def test_read_questions(
     data = response.json()
 
     assert response.status_code == 200
-    assert len(data) >= 2
+    items = data["items"]
+    assert len(items) >= 2
+    assert data["page"] == 1
+    assert data["size"] == 25
+    assert data["pages"] == 1
+    assert data["total"] == 2
 
     # Check that the questions have the expected properties
-    question_ids = [q["id"] for q in data]
+    question_ids = [q["id"] for q in items]
     assert q1.id in question_ids
     assert q2.id in question_ids
 
     # Find q1 in response
-    q1_data = next(q for q in data if q["id"] == q1.id)
+    q1_data = next(q for q in items if q["id"] == q1.id)
     # Check created_by_id
     assert q1_data["created_by_id"] == user_id
     # Check tag information
@@ -246,9 +254,10 @@ def test_read_questions(
         headers=get_user_superadmin_token,
     )
     data = response.json()
+    items = data["items"]
     assert response.status_code == 200
-    assert len(data) == 1
-    assert data[0]["id"] == q1.id
+    assert len(data["items"]) == 1
+    assert items[0]["id"] == q1.id
 
     # Test filtering by created_by
     response = client.get(
@@ -257,7 +266,8 @@ def test_read_questions(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     # Verify that filtering works
     response = client.get(
@@ -266,15 +276,158 @@ def test_read_questions(
     )
     data = response.json()
     assert response.status_code == 200
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
-    # Check pagination
+
+def test_read_questions_filter_by_tag_type_ids(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag_type1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type1)
+    db.flush()
+    tag_type2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type2)
+    db.flush()
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type1.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type2.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+    q1 = Question(organization_id=org_id)
+    db.add(q1)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    q1_tag = QuestionTag(
+        question_id=q1.id,
+        tag_id=tag1.id,
+    )
+    db.add(q1_tag)
+
+    q2 = Question(organization_id=org_id)
+    db.add(q2)
+    db.flush()
+
+    rev2 = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(rev2)
+    db.flush()
+
+    q2.last_revision_id = rev2.id
+    q2_tag = QuestionTag(question_id=q2.id, tag_id=tag2.id)
+    db.add(q2_tag)
+
+    db.commit()
+    db.refresh(q1)
+    db.refresh(q2)
+
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?limit=1", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}",
+        headers=get_user_superadmin_token,
     )
     data = response.json()
+    items = data["items"]
     assert response.status_code == 200
-    assert len(data) <= 1
+    assert len(data["items"]) == 1
+    assert items[0]["id"] == q1.id
+    assert any(tag["tag_type"]["id"] == tag_type1.id for tag in items[0]["tags"])
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == q2.id
+    assert any(tag["tag_type"]["id"] == tag_type2.id for tag in items[0]["tags"])
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) >= 2
+    returned_ids = [item["id"] for item in items]
+    assert q1.id in returned_ids
+    assert q2.id in returned_ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 2
+    returned_tag_type_ids = {
+        tag["tag_type"]["id"] for item in items for tag in item["tags"]
+    }
+    assert tag_type1.id in returned_tag_type_ids
+    assert tag_type2.id in returned_tag_type_ids
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids=-10",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["items"] == []
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
@@ -751,6 +904,204 @@ def test_question_tag_operations(
     assert tags[0]["id"] == tag2.id
 
 
+def test_question_validation_multiple_correct_answers_for_single_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "single-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1, 2],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Single-choice questions must have exactly one correct answer." in response.text
+    )
+    assert question_data["question_type"] == "single-choice"
+
+
+def test_question_validation_no_correct_answer_for_multi_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "multi-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Multi-choice questions must have at least one correct answer." in response.text
+    )
+    assert question_data["question_type"] == QuestionType.multi_choice
+
+
+def test_question_validation_invalid_question_type(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "invalid-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 422
+
+
+def test_update_question_validation_multiple_correct_answers_for_single_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": "Initial Question",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    question = create_response.json()
+    question_id = question["id"]
+
+    revision_payload = {
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1, 2],
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 422
+    assert (
+        "Single-choice questions must have exactly one correct answer."
+        in revision_response.text
+    )
+
+
+def test_question_validation_valid_single_and_multi_choice(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    valid_single_question = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "single-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+        ],
+        "correct_answer": [1],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=valid_single_question,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == valid_single_question["question_text"]
+    assert data["correct_answer"] == valid_single_question["correct_answer"]
+    assert data["question_type"] == valid_single_question["question_type"]
+
+    valid_multi_question = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "multi-choice",
+        "options": [
+            {"id": 1, "key": "A", "value": "Option A"},
+            {"id": 2, "key": "B", "value": "Option B"},
+            {"id": 3, "key": "C", "value": "Option C"},
+        ],
+        "correct_answer": [2, 3],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=valid_multi_question,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_text"] == valid_multi_question["question_text"]
+    assert data["correct_answer"] == valid_multi_question["correct_answer"]
+    assert data["question_type"] == valid_multi_question["question_type"]
+
+
 def test_question_location_operations(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -1196,7 +1547,9 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
             f"{settings.API_V1_STR}/questions/",
             headers=get_user_superadmin_token,
         )
-        questions = response.json()
+        data = response.json()
+        questions = data["items"]
+
         assert len(questions) >= 4  # Updated to reflect 4 questions
 
         # Check for specific question content
@@ -1294,7 +1647,7 @@ What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geog
         # Cleanup
         import os
 
-        if os.path.exists(temp_file_path):
+        with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
 
 
@@ -2192,7 +2545,7 @@ def test_inactive_question_listed(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert all(item["id"] != question_id for item in data)
+    assert all(item["id"] != question_id for item in data["items"])
 
 
 def test_deactivate_question_with_new_revision(
@@ -2265,7 +2618,7 @@ def test_deactivate_question_with_new_revision(
 
     assert response.status_code == 200
     # Make sure the inactive question is NOT in the response
-    assert any(item["id"] == question_id for item in data)
+    assert any(item["id"] == question_id for item in data["items"])
 
 
 def test_filter_questions_by_latest_revision_text(
@@ -2317,7 +2670,7 @@ def test_filter_questions_by_latest_revision_text(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert q.id in ids
     response = client.get(
         f"{settings.API_V1_STR}/questions/?question_text=First+revision+text",
@@ -2325,7 +2678,7 @@ def test_filter_questions_by_latest_revision_text(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert q.id not in ids
 
 
@@ -2377,7 +2730,7 @@ def test_filter_questions_by_latest_revision_subtext(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert question.id in ids
     response = client.get(
         f"{settings.API_V1_STR}/questions/?question_text=First+revision+text",
@@ -2385,7 +2738,7 @@ def test_filter_questions_by_latest_revision_subtext(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [item["id"] for item in data]
+    ids = [item["id"] for item in data["items"]]
     assert question.id not in ids
 
 
@@ -2501,7 +2854,7 @@ def test_get_questions_by_is_active_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [q["id"] for q in data]
+    ids = [q["id"] for q in data["items"]]
     assert active_question.id in ids
     assert inactive_question.id in ids
     response = client.get(
@@ -2510,7 +2863,7 @@ def test_get_questions_by_is_active_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [q["id"] for q in data]
+    ids = [q["id"] for q in data["items"]]
     assert active_question.id in ids
     assert inactive_question.id not in ids
     response = client.get(
@@ -2519,7 +2872,7 @@ def test_get_questions_by_is_active_filter(
     )
     assert response.status_code == 200
     data = response.json()
-    ids = [q["id"] for q in data]
+    ids = [q["id"] for q in data["items"]]
     assert inactive_question.id in ids
     assert active_question.id not in ids
 
@@ -2574,7 +2927,8 @@ What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Subject:Geography,P
             f"{settings.API_V1_STR}/questions/",
             headers=get_user_superadmin_token,
         )
-        questions = response.json()
+        data = response.json()
+        questions = data["items"]
         question_texts = [q["question_text"] for q in questions]
         assert "What is 10+10?" in question_texts
         assert "What is the color of the sky?" in question_texts
@@ -2655,7 +3009,7 @@ def test_create_duplicate_question(
     tag_type_response = client.post(
         f"{settings.API_V1_STR}/tagtype/",
         json={
-            "name": "Test Tag Type",
+            "name": random_lower_string(),
             "description": "For testing",
             "organization_id": org_id,
         },
@@ -3446,11 +3800,8 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
             9: "Correct option is missing",
             10: "Questions Already Exist",
         }
-        assert (
-            "Download failed questions: data:text/csv;base64,"
-            in data["failed_question_details"]
-        )
-        base64_csv = data["failed_question_details"].split("base64,")[-1]
+        assert "data:text/csv;base64," in data["error_log"]
+        base64_csv = data["error_log"].split("base64,")[-1]
         csv_bytes = base64.b64decode(base64_csv)
         csv_text = csv_bytes.decode("utf-8")
         csv_reader = csv.DictReader(io.StringIO(csv_text))
@@ -3470,4 +3821,240 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
         import os
 
         if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_read_questions_with_pagination(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag_type = TagType(
+        name="Question Category",
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type)
+    db.flush()
+
+    tag = Tag(
+        name="Math",
+        description=random_lower_string(),
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    for _ in range(26):
+        create_random_question_revision(db, user_id=user_id, org_id=org_id)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/", headers=get_user_superadmin_token
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "items" in data
+    assert len(data["items"]) == 25
+    assert data["page"] == 1
+    assert data["pages"] == 2
+    assert data["size"] == 25
+    assert data["total"] >= 26
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?page=10", headers=get_user_superadmin_token
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "items" in data
+    assert len(data["items"]) == 0
+    assert data["page"] == 10
+    assert data["pages"] == 2
+    assert data["size"] == 25
+    assert data["total"] >= 26
+
+
+def test_get_questions_with_invalid_fields_returns_empty(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?created_by_id=-99999",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["items"] == []
+    assert data["total"] == 0
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?state_ids=-99999",  # assuming this state ID doesn't exist
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["items"] == []
+    assert data["total"] == 0
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_ids=-99999",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["items"] == []
+    assert data["total"] == 0
+
+
+def test_create_random_question_revision_invalid_org_and_user(
+    db: SessionDep,
+) -> None:
+    user = -100
+    org = -100
+    with pytest.raises(Exception) as excinfo:
+        create_random_question_revision(db, user_id=user)
+    assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
+    with pytest.raises(Exception) as excinfo:
+        create_random_question_revision(db, org_id=org)
+    assert str(excinfo.value) in ["User Not Found", "Organization Not Found"]
+
+
+def test_bulk_upload_questions_without_tag_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,State,
+What is 10+10?,20,10,30,40,A,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Punjab
+What is 5x5?,25,10,15,20,A,Punjab
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Punjab
+Which option is missing?,25,10,20,30,A,Punjab
+What is 2 + 2?,4,5,6,7,Z,Punjab
+What is 9+1?,10,20,30,40,A,NonExistentState
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 5
+        assert data["failed_questions"] == 3
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_without_state_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,
+What is the color of the sky?,Blue,Green,Red,Yellow,A,Science
+What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication
+What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography
+Which option is missing?,25,10,20,30,A,Math
+What is 2 + 2?,4,5,6,7,Z,Math
+What is 9+1?,10,20,30,40,A,Math
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Math
+What is 10+10?,20,10,30,40,A,Math"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 8
+        assert data["success_questions"] == 4
+        assert data["failed_questions"] == 4
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_with_extra_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Training Tags,State,ABCD
+What is 10+10?,20,10,30,40,A,ABCD,Math,Punjab
+What is the color of the sky?,Blue,Green,Red,Yellow,A,ABCD,Science,Punjab
+Which option is missing?,25,10,20,30,A,ABCD,Math,Punjab
+What is 2 + 2?,4,5,6,7,A,ABCD,Math,Punjab
+Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Punjab"""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_error_report.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert data["uploaded_questions"] == 5
+        assert data["success_questions"] == 5
+        assert data["failed_questions"] == 0
+        assert data["error_log"] is None
+    finally:
+        import os
+
+        with suppress(FileNotFoundError):
             os.unlink(temp_file_path)

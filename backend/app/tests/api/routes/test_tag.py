@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
 from app.tests.utils.user import create_random_user, get_current_user_data
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import assert_paginated_response, random_lower_string
 
 
 def setup_user_organization(
@@ -75,6 +75,79 @@ def test_create_tagtype(
     assert "modified_date" in response_data
 
 
+def test_prevent_duplicate_tagtype_creation(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user, organization = setup_user_organization(db)
+
+    name = "math"
+    data = {
+        "name": name,
+        "description": random_lower_string(),
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["name"] == name
+    assert response_data["organization_id"] == data["organization_id"]
+
+    data_upper = {
+        "name": "MATH",
+        "organization_id": organization.id,
+    }
+    response_upper = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data_upper,
+        headers=get_user_superadmin_token,
+    )
+    response_data_upper = response_upper.json()
+    assert response_upper.status_code == 400
+    assert (
+        response_data_upper["detail"]
+        == "TagType with name 'MATH' already exists in this organization."
+    )
+
+    data_spaces = {
+        "name": "   math  ",
+        "organization_id": organization.id,
+    }
+    response_spaces = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data_spaces,
+        headers=get_user_superadmin_token,
+    )
+    assert response_spaces.status_code == 400
+    assert (
+        response_spaces.json()["detail"]
+        == "TagType with name '   math  ' already exists in this organization."
+    )
+    unique_name = "science"
+    data_unique = {
+        "name": unique_name,
+        "organization_id": organization.id,
+        "description": random_lower_string(),
+    }
+    response_unique = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json=data_unique,
+        headers=get_user_superadmin_token,
+    )
+    assert response_unique.status_code == 200
+    response_data_unique = response_unique.json()
+    assert response_data_unique["name"] == unique_name
+    assert response_data_unique["description"] == data_unique["description"]
+    assert response_data_unique["organization_id"] == organization.id
+    assert response_data_unique["created_by_id"] == user_id
+
+
 def test_get_tagtype(
     client: TestClient,
     db: SessionDep,
@@ -84,7 +157,7 @@ def test_get_tagtype(
     user_id = user_data["id"]
     organization_id = user_data["organization_id"]
     tagtype = TagType(
-        name=random_lower_string(),
+        name="sample",
         description=random_lower_string(),
         organization_id=organization_id,
         created_by_id=user_id,
@@ -95,7 +168,9 @@ def test_get_tagtype(
         f"{settings.API_V1_STR}/tagtype/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
+    data = response.json()
+    response_data = data["items"]
+    assert_paginated_response(response)
     assert response.status_code == 200
     total_length = len(response_data) - 1
     assert any(item["name"] == tagtype.name for item in response_data)
@@ -108,6 +183,48 @@ def test_get_tagtype(
     assert any(item["is_active"] == tagtype.is_active for item in response_data)
     assert "created_date" in response_data[total_length]
     assert "modified_date" in response_data[total_length]
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=Sample",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert any(item["name"].lower() == "sample" for item in data["items"])
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=SAMPLE",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert any(item["name"].lower() == "sample" for item in data["items"])
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name= SaMPlE",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert any(item["name"].lower() == "sample" for item in data["items"])
+
+    tagtype = TagType(
+        name="sampleAnother",
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=SAMPLE",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
 
 
 def test_get_tagtype_by_id(
@@ -373,6 +490,90 @@ def test_create_tag(
     assert "not found" in response_data["detail"]
 
 
+def test_prevent_duplicate_tag_creation(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype2)
+    db.commit()
+    db.refresh(tagtype2)
+    name = random_lower_string()
+    data = {
+        "name": name,
+        "description": random_lower_string(),
+        "tag_type_id": tagtype.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    assert response_data["description"] == data["description"]
+    assert response_data["tag_type"]["name"] == tagtype.name
+    assert response_data["tag_type"]["id"] == tagtype.id
+    response1 = client.post(
+        f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
+    )
+    assert response1.status_code == 400
+    assert "already exists" in response1.json()["detail"]
+
+    data2 = {
+        "name": name,
+        "tag_type_id": tagtype2.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json=data2,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    assert response_data["description"] is None
+
+    assert response_data["tag_type"]["id"] == tagtype2.id
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/", json=data2, headers=get_user_superadmin_token
+    )
+    assert response.status_code == 400
+    assert "already exists" in response.json()["detail"]
+
+    data = {
+        "name": name,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
+    )
+    assert response.status_code == 200
+    assert response.json()["tag_type"] is None
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
+    )
+    assert response.status_code == 400
+    assert "already exists" in response.json()["detail"]
+
+
 def test_read_tag(
     client: TestClient,
     db: SessionDep,
@@ -414,8 +615,9 @@ def test_read_tag(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
-
+    data = response.json()
+    response_data = data["items"]
+    assert_paginated_response(response, min_expected_total=1)
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
@@ -458,10 +660,93 @@ def test_read_tag(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
-
+    data = response.json()
+    response_data = data["items"]
     assert any(item["name"] == tag_2.name for item in response_data)
     assert any(item["description"] == tag_2.description for item in response_data)
+
+
+def test_read_tag_filter_by_tag_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+
+    db.add(tagtype)
+    db.commit()
+
+    tag = Tag(
+        name="FilterMatch",
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    db.flush()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?name= FilterMatch ",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert any(tag["name"] == "FilterMatch" for tag in data["items"])
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?name=Filter",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert any(tag["name"] == "FilterMatch" for tag in data["items"])
+    assert len(data["items"]) == 1
+
+    tag_2 = Tag(
+        name="AnotherFilterMatch",
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    db.add(tag_2)
+    db.commit()
+    db.refresh(tag_2)
+    db.flush()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?name=filter",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+
+
+def test_get_tags_filter_no_match(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?name=NonExistentTag",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 0
 
 
 def test_read_tag_by_id(
@@ -781,15 +1066,18 @@ def test_inactive_tag_not_listed(
     )
     assert response.status_code == 200
     created_tag = response.json()
-    tag_id = created_tag["id"]
-    assert created_tag["is_active"] is False
+    items = created_tag
+    tag_id = items["id"]
+    assert items["is_active"] is False
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
+    assert_paginated_response(response, min_expected_total=1)
+    items = response_data["items"]
     # The inactive tag should NOT be in the response
-    assert all(item["id"] != tag_id for item in response_data)
+    assert all(item["id"] != tag_id for item in items)
 
 
 def test_tag_is_active_toggle(
@@ -875,9 +1163,9 @@ def test_inactive_tagtype_not_listed(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
-
+    items = response_data["items"]
     # The inactive tagtype should NOT be in the response
-    assert all(item["id"] != tagtype_id for item in response_data)
+    assert all(item["id"] != tagtype_id for item in items)
 
 
 def test_create_tag_without_tag_type(
@@ -1112,8 +1400,8 @@ def test_get_tag_with_tagtype_of_different_organization_returns_tag_type_none(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
-    response_data = response.json()
-
+    data = response.json()
+    response_data = data["items"]
     assert response.status_code == 200
     assert any(item["name"] == tag.name for item in response_data)
     assert any(item["description"] == tag.description for item in response_data)
@@ -1210,13 +1498,15 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
+    data = response.json()
+    response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected)
     response = client.get(
         f"{settings.API_V1_STR}/tag/?order_by=-name",
         headers=get_user_superadmin_token,
     )
-    response_names = [tag["name"] for tag in response.json() if tag["name"] in expected]
+    data = response.json()
+    response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected, reverse=True)
 
     response = client.get(
@@ -1224,10 +1514,10 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-
+    data = response.json()
     tagtypes = [
         tag["tag_type"]["name"]
-        for tag in response.json()
+        for tag in data["items"]
         if tag["tag_type"] is not None and tag["tag_type"]["name"] in expected_tagtypes
     ]
     assert set(tagtypes) == set(expected_tagtypes)
@@ -1238,9 +1528,10 @@ def test_read_tag_with_sort(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
+    data = response.json()
     tagtypes_desc = [
         tag["tag_type"]["name"]
-        for tag in response.json()
+        for tag in data["items"]
         if tag["tag_type"] is not None and tag["tag_type"]["name"] in expected_tagtypes
     ]
     assert set(tagtypes_desc) == set(expected_tagtypes)
@@ -1254,7 +1545,7 @@ def test_read_tag_with_sort(
     data_both = response.json()
     filtered_both = [
         (tag["tag_type"]["name"], tag["name"])
-        for tag in data_both
+        for tag in data_both["items"]
         if tag["tag_type"]
         and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
     ]
@@ -1294,7 +1585,8 @@ def test_get_tags_with_invalid_sort_field(
     )
     assert response.status_code == 200
     data = response.json()
-    assert any(tag_data["name"] == "SampleTag" for tag_data in data)
+    items = data["items"]
+    assert any(tag_data["name"] == "SampleTag" for tag_data in items)
 
 
 def test_get_tags_includes_with_and_without_tag_types(
@@ -1345,11 +1637,12 @@ def test_get_tags_includes_with_and_without_tag_types(
 
     assert response.status_code == 200
     data = response.json()
-    tag_names = [tag["name"] for tag in data]
+    items = data["items"]
+    tag_names = [tag["name"] for tag in items]
     assert "Easy" in tag_names
     assert "Medium" in tag_names
     assert "General" in tag_names
-    for tag in data:
+    for tag in items:
         if tag["name"] == "General":
             assert tag["tag_type"] is None
         elif tag["name"] in ["Easy", "Medium"]:

@@ -3,21 +3,23 @@ import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Any
+from typing import Any, cast
 
 from fastapi import (
     APIRouter,
     Body,
+    Depends,
     File,
     HTTPException,
     Query,
     UploadFile,
 )
+from fastapi_pagination import Page, paginate
 from sqlalchemy import desc, func
-from sqlmodel import not_, or_, select
+from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
     CandidateTest,
     Message,
@@ -41,6 +43,7 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.utils import MarkingScheme
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -75,11 +78,7 @@ def build_question_response(
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
@@ -152,7 +151,7 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[Option] | None, dict[str, float] | None, dict[str, Any] | None]:
+) -> tuple[list[Option] | None, MarkingScheme | None, dict[str, Any] | None]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
     options: list[Option] | None = None
@@ -168,15 +167,8 @@ def prepare_for_db(
             for opt in data.options
         ]
 
-    marking_scheme: dict[str, float] | None = None
-    if (
-        data.marking_scheme
-        and hasattr(data.marking_scheme, "dict")
-        and callable(data.marking_scheme.dict)
-    ):
-        marking_scheme = data.marking_scheme.dict()
-    else:
-        marking_scheme = data.marking_scheme
+    marking_scheme: MarkingScheme | None = None
+    marking_scheme = data.marking_scheme if data.marking_scheme else None
 
     # Handle media
     media: dict[str, Any] | None = None
@@ -345,7 +337,7 @@ class RevisionDetailDict(TypedDict):
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
-    marking_scheme: dict[str, float] | None  # Updated type to float
+    marking_scheme: MarkingScheme | None  # Updated type to float
     solution: str | None
     media: dict[str, Any] | None
     is_current: bool
@@ -374,24 +366,24 @@ class CandidateTestInfoDict(TypedDict):
     is_submitted: bool
 
 
-@router.get("/", response_model=list[QuestionPublic])
+@router.get("/", response_model=Page[QuestionPublic])
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    params: Pagination = Depends(),
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
     district_ids: list[int] = Query(None),  # Support multiple districts
     block_ids: list[int] = Query(None),  # Support multiple blocks
     tag_ids: list[int] = Query(None),  # Support multiple tags
+    tag_type_ids: list[int] = Query(None),  # Support multiple tag types
     created_by_id: int | None = None,
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
-) -> list[QuestionPublic]:
+) -> Page[QuestionPublic]:
     """Get all questions with optional filtering."""
     # Start with a basic query
-
+    empty_result = cast(Page[QuestionPublic], paginate([], params))
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
@@ -413,14 +405,26 @@ def get_questions(
     # Handle tag-based filtering with multiple tags
     if tag_ids:
         tag_query = select(QuestionTag.question_id).where(
-            QuestionTag.tag_id.in_(tag_ids)  # type: ignore
+            col(QuestionTag.tag_id).in_(tag_ids)
         )
         question_ids_with_tags = session.exec(tag_query).all()
-        if question_ids_with_tags:  # Only apply filter if we found matching tags
-            query = query.where(Question.id.in_(question_ids_with_tags))  # type: ignore
+        if question_ids_with_tags:
+            query = query.where(col(Question.id).in_(question_ids_with_tags))
         else:
-            # If no questions have these tags, return empty list
-            return []
+            return empty_result
+
+    if tag_type_ids:
+        tag_type_query = (
+            select(QuestionTag.question_id)
+            .join(Tag)
+            .where(Tag.id == QuestionTag.tag_id)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        )
+        question_ids_with_tag_types = session.exec(tag_type_query).all()
+        if question_ids_with_tag_types:
+            query = query.where(col(Question.id).in_(question_ids_with_tag_types))
+        else:
+            return empty_result
 
     # Handle creator-based filtering
     if created_by_id is not None:
@@ -437,7 +441,7 @@ def get_questions(
         if questions_by_creator:
             query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
         else:
-            return []
+            return empty_result
 
     # Handle location-based filtering with multiple locations
     if any([state_ids, district_ids, block_ids]):
@@ -458,10 +462,10 @@ def get_questions(
             if question_ids:  # Only apply filter if we found matching locations
                 query = query.where(Question.id.in_(question_ids))  # type: ignore
             else:
-                return []
+                return empty_result
 
     # Apply pagination
-    query = query.offset(skip).limit(limit)
+    # query = query.offset(skip).limit(limit)
 
     # Execute query and get all questions
     questions = session.exec(query).all()
@@ -492,7 +496,7 @@ def get_questions(
         )
         result.append(question_data)
 
-    return result
+    return cast(Page[QuestionPublic], paginate(result, params))
 
 
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])
@@ -789,11 +793,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
             for opt in revision.options
         ]
 
-    marking_scheme_dict = (
-        revision.marking_scheme.dict()
-        if revision.marking_scheme and hasattr(revision.marking_scheme, "dict")
-        else revision.marking_scheme
-    )
+    marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
     media_dict = (
         revision.media.dict()
@@ -1040,6 +1040,7 @@ async def upload_questions_csv(
         # Start processing rows
         questions_created = 0
         questions_failed = 0
+        failed_message = None
         failed_question_details = []
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
@@ -1298,17 +1299,14 @@ async def upload_questions_csv(
             csv_buffer.seek(0)
             csv_bytes = csv_buffer.getvalue().encode("utf-8")
             base64_csv = base64.b64encode(csv_bytes).decode("utf-8")
-            data_link = f"data:text/csv;base64,{base64_csv}"
-            failed_message = f"Download failed questions: {data_link}"
-        else:
-            failed_message = "No failed questions. No CSV generated."
+            failed_message = f"data:text/csv;base64,{base64_csv}"
 
         return BulkUploadQuestionsResponse(
             message=message,
             uploaded_questions=questions_created + questions_failed,
             success_questions=questions_created,
             failed_questions=questions_failed,
-            failed_question_details=failed_message,
+            error_log=failed_message,
         )
     except HTTPException:
         # Re-raise any HTTP exceptions we explicitly raised

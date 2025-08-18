@@ -1,4 +1,9 @@
-from .auth import NewPassword, Token, TokenPayload
+from .auth import (
+    NewPassword,
+    RefreshTokenRequest,
+    Token,
+    TokenPayload,
+)
 from .candidate import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -81,6 +86,7 @@ from .tag import (
 from .test import (
     Test,
     TestCreate,
+    TestDistrict,
     TestPublic,
     TestPublicLimited,
     TestQuestion,
@@ -101,6 +107,7 @@ from .utils import Message
 
 __all__ = [
     "NewPassword",
+    "RefreshTokenRequest",
     "Token",
     "TokenPayload",
     "Role",
@@ -198,7 +205,10 @@ __all__ = [
     "QuestionLocationUpdateItem",
     "QuestionLocationsUpdate",
     "QuestionTagsUpdate",
+    "TestDistrict",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
 TestCandidatePublic.model_rebuild()
+TestPublic.model_rebuild()
+UserPublic.model_rebuild()

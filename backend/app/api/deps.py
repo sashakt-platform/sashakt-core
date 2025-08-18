@@ -4,12 +4,13 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from fastapi_pagination import Params
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.core import security
-from app.core.config import settings
+from app.core.config import PAGINATION_SIZE, settings
 from app.core.db import engine
 from app.models import TokenPayload, User
 
@@ -43,6 +44,14 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+
+    # Validate that the token matches the one stored in database
+    if user.token != token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+        )
+
     return user
 
 
@@ -81,3 +90,7 @@ def permission_dependency(
             )
 
     return check_permissions
+
+
+class Pagination(Params):
+    size: int = PAGINATION_SIZE

@@ -1,10 +1,11 @@
-from collections.abc import Sequence
 from datetime import datetime
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
     Message,
@@ -19,8 +20,9 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
+from app.models.location import District
 from app.models.tag import Tag
-from app.models.test import MarksLevelEnum
+from app.models.test import MarksLevelEnum, TestDistrict
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -92,7 +94,7 @@ def create_test(
     current_user: CurrentUser,
 ) -> TestPublic:
     test_data = test_create.model_dump(
-        exclude={"tag_ids", "question_revision_ids", "state_ids"}
+        exclude={"tag_ids", "question_revision_ids", "state_ids", "district_ids"}
     )
     test_data["created_by_id"] = current_user.id
     # Auto-generate UUID for link if not provided
@@ -157,6 +159,14 @@ def create_test(
         ]
         session.add_all(state_links)
         session.commit()
+    if test_create.district_ids:
+        district_ids = test_create.district_ids
+        district_links = [
+            TestDistrict(test_id=test.id, district_id=district_id)
+            for district_id in district_ids
+        ]
+        session.add_all(district_links)
+        session.commit()
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
 
@@ -171,26 +181,30 @@ def create_test(
 
     state_query = select(State).join(TestState).where(TestState.test_id == test.id)
     states = session.exec(state_query).all()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
+    )
+    districts = session.exec(district_query).all()
 
     return TestPublic(
         **test.model_dump(),
         tags=tags,
         question_revisions=question_revisions,
         states=states,
+        districts=districts,
     )
 
 
 # Get All Tests
 @router.get(
     "/",
-    response_model=list[TestPublic],
+    response_model=Page[TestPublic],
     dependencies=[Depends(permission_dependency("read_test"))],
 )
 def get_test(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    params: Pagination = Depends(),
     marks_level: MarksLevelEnum | None = None,
     name: str | None = None,
     description: str | None = None,
@@ -214,7 +228,9 @@ def get_test(
     is_template: bool | None = None,
     created_by: list[int] | None = Query(None),
     tag_ids: list[int] | None = Query(None),
+    tag_type_ids: list[int] | None = Query(None),
     state_ids: list[int] | None = Query(None),
+    district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
     order_by: list[str] = Query(
@@ -223,9 +239,10 @@ def get_test(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Sequence[TestPublic]:
+) -> Page[TestPublic]:
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
+    empty_result = cast(Page[TestPublic], paginate([], params))
 
     for order in order_by:
         is_desc = order.startswith("-")
@@ -318,7 +335,20 @@ def get_test(
         if test_ids_with_tags:
             query = query.where(col(Test.id).in_(test_ids_with_tags))
         else:
-            return []
+            return empty_result
+    if tag_type_ids:
+        tag_type_query = (
+            select(TestTag.test_id)
+            .join(Tag)
+            .where(Tag.id == TestTag.tag_id)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        )
+        test_ids_with_tag_types = session.exec(tag_type_query).all()
+        if test_ids_with_tag_types:
+            query = query.where(col(Test.id).in_(test_ids_with_tag_types))
+        else:
+            return empty_result
+
     if state_ids:
         state_subquery = select(TestState.test_id).where(
             col(TestState.state_id).in_(state_ids)
@@ -327,10 +357,17 @@ def get_test(
         if test_ids_with_states:
             query = query.where(col(Test.id).in_(test_ids_with_states))
         else:
-            return []
+            return empty_result
 
-    # Apply pagination
-    query = query.offset(skip).limit(limit)
+    if district_ids:
+        district_subquery = select(TestDistrict.test_id).where(
+            col(TestDistrict.district_id).in_(district_ids)
+        )
+        test_ids_with_districts = session.exec(district_subquery).all()
+        if test_ids_with_districts:
+            query = query.where(col(Test.id).in_(test_ids_with_districts))
+        else:
+            return empty_result
 
     # Execute query and get all questions
     tests = session.exec(query).all()
@@ -350,6 +387,10 @@ def get_test(
 
         state_query = select(State).join(TestState).where(TestState.test_id == test.id)
         states = session.exec(state_query).all()
+        districts_query = (
+            select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
+        )
+        districts = session.exec(districts_query).all()
 
         test_public.append(
             TestPublic(
@@ -357,10 +398,11 @@ def get_test(
                 tags=tags,
                 question_revisions=question_revisions,
                 states=states,
+                districts=districts,
             )
         )
 
-    return test_public
+    return cast(Page[TestPublic], paginate(test_public, params))
 
 
 @router.get(
@@ -385,12 +427,17 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
 
     state_query = select(State).join(TestState).where(TestState.test_id == test_id)
     states = session.exec(state_query).all()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
+    )
+    districts = session.exec(district_query).all()
 
     return TestPublic(
         **test.model_dump(),
         tags=tags,
         question_revisions=question_revisions,
         states=states,
+        districts=districts,
     )
 
 
@@ -543,6 +590,32 @@ def update_test(
             session.add(TestState(test_id=test.id, state_id=state))
             session.commit()
 
+    districts_remove = [
+        district.id
+        for district in (test.districts or [])
+        if district.id not in (test_update.district_ids or [])
+    ]
+    districts_add = [
+        district
+        for district in (test_update.district_ids or [])
+        if district not in [d.id for d in (test.districts or [])]
+    ]
+    if districts_remove:
+        for district in districts_remove:
+            session.delete(
+                session.exec(
+                    select(TestDistrict).where(
+                        TestDistrict.test_id == test.id,
+                        TestDistrict.district_id == district,
+                    )
+                ).one()
+            )
+        session.commit()
+
+    if districts_add:
+        for district in districts_add:
+            session.add(TestDistrict(test_id=test.id, district_id=district))
+            session.commit()
     test_data = test_update.model_dump(exclude_unset=True)
     test.sqlmodel_update(test_data)
     session.add(test)
@@ -561,12 +634,17 @@ def update_test(
 
     state_query = select(State).join(TestState).where(TestState.test_id == test_id)
     states = session.exec(state_query).all()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
+    )
+    districts = session.exec(district_query).all()
 
     return TestPublic(
         **test.model_dump(),
         tags=tags,
         question_revisions=question_revisions,
         states=states,
+        districts=districts,
     )
 
 
@@ -601,12 +679,17 @@ def visibility_test(
 
     state_query = select(State).join(TestState).where(TestState.test_id == test_id)
     states = session.exec(state_query).all()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
+    )
+    districts = session.exec(district_query).all()
 
     return TestPublic(
         **test.model_dump(),
         tags=tags,
         question_revisions=question_revisions,
         states=states,
+        districts=districts,
     )
 
 
@@ -693,6 +776,16 @@ def clone_test(
     for sl in state_links:
         session.add(TestState(test_id=new_test.id, state_id=sl.state_id))
     session.commit()
+    district_links = session.exec(
+        select(TestDistrict).where(TestDistrict.test_id == original.id)
+    ).all()
+    for dl in district_links:
+        session.add(TestDistrict(test_id=new_test.id, district_id=dl.district_id))
+    session.commit()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == new_test.id)
+    )
+    districts = session.exec(district_query).all()
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == new_test.id)
     tags = session.exec(tags_query).all()
@@ -710,4 +803,5 @@ def clone_test(
         tags=tags,
         question_revisions=question_revisions,
         states=states,
+        districts=districts,
     )

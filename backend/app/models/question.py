@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
+from app.models.utils import MarkingScheme
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -51,17 +52,6 @@ class OptionBase:
     image: dict[str, Any] | None = None
 
 
-# SQLModel implementations
-class MarkingScheme(SQLModel):
-    """Defines scoring rules for a question"""
-
-    correct: float = Field(description="Points awarded for a correct answer")
-    wrong: float = Field(description="Points deducted for a wrong answer")
-    skipped: float = Field(
-        description="Points awarded/deducted when question is skipped"
-    )
-
-
 class Image(SQLModel):
     """Represents an image used in questions or options"""
 
@@ -95,34 +85,6 @@ CorrectAnswerType = list[int] | list[str] | float | int | None
 class QuestionBase(SQLModel):
     """Base model with common fields for questions"""
 
-    @model_validator(mode="after")
-    def validate_correct_answer_ids(self) -> "QuestionBase":
-        question_type = self.question_type
-        options = self.options
-        correct_answer = self.correct_answer
-        if (
-            question_type in ["single-choice", "multi-choice"]
-            and options
-            and correct_answer is not None
-        ):
-            option_ids = [
-                opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
-                for opt in options
-            ]
-            if len(option_ids) != len(set(option_ids)):
-                raise ValueError("Option IDs must be unique.")
-            answer_ids = (
-                correct_answer if isinstance(correct_answer, list) else [correct_answer]
-            )
-            for ans_id in answer_ids:
-                if ans_id not in option_ids:
-                    raise ValueError(
-                        f"Correct answer ID {ans_id} does not match any option ID."
-                    )
-        return self
-
-    """Base model with common fields for questions"""
-
     question_text: str = Field(nullable=False, description="The actual question text")
     instructions: str | None = Field(
         default=None,
@@ -133,6 +95,7 @@ class QuestionBase(SQLModel):
         nullable=False,
         description="Type of question (single-choice, multi-choice, etc.)",
     )
+
     options: list[Option] | None = Field(
         sa_type=JSON,
         default=None,
@@ -155,8 +118,10 @@ class QuestionBase(SQLModel):
         description="Whether the question must be answered",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
-    marking_scheme: MarkingSchemeDict | None = Field(
-        sa_type=JSON, default=None, description="Scoring rules for this question"
+    marking_scheme: MarkingScheme | None = Field(
+        default={"correct": 1, "wrong": 0, "skipped": 0},
+        sa_type=JSON,
+        description="Scoring rules for this question",
     )
     solution: str | None = Field(
         default=None, nullable=True, description="Explanation of the correct answer"
@@ -164,6 +129,42 @@ class QuestionBase(SQLModel):
     media: dict[str, Any] | None = Field(
         sa_type=JSON, default=None, description="Associated media for this question"
     )
+
+    @model_validator(mode="after")
+    def validate_question(self) -> "QuestionBase":
+        question_type = self.question_type
+        options = self.options
+        correct_answer = self.correct_answer
+        if question_type in ["single-choice", "multi-choice"]:
+            if options and correct_answer is not None:
+                option_ids = [
+                    opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
+                    for opt in options
+                ]
+                if len(option_ids) != len(set(option_ids)):
+                    raise ValueError("Option IDs must be unique.")
+                answer_ids = (
+                    correct_answer
+                    if isinstance(correct_answer, list)
+                    else [correct_answer]
+                )
+                for ans_id in answer_ids:
+                    if ans_id not in option_ids:
+                        raise ValueError(
+                            f"Correct answer ID {ans_id} does not match any option ID."
+                        )
+            if question_type == QuestionType.single_choice:
+                if not isinstance(correct_answer, list) or len(correct_answer) != 1:
+                    raise ValueError(
+                        "Single-choice questions must have exactly one correct answer."
+                    )
+            elif question_type == QuestionType.multi_choice:
+                if not isinstance(correct_answer, list) or len(correct_answer) < 1:
+                    raise ValueError(
+                        "Multi-choice questions must have at least one correct answer."
+                    )
+
+        return self
 
 
 class QuestionTag(SQLModel, table=True):
@@ -454,7 +455,7 @@ class QuestionPublic(SQLModel):
         description="Character limit for subjective answers"
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
-    marking_scheme: MarkingSchemeDict | None = Field(description="Scoring rules")
+    marking_scheme: MarkingScheme | None = Field(description="Scoring rules")
     solution: str | None = Field(description="Explanation of the answer")
     media: dict[str, Any] | None = Field(description="Associated media")
     latest_question_revision_id: int = Field(
@@ -485,6 +486,7 @@ class QuestionCandidatePublic(SQLModel):
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
     media: dict[str, Any] | None = Field(description="Associated media")
+    marking_scheme: MarkingScheme | None = Field(description="Scoring rules")
 
 
 class QuestionUpdate(SQLModel):
@@ -501,7 +503,7 @@ class BulkUploadQuestionsResponse(SQLModel):
     uploaded_questions: int
     success_questions: int
     failed_questions: int
-    failed_question_details: str | None
+    error_log: str | None
 
 
 # Force model rebuild to handle forward references
