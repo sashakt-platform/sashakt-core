@@ -66,7 +66,7 @@ def validate_question_response_format(
         if (
             not isinstance(response, list)
             or not all(isinstance(x, int) for x in response)
-            or len(response) > 4
+            or len(response) < 1
         ):
             raise HTTPException(
                 status_code=400,
@@ -193,12 +193,11 @@ def submit_answer_for_qr_candidate(
     question_revision = session.get(
         QuestionRevision, answer_request.question_revision_id
     )
-    if not question_revision:
-        return Response(status_code=204)
 
-    answer_request.response = validate_question_response_format(
-        answer_request.response, question_revision.question_type
-    )
+    if question_revision is not None:
+        answer_request.response = validate_question_response_format(
+            answer_request.response, question_revision.question_type
+        )
     # Check if answer already exists for this question
     existing_answer = session.exec(
         select(CandidateTestAnswer)

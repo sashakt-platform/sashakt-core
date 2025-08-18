@@ -4217,21 +4217,6 @@ def test_submit_answer_for_multi_choice_should_validate_responses_correctly(
         data["detail"]
         == "Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])"
     )
-    answer_payload = {
-        "question_revision_id": -999999,
-        "response": "[1]",
-        "visited": True,
-        "time_spent": 30,
-    }
-    response = client.post(
-        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
-        json=answer_payload,
-        params={"candidate_uuid": candidate_uuid},
-    )
-    assert response.status_code == 204
-    assert response.text == ""
-    assert data["marks_obtained"] == 2
-    assert data["marks_maximum"] == 6
 
 
 def test_test_level_marking_scheme_applied_on_questions(
