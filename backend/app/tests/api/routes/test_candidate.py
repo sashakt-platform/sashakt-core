@@ -18,11 +18,13 @@ from app.models import (
     Test,
     TestCandidatePublic,
 )
+from app.models.location import Country, District, State
 from app.models.question import QuestionType
-from app.models.test import TestQuestion
+from app.models.tag import Tag, TagType
+from app.models.test import TestDistrict, TestQuestion, TestState, TestTag
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
-from app.tests.utils.user import create_random_user
+from app.tests.utils.user import create_random_user, get_current_user_data
 
 from ...utils.utils import random_lower_string
 
@@ -1890,6 +1892,436 @@ def test_get_test_result(
     assert data["optional_not_attempted"] == 0
     assert data["marks_obtained"] == 2
     assert data["marks_maximum"] == 4
+
+
+def test_get_score_and_time_test_not_found(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+    tag_type = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    resp = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["overall_avg_time_minutes"] == 0.0
+    assert data["overall_avg_score"] == 0.0
+    resp = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["overall_avg_time_minutes"] == 0.0
+    assert data["overall_avg_score"] == 0.0
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["overall_avg_time_minutes"] == 0.0
+    assert data["overall_avg_score"] == 0.0
+
+
+def test_overall_avg_score_two_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+    tag_type = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="question",
+        tag_ids=[tag.id],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_tag_link = TestTag(test_id=test.id, tag_id=tag.id)
+    db.add(test_tag_link)
+    db.commit()
+
+    revisions = []
+    for i in range(5):
+        question = Question(organization_id=org_id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision_data = {
+            "created_by_id": user_id,
+            "question_id": question.id,
+            "question_text": f"Question {i + 1}",
+            "question_type": QuestionType.single_choice,
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            "correct_answer": [2],
+            "is_mandatory": True,
+            "is_active": True,
+            "is_deleted": False,
+            "marking_scheme": {"correct": 2, "wrong": -1, "skipped": 0},
+        }
+        revision = QuestionRevision(**revision_data)
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions.append(revision)
+
+    for rev in revisions:
+        db.add(TestQuestion(test_id=test.id, question_revision_id=rev.id))
+    db.commit()
+
+    candidate_answers = {
+        "cand1": {
+            1: [2],
+            2: [2],
+        },
+        "cand2": {
+            1: [2],
+            2: [2],
+            3: [2],
+        },
+        "cand3": {
+            1: [2],
+            2: [2],
+            3: [2],
+            4: [2],
+            5: [1],
+        },
+        "cand4": {
+            1: [2],
+            2: [2],
+            3: [2],
+            4: [2],
+        },
+    }
+
+    for cand_label, answers in candidate_answers.items():
+        payload = {"test_id": test.id, "device_info": f"{cand_label}-device"}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+        candidate_test_id = start_data["candidate_test_id"]
+        candidate_uuid = start_data["candidate_uuid"]
+
+        for q_idx, resp in answers.items():
+            db.add(
+                CandidateTestAnswer(
+                    candidate_test_id=candidate_test_id,
+                    question_revision_id=revisions[q_idx - 1].id,
+                    response=resp,
+                    visited=True,
+                    time_spent=10,
+                )
+            )
+        db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 62.5
+
+    test2 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="test",
+        marking_scheme={"correct": 4, "wrong": -2, "skipped": 0},
+        tag_ids=[tag.id],
+    )
+    db.add(test2)
+    db.commit()
+    db.refresh(test2)
+    test_tag_link = TestTag(test_id=test2.id, tag_id=tag.id)
+    db.add(test_tag_link)
+    db.commit()
+
+    revisions2 = []
+    for i in range(5):
+        question = Question(organization_id=org_id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision = QuestionRevision(
+            created_by_id=user_id,
+            question_id=question.id,
+            question_text=f"Test2 Question {i + 1}",
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            correct_answer=[2],
+            is_mandatory=True,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions2.append(revision)
+
+    for rev in revisions2:
+        db.add(TestQuestion(test_id=test2.id, question_revision_id=rev.id))
+    db.commit()
+
+    candidate_answers2 = {
+        "cand1": {1: [2], 2: [2], 3: [2]},
+        "cand2": {1: [2], 2: [2], 3: [2], 4: [2], 5: [1]},
+        "cand3": {1: [2], 2: [2], 3: [2], 4: [2]},
+        "cand4": {
+            1: [2],
+            2: [2],
+            3: [2],
+            4: [2],
+            5: [2],
+        },
+    }
+
+    for cand_label, answers in candidate_answers2.items():
+        payload = {"test_id": test2.id, "device_info": f"{cand_label}-device"}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+        candidate_test_id = start_data["candidate_test_id"]
+        candidate_uuid = start_data["candidate_uuid"]
+
+        for q_idx, resp in answers.items():
+            db.add(
+                CandidateTestAnswer(
+                    candidate_test_id=candidate_test_id,
+                    question_revision_id=revisions2[q_idx - 1].id,
+                    response=resp,
+                    visited=True,
+                    time_spent=10,
+                )
+            )
+        db.commit()
+
+        response = client.get(
+            f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 72.5
+
+
+def test_overall_avg_time_two_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    test1 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        state_ids=[state.id],
+        district_ids=[district.id],
+    )
+    db.add(test1)
+    db.commit()
+    db.refresh(test1)
+
+    test_state_link = TestState(test_id=test1.id, state_id=state.id)
+    db.add(test_state_link)
+    db.commit()
+    test_district_link = TestDistrict(test_id=test1.id, district_id=district.id)
+    db.add(test_district_link)
+    db.commit()
+
+    test2 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        state_ids=[state.id],
+    )
+    db.add(test2)
+    db.commit()
+    db.refresh(test2)
+    test_state_link = TestState(test_id=test2.id, state_id=state.id)
+    db.add(test_state_link)
+    db.commit()
+
+    t1_durations = [10, 12, 14, 25]
+    t2_durations = [32, 20, 41, 45]
+
+    for idx, mins in enumerate(t1_durations, start=1):
+        resp = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={"test_id": test1.id, "device_info": f"T1-cand{idx}"},
+        )
+        assert resp.status_code == 200
+        cand_data = resp.json()
+        cand_test_id = cand_data["candidate_test_id"]
+
+        start_time = datetime.now()
+        end_time = start_time + timedelta(minutes=mins)
+
+        ct = db.get(CandidateTest, cand_test_id)
+        assert ct is not None
+        ct.start_time = start_time
+        ct.end_time = end_time
+        db.add(ct)
+        db.commit()
+
+    for idx, mins in enumerate(t2_durations, start=1):
+        resp = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={"test_id": test2.id, "device_info": f"T2-cand{idx}"},
+        )
+        assert resp.status_code == 200
+        cand_data = resp.json()
+        cand_test_id = cand_data["candidate_test_id"]
+
+        start_time = datetime.now()
+        end_time = start_time + timedelta(minutes=mins)
+
+        ct = db.get(CandidateTest, cand_test_id)
+        assert ct is not None
+        ct.start_time = start_time
+        ct.end_time = end_time
+        db.add(ct)
+        db.commit()
+
+    resp = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    expected_avg_time = (sum(t1_durations) + sum(t2_durations)) / (
+        len(t1_durations) + len(t2_durations)
+    )
+
+    assert data["overall_avg_time_minutes"] == expected_avg_time
+
+    resp = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    expected_avg_time = (sum(t1_durations)) / (len(t1_durations))
+
+    assert data["overall_avg_time_minutes"] == expected_avg_time
 
 
 def test_result_with_no_answers(
