@@ -4643,3 +4643,684 @@ def test_question_level_marking_scheme_applied_on_questions(
 
     for question_data in data["question_revisions"]:
         assert question_data["marking_scheme"] == question_level_scheme
+
+
+def test_submitted_candidate_with_end_time(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    resp_before = client.get(
+        f"{settings.API_V1_STR}/candidate/summary", headers=get_user_superadmin_token
+    )
+    assert resp_before.status_code == 200
+    before = resp_before.json()
+
+    fake_now = datetime(2025, 8, 8, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=30,
+            marks=100,
+            start_time="2025-07-01T12:00:00Z",
+            end_time="2025-08-10T12:00:00Z",
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=True,
+                start_time=datetime(2025, 8, 8, 10, 0),
+                end_time=datetime(2025, 8, 8, 11, 0),
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 1
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 0
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_candidate_active_before_end_time(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    resp_before = client.get(
+        f"{settings.API_V1_STR}/candidate/summary", headers=get_user_superadmin_token
+    )
+    assert resp_before.status_code == 200
+    before = resp_before.json()
+
+    fake_now = datetime(2025, 8, 8, 10, 45)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=None,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 10, 0),
+            end_time=datetime(2025, 8, 8, 12, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 10, 15),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 1
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_candidate_active_inside_time_limit(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 11, 15)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=90,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 10, 0),
+            end_time=datetime(2025, 8, 8, 12, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 10, 30),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 1
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_candidate_active_no_start_end(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 10, 15)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=None,
+            marks=100,
+            start_time=None,
+            end_time=None,
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 9, 45),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 1
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_candidate_active_inside_60_min_before_end(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 3, 15)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=60,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 2, 0),
+            end_time=datetime(2025, 8, 8, 4, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 2, 30),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 1
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_candidate_inactive_past_end_time(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 12, 5)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=None,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 10, 0),
+            end_time=datetime(2025, 8, 8, 12, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 10, 30),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 1
+
+
+def test_candidate_inactive_time_limit_exceeded(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 11, 15)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=60,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 10, 0),
+            end_time=datetime(2025, 8, 8, 12, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 10, 0),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 1
+
+
+def test_candidate_inactive_time_limit_exceeded_no_test_end(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 10, 45)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=90,
+            marks=100,
+            start_time=None,
+            end_time=None,
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 9, 0),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 1
+
+
+def test_candidate_inactive_past_end_time_no_time_limit(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 15, 10)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=None,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 14, 0),
+            end_time=datetime(2025, 8, 8, 15, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 14, 15),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 1
+
+
+def test_candidate_with_end_time_counted_as_submitted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 15, 10)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=None,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 14, 0),
+            end_time=datetime(2025, 8, 8, 15, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 14, 15),
+                end_time=datetime(2025, 8, 8, 14, 45),
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 1
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 0
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_candidate_inactive_due_to_time_limit_exceeded(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 8, 8, 11, 15)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        resp_before = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_before.status_code == 200
+        before = resp_before.json()
+
+        active_test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=60,
+            marks=100,
+            start_time=datetime(2025, 8, 8, 10, 0),
+            end_time=datetime(2025, 8, 8, 12, 0),
+            is_template=False,
+            created_by_id=user_id,
+            link=random_lower_string(),
+        )
+        db.add(active_test)
+        db.commit()
+
+        candidate = Candidate(user_id=user_id)
+        db.add(candidate)
+        db.commit()
+
+        db.add(
+            CandidateTest(
+                test_id=active_test.id,
+                candidate_id=candidate.id,
+                is_submitted=False,
+                start_time=datetime(2025, 8, 8, 10, 0),
+                end_time=None,
+                device="laptop",
+                consent=True,
+            )
+        )
+        db.commit()
+
+        resp_after = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_after.status_code == 200
+        after = resp_after.json()
+
+        assert after["total_test_submitted"] - before["total_test_submitted"] == 0
+        assert (
+            after["total_test_not_submitted"] - before["total_test_not_submitted"] == 1
+        )
+        assert after["not_submitted_active"] - before["not_submitted_active"] == 0
+        assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 1
+
+
+def test_candidate_summary_invalid_date_range(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    start_date = "2025-08-10T10:00:00"
+    end_date = "2025-08-09T10:00:00"
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/summary",
+        headers=get_user_superadmin_token,
+        params={"start_date": start_date, "end_date": end_date},
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "End date must be after start date"

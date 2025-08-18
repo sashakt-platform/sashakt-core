@@ -226,3 +226,10 @@ class Result(SQLModel):
     optional_not_attempted: int
     marks_obtained: float | None
     marks_maximum: float | None
+
+
+class TestStatusSummary(SQLModel):
+    total_test_submitted: int
+    total_test_not_submitted: int
+    not_submitted_active: int
+    not_submitted_inactive: int
