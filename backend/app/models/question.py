@@ -506,6 +506,11 @@ class BulkUploadQuestionsResponse(SQLModel):
     error_log: str | None
 
 
+class DeleteQuestion(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[QuestionPublic] | None = None
+
+
 # Force model rebuild to handle forward references
 QuestionPublic.model_rebuild()
 QuestionRevision.model_rebuild()

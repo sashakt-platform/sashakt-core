@@ -22,7 +22,6 @@ from typing_extensions import TypedDict
 from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
     CandidateTest,
-    Message,
     Organization,
     Question,
     QuestionCreate,
@@ -42,7 +41,7 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.question import BulkUploadQuestionsResponse, DeleteQuestion, Option
 from app.models.utils import MarkingScheme
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -581,21 +580,66 @@ def get_question_candidate_tests(
     return candidate_test_info_list
 
 
-@router.delete("/{question_id}")
-def delete_question(question_id: int, session: SessionDep) -> Message:
+@router.delete(
+    "/",
+    response_model=DeleteQuestion,
+)
+def delete_question(
+    session: SessionDep, question_ids: list[int] = Body(...)
+) -> DeleteQuestion:
     """Soft delete a question."""
-    question = session.get(Question, question_id)
-    if not question or question.is_deleted:
-        raise HTTPException(status_code=404, detail="Question not found")
+    success_count = 0
+    failure_list = []
+    db_questions = session.exec(
+        select(Question).where(col(Question.id).in_(question_ids))
+    ).all()
+
+    found_ids = {q.id for q in db_questions}
+    missing_ids = set(question_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail=f"Question IDs not found in DB: {missing_ids}"
+        )
 
     # Soft delete
-    question.is_deleted = True
-    question.is_active = False
-    # No need to set modified_date manually as it will be updated by SQLModel
-    session.add(question)
+    for question in db_questions:
+        if question.is_deleted:
+            revision = session.exec(
+                select(QuestionRevision).where(
+                    QuestionRevision.id == question.last_revision_id
+                )
+            ).first()
+
+            locations = session.exec(
+                select(QuestionLocation).where(
+                    QuestionLocation.question_id == question.id
+                )
+            ).all()
+
+            tags = session.exec(
+                select(Tag)
+                .join(QuestionTag)
+                .where(QuestionTag.tag_id == Tag.id)
+                .where(QuestionTag.question_id == question.id)
+            ).all()
+            tags_list: list[Tag] | None = list(tags) if tags else None
+            if revision:
+                failure_list.append(
+                    build_question_response(
+                        session, question, revision, list(locations), tags_list
+                    )
+                )
+        else:
+            question.is_deleted = True
+            question.is_active = False
+            session.add(question)
+            success_count += 1
+
     session.commit()
 
-    return Message(message="Question deleted successfully")
+    return DeleteQuestion(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 @router.get("/{question_id}", response_model=QuestionPublic)

@@ -1281,7 +1281,9 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
 
     # Create question
     q1 = Question(organization_id=org.id)
+    q2 = Question(organization_id=org.id, is_deleted=True)
     db.add(q1)
+    db.add(q2)
     db.flush()
 
     rev1 = QuestionRevision(
@@ -1297,29 +1299,51 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     )
     db.add(rev1)
     db.flush()
+    rev2 = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.add(rev2)
+    db.flush()
 
     q1.last_revision_id = rev1.id
+    q2.last_revision_id = rev2.id
     db.commit()
     db.refresh(q1)
+    db.refresh(q2)
 
-    # Delete non-existent question
-    response = client.delete(f"{settings.API_V1_STR}/questions/99999")
+    response = client.request(
+        "DELETE", f"{settings.API_V1_STR}/questions/", json=[q1.id, q2.id, 99999]
+    )
     assert response.status_code == 404
+    assert "99999" in response.json()["detail"]
 
-    # Delete question
-    response = client.delete(f"{settings.API_V1_STR}/questions/{q1.id}")
+    response = client.request(
+        "DELETE", f"{settings.API_V1_STR}/questions/", json=[q1.id, q2.id]
+    )
     data = response.json()
 
     assert response.status_code == 200
-    assert "deleted" in data["message"]
+    assert data["delete_success_count"] == 1
+    assert any(f["id"] == q2.id for f in data["delete_failure_list"])
 
-    # Verify in database
     db.refresh(q1)
+    db.refresh(q2)
     assert q1.is_deleted is True
     assert q1.is_active is False
+    assert q2.is_deleted is True
 
-    # Check that it's no longer accessible via API
     response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}")
+    assert response.status_code == 404
+    response = client.get(f"{settings.API_V1_STR}/questions/{q2.id}")
     assert response.status_code == 404
 
 
@@ -3528,8 +3552,10 @@ def test_check_question_duplication_if_deleted(
     question_id = data["id"]
 
     # Delete the question
-    delete_response = client.delete(
-        f"{settings.API_V1_STR}/questions/{question_id}",
+    delete_response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id],
         headers=get_user_superadmin_token,
     )
     assert delete_response.status_code == 200
