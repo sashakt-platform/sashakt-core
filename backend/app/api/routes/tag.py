@@ -135,7 +135,7 @@ def visibility_tagtype(
 @router_tagtype.delete("/{tagtype_id}")
 def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     tagtype = session.get(TagType, tagtype_id)
-    if not tagtype or tagtype.is_deleted is True:
+    if not tagtype:
         raise HTTPException(status_code=404, detail="Tag Type not found")
 
     has_active_tags = session.exec(
@@ -348,7 +348,7 @@ def visibility_tag(
 @router_tag.delete("/{tag_id}")
 def delete_tag(tag_id: int, session: SessionDep) -> Message:
     tag = session.get(Tag, tag_id)
-    if not tag or tag.is_deleted is True:
+    if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
 
     has_questions = session.exec(
@@ -380,7 +380,7 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
             detail="Tag is associated with a question or test and cannot be deleted.",
         )
 
-    session.delete(tag)  # Hard delete
+    session.delete(tag)
     session.commit()
 
     return Message(message="Tag deleted successfully")

@@ -297,9 +297,7 @@ def delete_user(
         session.delete(user)
         session.commit()
         return Message(message="User deleted successfully")
-    except Exception as e:
+    except Exception:
         session.rollback()
 
-        raise HTTPException(
-            status_code=400, detail=f"Failed to delete user. Reason: {str(e)}"
-        )
+        raise HTTPException(status_code=400, detail="Failed to delete user")

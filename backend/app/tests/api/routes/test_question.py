@@ -1313,11 +1313,6 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     assert response.status_code == 200
     assert "deleted" in data["message"]
 
-    # Verify in database
-    db.refresh(q1)
-    assert q1.is_deleted is True
-    assert q1.is_active is False
-
     # Check that it's no longer accessible via API
     response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}")
     assert response.status_code == 404
@@ -3580,6 +3575,13 @@ def test_check_question_duplication_if_deleted(
     assert response.status_code == 200
     data = response.json()
     question_id = data["id"]
+
+    revisions = db.exec(
+        select(QuestionRevision).where(QuestionRevision.question_id == question_id)
+    ).first()
+
+    db.delete(revisions)
+    db.commit()
 
     # Delete the question
     delete_response = client.delete(

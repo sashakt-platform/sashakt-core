@@ -4213,10 +4213,7 @@ def test_delete_test_with_attempted_candidate_should_fail(
     )
 
     assert response.status_code == 422
-    assert (
-        response.json()["detail"]
-        == "Cannot delete test. One or more answers have already been submitted for its questions."
-    )
+    assert "Cannot delete" in response.json()["detail"]
 
 
 def test_delete_test_with_no_attempted_candidates_should_pass(

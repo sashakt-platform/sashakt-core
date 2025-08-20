@@ -435,6 +435,7 @@ def test_create_tag(
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
+    tag1_id = response_data["id"]
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
@@ -460,6 +461,7 @@ def test_create_tag(
     )
     response_data = response.json()
     assert response.status_code == 200
+    tag_id = response_data["id"]
     assert response_data["name"] == data["name"]
     assert response_data["description"] is None
 
@@ -473,8 +475,32 @@ def test_create_tag(
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
-    db.delete(tagtype)
-    db.commit()
+    update_payload = {"name": data["name"], "tag_type_id": None}
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag1_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["tag_type"] is None
+    update_payload = {"name": data["name"], "tag_type_id": None}
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["tag_type"] is None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert "Tag Type deleted" in response_data["message"]
 
     response = client.post(
         f"{settings.API_V1_STR}/tag/",
@@ -643,10 +669,24 @@ def test_read_tag(
     db.add(tag_2)
     db.commit()
     db.refresh(tag_2)
-    db.flush()
 
-    db.delete(tagtype)
-    db.commit()
+    update_payload = {"name": tag.name, "tag_type_id": None}
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["tag_type"] is None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
@@ -792,8 +832,23 @@ def test_read_tag_by_id(
     assert response.status_code == 404
     assert response_data["detail"] == "Tag not found"
 
-    db.delete(tagtype)
-    db.commit()
+    update_payload = {"name": tag.name, "tag_type_id": None}
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["tag_type"] is None
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert "deleted successfully" in response_data["message"]
 
     response = client.get(
         f"{settings.API_V1_STR}/tag/{tag.id}",
@@ -954,9 +1009,23 @@ def test_visibility_tag_by_id(
     response_data = response.json()
     assert response.status_code == 404
     assert "not found" in response_data["detail"]
+    update_payload = {"name": tag.name, "tag_type_id": None}
+    response = client.put(
+        f"{settings.API_V1_STR}/tag/{tag.id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["tag_type"] is None
 
-    db.delete(tagtype)
-    db.commit()
+    response = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+
     response = client.patch(
         f"{settings.API_V1_STR}/tag/{tag.id}",
         json={"is_active": False},

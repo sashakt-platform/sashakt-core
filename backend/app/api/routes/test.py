@@ -700,7 +700,7 @@ def visibility_test(
 )
 def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
-    if not test or test.is_deleted is True:
+    if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
     attempted_answer_exists = (
         session.exec(
