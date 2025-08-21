@@ -2156,7 +2156,7 @@ def test_overall_avg_score_two_tests(
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -2, "skipped": 0},
         tag_ids=[tag.id],
-        district_ds=[district.id],
+        district_ids=[district.id],
     )
     db.add(test2)
     db.commit()

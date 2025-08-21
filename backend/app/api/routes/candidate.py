@@ -142,7 +142,7 @@ def get_overall_tests_analytics(
         .join(Test)
         .join(User)
         .where(
-            not_(CandidateTest.end_time is None),
+            col(CandidateTest.end_time).is_not(None),
             User.organization_id == current_user.organization_id,
         )
     )
