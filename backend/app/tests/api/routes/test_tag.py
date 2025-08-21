@@ -681,12 +681,13 @@ def test_read_tag(
     assert response_data["tag_type"] is None
 
     response = client.delete(
-        f"{settings.API_V1_STR}/tagtype/{tagtype.id}",
+        f"{settings.API_V1_STR}/tagtype/{tagtype_2.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
 
-    assert response.status_code == 200
+    assert response.status_code == 400
+    assert "cannot delete" in response_data["detail"].lower()
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
