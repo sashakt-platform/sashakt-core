@@ -233,3 +233,19 @@ class TestStatusSummary(SQLModel):
     total_test_not_submitted: int
     not_submitted_active: int
     not_submitted_inactive: int
+
+
+class StartTestRequest(SQLModel):
+    test_id: int
+    device_info: str | None = None
+
+
+class StartTestResponse(SQLModel):
+    candidate_uuid: uuid.UUID
+    candidate_test_id: int
+
+
+class OverallTestAnalyticsResponse(SQLModel):
+    total_candidates: int
+    overall_avg_score: float
+    overall_avg_time_minutes: float

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import SQLModel, and_, col, not_, outerjoin, select
+from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -31,7 +31,13 @@ from app.models import (
     TestCandidatePublic,
     TestQuestion,
 )
-from app.models.candidate import Result, TestStatusSummary
+from app.models.candidate import (
+    OverallTestAnalyticsResponse,
+    Result,
+    StartTestRequest,
+    StartTestResponse,
+    TestStatusSummary,
+)
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -42,23 +48,6 @@ router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Tes
 router_candidate_test_answer = APIRouter(
     prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
-
-
-# Simple request/response models for start_test
-class StartTestRequest(SQLModel):
-    test_id: int
-    device_info: str | None = None
-
-
-class StartTestResponse(SQLModel):
-    candidate_uuid: uuid.UUID
-    candidate_test_id: int
-
-
-class OverallTestAnalyticsResponse(SQLModel):
-    total_candidates: int
-    overall_avg_score: float
-    overall_avg_time_minutes: float
 
 
 def get_score_and_time(
@@ -152,7 +141,10 @@ def get_overall_tests_analytics(
         select(CandidateTest)
         .join(Test)
         .join(User)
-        .where(User.organization_id == current_user.organization_id)
+        .where(
+            not_(CandidateTest.end_time is None),
+            User.organization_id == current_user.organization_id,
+        )
     )
     if tag_type_ids:
         tag_type_query = (

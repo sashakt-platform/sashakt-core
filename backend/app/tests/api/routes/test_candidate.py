@@ -1968,6 +1968,18 @@ def test_overall_avg_score_two_tests(
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
     tag_type = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -2000,12 +2012,20 @@ def test_overall_avg_score_two_tests(
         is_deleted=False,
         marks_level="question",
         tag_ids=[tag.id],
+        state_ids=[state.id],
+        district_ids=[district.id],
     )
     db.add(test)
     db.commit()
     db.refresh(test)
     test_tag_link = TestTag(test_id=test.id, tag_id=tag.id)
     db.add(test_tag_link)
+    db.commit()
+    test_state_link = TestState(test_id=test.id, state_id=state.id)
+    db.add(test_state_link)
+    db.commit()
+    test_district_link = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district_link)
     db.commit()
 
     revisions = []
@@ -2075,17 +2095,31 @@ def test_overall_avg_score_two_tests(
         candidate_test_id = start_data["candidate_test_id"]
         candidate_uuid = start_data["candidate_uuid"]
 
-        for q_idx, resp in answers.items():
+        for question_index, resp in answers.items():
             db.add(
                 CandidateTestAnswer(
                     candidate_test_id=candidate_test_id,
-                    question_revision_id=revisions[q_idx - 1].id,
+                    question_revision_id=revisions[question_index - 1].id,
                     response=resp,
                     visited=True,
                     time_spent=10,
                 )
             )
+            db.commit()
+
+        candidate_test = db.get(CandidateTest, candidate_test_id)
+        assert candidate_test is not None
+        candidate_test.end_time = datetime.now()
+        db.add(candidate_test)
         db.commit()
+
+        response = client.get(
+            f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+            headers=get_user_superadmin_token,
+        )
+        data = response.json()
+        assert response.status_code == 200
 
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
@@ -2094,6 +2128,20 @@ def test_overall_avg_score_two_tests(
     assert response.status_code == 200
     data = response.json()
     assert data["overall_avg_score"] == 62.5
+    response1 = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["overall_avg_score"] == 62.5
+    response1 = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}&district_ids={district.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["overall_avg_score"] == 62.5
 
     test2 = Test(
         name=random_lower_string(),
@@ -2108,12 +2156,16 @@ def test_overall_avg_score_two_tests(
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -2, "skipped": 0},
         tag_ids=[tag.id],
+        district_ds=[district.id],
     )
     db.add(test2)
     db.commit()
     db.refresh(test2)
     test_tag_link = TestTag(test_id=test2.id, tag_id=tag.id)
     db.add(test_tag_link)
+    db.commit()
+    test_district_link = TestDistrict(test_id=test2.id, district_id=district.id)
+    db.add(test_district_link)
     db.commit()
 
     revisions2 = []
@@ -2180,6 +2232,11 @@ def test_overall_avg_score_two_tests(
                 )
             )
         db.commit()
+        candidate_test = db.get(CandidateTest, candidate_test_id)
+        assert candidate_test is not None
+        candidate_test.end_time = datetime.now()
+        db.add(candidate_test)
+        db.commit()
 
         response = client.get(
             f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
@@ -2190,6 +2247,13 @@ def test_overall_avg_score_two_tests(
 
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 72.5
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
