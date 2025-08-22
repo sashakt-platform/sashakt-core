@@ -247,5 +247,5 @@ class StartTestResponse(SQLModel):
 
 class OverallTestAnalyticsResponse(SQLModel):
     total_candidates: int
-    overall_avg_score: float
+    overall_avg_score_percent: float
     overall_avg_time_minutes: float
