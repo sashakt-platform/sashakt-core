@@ -81,13 +81,13 @@ def test_read_candidate(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate",
+        f"{settings.API_V1_STR}/candidate/{candidate.id}",
         headers=get_user_testadmin_token,
     )
     data = response.json()
     current_index = len(data) - 1
     assert response.status_code == 200
-    assert data[current_index]["user_id"] is None
+    assert data["user_id"] is None
 
 
 def test_read_candidate_by_id(
