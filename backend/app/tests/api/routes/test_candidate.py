@@ -2000,6 +2000,7 @@ def test_overall_avg_score_two_tests(
     db.commit()
     db.refresh(tag)
 
+    # --- Test 1 ---
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -2142,7 +2143,7 @@ def test_overall_avg_score_two_tests(
     assert response1.status_code == 200
     data1 = response1.json()
     assert data1["overall_avg_score"] == 62.5
-
+    # --- Test 2 ---
     test2 = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -2260,6 +2261,210 @@ def test_overall_avg_score_two_tests(
     data = response.json()
     assert data["overall_avg_score"] == 72.5
 
+    # --- Test 3 (New) ---
+    test3 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="test",
+        marking_scheme={"correct": 3, "wrong": -1, "skipped": 0},
+        state_ids=[state.id],
+        district_ids=[district.id],
+    )
+    db.add(test3)
+    db.commit()
+    db.refresh(test3)
+    db.add(TestTag(test_id=test3.id, tag_id=tag.id))
+    db.add(TestState(test_id=test3.id, state_id=state.id))
+    db.add(TestDistrict(test_id=test3.id, district_id=district.id))
+    db.commit()
+
+    revisions3 = []
+    for i in range(5):
+        question = Question(organization_id=org_id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+        revision = QuestionRevision(
+            created_by_id=user_id,
+            question_id=question.id,
+            question_text=f"Test3 Question {i + 1}",
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            correct_answer=[2],
+            is_mandatory=True,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions3.append(revision)
+        db.add(TestQuestion(test_id=test3.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate_answers3 = {
+        "cand1": {1: [2], 2: [2], 3: [1], 4: [2]},
+        "cand2": {1: [2], 2: [2], 3: [2], 4: [2], 5: [2]},
+        "cand3": {1: [2], 2: [2], 3: [2]},
+        "cand4": {1: [2], 2: [2], 3: [2], 4: [2]},
+    }
+
+    for cand_label, answers in candidate_answers3.items():
+        payload = {"test_id": test3.id, "device_info": f"{cand_label}-device"}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+        candidate_test_id = start_data["candidate_test_id"]
+        candidate_uuid = start_data["candidate_uuid"]
+
+        for q_idx, resp in answers.items():
+            db.add(
+                CandidateTestAnswer(
+                    candidate_test_id=candidate_test_id,
+                    question_revision_id=revisions3[q_idx - 1].id,
+                    response=resp,
+                    visited=True,
+                    time_spent=10,
+                )
+            )
+        db.commit()
+        candidate_test = db.get(CandidateTest, candidate_test_id)
+        assert candidate_test is not None
+        candidate_test.end_time = datetime.now()
+        db.add(candidate_test)
+        db.commit()
+
+        response = client.get(
+            f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 72.78
+
+    response1 = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    data1 = response1.json()
+    assert data1["overall_avg_score"] == 69
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 72.78
+
+    # ---- Test 4 ----
+    test4 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        is_deleted=False,
+        marks_level="test",
+        marking_scheme={"correct": 2, "wrong": 0, "skipped": 0},
+    )
+    db.add(test4)
+    db.commit()
+    db.refresh(test4)
+    revisions4 = []
+    for i in range(5):
+        question = Question(organization_id=org_id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+        revision = QuestionRevision(
+            created_by_id=user_id,
+            question_id=question.id,
+            question_text=f"Test4 Question {i + 1}",
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": "Option C"},
+            ],
+            correct_answer=[2],
+            is_mandatory=True,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions4.append(revision)
+        db.add(TestQuestion(test_id=test4.id, question_revision_id=revision.id))
+    db.commit()
+    candidate_answers4 = {
+        "cand1": {1: [2], 2: [2], 3: [2]},
+        "cand2": {1: [2], 2: [2], 3: [2]},
+        "cand3": {1: [2], 2: [2]},
+        "cand4": {1: [2], 2: [2], 3: [2], 4: [2]},
+    }
+    for cand_label, answers in candidate_answers4.items():
+        payload = {"test_id": test4.id, "device_info": f"{cand_label}-device"}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+        candidate_test_id = start_data["candidate_test_id"]
+        candidate_uuid = start_data["candidate_uuid"]
+        for q_idx, resp in answers.items():
+            db.add(
+                CandidateTestAnswer(
+                    candidate_test_id=candidate_test_id,
+                    question_revision_id=revisions4[q_idx - 1].id,
+                    response=resp,
+                    visited=True,
+                    time_spent=10,
+                )
+            )
+        db.commit()
+        candidate_test = db.get(CandidateTest, candidate_test_id)
+        assert candidate_test is not None
+        candidate_test.end_time = datetime.now()
+        db.add(candidate_test)
+        db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 70.45
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_avg_score"] == 72.78
+
 
 def test_overall_avg_time_two_tests(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
@@ -2370,8 +2575,10 @@ def test_overall_avg_time_two_tests(
     assert resp.status_code == 200
     data = resp.json()
 
-    expected_avg_time = (sum(t1_durations) + sum(t2_durations)) / (
-        len(t1_durations) + len(t2_durations)
+    expected_avg_time = round(
+        (sum(t1_durations) + sum(t2_durations))
+        / (len(t1_durations) + len(t2_durations)),
+        2,
     )
 
     assert data["overall_avg_time_minutes"] == expected_avg_time
@@ -2383,7 +2590,7 @@ def test_overall_avg_time_two_tests(
     assert resp.status_code == 200
     data = resp.json()
 
-    expected_avg_time = (sum(t1_durations)) / (len(t1_durations))
+    expected_avg_time = round((sum(t1_durations)) / (len(t1_durations)), 2)
 
     assert data["overall_avg_time_minutes"] == expected_avg_time
 

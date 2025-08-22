@@ -198,10 +198,11 @@ def get_overall_tests_analytics(
     )
 
     overall_avg_time = total_time / len(candidate_tests) if candidate_tests else 0.0
+    overall_avg_time = round(overall_avg_time, 2)
 
     return OverallTestAnalyticsResponse(
         total_candidates=len(unique_candidates),
-        overall_avg_score=overall_avg_score,
+        overall_avg_score=round(overall_avg_score, 2),
         overall_avg_time_minutes=overall_avg_time,
     )
 
