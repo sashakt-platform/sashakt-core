@@ -1941,7 +1941,7 @@ def test_get_score_and_time_test_not_found(
     data = resp.json()
 
     assert data["overall_avg_time_minutes"] == 0.0
-    assert data["overall_avg_score_percent"] == 0.0
+    assert data["overall_score_percent"] == 0.0
     resp = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
         headers=get_user_superadmin_token,
@@ -1950,7 +1950,7 @@ def test_get_score_and_time_test_not_found(
     data = resp.json()
 
     assert data["overall_avg_time_minutes"] == 0.0
-    assert data["overall_avg_score_percent"] == 0.0
+    assert data["overall_score_percent"] == 0.0
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
         headers=get_user_superadmin_token,
@@ -1959,7 +1959,7 @@ def test_get_score_and_time_test_not_found(
     data = response.json()
 
     assert data["overall_avg_time_minutes"] == 0.0
-    assert data["overall_avg_score_percent"] == 0.0
+    assert data["overall_score_percent"] == 0.0
 
 
 def test_overall_avg_score_two_tests(
@@ -2128,21 +2128,21 @@ def test_overall_avg_score_two_tests(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 62.5
+    assert data["overall_score_percent"] == 62.5
     response1 = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response1.status_code == 200
     data1 = response1.json()
-    assert data1["overall_avg_score_percent"] == 62.5
+    assert data1["overall_score_percent"] == 62.5
     response1 = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}&district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response1.status_code == 200
     data1 = response1.json()
-    assert data1["overall_avg_score_percent"] == 62.5
+    assert data1["overall_score_percent"] == 62.5
     # --- Test 2 ---
     test2 = Test(
         name=random_lower_string(),
@@ -2252,14 +2252,14 @@ def test_overall_avg_score_two_tests(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 72.5
+    assert data["overall_score_percent"] == 72.5
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 72.5
+    assert data["overall_score_percent"] == 72.5
 
     # --- Test 3 (New) ---
     test3 = Test(
@@ -2358,7 +2358,7 @@ def test_overall_avg_score_two_tests(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 72.78
+    assert data["overall_score_percent"] == 72.78
 
     response1 = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
@@ -2366,7 +2366,7 @@ def test_overall_avg_score_two_tests(
     )
     assert response1.status_code == 200
     data1 = response1.json()
-    assert data1["overall_avg_score_percent"] == 69
+    assert data1["overall_score_percent"] == 69
 
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
@@ -2374,7 +2374,7 @@ def test_overall_avg_score_two_tests(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 72.78
+    assert data["overall_score_percent"] == 72.78
 
     # ---- Test 4 ----
     test4 = Test(
@@ -2456,14 +2456,14 @@ def test_overall_avg_score_two_tests(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 70.45
+    assert data["overall_score_percent"] == 70.45
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["overall_avg_score_percent"] == 72.78
+    assert data["overall_score_percent"] == 72.78
 
 
 def test_overall_avg_time_two_tests(

@@ -134,7 +134,7 @@ def get_overall_tests_analytics(
     """
     empty_result = OverallTestAnalyticsResponse(
         total_candidates=0,
-        overall_avg_score_percent=0.0,
+        overall_score_percent=0.0,
         overall_avg_time_minutes=0.0,
     )
     query = (
@@ -191,7 +191,7 @@ def get_overall_tests_analytics(
         total_time += time_min
         unique_candidates.add(ct.candidate_id)
 
-    overall_avg_score_percent = (
+    overall_score_percent = (
         (total_scores / total_possible_scores) * 100
         if total_possible_scores > 0
         else 0.0
@@ -202,7 +202,7 @@ def get_overall_tests_analytics(
 
     return OverallTestAnalyticsResponse(
         total_candidates=len(unique_candidates),
-        overall_avg_score_percent=round(overall_avg_score_percent, 2),
+        overall_score_percent=round(overall_score_percent, 2),
         overall_avg_time_minutes=overall_avg_time,
     )
 
