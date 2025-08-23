@@ -43,6 +43,7 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.test import TestQuestion
 from app.models.utils import MarkingScheme
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -585,14 +586,21 @@ def get_question_candidate_tests(
 def delete_question(question_id: int, session: SessionDep) -> Message:
     """Soft delete a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-
-    # Soft delete
-    question.is_deleted = True
-    question.is_active = False
-    # No need to set modified_date manually as it will be updated by SQLModel
-    session.add(question)
+    query = (
+        select(TestQuestion)
+        .join(QuestionRevision)
+        .where(QuestionRevision.id == TestQuestion.question_revision_id)
+        .where(QuestionRevision.question_id == question_id)
+    )
+    linked_tests = session.exec(query).first()
+    if linked_tests:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete question because it is linked to a test",
+        )
+    session.delete(question)
     session.commit()
 
     return Message(message="Question deleted successfully")
