@@ -325,6 +325,63 @@ def test_update_user_me(
     assert response.status_code == 401
 
 
+def test_update_user_me_update_phone_only(
+    client: TestClient, get_user_candidate_token: dict[str, str], db: Session
+) -> None:
+    email = random_email()
+    full_name = random_lower_string()
+    password = random_lower_string()
+    phone = random_lower_string()
+    role = create_random_role(db)
+    organization = create_random_organization(db)
+    data = {
+        "email": email,
+        "password": password,
+        "phone": phone,
+        "role_id": role.id,
+        "full_name": full_name,
+        "organization_id": organization.id,
+    }
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=get_user_candidate_token,
+        json=data,
+    )
+    assert r.status_code == 200
+    updated_user = r.json()
+    assert updated_user["email"] == email
+    assert updated_user["full_name"] == full_name
+    assert updated_user["phone"] == phone
+
+    user_query = select(User).where(User.email == email)
+    user_db = db.exec(user_query).first()
+    assert user_db
+    assert user_db.email == email
+    assert user_db.full_name == full_name
+    assert user_db.phone == phone
+    email_new = random_email()
+
+    data = {
+        "email": email_new,
+        "phone": phone,
+        "password": password,
+        "role_id": role.id,
+        "full_name": full_name,
+        "organization_id": organization.id,
+    }
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=get_user_candidate_token,
+        json=data,
+    )
+
+    assert r.status_code == 200
+    updated_user = r.json()
+    assert updated_user["email"] == email_new
+    assert updated_user["full_name"] == full_name
+    assert updated_user["phone"] == phone
+
+
 def test_update_password_me(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
