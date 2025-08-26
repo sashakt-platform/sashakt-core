@@ -229,19 +229,15 @@ def validate_correct_answer(
         QuestionType.matrix_numbers: dict,
         QuestionType.matrix_texts: dict,
     }
-
-    if correct_answer is None:
-        return
-
     expected_type = type_mapping.get(question_type)
-    if expected_type is None:
-        return
 
-    if not isinstance(correct_answer, expected_type):
-        raise ValueError(
-            f"For question_type '{question_type}', "
-            f"correct_answer must be of type {expected_type}, got {type(correct_answer)}"
-        )
+    if correct_answer is not None and expected_type is not None:
+        if not isinstance(correct_answer, expected_type):
+            raise HTTPException(
+                status_code=400,
+                detail=f"For question_type '{question_type}', "
+                f"correct_answer must be of type {expected_type}, got {type(correct_answer)}",
+            )
 
 
 @router.post("/", response_model=QuestionPublic)

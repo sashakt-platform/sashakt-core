@@ -218,6 +218,70 @@ def test_create_question(
     assert data["question_type"] == QuestionType.matrix_ratings
 
 
+def test_question_types_validation(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org_name = random_lower_string()
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": org_name},
+        headers=get_user_superadmin_token,
+    )
+    org_data = org_response.json()
+    org_id = org_data["id"]
+
+    numeric_question_text = random_lower_string()
+    numeric_question_data = {
+        "organization_id": org_id,
+        "question_text": numeric_question_text,
+        "question_type": QuestionType.numerical_integer,
+        "correct_answer": "42",
+        "is_mandatory": True,
+    }
+
+    numeric_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=numeric_question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert numeric_response.status_code == 400
+    assert (
+        "correct_answer must be of type <class 'int'>"
+        in numeric_response.json()["detail"]
+    )
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.subjective,
+        "correct_answer": 42,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert "correct_answer must be of type <class 'str'>" in response.json()["detail"]
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.numerical_decimal,
+        "correct_answer": "45.5",
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "correct_answer must be of type <class 'float'>" in response.json()["detail"]
+
+
 def test_read_questions(
     client: TestClient,
     db: SessionDep,
