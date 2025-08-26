@@ -42,7 +42,12 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.question import (
+    BulkUploadQuestionsResponse,
+    CorrectAnswerType,
+    Option,
+    QuestionType,
+)
 from app.models.utils import MarkingScheme
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -209,6 +214,36 @@ def is_duplicate_question(
     return False
 
 
+def validate_correct_answer(
+    question_type: QuestionType, correct_answer: CorrectAnswerType
+) -> None:
+    # Mapping of allowed types
+    type_mapping: dict[QuestionType, type] = {
+        QuestionType.single_choice: list,
+        QuestionType.multi_choice: list,
+        QuestionType.subjective: str,
+        QuestionType.numerical_integer: int,
+        QuestionType.numerical_decimal: float,
+        QuestionType.matrix_matches: dict,
+        QuestionType.matrix_ratings: dict,
+        QuestionType.matrix_numbers: dict,
+        QuestionType.matrix_texts: dict,
+    }
+
+    if correct_answer is None:
+        return
+
+    expected_type = type_mapping.get(question_type)
+    if expected_type is None:
+        return
+
+    if not isinstance(correct_answer, expected_type):
+        raise ValueError(
+            f"For question_type '{question_type}', "
+            f"correct_answer must be of type {expected_type}, got {type(correct_answer)}"
+        )
+
+
 @router.post("/", response_model=QuestionPublic)
 def create_question(
     question_create: QuestionCreate,
@@ -216,6 +251,9 @@ def create_question(
     current_user: CurrentUser,
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
+    validate_correct_answer(
+        question_create.question_type, question_create.correct_answer
+    )
     if is_duplicate_question(
         session, question_create.question_text, question_create.tag_ids
     ):
@@ -240,7 +278,9 @@ def create_question(
         question_text=question_create.question_text,
         instructions=question_create.instructions,
         question_type=question_create.question_type,
-        options=options,
+        options=options
+        if question_create.question_type in ["single-choice", "multi-choice"]
+        else None,
         correct_answer=question_create.correct_answer,
         subjective_answer_limit=question_create.subjective_answer_limit,
         is_mandatory=question_create.is_mandatory,

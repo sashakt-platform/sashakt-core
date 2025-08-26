@@ -123,6 +123,99 @@ def test_create_question(
     ).all()
     assert len(question_tags) == 1
     assert question_tags[0].tag_id == tag_id
+    numeric_question_text = random_lower_string()
+    numeric_question_data = {
+        "organization_id": org_id,
+        "question_text": numeric_question_text,
+        "question_type": QuestionType.numerical_integer,
+        "correct_answer": 42,
+        "is_mandatory": True,
+    }
+
+    numeric_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=numeric_question_data,
+        headers=get_user_superadmin_token,
+    )
+    numeric_data = numeric_response.json()
+
+    assert numeric_response.status_code == 200
+    assert numeric_data["question_text"] == numeric_question_text
+    assert numeric_data["organization_id"] == org_id
+    assert numeric_data["question_type"] == QuestionType.numerical_integer
+    assert numeric_data["options"] is None
+    assert numeric_data["correct_answer"] == 42
+    assert numeric_data["created_by_id"] == user_id
+
+    # 3. Subjective Question
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.subjective,
+        "correct_answer": "mumbai",
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["question_type"] == QuestionType.subjective
+    assert data["correct_answer"] == "mumbai"
+
+    # 4. Numerical Decimal Question
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.numerical_decimal,
+        "correct_answer": 45.5,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["question_type"] == QuestionType.numerical_decimal
+    assert data["correct_answer"] == 45.5
+
+    # Matrix Matches Question
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.matrix_matches,
+        "options": None,
+        "correct_answer": {"row1": "col1"},
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["question_type"] == QuestionType.matrix_matches
+
+    # Matrix Ratings Question
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.matrix_ratings,
+        "options": None,
+        "correct_answer": {"row1": "col1"},
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["question_type"] == QuestionType.matrix_ratings
 
 
 def test_read_questions(
