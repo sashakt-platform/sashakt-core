@@ -4214,6 +4214,31 @@ def test_delete_test_with_attempted_candidate_should_fail(
 
     assert response.status_code == 422
     assert "Cannot delete" in response.json()["detail"]
+    test_payload1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 100,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload1,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    test_id2 = response.json()["id"]
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id2}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
 
 
 def test_delete_test_with_no_attempted_candidates_should_pass(
