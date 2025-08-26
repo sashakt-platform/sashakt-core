@@ -27,6 +27,11 @@ class QuestionType(str, Enum):
     multi_choice = "multi-choice"
     subjective = "subjective"
     numerical_integer = "numerical-integer"
+    numerical_decimal = "numerical-decimal"
+    matrix_matches = "matrix-matches"
+    matrix_ratings = "matrix-ratings"
+    matrix_numbers = "matrix-numbers"
+    matrix_texts = "matrix-texts"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -79,7 +84,7 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | None
+CorrectAnswerType = list[int] | list[str] | float | int | str | dict[Any, Any] | None
 
 
 class QuestionBase(SQLModel):
