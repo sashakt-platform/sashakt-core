@@ -381,6 +381,22 @@ def test_update_user_me_update_phone_only(
     assert updated_user["full_name"] == full_name
     assert updated_user["phone"] == phone
 
+    new_phone = random_lower_string()
+    data = {
+        "phone": new_phone,
+    }
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=get_user_candidate_token,
+        json=data,
+    )
+
+    assert r.status_code == 200
+    updated_user = r.json()
+    assert updated_user["email"] == email_new
+    assert updated_user["full_name"] == full_name
+    assert updated_user["phone"] == new_phone
+
 
 def test_update_password_me(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
