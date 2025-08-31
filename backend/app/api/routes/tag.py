@@ -2,7 +2,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import and_, func, not_, or_, select
+from sqlmodel import and_, exists, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -16,6 +16,8 @@ from app.models import (
     TagTypeUpdate,
     TagUpdate,
 )
+from app.models.question import Question, QuestionTag
+from app.models.test import Test, TestTag
 
 router_tagtype = APIRouter(
     prefix="/tagtype",
@@ -133,12 +135,19 @@ def visibility_tagtype(
 @router_tagtype.delete("/{tagtype_id}")
 def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     tagtype = session.get(TagType, tagtype_id)
-    if not tagtype or tagtype.is_deleted is True:
+    if not tagtype:
         raise HTTPException(status_code=404, detail="Tag Type not found")
-    tagtype.is_deleted = True
-    session.add(tagtype)
+
+    has_active_tags = session.exec(
+        select(Tag).where(Tag.tag_type_id == tagtype_id, not_(Tag.is_deleted))
+    ).first()
+
+    if has_active_tags:
+        raise HTTPException(
+            status_code=400, detail="Cannot delete Tag Type as it has associated Tags"
+        )
+    session.delete(tagtype)
     session.commit()
-    session.refresh(tagtype)
     return Message(message="Tag Type deleted successfully")
 
 
@@ -339,10 +348,39 @@ def visibility_tag(
 @router_tag.delete("/{tag_id}")
 def delete_tag(tag_id: int, session: SessionDep) -> Message:
     tag = session.get(Tag, tag_id)
-    if not tag or tag.is_deleted is True:
+    if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
-    tag.is_deleted = True
-    session.add(tag)
+
+    has_questions = session.exec(
+        select(
+            exists().where(
+                and_(
+                    QuestionTag.tag_id == tag_id,
+                    QuestionTag.question_id == Question.id,
+                    not_(Question.is_deleted),
+                )
+            )
+        )
+    ).one()
+    has_tests = session.exec(
+        select(
+            exists().where(
+                and_(
+                    TestTag.tag_id == tag_id,
+                    TestTag.test_id == Test.id,
+                    not_(Test.is_deleted),
+                )
+            )
+        )
+    ).one()
+
+    if has_questions or has_tests:
+        raise HTTPException(
+            status_code=400,
+            detail="Tag is associated with a question or test and cannot be deleted.",
+        )
+
+    session.delete(tag)
     session.commit()
-    session.refresh(tag)
+
     return Message(message="Tag deleted successfully")
