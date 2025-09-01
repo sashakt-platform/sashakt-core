@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import Self
+from typing_extensions import Self, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
@@ -19,6 +19,11 @@ class MarksLevelEnum(str, enum.Enum):
 if TYPE_CHECKING:
     from app.models import Candidate, District, QuestionRevision, State, User
     from app.models.tag import Tag
+
+
+class Tag_random(TypedDict):
+    tag_id: int
+    count: int
 
 
 class TestTag(SQLModel, table=True):
@@ -138,6 +143,11 @@ class TestBase(SQLModel):
         default=None,
         title="No of Random Questions",
         description="No of random questions to be selected from the question bank. This field is only applicable when random_questions is set to true.",
+    )
+    tag_random: list[Tag_random] | None = Field(
+        sa_type=JSON,
+        default=None,
+        description="Tag-based randomization",
     )
     question_pagination: int = Field(
         default=1,

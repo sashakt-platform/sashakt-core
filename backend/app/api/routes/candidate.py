@@ -38,6 +38,7 @@ from app.models.candidate import (
     StartTestResponse,
     TestStatusSummary,
 )
+from app.models.question import QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -232,6 +233,50 @@ def start_test_for_candidate(
             question_revision_ids,
             min(test.no_of_random_questions, len(question_revision_ids)),
         )
+
+    if test.random_questions and test.tag_random:
+        final_question_revision_ids_set = set()
+
+        question_revision_to_question_id_map = {
+            question_revision.id: question_revision.question_id
+            for question_revision in session.exec(
+                select(QuestionRevision).where(
+                    col(QuestionRevision.id).in_(question_revision_ids)
+                )
+            ).all()
+        }
+
+        for tag_rule in test.tag_random:
+            tag_id = tag_rule["tag_id"]
+            count = tag_rule["count"]
+
+            question_ids_for_tag = set(
+                session.exec(
+                    select(QuestionTag.question_id).where(QuestionTag.tag_id == tag_id)
+                ).all()
+            )
+
+            question_revision_ids_for_tag = [
+                revision_id
+                for revision_id, question_id in question_revision_to_question_id_map.items()
+                if question_id in question_ids_for_tag
+            ]
+
+            if len(question_revision_ids_for_tag) <= count:
+                chosen_question_revision_ids = question_revision_ids_for_tag
+            else:
+                chosen_question_revision_ids = random.sample(
+                    question_revision_ids_for_tag, count
+                )
+
+            final_question_revision_ids_set.update(chosen_question_revision_ids)
+
+        question_revision_ids = [
+            question_id
+            for question_id in final_question_revision_ids_set
+            if question_id is not None
+        ]
+
     if test.shuffle:
         random.shuffle(question_revision_ids)
 
