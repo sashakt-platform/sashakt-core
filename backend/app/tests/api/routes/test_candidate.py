@@ -4773,6 +4773,106 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
     assert stored_ids_1 != stored_ids_2
 
 
+def test_candidate_tag_random_count_update(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[{"tag_id": tag.id, "count": 2}],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_qr_ids = []
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag.id))
+
+    db.commit()
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 120,
+        "marks": 100,
+        "shuffle": True,
+        "random_tag_count": [{"tag_id": tag.id, "count": 4}],
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
+    ).first()
+    assert candidate_test is not None
+
+    stored_ids = candidate_test.question_revision_ids
+    assert set(stored_ids).issubset(set(all_qr_ids))
+    assert len(stored_ids) == 4
+    assert len(stored_ids) == len(set(stored_ids))
+
+
 def test_candidate_question_ids_random_and_tag_combined_two_candidates(
     client: TestClient, db: SessionDep
 ) -> None:
