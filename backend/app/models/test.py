@@ -144,10 +144,11 @@ class TestBase(SQLModel):
         title="No of Random Questions",
         description="No of random questions to be selected from the question bank. This field is only applicable when random_questions is set to true.",
     )
-    tag_random: list[Tag_random] | None = Field(
+    random_tag_count: list[Tag_random] | None = Field(
         sa_type=JSON,
         default=None,
-        description="Tag-based randomization",
+        title="Tag-based Randomization Configuration",
+        description="Specifies how many random questions to select for each tag. Each item includes a tag ID and the count of random questions to select from that tag.",
     )
     question_pagination: int = Field(
         default=1,

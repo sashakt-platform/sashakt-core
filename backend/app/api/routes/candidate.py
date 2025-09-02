@@ -234,19 +234,10 @@ def start_test_for_candidate(
             min(test.no_of_random_questions, len(question_revision_ids)),
         )
 
-    if test.random_questions and test.tag_random:
-        final_question_revision_ids_set = set()
+    if test.random_tag_count:
+        extra_question_ids = set()
 
-        question_revision_to_question_id_map = {
-            question_revision.id: question_revision.question_id
-            for question_revision in session.exec(
-                select(QuestionRevision).where(
-                    col(QuestionRevision.id).in_(question_revision_ids)
-                )
-            ).all()
-        }
-
-        for tag_rule in test.tag_random:
+        for tag_rule in test.random_tag_count:
             tag_id = tag_rule["tag_id"]
             count = tag_rule["count"]
 
@@ -255,27 +246,23 @@ def start_test_for_candidate(
                     select(QuestionTag.question_id).where(QuestionTag.tag_id == tag_id)
                 ).all()
             )
+            result = session.exec(
+                select(QuestionRevision.id).where(
+                    col(QuestionRevision.question_id).in_(question_ids_for_tag)
+                )
+            ).all()
 
             question_revision_ids_for_tag = [
-                revision_id
-                for revision_id, question_id in question_revision_to_question_id_map.items()
-                if question_id in question_ids_for_tag
+                rev_id for rev_id in result if rev_id is not None
             ]
 
-            if len(question_revision_ids_for_tag) <= count:
-                chosen_question_revision_ids = question_revision_ids_for_tag
-            else:
-                chosen_question_revision_ids = random.sample(
-                    question_revision_ids_for_tag, count
-                )
+            num_to_pick = min(len(question_ids_for_tag), count)
+            chosen_question_revision_ids = random.sample(
+                question_revision_ids_for_tag, num_to_pick
+            )
+            extra_question_ids.update(chosen_question_revision_ids)
 
-            final_question_revision_ids_set.update(chosen_question_revision_ids)
-
-        question_revision_ids = [
-            question_id
-            for question_id in final_question_revision_ids_set
-            if question_id is not None
-        ]
+        question_revision_ids = list(set(question_revision_ids) | extra_question_ids)
 
     if test.shuffle:
         random.shuffle(question_revision_ids)
