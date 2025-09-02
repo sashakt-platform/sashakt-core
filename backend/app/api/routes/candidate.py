@@ -38,7 +38,7 @@ from app.models.candidate import (
     StartTestResponse,
     TestStatusSummary,
 )
-from app.models.question import QuestionTag
+from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -241,24 +241,20 @@ def start_test_for_candidate(
             tag_id = tag_rule["tag_id"]
             count = tag_rule["count"]
 
-            question_ids_for_tag = set(
-                session.exec(
-                    select(QuestionTag.question_id).where(QuestionTag.tag_id == tag_id)
-                ).all()
-            )
-            result = session.exec(
-                select(QuestionRevision.id).where(
-                    col(QuestionRevision.question_id).in_(question_ids_for_tag)
-                )
+            question_ids_for_tag = session.exec(
+                select(Question.last_revision_id)
+                .join(QuestionTag)
+                .where(Question.id == QuestionTag.question_id)
+                .where(QuestionTag.tag_id == tag_id)
             ).all()
 
             question_revision_ids_for_tag = [
-                rev_id for rev_id in result if rev_id is not None
+                rev_id for rev_id in question_ids_for_tag if rev_id is not None
             ]
 
-            num_to_pick = min(len(question_ids_for_tag), count)
             chosen_question_revision_ids = random.sample(
-                question_revision_ids_for_tag, num_to_pick
+                question_revision_ids_for_tag,
+                min(len(question_revision_ids_for_tag), count),
             )
             extra_question_ids.update(chosen_question_revision_ids)
 

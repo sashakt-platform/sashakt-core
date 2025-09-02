@@ -4708,6 +4708,8 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
         db.commit()
         db.refresh(qrev)
         all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
 
         db.add(QuestionTag(question_id=question.id, tag_id=tag_a.id))
 
@@ -4734,6 +4736,8 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
         db.commit()
         db.refresh(qrev)
         all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
 
         db.add(QuestionTag(question_id=question.id, tag_id=tag_b.id))
 
@@ -4838,6 +4842,8 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
         db.commit()
         db.refresh(qrev)
         all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
 
         db.add(QuestionTag(question_id=question.id, tag_id=tag_a.id))
 
@@ -4864,6 +4870,8 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
         db.commit()
         db.refresh(qrev)
         all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
 
         db.add(QuestionTag(question_id=question.id, tag_id=tag_b.id))
 
@@ -4996,6 +5004,8 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
         db.commit()
         db.refresh(qrev)
         all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
 
         db.add(QuestionTag(question_id=question.id, tag_id=tag_a.id))
 
@@ -5022,6 +5032,8 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
         db.commit()
         db.refresh(qrev)
         all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
 
         db.add(QuestionTag(question_id=question.id, tag_id=tag_b.id))
 
