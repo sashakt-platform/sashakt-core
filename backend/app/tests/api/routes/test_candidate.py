@@ -4983,6 +4983,50 @@ def test_submit_answer_for_multi_choice_with_invalid_response_should_fail(
     )
 
 
+def test_submit_answer_for_multi_choice_with_none_revision(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": None,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 30,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 422
+
+
 def test_test_level_marking_scheme_applied_on_questions(
     client: TestClient, db: SessionDep
 ) -> None:

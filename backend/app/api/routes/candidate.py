@@ -82,11 +82,6 @@ def validate_question_response_format(
             )
 
         return json.dumps(response)
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported question type",
-        )
 
 
 def get_score_and_time(
