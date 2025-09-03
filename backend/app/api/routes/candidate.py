@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import SQLModel, and_, col, not_, outerjoin, select
+from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -31,7 +31,15 @@ from app.models import (
     TestCandidatePublic,
     TestQuestion,
 )
-from app.models.candidate import Result, TestStatusSummary
+from app.models.candidate import (
+    OverallTestAnalyticsResponse,
+    Result,
+    StartTestRequest,
+    StartTestResponse,
+    TestStatusSummary,
+)
+from app.models.tag import Tag
+from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -42,15 +50,161 @@ router_candidate_test_answer = APIRouter(
 )
 
 
-# Simple request/response models for start_test
-class StartTestRequest(SQLModel):
-    test_id: int
-    device_info: str | None = None
+def get_score_and_time(
+    session: SessionDep, candidate_test: CandidateTest
+) -> tuple[float, float, float]:
+    """
+    Returns total_score_obtained, total_max_score, total_time_minutes
+    """
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        return 0.0, 0.0, 0.0
+
+    answers_map = {
+        ans.question_revision_id: ans
+        for ans in session.exec(
+            select(CandidateTestAnswer).where(
+                CandidateTestAnswer.candidate_test_id == candidate_test.id
+            )
+        ).all()
+    }
+
+    total_score_obtained = 0.0
+    total_max_score = 0.0
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(candidate_test.question_revision_ids)
+        )
+    ).all()
+    question_rev_map = {q.id: q for q in question_revisions}
+
+    for q_id in candidate_test.question_revision_ids:
+        question_rev = question_rev_map.get(q_id)
+        if not question_rev:
+            continue
+
+        if test.marks_level == "test" and test.marking_scheme:
+            marking_scheme = test.marking_scheme
+        elif test.marks_level == "question" and question_rev.marking_scheme:
+            marking_scheme = question_rev.marking_scheme
+        else:
+            continue
+
+        total_max_score += marking_scheme.get("correct", 0.0)
+        answer = answers_map.get(q_id)
+
+        if (
+            answer is None
+            or not answer.response
+            or (isinstance(answer.response, str) and answer.response.strip() == "")
+        ):
+            total_score_obtained += marking_scheme.get("skipped", 0.0)
+        else:
+            correct_answer = question_rev.correct_answer
+            response_list = convert_to_list(answer.response)
+            correct_list = convert_to_list(correct_answer)
+            if set(response_list) == set(correct_list):
+                total_score_obtained += marking_scheme.get("correct", 0.0)
+            else:
+                total_score_obtained += marking_scheme.get("wrong", 0.0)
+
+    if candidate_test.start_time and candidate_test.end_time:
+        time_diff = candidate_test.end_time - candidate_test.start_time
+        total_time_minutes = time_diff.total_seconds() / 60.0
+    else:
+        total_time_minutes = 0.0
+
+    return total_score_obtained, total_max_score, total_time_minutes
 
 
-class StartTestResponse(SQLModel):
-    candidate_uuid: uuid.UUID
-    candidate_test_id: int
+@router.get(
+    "/overall-analytics",
+    response_model=OverallTestAnalyticsResponse,
+    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+)
+def get_overall_tests_analytics(
+    session: SessionDep,
+    current_user: CurrentUser,
+    tag_type_ids: list[int] | None = Query(None),
+    state_ids: list[int] | None = Query(None),
+    district_ids: list[int] | None = Query(None),
+) -> OverallTestAnalyticsResponse:
+    """
+    Calculate overall average score and average test duration across all tests.
+    """
+    empty_result = OverallTestAnalyticsResponse(
+        total_candidates=0,
+        overall_score_percent=0.0,
+        overall_avg_time_minutes=0.0,
+    )
+    query = (
+        select(CandidateTest)
+        .join(Test)
+        .join(User)
+        .where(
+            col(CandidateTest.end_time).is_not(None),
+            User.organization_id == current_user.organization_id,
+        )
+    )
+    if tag_type_ids:
+        tag_type_query = (
+            select(TestTag.test_id)
+            .join(Tag)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        )
+        test_ids_with_tag_types = session.exec(tag_type_query).all()
+        if test_ids_with_tag_types:
+            query = query.where(col(CandidateTest.test_id).in_(test_ids_with_tag_types))
+        else:
+            return empty_result
+    if state_ids:
+        state_query = select(TestState.test_id).where(
+            col(TestState.state_id).in_(state_ids)
+        )
+        test_ids_with_states = session.exec(state_query).all()
+        if test_ids_with_states:
+            query = query.where(col(CandidateTest.test_id).in_(test_ids_with_states))
+        else:
+            return empty_result
+
+    if district_ids:
+        district_query = select(TestDistrict.test_id).where(
+            col(TestDistrict.district_id).in_(district_ids)
+        )
+        test_ids_with_districts = session.exec(district_query).all()
+        if test_ids_with_districts:
+            query = query.where(col(CandidateTest.test_id).in_(test_ids_with_districts))
+        else:
+            return empty_result
+
+    candidate_tests = session.exec(query).all()
+
+    total_scores = 0.0
+    total_possible_scores = 0.0
+    total_time = 0.0
+    unique_candidates = set()
+
+    for ct in candidate_tests:
+        score_obtained, max_score, time_min = get_score_and_time(session, ct)
+        total_scores += score_obtained
+        total_possible_scores += max_score
+        total_time += time_min
+        unique_candidates.add(ct.candidate_id)
+
+    overall_score_percent = (
+        (total_scores / total_possible_scores) * 100
+        if total_possible_scores > 0
+        else 0.0
+    )
+
+    overall_avg_time = total_time / len(candidate_tests) if candidate_tests else 0.0
+    overall_avg_time = round(overall_avg_time, 2)
+
+    return OverallTestAnalyticsResponse(
+        total_candidates=len(unique_candidates),
+        overall_score_percent=round(overall_score_percent, 2),
+        overall_avg_time_minutes=overall_avg_time,
+    )
 
 
 @router.post("/start_test", response_model=StartTestResponse)

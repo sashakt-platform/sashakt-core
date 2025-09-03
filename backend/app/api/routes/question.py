@@ -42,7 +42,8 @@ from app.models import (
     User,
 )
 from app.models.question import BulkUploadQuestionsResponse, DeleteQuestion, Option
-from app.models.utils import MarkingScheme
+from app.models.test import TestQuestion
+from app.models.utils import MarkingScheme, Message
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -580,11 +581,35 @@ def get_question_candidate_tests(
     return candidate_test_info_list
 
 
+@router.delete("/{question_id}")
+def delete_question(question_id: int, session: SessionDep) -> Message:
+    """Soft delete a question."""
+    question = session.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    query = (
+        select(TestQuestion)
+        .join(QuestionRevision)
+        .where(QuestionRevision.id == TestQuestion.question_revision_id)
+        .where(QuestionRevision.question_id == question_id)
+    )
+    linked_tests = session.exec(query).first()
+    if linked_tests:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete question because it is linked to a test",
+        )
+    session.delete(question)
+    session.commit()
+
+    return Message(message="Question deleted successfully")
+
+
 @router.delete(
     "/",
     response_model=DeleteQuestion,
 )
-def delete_question(
+def bulk_delete_question(
     session: SessionDep, question_ids: list[int] = Body(...)
 ) -> DeleteQuestion:
     """Soft delete a question."""

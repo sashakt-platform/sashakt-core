@@ -1321,7 +1321,9 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     db.refresh(q2)
 
     response = client.request(
-        "DELETE", f"{settings.API_V1_STR}/questions/", json=[q1.id, q2.id, 99999]
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[q1.id, q2.id, 99999],
     )
     assert response.status_code == 404
     assert "99999" in response.json()["detail"]
@@ -1447,6 +1449,60 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     # Non-existent question
     response = client.get(f"{settings.API_V1_STR}/questions/99999/candidate-tests")
     assert response.status_code == 404
+
+
+def test_delete_question_associated_with_test_should_fail(
+    client: TestClient, db: SessionDep
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    user = create_random_user(db)
+    db.refresh(user)
+
+    q1 = Question(organization_id=org.id)
+    db.add(q1)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"id": 1, "key": "A", "value": "Option 1"}],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.flush()
+    q1.last_revision_id = rev1.id
+    db.commit()
+    db.refresh(q1)
+
+    test = Test(
+        name=random_lower_string(),
+        organization_id=org.id,
+        time_limit=60,
+        marks=10,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.flush()
+
+    test_question = TestQuestion(test_id=test.id, question_revision_id=rev1.id)
+    db.add(test_question)
+    db.commit()
+
+    response = client.delete(f"{settings.API_V1_STR}/questions/{q1.id}")
+    data = response.json()
+
+    assert response.status_code == 400
+    assert data["detail"] == "Cannot delete question because it is linked to a test"
+
+    db.refresh(q1)
+    assert q1.is_deleted is False
+    assert q1.is_active is True
 
 
 def test_bulk_upload_questions(
@@ -3550,6 +3606,13 @@ def test_check_question_duplication_if_deleted(
     assert response.status_code == 200
     data = response.json()
     question_id = data["id"]
+
+    revisions = db.exec(
+        select(QuestionRevision).where(QuestionRevision.question_id == question_id)
+    ).first()
+
+    db.delete(revisions)
+    db.commit()
 
     # Delete the question
     delete_response = client.request(
