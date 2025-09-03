@@ -82,6 +82,11 @@ def validate_question_response_format(
             )
 
         return json.dumps(response)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported question type",
+        )
 
 
 def get_score_and_time(
@@ -412,11 +417,10 @@ def submit_batch_answers_for_qr_candidate(
                 QuestionRevision.id == answer.question_revision_id
             )
         ).first()
-        if not question_revision:
-            continue
-        answer.response = validate_question_response_format(
-            answer.response, question_revision.question_type
-        )
+        if question_revision:
+            answer.response = validate_question_response_format(
+                answer.response, question_revision.question_type
+            )
         # Check if answer already exists for this question
         existing_answer = session.exec(
             select(CandidateTestAnswer)

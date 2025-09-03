@@ -4836,6 +4836,76 @@ def test_submit_answer_for_single_choice_with_multiple_options_should_fail(
     )
 
 
+def test_submit_answer_for_invalid_question_type_should_fail(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type="example",
+        options=[],
+        correct_answer=None,
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    invalid_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 30,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=invalid_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported question type" in response.json()["detail"]
+
+
 def test_submit_answer_for_multi_choice_with_valid_response_should_pass(
     client: TestClient, db: SessionDep
 ) -> None:
