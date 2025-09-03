@@ -231,7 +231,9 @@ class Question(SQLModel, table=True):
 
     # Relationships
     # All revisions of this question
-    revisions: list["QuestionRevision"] = Relationship(back_populates="question")
+    revisions: list["QuestionRevision"] = Relationship(
+        back_populates="question", cascade_delete=True
+    )
     # Geographic locations associated with this question
     locations: list["QuestionLocation"] = Relationship(back_populates="question")
     # Tags associated with this question
@@ -256,6 +258,7 @@ class QuestionRevision(QuestionBase, table=True):
         foreign_key="question.id",
         nullable=False,
         description="ID of the parent question",
+        ondelete="CASCADE",
     )
     created_by_id: int = Field(
         foreign_key="user.id",

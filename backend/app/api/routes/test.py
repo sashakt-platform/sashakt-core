@@ -3,7 +3,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi_pagination import Page, paginate
-from sqlmodel import col, func, select
+from sqlmodel import col, exists, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
@@ -20,6 +20,7 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
+from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.location import District
 from app.models.tag import Tag
 from app.models.test import MarksLevelEnum, TestDistrict
@@ -699,13 +700,26 @@ def visibility_test(
 )
 def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
-    if not test or test.is_deleted is True:
+    if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    attempted_answer_exists = session.scalar(
+        select(
+            exists().where(
+                col(CandidateTestAnswer.candidate_test_id).in_(
+                    select(CandidateTest.id).where(CandidateTest.test_id == test_id)
+                )
+            )
+        )
+    )
 
-    test.is_deleted = True
-    session.add(test)
+    if attempted_answer_exists:
+        raise HTTPException(
+            status_code=422,
+            detail="Cannot delete test. One or more answers have already been submitted for its questions.",
+        )
+
+    session.delete(test)
     session.commit()
-    session.refresh(test)
 
     return Message(message="Test deleted successfully")
 
