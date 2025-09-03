@@ -1432,7 +1432,7 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     data = response.json()
     assert data["candidate_test_id"] == candidate_test_id
     assert data["question_revision_id"] == question_revision.id
-    assert data["response"] == "{1,2}"
+    assert data["response"] == "[1, 2]"
     assert data["visited"] is True
     assert data["time_spent"] == 30
 
@@ -1443,7 +1443,7 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).first()
     assert answer is not None
-    assert answer.response == "{1,2}"
+    assert answer.response == "[1, 2]"
 
 
 def test_submit_answer_invalid_uuid(client: TestClient, db: SessionDep) -> None:
@@ -4836,7 +4836,7 @@ def test_submit_answer_for_single_choice_with_multiple_options_should_fail(
     )
 
 
-def test_submit_answer_for_multi_choice_should_validate_responses_correctly(
+def test_submit_answer_for_multi_choice_with_valid_response_should_pass(
     client: TestClient, db: SessionDep
 ) -> None:
     user = create_random_user(db)
@@ -4903,9 +4903,68 @@ def test_submit_answer_for_multi_choice_should_validate_responses_correctly(
         params={"candidate_uuid": candidate_uuid},
     )
     assert response.status_code == 200
+
+
+def test_submit_answer_for_multi_choice_with_invalid_response_should_fail(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "5"},
+            {"id": 2, "key": "B", "value": "6"},
+            {"id": 3, "key": "C", "value": "7"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "1",
+        "response": "[]",
         "visited": True,
         "time_spent": 30,
     }
@@ -4917,6 +4976,7 @@ def test_submit_answer_for_multi_choice_should_validate_responses_correctly(
     )
     assert response.status_code == 400
     data = response.json()
+    assert "detail" in data
     assert (
         data["detail"]
         == "Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])"

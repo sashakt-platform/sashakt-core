@@ -81,7 +81,7 @@ def validate_question_response_format(
                 detail="Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])",
             )
 
-        return response
+        return json.dumps(response)
 
 
 def get_score_and_time(
@@ -348,7 +348,7 @@ def submit_answer_for_qr_candidate(
         QuestionRevision, answer_request.question_revision_id
     )
 
-    if question_revision is not None:
+    if question_revision:
         answer_request.response = validate_question_response_format(
             answer_request.response, question_revision.question_type
         )
