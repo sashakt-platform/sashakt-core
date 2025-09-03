@@ -1279,9 +1279,21 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     user = create_random_user(db)
     db.refresh(user)
 
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
     # Create question
     q1 = Question(organization_id=org.id)
-    q2 = Question(organization_id=org.id, is_deleted=True)
+    q2 = Question(
+        organization_id=org.id,
+    )
     db.add(q1)
     db.add(q2)
     db.flush()
@@ -1319,6 +1331,24 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     db.commit()
     db.refresh(q1)
     db.refresh(q2)
+    test = Test(
+        name=random_lower_string(),
+        organization_id=org.id,
+        time_limit=60,
+        marks=10,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.flush()
+
+    test_question = TestQuestion(test_id=test.id, question_revision_id=rev2.id)
+    db.add(test_question)
+    q2_tag = QuestionTag(
+        question_id=q2.id,
+        tag_id=tag.id,
+    )
+    db.add(q2_tag)
+    db.commit()
 
     response = client.request(
         "DELETE",
@@ -1337,16 +1367,13 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     assert data["delete_success_count"] == 1
     assert any(f["id"] == q2.id for f in data["delete_failure_list"])
 
-    db.refresh(q1)
     db.refresh(q2)
-    assert q1.is_deleted is True
-    assert q1.is_active is False
-    assert q2.is_deleted is True
+    assert q2.is_active is True
 
     response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}")
     assert response.status_code == 404
     response = client.get(f"{settings.API_V1_STR}/questions/{q2.id}")
-    assert response.status_code == 404
+    assert response.status_code == 200
 
 
 def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> None:

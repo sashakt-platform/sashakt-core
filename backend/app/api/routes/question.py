@@ -626,9 +626,15 @@ def bulk_delete_question(
             status_code=404, detail=f"Question IDs not found in DB: {missing_ids}"
         )
 
-    # Soft delete
     for question in db_questions:
-        if question.is_deleted:
+        query = (
+            select(TestQuestion)
+            .join(QuestionRevision)
+            .where(QuestionRevision.id == TestQuestion.question_revision_id)
+            .where(QuestionRevision.question_id == question.id)
+        )
+        linked_tests = session.exec(query).first()
+        if linked_tests:
             revision = session.exec(
                 select(QuestionRevision).where(
                     QuestionRevision.id == question.last_revision_id
@@ -655,9 +661,8 @@ def bulk_delete_question(
                     )
                 )
         else:
-            question.is_deleted = True
-            question.is_active = False
-            session.add(question)
+            session.delete(question)
+            session.commit()
             success_count += 1
 
     session.commit()
