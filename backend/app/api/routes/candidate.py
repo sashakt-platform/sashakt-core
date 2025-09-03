@@ -245,10 +245,7 @@ def start_test_for_candidate(
                 select(Question.last_revision_id)
                 .join(QuestionTag)
                 .where(Question.id == QuestionTag.question_id)
-                .join(Tag)
-                .where(Tag.id == QuestionTag.tag_id)
                 .where(QuestionTag.tag_id == tag_id)
-                .where(Question.organization_id == Tag.organization_id)
             ).all()
 
             question_revision_ids_for_tag = [
