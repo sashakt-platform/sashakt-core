@@ -2,7 +2,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import and_, exists, func, not_, or_, select
+from sqlmodel import and_, col, exists, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -69,6 +69,11 @@ def get_tagtype(
     current_user: CurrentUser,
     params: Pagination = Depends(),
     name: str | None = None,
+    tagtype_ids: list[int] | None = Query(
+        None,
+        title="Filter by TagTypes",
+        description="List of TagType Ids to filter from",
+    ),
 ) -> Page[TagType]:
     query = select(TagType).where(
         TagType.organization_id == current_user.organization_id,
@@ -78,6 +83,9 @@ def get_tagtype(
         query = query.where(
             func.trim(func.lower(TagType.name)).like(f"%{name.strip().lower()}%")
         )
+
+    if tagtype_ids:
+        query = query.where(col(TagType.id).in_(tagtype_ids))
 
     tagtype = session.exec(query).all()
     return cast(Page[TagType], paginate(tagtype, params=params))
@@ -214,6 +222,9 @@ def get_tags(
     current_user: CurrentUser,
     params: Pagination = Depends(),
     name: str | None = None,
+    tag_ids: list[int] | None = Query(
+        None, title="Filter by Tags", description="List of Tag Ids to filter from"
+    ),
     order_by: list[str] = Query(
         default=["tag_type_name", "name"],
         title="Order by",
@@ -228,6 +239,10 @@ def get_tags(
         query = query.where(
             func.trim(func.lower(Tag.name)).like(f"%{name.strip().lower()}%")
         )
+
+    if tag_ids:
+        query = query.where(col(Tag.id).in_(tag_ids))
+
     join_tag_type = any("tag_type_name" in field for field in order_by)
     if join_tag_type:
         query = query.outerjoin(TagType)
@@ -237,13 +252,13 @@ def get_tags(
         desc = field.startswith("-")
         field_name = field[1:] if desc else field
         if field_name == "tag_type_name":
-            col = getattr(TagType, "name", None)
+            order_column = getattr(TagType, "name", None)
         else:
-            col = getattr(Tag, field_name, None)
+            order_column = getattr(Tag, field_name, None)
 
-        if col is None:
+        if order_column is None:
             continue
-        ordering.append(col.desc() if desc else col.asc())
+        ordering.append(order_column.desc() if desc else order_column.asc())
     if ordering:
         query = query.order_by(*ordering)
     tags = session.exec(query).all()
