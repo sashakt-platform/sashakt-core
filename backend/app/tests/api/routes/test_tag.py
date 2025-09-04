@@ -230,6 +230,49 @@ def test_get_tagtype(
     assert len(data["items"]) == 2
 
 
+def test_get_tagtype_by_tagtype_id_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+    tagtype_1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype_2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype_3 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add_all([tagtype_1, tagtype_2, tagtype_3])
+    db.commit()
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?tagtype_ids={tagtype_1.id}&tagtype_ids={tagtype_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    assert any(item["id"] == tagtype_1.id for item in data["items"])
+    assert any(item["name"] == tagtype_1.name for item in data["items"])
+    assert any(item["id"] == tagtype_3.id for item in data["items"])
+    assert any(item["name"] == tagtype_3.name for item in data["items"])
+    assert all(item["id"] != tagtype_2.id for item in data["items"])
+    assert all(item["name"] != tagtype_2.name for item in data["items"])
+
+
 def test_get_tagtype_by_id(
     client: TestClient,
     db: SessionDep,
@@ -779,6 +822,67 @@ def test_get_tags_filter_no_match(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 0
+
+
+def test_read_tag_by_tag_id_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+
+    db.add(tagtype)
+    db.commit()
+
+    tag_1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    tag_2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    tag_3 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    db.add_all([tag_1, tag_2, tag_3])
+    db.commit()
+    db.refresh(tag_1)
+    db.refresh(tag_2)
+    db.refresh(tag_3)
+    db.flush()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/?tag_ids={tag_1.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    assert any(item["id"] == tag_1.id for item in data["items"])
+    assert any(item["name"] == tag_1.name for item in data["items"])
+    assert any(item["id"] == tag_3.id for item in data["items"])
+    assert any(item["name"] == tag_3.name for item in data["items"])
+    assert all(item["id"] != tag_2.id for item in data["items"])
+    assert all(item["name"] != tag_2.name for item in data["items"])
 
 
 def test_read_tag_by_id(

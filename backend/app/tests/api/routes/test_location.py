@@ -246,6 +246,36 @@ def test_get_state(
     assert len(items) == 2
 
 
+def test_get_state_filter_by_state_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state_1 = State(name=random_lower_string(), country_id=country.id)
+    state_2 = State(name=random_lower_string(), country_id=country.id)
+    state_3 = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_1, state_2, state_3])
+    db.commit()
+    db.refresh(state_1)
+    db.refresh(state_2)
+    db.refresh(state_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?state_ids={state_1.id}&state_ids={state_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    assert any(item["name"] == state_1.name for item in data["items"])
+    assert any(item["name"] == state_2.name for item in data["items"])
+    assert all(item["name"] != state_3.name for item in data["items"])
+
+
 def test_get_state_filter_by_name(
     client: TestClient,
     db: SessionDep,
@@ -474,6 +504,39 @@ def test_get_district(
     data = response.json()
 
     assert len(data["items"]) == 2
+
+
+def test_get_district_by_district_id_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    district_1 = District(name=random_lower_string(), state_id=state.id)
+    district_2 = District(name=random_lower_string(), state_id=state.id)
+    district_3 = District(name=random_lower_string(), state_id=state.id)
+    db.add_all([district_1, district_2, district_3])
+    db.commit()
+    db.refresh(district_1)
+    db.refresh(district_2)
+    db.refresh(district_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?district_ids={district_1.id}&district_ids={district_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    assert any(item["name"] == district_1.name for item in data["items"])
+    assert any(item["name"] == district_2.name for item in data["items"])
+    assert all(item["name"] != district_3.name for item in data["items"])
 
 
 def test_get_district_by_name_filter(
