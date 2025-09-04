@@ -48,6 +48,18 @@ from app.models.utils import MarkingScheme, Message
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
+def check_linked_test(session: SessionDep, question_id: int) -> bool:
+    query = (
+        select(TestQuestion)
+        .join(QuestionRevision)
+        .where(QuestionRevision.id == TestQuestion.question_revision_id)
+        .where(QuestionRevision.question_id == question_id)
+    )
+    linked_tests = session.exec(query).first()
+
+    return bool(linked_tests)
+
+
 def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
@@ -587,14 +599,8 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    query = (
-        select(TestQuestion)
-        .join(QuestionRevision)
-        .where(QuestionRevision.id == TestQuestion.question_revision_id)
-        .where(QuestionRevision.question_id == question_id)
-    )
-    linked_tests = session.exec(query).first()
-    if linked_tests:
+
+    if check_linked_test(session, question_id):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete question because it is linked to a test",
@@ -627,14 +633,7 @@ def bulk_delete_question(
         )
 
     for question in db_questions:
-        query = (
-            select(TestQuestion)
-            .join(QuestionRevision)
-            .where(QuestionRevision.id == TestQuestion.question_revision_id)
-            .where(QuestionRevision.question_id == question.id)
-        )
-        linked_tests = session.exec(query).first()
-        if linked_tests:
+        if question.id is not None and check_linked_test(session, question.id):
             revision = session.exec(
                 select(QuestionRevision).where(
                     QuestionRevision.id == question.last_revision_id
