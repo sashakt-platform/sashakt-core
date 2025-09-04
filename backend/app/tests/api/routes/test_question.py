@@ -735,6 +735,54 @@ def test_create_question_revision(
     assert revisions[1]["created_by_id"]["id"] == user_id
 
 
+def test_get_question_revisions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    q1 = Question(organization_id=org.id)
+    db.add(q1)
+    db.flush()
+
+    initial_text = random_lower_string()
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=initial_text,
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    db.commit()
+    db.refresh(q1)
+
+    response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}/revisions")
+    revisions = response.json()
+
+    assert response.status_code == 200
+    assert len(revisions) == 1
+    revision_data = revisions[0]
+    assert revision_data["is_current"] is True
+    assert revision_data["created_by_id"] is not None
+
+    created_by = revision_data["created_by_id"]
+    assert created_by["id"] == user_id
+    assert created_by.get("full_name") is not None
+
+
 def test_get_revision(client: TestClient, db: SessionDep) -> None:
     # Create organization
     org = Organization(name=random_lower_string())

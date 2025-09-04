@@ -746,8 +746,7 @@ def get_question_revisions(
         # Ensure all fields have non-None values before creating TypedDict
         if rev.id is not None and rev.created_date is not None:
             user = None
-            if rev.created_by_id:
-                user = session.get(User, rev.created_by_id)
+            user = session.get(User, rev.created_by_id)
             result.append(
                 QuestionRevisionInfo(
                     id=rev.id,
