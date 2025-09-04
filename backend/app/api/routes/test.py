@@ -77,6 +77,11 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         question_revisions = session.exec(question_revision_query).all()
         total_questions = len(question_revisions)
 
+    if test.random_tag_count:
+        total_questions += sum(
+            tag_rule.get("count", 0) for tag_rule in test.random_tag_count
+        )
+
     return TestPublicLimited(
         **test.model_dump(),
         total_questions=total_questions,

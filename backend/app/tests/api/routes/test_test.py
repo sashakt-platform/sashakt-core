@@ -2179,6 +2179,157 @@ def test_get_public_test_info(
     assert data["total_questions"] == 2  # We added 2 questions
 
 
+def testget_public_test_info_with_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    # Create a test
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        random_tag_count=[{"tag_id": 1, "count": 3}, {"tag_id": 2, "count": 2}],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["start_instructions"] == test.start_instructions
+    assert data["total_questions"] == 7
+
+
+def test_get_public_test_info_with_random_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        random_questions=True,
+        no_of_random_questions=1,
+        random_tag_count=[{"tag_id": 1, "count": 3}, {"tag_id": 2, "count": 2}],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["total_questions"] == 6
+
+
+def test_get_public_test_info_with_tag_count_only(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test public test endpoint with only tag-based random questions (no fixed questions, random_questions=False)."""
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        time_limit=30,
+        marks=50,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+        random_tag_count=[{"tag_id": 1, "count": 4}, {"tag_id": 2, "count": 3}],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["total_questions"] == 7
+
+
 def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> None:
     """Test that inactive tests are not accessible via public endpoint."""
     user = create_random_user(db)
