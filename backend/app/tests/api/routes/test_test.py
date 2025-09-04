@@ -2179,7 +2179,7 @@ def test_get_public_test_info(
     assert data["total_questions"] == 2  # We added 2 questions
 
 
-def testget_public_test_info_with_random_tag_count(
+def test_get_public_test_info_with_random_tag_count(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     (
