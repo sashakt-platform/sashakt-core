@@ -729,10 +729,10 @@ def test_create_question_revision(
     assert len(revisions) == 2
     assert revisions[0]["id"] == new_rev.id
     assert revisions[0]["is_current"] is True
-    assert revisions[0]["created_by_id"] == user_id
+    assert revisions[0]["created_by_id"]["id"] == user_id
     assert revisions[1]["id"] == rev1.id
     assert revisions[1]["is_current"] is False
-    assert revisions[1]["created_by_id"] == user_id
+    assert revisions[1]["created_by_id"]["id"] == user_id
 
 
 def test_get_revision(client: TestClient, db: SessionDep) -> None:
