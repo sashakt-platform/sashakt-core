@@ -119,6 +119,11 @@ class TagUpdate(TagBase):
     tag_type_id: int | None = None
 
 
+class DeleteTagtype(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TagTypePublic] | None = None
+
+
 # Rebuild the models to ensure the database schema is up to date
 
 QuestionRevision.model_rebuild()

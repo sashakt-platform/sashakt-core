@@ -1,8 +1,8 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import and_, exists, func, not_, or_, select
+from sqlmodel import and_, col, exists, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -17,6 +17,7 @@ from app.models import (
     TagUpdate,
 )
 from app.models.question import Question, QuestionTag
+from app.models.tag import DeleteTagtype
 from app.models.test import Test, TestTag
 
 router_tagtype = APIRouter(
@@ -32,6 +33,16 @@ router_tag = APIRouter(
 
 
 # Routers fro Tag-Types
+
+
+def check_linked_tag(session: SessionDep, tagtype_id: int) -> bool:
+    has_active_tags = session.exec(
+        select(Tag).where(
+            Tag.tag_type_id == tagtype_id,
+        )
+    ).first()
+
+    return bool(has_active_tags)
 
 
 @router_tagtype.post("/", response_model=TagTypePublic)
@@ -116,7 +127,11 @@ def update_tagtype(
     return tagtype
 
 
-@router_tagtype.patch("/{tagtype_id}", response_model=TagTypePublic)
+@router_tagtype.patch(
+    "/{tagtype_id}",
+    response_model=TagTypePublic,
+    dependencies=[Depends(permission_dependency("delete_tag"))],
+)
 def visibility_tagtype(
     tagtype_id: int,
     session: SessionDep,
@@ -138,17 +153,53 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     if not tagtype:
         raise HTTPException(status_code=404, detail="Tag Type not found")
 
-    has_active_tags = session.exec(
-        select(Tag).where(Tag.tag_type_id == tagtype_id, not_(Tag.is_deleted))
-    ).first()
-
-    if has_active_tags:
+    if check_linked_tag(session, tagtype_id):
         raise HTTPException(
             status_code=400, detail="Cannot delete Tag Type as it has associated Tags"
         )
     session.delete(tagtype)
     session.commit()
     return Message(message="Tag Type deleted successfully")
+
+
+@router_tagtype.delete(
+    "/",
+    response_model=DeleteTagtype,
+    dependencies=[Depends(permission_dependency("delete_tag"))],
+)
+def bulk_delete_tagtype(
+    session: SessionDep, tagtype_ids: list[int] = Body(...)
+) -> DeleteTagtype:
+    """Soft delete a question."""
+    success_count = 0
+    failure_list = []
+    db_tagtype = session.exec(
+        select(TagType).where(col(TagType.id).in_(tagtype_ids))
+    ).all()
+
+    found_ids = {q.id for q in db_tagtype}
+    missing_ids = set(tagtype_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail=f"Tagtype IDs not found in DB: {missing_ids}"
+        )
+
+    for tagtype in db_tagtype:
+        if tagtype.id and check_linked_tag(session, tagtype.id):
+            failure_list.append(
+                TagTypePublic(
+                    **tagtype.model_dump(),
+                )
+            )
+        else:
+            session.delete(tagtype)
+            success_count += 1
+
+    session.commit()
+
+    return DeleteTagtype(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 # Routers for Tags

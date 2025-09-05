@@ -399,6 +399,105 @@ def test_delete_tagtype_by_id(
     assert response.status_code == 404
 
 
+def test_bulk_delete_tagtype_with_dependency(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    tagtype1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    tagtype3 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add_all([tagtype1, tagtype2, tagtype3])
+    db.commit()
+    db.refresh(tagtype1)
+    db.refresh(tagtype2)
+    db.refresh(tagtype3)
+    tag = Tag(
+        name=random_lower_string(),
+        tag_type_id=tagtype1.id,
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=[-90],
+    )
+    assert response.status_code == 404
+    assert "Tagtype IDs not found" in response.json()["detail"]
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=[tagtype1.id, tagtype2.id, tagtype3.id],
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 2
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == tagtype1.id
+
+
+def test_bulk_delete_tagtype(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    tagtype1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add_all([tagtype1, tagtype2])
+    db.commit()
+    db.refresh(tagtype1)
+    db.refresh(tagtype2)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=[tagtype1.id, tagtype2.id],
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 2
+    assert (
+        response_data["delete_failure_list"] is None
+        or len(response_data["delete_failure_list"]) == 0
+    )
+
+
 # Test cases for Tags
 
 
