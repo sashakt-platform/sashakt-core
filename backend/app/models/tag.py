@@ -124,6 +124,11 @@ class DeleteTagtype(SQLModel):
     delete_failure_list: list[TagTypePublic] | None = None
 
 
+class DeleteTag(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TagPublic] | None = None
+
+
 # Rebuild the models to ensure the database schema is up to date
 
 QuestionRevision.model_rebuild()
