@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
+from app.models.user import UserPublic
 from app.models.utils import MarkingScheme
 
 if TYPE_CHECKING:
@@ -80,6 +81,15 @@ OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] l
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
 CorrectAnswerType = list[int] | list[str] | float | int | None
+
+
+class QuestionRevisionInfo(SQLModel):
+    id: int
+    created_date: datetime
+    text: str
+    type: str
+    is_current: bool
+    created_by_id: UserPublic
 
 
 class QuestionBase(SQLModel):
