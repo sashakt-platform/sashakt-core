@@ -19,7 +19,7 @@ from sqlalchemy import desc, func
 from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, Pagination, SessionDep
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
     CandidateTest,
     Organization,
@@ -591,7 +591,9 @@ def get_question_candidate_tests(
     return candidate_test_info_list
 
 
-@router.delete("/{question_id}")
+@router.delete(
+    "/{question_id}", dependencies=[Depends(permission_dependency("delete_question"))]
+)
 def delete_question(question_id: int, session: SessionDep) -> Message:
     """Soft delete a question."""
     question = session.get(Question, question_id)
@@ -612,6 +614,7 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
 @router.delete(
     "/",
     response_model=DeleteQuestion,
+    dependencies=[Depends(permission_dependency("delete_question"))],
 )
 def bulk_delete_question(
     session: SessionDep, question_ids: list[int] = Body(...)

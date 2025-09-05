@@ -1316,31 +1316,79 @@ def test_question_location_operations(
     assert len(response.json()) >= 1
 
 
-def test_delete_question(client: TestClient, db: SessionDep) -> None:
-    # Create organization
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
+def test_delete_single_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+    # Create question
+    q1 = Question(organization_id=org_id)
+    db.add(q1)
+    db.flush()
 
-    # Create user
-    user = create_random_user(db)
-    db.refresh(user)
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    db.commit()
+    db.refresh(q1)
+
+    # Delete non-existent question
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/99999",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+
+    # Delete question
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "deleted" in data["message"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+    )
+    assert response.status_code == 404
+
+
+def test_delete_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
 
     tag = Tag(
         name=random_lower_string(),
         description=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=org.id,
+        created_by_id=user_id,
+        organization_id=org_id,
     )
     db.add(tag)
     db.commit()
     db.refresh(tag)
 
     # Create question
-    q1 = Question(organization_id=org.id)
+    q1 = Question(organization_id=org_id)
     q2 = Question(
-        organization_id=org.id,
+        organization_id=org_id,
     )
     db.add(q1)
     db.add(q2)
@@ -1348,7 +1396,7 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
 
     rev1 = QuestionRevision(
         question_id=q1.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
@@ -1361,7 +1409,7 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     db.flush()
     rev2 = QuestionRevision(
         question_id=q2.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
@@ -1381,10 +1429,10 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     db.refresh(q2)
     test = Test(
         name=random_lower_string(),
-        organization_id=org.id,
+        organization_id=org_id,
         time_limit=60,
         marks=10,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(test)
     db.flush()
@@ -1402,12 +1450,16 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
         "DELETE",
         f"{settings.API_V1_STR}/questions/",
         json=[q1.id, q2.id, 99999],
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 404
     assert "99999" in response.json()["detail"]
 
     response = client.request(
-        "DELETE", f"{settings.API_V1_STR}/questions/", json=[q1.id, q2.id]
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[q1.id, q2.id],
+        headers=get_user_superadmin_token,
     )
     data = response.json()
 
@@ -1527,23 +1579,19 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
 
 
 def test_delete_question_associated_with_test_should_fail(
-    client: TestClient, db: SessionDep
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
 
-    user = create_random_user(db)
-    db.refresh(user)
-
-    q1 = Question(organization_id=org.id)
+    q1 = Question(organization_id=org_id)
     db.add(q1)
     db.flush()
 
     rev1 = QuestionRevision(
         question_id=q1.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[{"id": 1, "key": "A", "value": "Option 1"}],
@@ -1557,10 +1605,10 @@ def test_delete_question_associated_with_test_should_fail(
 
     test = Test(
         name=random_lower_string(),
-        organization_id=org.id,
+        organization_id=org_id,
         time_limit=60,
         marks=10,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(test)
     db.flush()
@@ -1569,7 +1617,10 @@ def test_delete_question_associated_with_test_should_fail(
     db.add(test_question)
     db.commit()
 
-    response = client.delete(f"{settings.API_V1_STR}/questions/{q1.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 400
