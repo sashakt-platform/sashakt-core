@@ -41,7 +41,12 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import BulkUploadQuestionsResponse, DeleteQuestion, Option
+from app.models.question import (
+    BulkUploadQuestionsResponse,
+    DeleteQuestion,
+    Option,
+    QuestionRevisionInfo,
+)
 from app.models.test import TestQuestion
 from app.models.utils import MarkingScheme, Message
 
@@ -326,13 +331,6 @@ def create_question(
 
 
 # TypedDict classes with all required fields
-class QuestionRevisionInfo(TypedDict):
-    id: int
-    created_date: datetime
-    text: str
-    type: str
-    is_current: bool
-    created_by_id: int
 
 
 class RevisionDetailDict(TypedDict):
@@ -813,6 +811,8 @@ def get_question_revisions(
     for rev in revisions:
         # Ensure all fields have non-None values before creating TypedDict
         if rev.id is not None and rev.created_date is not None:
+            user = None
+            user = session.get(User, rev.created_by_id)
             result.append(
                 QuestionRevisionInfo(
                     id=rev.id,
@@ -820,7 +820,7 @@ def get_question_revisions(
                     text=rev.question_text,
                     type=rev.question_type,
                     is_current=(rev.id == question.last_revision_id),
-                    created_by_id=rev.created_by_id,
+                    created_by_id=user,
                 )
             )
 
