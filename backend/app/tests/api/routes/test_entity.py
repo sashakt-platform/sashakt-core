@@ -33,7 +33,6 @@ def test_create_entitytype(
     assert response_data["description"] == data["description"]
     assert response_data["organization_id"] == data["organization_id"]
     assert response_data["created_by_id"] == user_id
-    assert response_data["is_deleted"] is False
     assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
@@ -53,7 +52,6 @@ def test_create_entitytype(
     assert response_data["description"] is None
     assert response_data["organization_id"] == data["organization_id"]
     assert response_data["created_by_id"] == user_id
-    assert response_data["is_deleted"] is False
     assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
@@ -170,7 +168,6 @@ def test_get_entity_type(
     assert any(
         item["created_by_id"] == entity_type.created_by_id for item in response_data
     )
-    assert any(item["is_deleted"] == entity_type.is_deleted for item in response_data)
     assert any(item["is_active"] == entity_type.is_active for item in response_data)
 
     for name_query in ["Testentity", "TESTENTITY", " TeStEnTiTy"]:
@@ -230,7 +227,6 @@ def test_get_entity_type_by_id(
     assert response_data["description"] == entity_type.description
     assert response_data["organization_id"] == entity_type.organization_id
     assert response_data["created_by_id"] == entity_type.created_by_id
-    assert response_data["is_deleted"] is False
     assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
@@ -279,7 +275,6 @@ def test_update_entitytype_by_id(
     assert response_data["description"] == data["description"]
     assert response_data["organization_id"] == entitytype.organization_id
     assert response_data["created_by_id"] == user_id
-    assert response_data["is_deleted"] is False
     assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
@@ -296,7 +291,6 @@ def test_update_entitytype_by_id(
     assert response_data["description"] == data_b["description"]
     assert response_data["organization_id"] == data_b["organization_id"]
     assert response_data["created_by_id"] == user_id
-    assert response_data["is_deleted"] is False
     assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
@@ -453,7 +447,6 @@ def test_create_entity(
     )
     assert response_data["entity_type"]["created_by_id"] == entity_type.created_by_id
     assert response_data["organization_id"] == entity_type.organization_id
-    assert response_data["is_deleted"] is False
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -480,7 +473,6 @@ def test_create_entity(
     assert response_data["entity_type"]["created_by_id"] == entity_type.created_by_id
 
     assert response_data["organization_id"] == entity_type.organization_id
-    assert response_data["is_deleted"] is False
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -665,7 +657,6 @@ def test_get_entities_base_case(
         and item["entity_type"]["id"] == entity_type.id
         and item["entity_type"]["name"] == entity_type.name
         and item["entity_type"]["organization_id"] == organization_id
-        and item["is_deleted"] is False
         and "created_date" in item
         and "modified_date" in item
         for item in base_response["items"]
@@ -863,7 +854,6 @@ def test_read_entity_by_id(
     assert response_data["entity_type"]["description"] == entity.entity_type.description
     assert response_data["organization_id"] == entity_type.organization_id
     assert response_data["created_by_id"] == user_b.id
-    assert response_data["is_deleted"] is False
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -928,7 +918,6 @@ def test_update_entity_by_id(
     assert response_data["entity_type"]["name"] == entity_type.name
     assert response_data["entity_type"]["description"] == entity_type.description
     assert response_data["organization_id"] == organization.id
-    assert response_data["is_deleted"] is False
     assert "created_date" in response_data
     assert "modified_date" in response_data
 

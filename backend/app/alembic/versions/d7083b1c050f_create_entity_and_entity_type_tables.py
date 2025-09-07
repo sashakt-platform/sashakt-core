@@ -1,8 +1,8 @@
-"""Add Entity and EntityType tables
+"""create entity and entity_type tables
 
-Revision ID: 79dde522511a
+Revision ID: d7083b1c050f
 Revises: db0ce83e0de2
-Create Date: 2025-09-06 22:15:27.449688
+Create Date: 2025-09-07 15:40:40.914554
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '79dde522511a'
+revision = 'd7083b1c050f'
 down_revision = 'db0ce83e0de2'
 branch_labels = None
 depends_on = None
@@ -27,7 +27,6 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_date', sa.DateTime(), nullable=True),
     sa.Column('modified_date', sa.DateTime(), nullable=True),
-    sa.Column('is_deleted', sa.Boolean(), nullable=False),
     sa.Column('created_by_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['created_by_id'], ['user.id'], ),
     sa.ForeignKeyConstraint(['organization_id'], ['organization.id'], ),
@@ -42,7 +41,6 @@ def upgrade():
     sa.Column('created_date', sa.DateTime(), nullable=True),
     sa.Column('modified_date', sa.DateTime(), nullable=True),
     sa.Column('entity_type_id', sa.Integer(), nullable=True),
-    sa.Column('is_deleted', sa.Boolean(), nullable=False),
     sa.Column('organization_id', sa.Integer(), nullable=False),
     sa.Column('created_by_id', sa.Integer(), nullable=False),
     sa.Column('state_id', sa.Integer(), nullable=True),

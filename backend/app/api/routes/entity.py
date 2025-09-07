@@ -2,7 +2,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import and_, func, not_, select
+from sqlmodel import and_, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
@@ -37,7 +37,6 @@ def create_entitytype(
         select(EntityType)
         .where(func.lower(func.trim(EntityType.name)) == normalized_name)
         .where(EntityType.organization_id == entitytype_create.organization_id)
-        .where(not_(EntityType.is_deleted))
     ).first()
     if existing:
         raise HTTPException(
@@ -64,7 +63,6 @@ def get_entitytype(
 ) -> Page[EntityType]:
     query = select(EntityType).where(
         EntityType.organization_id == current_user.organization_id,
-        not_(EntityType.is_deleted),
     )
     if name:
         query = query.where(
@@ -82,11 +80,7 @@ def get_entitytype_by_id(
     current_user: CurrentUser,
 ) -> EntityType:
     entitytype = session.get(EntityType, entitytype_id)
-    if (
-        not entitytype
-        or entitytype.is_deleted is True
-        or entitytype.organization_id != current_user.organization_id
-    ):
+    if not entitytype or entitytype.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="EntityType not found")
     return entitytype
 
@@ -99,7 +93,7 @@ def update_entitytype(
     session: SessionDep,
 ) -> EntityType:
     entitytype = session.get(EntityType, entitytype_id)
-    if not entitytype or entitytype.is_deleted is True:
+    if not entitytype:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
     entitytype_data = updated_data.model_dump(exclude_unset=True)
@@ -120,7 +114,7 @@ def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
 
     has_active_entities = session.exec(
         select(Entity).where(
-            Entity.entity_type_id == entitytype_id, not_(Entity.is_deleted)
+            Entity.entity_type_id == entitytype_id,
         )
     ).first()
 
@@ -149,7 +143,7 @@ def create_entity(
         )
 
     entity_type = session.get(EntityType, entity_type_id)
-    if not entity_type or entity_type.is_deleted is True:
+    if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
     organization_id = entity_type.organization_id
@@ -161,7 +155,6 @@ def create_entity(
                 func.lower(func.trim(Entity.name))
                 == entity_create.name.strip().lower(),
                 Entity.organization_id == organization_id,
-                not_(Entity.is_deleted),
                 Entity.entity_type_id == entity_type_id,
             )
         )
@@ -204,7 +197,6 @@ def get_entities(
 ) -> Page[EntityPublic]:
     query = select(Entity).where(
         Entity.organization_id == current_user.organization_id,
-        not_(Entity.is_deleted),
     )
 
     if name:
@@ -241,7 +233,6 @@ def get_entities(
 
             if (
                 not entity_type
-                or entity_type.is_deleted is True
                 or entity_type.organization_id != current_user.organization_id
             ):
                 entity_type = None
@@ -263,7 +254,7 @@ def get_entity_by_id(
     current_user: CurrentUser,
 ) -> EntityPublic:
     entity = session.get(Entity, entity_id)
-    if not entity or entity.is_deleted is True:
+    if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
     entity_type = None
@@ -271,7 +262,6 @@ def get_entity_by_id(
         entity_type = session.get(EntityType, entity.entity_type_id)
         if (
             not entity_type
-            or entity_type.is_deleted is True
             or entity_type.organization_id != current_user.organization_id
         ):
             entity_type = None
@@ -289,7 +279,7 @@ def update_entity(
     session: SessionDep,
 ) -> EntityPublic:
     entity = session.get(Entity, entity_id)
-    if not entity or entity.is_deleted is True:
+    if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
     entity_data = updated_data.model_dump(exclude_unset=True)
@@ -297,7 +287,7 @@ def update_entity(
     entity_type_id = entity_data.get("entity_type_id")
     if entity_type_id is not None:
         entity_type = session.get(EntityType, entity_type_id)
-        if not entity_type or entity_type.is_deleted:
+        if not entity_type:
             raise HTTPException(status_code=404, detail="EntityType not found")
         entity_data["organization_id"] = entity_type.organization_id
     else:

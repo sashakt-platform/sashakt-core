@@ -29,7 +29,6 @@ class EntityType(EntityTypeBase, table=True):
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
-    is_deleted: bool = Field(default=False, nullable=False)
     entities: list["Entity"] = Relationship(back_populates="entity_type")
     created_by: "User" = Relationship(back_populates="entity_types")
     organization: "Organization" = Relationship(back_populates="entity_types")
@@ -48,7 +47,6 @@ class EntityTypePublic(EntityTypeBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
     created_by_id: int = Field(description="ID of the user who created the Entity Type")
 
 
@@ -76,7 +74,6 @@ class Entity(EntityBase, table=True):
         foreign_key="entitytype.id",
         description="ID of the Entity Type to which the Entity should belong",
     )
-    is_deleted: bool = Field(default=False, nullable=False)
     entity_type: "EntityType" = Relationship(back_populates="entities")
     organization_id: int = Field(
         foreign_key="organization.id",
@@ -121,7 +118,6 @@ class EntityPublic(EntityBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
     entity_type: EntityType | None = None
     state_id: int | None = None
     district_id: int | None = None
