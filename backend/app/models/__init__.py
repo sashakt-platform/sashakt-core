@@ -23,6 +23,18 @@ from .candidate import (
     CandidateUpdate,
     TestCandidatePublic,
 )
+from .entity import (
+    Entity,
+    EntityBase,
+    EntityCreate,
+    EntityPublic,
+    EntityType,
+    EntityTypeBase,
+    EntityTypeCreate,
+    EntityTypePublic,
+    EntityTypeUpdate,
+    EntityUpdate,
+)
 from .location import (
     Block,
     BlockCreate,
@@ -206,6 +218,16 @@ __all__ = [
     "QuestionLocationsUpdate",
     "QuestionTagsUpdate",
     "TestDistrict",
+    "Entity",
+    "EntityBase",
+    "EntityCreate",
+    "EntityPublic",
+    "EntityType",
+    "EntityTypeBase",
+    "EntityTypeCreate",
+    "EntityTypePublic",
+    "EntityTypeUpdate",
+    "EntityUpdate",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
