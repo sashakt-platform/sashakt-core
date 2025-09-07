@@ -446,7 +446,6 @@ def test_create_entity(
         response_data["entity_type"]["organization_id"] == entity_type.organization_id
     )
     assert response_data["entity_type"]["created_by_id"] == entity_type.created_by_id
-    assert response_data["organization_id"] == entity_type.organization_id
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -471,8 +470,6 @@ def test_create_entity(
         response_data["entity_type"]["organization_id"] == entity_type.organization_id
     )
     assert response_data["entity_type"]["created_by_id"] == entity_type.created_by_id
-
-    assert response_data["organization_id"] == entity_type.organization_id
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -633,7 +630,6 @@ def test_get_entities_base_case(
         name="EntityZ",
         description=random_lower_string(),
         entity_type_id=entity_type.id,
-        organization_id=organization_id,
         created_by_id=user_id,
     )
     db.add(entity)
@@ -653,7 +649,6 @@ def test_get_entities_base_case(
     assert any(
         item["id"] == entity.id
         and item["name"] == "EntityZ"
-        and item["organization_id"] == organization_id
         and item["entity_type"]["id"] == entity_type.id
         and item["entity_type"]["name"] == entity_type.name
         and item["entity_type"]["organization_id"] == organization_id
@@ -708,28 +703,24 @@ def test_read_entity_with_sort(
         description=random_lower_string(),
         entity_type_id=entity_type1.id,
         created_by_id=user.id,
-        organization_id=organization_id,
     )
     entity2 = Entity(
         name="Django",
         description=random_lower_string(),
         entity_type_id=entity_type2.id,
         created_by_id=user.id,
-        organization_id=organization_id,
     )
     entity3 = Entity(
         name="C++",
         description=random_lower_string(),
         entity_type_id=entity_type1.id,
         created_by_id=user.id,
-        organization_id=organization_id,
     )
     entity4 = Entity(
         name="Git",
         description=random_lower_string(),
         entity_type_id=entity_type3.id,
         created_by_id=user.id,
-        organization_id=organization_id,
     )
     db.add_all([entity1, entity2, entity3, entity4])
     db.commit()
@@ -834,7 +825,6 @@ def test_read_entity_by_id(
         description=random_lower_string(),
         entity_type_id=entity_type.id,
         created_by_id=user_b.id,
-        organization_id=user_b.organization_id,
     )
     db.add(entity)
     db.commit()
@@ -852,7 +842,6 @@ def test_read_entity_by_id(
     assert response_data["entity_type"]["id"] == entity.entity_type.id
     assert response_data["entity_type"]["name"] == entity.entity_type.name
     assert response_data["entity_type"]["description"] == entity.entity_type.description
-    assert response_data["organization_id"] == entity_type.organization_id
     assert response_data["created_by_id"] == user_b.id
     assert "created_date" in response_data
     assert "modified_date" in response_data
@@ -892,7 +881,6 @@ def test_update_entity_by_id(
         description=random_lower_string(),
         entity_type_id=entity_type.id,
         created_by_id=user_b.id,
-        organization_id=organization.id,
     )
     db.add(entity)
     db.commit()
@@ -902,7 +890,6 @@ def test_update_entity_by_id(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "entity_type_id": entity_type.id,
-        "organization_id": organization.id,
     }
     response = client.put(
         f"{settings.API_V1_STR}/entity/{entity.id}",
@@ -917,7 +904,6 @@ def test_update_entity_by_id(
     assert response_data["entity_type"]["id"] == update_data_a["entity_type_id"]
     assert response_data["entity_type"]["name"] == entity_type.name
     assert response_data["entity_type"]["description"] == entity_type.description
-    assert response_data["organization_id"] == organization.id
     assert "created_date" in response_data
     assert "modified_date" in response_data
 
@@ -925,7 +911,6 @@ def test_update_entity_by_id(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "entity_type_id": entity_type.id,
-        "organization_id": organization.id,
     }
     response = client.put(
         f"{settings.API_V1_STR}/entity/{entity.id}",
@@ -938,7 +923,6 @@ def test_update_entity_by_id(
     assert response_data["name"] == update_data_b["name"]
     assert response_data["description"] == update_data_b["description"]
     assert response_data["entity_type"]["id"] == update_data_b["entity_type_id"]
-    assert response_data["organization_id"] == organization.id
 
 
 def test_update_entity_with_invalid_entitytype(
@@ -965,7 +949,6 @@ def test_update_entity_with_invalid_entitytype(
         description=random_lower_string(),
         entity_type_id=entity_type.id,
         created_by_id=user.id,
-        organization_id=organization.id,
     )
     db.add(entity)
     db.commit()
@@ -977,7 +960,6 @@ def test_update_entity_with_invalid_entitytype(
         "description": random_lower_string(),
         "entity_type_id": -90,  # invalid entity type
         "created_by_id": user.id,
-        "organization_id": organization.id,
     }
 
     response = client.put(
@@ -1003,7 +985,6 @@ def test_update_entity_not_found(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "created_by_id": user.id,
-        "organization_id": organization.id,
     }
 
     # Try updating non-existent entity with id -90
@@ -1042,7 +1023,6 @@ def test_delete_entity_by_id(
         description=random_lower_string(),
         entity_type_id=entity_type.id,
         created_by_id=user.id,
-        organization_id=organization.id,
     )
     db.add(entity)
     db.commit()

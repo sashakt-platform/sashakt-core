@@ -1,8 +1,8 @@
-"""create entity and entity_type tables
+"""create entity and entity-type table
 
-Revision ID: d7083b1c050f
+Revision ID: c3700ec39403
 Revises: db0ce83e0de2
-Create Date: 2025-09-07 15:40:40.914554
+Create Date: 2025-09-07 16:16:24.534203
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = 'd7083b1c050f'
+revision = 'c3700ec39403'
 down_revision = 'db0ce83e0de2'
 branch_labels = None
 depends_on = None
@@ -41,7 +41,6 @@ def upgrade():
     sa.Column('created_date', sa.DateTime(), nullable=True),
     sa.Column('modified_date', sa.DateTime(), nullable=True),
     sa.Column('entity_type_id', sa.Integer(), nullable=True),
-    sa.Column('organization_id', sa.Integer(), nullable=False),
     sa.Column('created_by_id', sa.Integer(), nullable=False),
     sa.Column('state_id', sa.Integer(), nullable=True),
     sa.Column('district_id', sa.Integer(), nullable=True),
@@ -50,7 +49,6 @@ def upgrade():
     sa.ForeignKeyConstraint(['created_by_id'], ['user.id'], ),
     sa.ForeignKeyConstraint(['district_id'], ['district.id'], ),
     sa.ForeignKeyConstraint(['entity_type_id'], ['entitytype.id'], ),
-    sa.ForeignKeyConstraint(['organization_id'], ['organization.id'], ),
     sa.ForeignKeyConstraint(['state_id'], ['state.id'], ),
     sa.PrimaryKeyConstraint('id')
     )

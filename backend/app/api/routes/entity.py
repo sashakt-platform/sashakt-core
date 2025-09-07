@@ -146,15 +146,12 @@ def create_entity(
     if not entity_type:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
-    organization_id = entity_type.organization_id
-
     # Check for duplicate entity name within same type and organization
     existing_entity = session.exec(
         select(Entity).where(
             and_(
                 func.lower(func.trim(Entity.name))
                 == entity_create.name.strip().lower(),
-                Entity.organization_id == organization_id,
                 Entity.entity_type_id == entity_type_id,
             )
         )
@@ -167,7 +164,6 @@ def create_entity(
         )
 
     entity_data = entity_create.model_dump(exclude_unset=True)
-    entity_data["organization_id"] = organization_id
     entity_data["created_by_id"] = current_user.id
 
     entity = Entity.model_validate(entity_data)
@@ -195,9 +191,7 @@ def get_entities(
         examples=["-name", "entity_type_name"],
     ),
 ) -> Page[EntityPublic]:
-    query = select(Entity).where(
-        Entity.organization_id == current_user.organization_id,
-    )
+    query = select(Entity)
 
     if name:
         query = query.where(
@@ -289,7 +283,6 @@ def update_entity(
         entity_type = session.get(EntityType, entity_type_id)
         if not entity_type:
             raise HTTPException(status_code=404, detail="EntityType not found")
-        entity_data["organization_id"] = entity_type.organization_id
     else:
         raise HTTPException(
             status_code=400, detail="EntityType is required for an entity."

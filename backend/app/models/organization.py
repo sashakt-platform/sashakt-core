@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
-from app.models.entity import Entity, EntityType
+from app.models.entity import EntityType
 
 if TYPE_CHECKING:
     from app.models import Question, Tag, TagType, User
@@ -34,7 +34,6 @@ class Organization(OrganizationBase, table=True):
     tag_types: list["TagType"] = Relationship(back_populates="organization")
     tags: list["Tag"] = Relationship(back_populates="organization")
     entity_types: list["EntityType"] = Relationship(back_populates="organization")
-    entities: list["Entity"] = Relationship(back_populates="organization")
     users: list["User"] = Relationship(back_populates="organization")
     question: list["Question"] = Relationship(back_populates="organization")
 

@@ -75,12 +75,7 @@ class Entity(EntityBase, table=True):
         description="ID of the Entity Type to which the Entity should belong",
     )
     entity_type: "EntityType" = Relationship(back_populates="entities")
-    organization_id: int = Field(
-        foreign_key="organization.id",
-        nullable=False,
-        description="Organization ID to which the Entity belongs",
-    )
-    organization: "Organization" = Relationship(back_populates="entities")
+
     created_by: "User" = Relationship(back_populates="entities")
     created_by_id: int = Field(
         foreign_key="user.id",
@@ -122,7 +117,6 @@ class EntityPublic(EntityBase):
     state_id: int | None = None
     district_id: int | None = None
     block_id: int | None = None
-    organization_id: int
     created_by_id: int
 
 
