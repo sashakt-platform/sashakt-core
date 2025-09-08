@@ -8,6 +8,7 @@ from sqlmodel import col, exists, func, select
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
+    Entity,
     Message,
     QuestionRevision,
     State,
@@ -62,6 +63,21 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
+
+    if test.candidate_profile:
+        print("test.candidate_profile", test.candidate_profile)
+        test_state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
+        test_district_ids = select(TestDistrict.district_id).where(
+            TestDistrict.test_id == test.id
+        )
+        print("profile query 0th", test_state_ids, test_district_ids)
+        profile_query = select(Entity.id, Entity.name).where(
+            (Entity.state_id.in_(test_state_ids))
+            | (Entity.district_id.in_(test_district_ids))
+        )
+        print("profile_query 1st", profile_query)
+        profile_list = session.exec(profile_query).all()
+
     if (
         test.random_questions
         and test.no_of_random_questions is not None
@@ -78,8 +94,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         total_questions = len(question_revisions)
 
     return TestPublicLimited(
-        **test.model_dump(),
-        total_questions=total_questions,
+        **test.model_dump(), total_questions=total_questions, profile_list=profile_list
     )
 
 
