@@ -5319,6 +5319,137 @@ def test_candidate_test_question_ids_tag_randomize_with_dual_tag(
     assert len(stored_ids) == len(set(stored_ids))
 
 
+def test_random_questions_by_tag_skipping_selected_questions(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 3},
+        ],
+        is_active=True,
+        is_deleted=False,
+    )
+
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    for i in range(3):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tag1_tag2_index_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag1.id))
+        db.add(QuestionTag(question_id=question.id, tag_id=tag2.id))
+        question.last_revision_id = qrev.id
+        db.commit()
+        db.refresh(question)
+
+    db.commit()
+
+    question_revision_tag2_only = []
+    for i in range(3):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tag2_only_index_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        question.last_revision_id = qrev.id
+        question_revision_tag2_only.append(qrev.id)
+        db.add(QuestionTag(question_id=question.id, tag_id=tag2.id))
+        db.commit()
+        db.refresh(question)
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test_id = data["candidate_test_id"]
+    candidate_uuid = data["candidate_uuid"]
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert get_response.status_code == 200
+    returned_data = get_response.json()
+    assert len(returned_data["question_revisions"]) == 6
+
+    # Extract the question revisions returned from the API
+    question_revisions = returned_data["question_revisions"]
+    question_revision_ids = [qr["id"] for qr in question_revisions]
+
+    # Verify that all question_revision_tag2_only IDs are in the returned data
+    for qr_id in question_revision_tag2_only:
+        assert qr_id in question_revision_ids, (
+            f"Question revision {qr_id} not found in returned data"
+        )
+
+
 def test_candidate_test_question_ids_in_order(
     client: TestClient, db: SessionDep
 ) -> None:
