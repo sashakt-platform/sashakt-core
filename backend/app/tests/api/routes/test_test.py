@@ -389,6 +389,39 @@ def test_create_test(
     assert test_question_link == []
 
 
+def test_create_test_with_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    tag1 = create_random_tag(db)
+    tag2 = create_random_tag(db)
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_tag_count": [
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag1.id
+    assert data["random_tag_counts"][1]["count"] == 2
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
+
+
 def test_create_test_random_question_field(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -626,6 +659,76 @@ def test_get_tests(
         len(item["districts"]) == 1 and item["districts"][0]["id"] == district.id
         for item in data
     )
+
+
+def test_get_tests_with_tag_random_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        state_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    district = District(name=random_lower_string(), state_id=state_a.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+        random_tag_count=[
+            {"tag_id": tag_a.id, "count": 3},
+            {"tag_id": tag_b.id, "count": 2},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestTag(test_id=test.id, tag_id=tag_a.id))
+    db.commit()
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/test/?name={test.name}",
+        headers=get_user_superadmin_token,
+    )
+    response = get_response.json()
+    data = response["items"]
+    assert any(item["name"] == test.name for item in data)
+    assert any(item["description"] == test.description for item in data)
+    assert any(item["time_limit"] == test.time_limit for item in data)
+
+    test_data = data[0]
+    assert len(test_data["random_tag_counts"]) == 2
+    first_random_tag = test_data["random_tag_counts"][0]
+    assert first_random_tag["count"] == 3
+    assert first_random_tag["tag"]["id"] == tag_a.id
+    assert first_random_tag["tag"]["name"] == tag_a.name
+    second_random_tag = test_data["random_tag_counts"][1]
+    assert second_random_tag["count"] == 2
+    assert second_random_tag["tag"]["id"] == tag_b.id
+    assert second_random_tag["tag"]["name"] == tag_b.name
 
 
 def test_get_test_by_filter_name(
@@ -1680,6 +1783,60 @@ def test_get_test_order_by(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "invalid" in data["detail"].lower()
+
+
+def test_get_test_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    tag1 = Tag(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+
+    tag2 = Tag(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link="test-link",
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    random_tag_counts = data["random_tag_counts"]
+
+    assert len(random_tag_counts) == 2
+    assert random_tag_counts[0]["count"] == 3
+    assert random_tag_counts[0]["tag"]["id"] == tag1.id
+    assert random_tag_counts[0]["tag"]["name"] == tag1.name
+    assert random_tag_counts[1]["count"] == 2
+    assert random_tag_counts[1]["tag"]["id"] == tag2.id
+    assert random_tag_counts[1]["tag"]["name"] == tag2.name
 
 
 def test_get_test_by_id(

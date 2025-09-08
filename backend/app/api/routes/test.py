@@ -22,8 +22,8 @@ from app.models import (
 )
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.location import District
-from app.models.tag import Tag
-from app.models.test import MarksLevelEnum, TestDistrict
+from app.models.tag import Tag, TagPublic
+from app.models.test import MarksLevelEnum, Tag_randomPublic, TestDistrict
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -133,6 +133,18 @@ def create_test(
     session.add(test)
     session.commit()
     session.refresh(test)
+    random_tag_public: list[Tag_randomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = []
+        for tag_count_mapping in test.random_tag_count:
+            tag = session.get(Tag, tag_count_mapping["tag_id"])
+            if tag:
+                random_tag_public.append(
+                    Tag_randomPublic(
+                        tag=TagPublic.model_validate(tag),
+                        count=tag_count_mapping["count"],
+                    )
+                )
 
     if test_create.tag_ids:
         tag_ids = test_create.tag_ids
@@ -198,6 +210,7 @@ def create_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -397,6 +410,18 @@ def get_test(
             select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
         )
         districts = session.exec(districts_query).all()
+        random_tag_public: list[Tag_randomPublic] | None = None
+        if test.random_tag_count:
+            random_tag_public = []
+            for tag_count_mapping in test.random_tag_count:
+                tag = session.get(Tag, tag_count_mapping["tag_id"])
+                if tag:
+                    random_tag_public.append(
+                        Tag_randomPublic(
+                            tag=TagPublic.model_validate(tag),
+                            count=tag_count_mapping["count"],
+                        )
+                    )
 
         test_public.append(
             TestPublic(
@@ -405,6 +430,7 @@ def get_test(
                 question_revisions=question_revisions,
                 states=states,
                 districts=districts,
+                random_tag_counts=random_tag_public,
             )
         )
 
@@ -437,6 +463,18 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
         select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     )
     districts = session.exec(district_query).all()
+    random_tag_public: list[Tag_randomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = []
+        for tag_count_mapping in test.random_tag_count:
+            tag = session.get(Tag, tag_count_mapping["tag_id"])
+            if tag:
+                random_tag_public.append(
+                    Tag_randomPublic(
+                        tag=TagPublic.model_validate(tag),
+                        count=tag_count_mapping["count"],
+                    )
+                )
 
     return TestPublic(
         **test.model_dump(),
@@ -444,6 +482,7 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -644,6 +683,18 @@ def update_test(
         select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     )
     districts = session.exec(district_query).all()
+    random_tag_public: list[Tag_randomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = []
+        for tag_count_mapping in test.random_tag_count:
+            tag_obj = session.get(Tag, tag_count_mapping["tag_id"])
+            if tag_obj:
+                random_tag_public.append(
+                    Tag_randomPublic(
+                        tag=TagPublic.model_validate(tag_obj),
+                        count=tag_count_mapping["count"],
+                    )
+                )
 
     return TestPublic(
         **test.model_dump(),
@@ -651,6 +702,7 @@ def update_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
