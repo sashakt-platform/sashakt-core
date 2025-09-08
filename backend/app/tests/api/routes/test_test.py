@@ -2224,6 +2224,64 @@ def test_visibility_test(
     assert data["is_active"] is False
 
 
+def test_visibility_test_with_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    tag1 = create_random_tag(db)
+    tag2 = create_random_tag(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["is_active"] is True
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag1.id
+    assert data["random_tag_counts"][1]["count"] == 2
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag1.id
+    assert data["random_tag_counts"][1]["count"] == 2
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
+
+
 def test_delete_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2764,6 +2822,68 @@ def test_clone_test(
     assert len(data["districts"]) == 1
     district_ids = [d["id"] for d in data["districts"]]
     assert district.id in district_ids
+
+
+def test_clone_test_with_random_tag(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user1 = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=True,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user1.id,
+        random_tag_count=[
+            {"tag_id": tag_hindi.id, "count": 5},
+            {"tag_id": tag_marathi.id, "count": 3},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Clone the test
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["id"] != test.id
+    assert data["name"].startswith("Copy of ")
+    assert data["description"] == test.description
+
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 5
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag_hindi.id
+    assert data["random_tag_counts"][1]["count"] == 3
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag_marathi.id
 
 
 def test_clone_soft_deleted_test(

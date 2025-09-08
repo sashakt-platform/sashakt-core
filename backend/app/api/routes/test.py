@@ -741,6 +741,18 @@ def visibility_test(
         select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     )
     districts = session.exec(district_query).all()
+    random_tag_public: list[Tag_randomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = []
+        for tag_count_mapping in test.random_tag_count:
+            tag_obj = session.get(Tag, tag_count_mapping["tag_id"])
+            if tag_obj:
+                random_tag_public.append(
+                    Tag_randomPublic(
+                        tag=TagPublic.model_validate(tag_obj),
+                        count=tag_count_mapping["count"],
+                    )
+                )
 
     return TestPublic(
         **test.model_dump(),
@@ -748,6 +760,7 @@ def visibility_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -868,6 +881,18 @@ def clone_test(
     question_revisions = session.exec(question_revision_query).all()
     state_query = select(State).join(TestState).where(TestState.test_id == new_test.id)
     states = session.exec(state_query).all()
+    random_tag_public: list[Tag_randomPublic] | None = None
+    if new_test.random_tag_count:
+        random_tag_public = []
+        for tag_count_mapping in new_test.random_tag_count:
+            tag_obj = session.get(Tag, tag_count_mapping["tag_id"])
+            if tag_obj:
+                random_tag_public.append(
+                    Tag_randomPublic(
+                        tag=TagPublic.model_validate(tag_obj),
+                        count=tag_count_mapping["count"],
+                    )
+                )
 
     return TestPublic(
         **new_test.model_dump(),
@@ -875,4 +900,5 @@ def clone_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
