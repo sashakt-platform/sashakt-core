@@ -167,6 +167,12 @@ class TestBase(SQLModel):
         sa_type=JSON,
         description="Scoring rules for this test",
     )
+    candidate_profile: bool = Field(
+        default=False,
+        title="Candidate Profile",
+        description="Field to set whether candidate profile is to be filled before the test or not.",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):
@@ -241,8 +247,14 @@ class TestUpdate(TestBase):
     district_ids: list[int] = []
 
 
+class EntityPublicLimited(SQLModel):
+    id: int
+    name: str
+
+
 class TestPublicLimited(TestBase):
     """Limited public information for test landing page"""
 
     id: int
     total_questions: int
+    profile_list: list["EntityPublicLimited"] | None = None

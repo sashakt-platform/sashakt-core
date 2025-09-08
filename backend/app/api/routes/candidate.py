@@ -32,6 +32,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -267,6 +268,16 @@ def start_test_for_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
+    if (
+        start_test_request.candidate_profile
+        and start_test_request.candidate_profile.entity_id
+    ):
+        candidate_test_profile = CandidateTestProfile(
+            candidate_test_id=candidate_test.id,
+            entity_id=start_test_request.candidate_profile.entity_id,
+        )
+        session.add(candidate_test_profile)
+        session.commit()
 
     return StartTestResponse(
         candidate_uuid=candidate.identity,

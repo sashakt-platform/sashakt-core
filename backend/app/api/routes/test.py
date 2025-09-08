@@ -21,9 +21,10 @@ from app.models import (
     TestUpdate,
 )
 from app.models.candidate import CandidateTest, CandidateTestAnswer
+from app.models.entity import Entity
 from app.models.location import District
 from app.models.tag import Tag
-from app.models.test import MarksLevelEnum, TestDistrict
+from app.models.test import EntityPublicLimited, MarksLevelEnum, TestDistrict
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -62,6 +63,22 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
+    profile_list: list[EntityPublicLimited] = []
+    if test.candidate_profile:
+        test_state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
+        test_district_ids = select(TestDistrict.district_id).where(
+            TestDistrict.test_id == test.id
+        )
+        profile_query = select(Entity.id, Entity.name).where(
+            (col(Entity.state_id).in_(test_state_ids))
+            | (col(Entity.district_id).in_(test_district_ids))
+        )
+        profile_list_raw = session.exec(profile_query).all()
+        profile_list = [
+            EntityPublicLimited(id=entity_id, name=entity_name)
+            for entity_id, entity_name in profile_list_raw
+            if entity_id is not None
+        ]
     if (
         test.random_questions
         and test.no_of_random_questions is not None
@@ -78,8 +95,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         total_questions = len(question_revisions)
 
     return TestPublicLimited(
-        **test.model_dump(),
-        total_questions=total_questions,
+        **test.model_dump(), total_questions=total_questions, profile_list=profile_list
     )
 
 

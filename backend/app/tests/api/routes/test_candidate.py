@@ -18,6 +18,8 @@ from app.models import (
     Test,
     TestCandidatePublic,
 )
+from app.models.candidate import CandidateTestProfile
+from app.models.entity import Entity, EntityType
 from app.models.location import Country, District, State
 from app.models.question import QuestionType
 from app.models.tag import Tag, TagType
@@ -1207,6 +1209,83 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
     # Verify end_time is None initially (will be set when test is submitted)
     assert candidate_test.end_time is None
     assert candidate_test.is_submitted is False
+
+
+def test_start_test_for_candidate_with_entity(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test the start_test endpoint with entity_id inside candidate_profile."""
+
+    user = create_random_user(db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "test_id": test.id,
+        "device_info": "example",
+        "candidate_profile": {"entity_id": entity.id},
+    }
+
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    data = response.json()
+    assert response.status_code == 200
+    assert "candidate_uuid" in data
+    assert "candidate_test_id" in data
+
+    candidate_test_id = data["candidate_test_id"]
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.test_id == test.id
+    assert candidate_test.device == "example"
+    assert candidate_test.consent is True
+
+    candidate = db.get(Candidate, candidate_test.candidate_id)
+    assert candidate is not None
+    assert candidate.identity is not None
+    assert candidate.user_id is None
+
+    candidate_test_profile = db.exec(
+        select(CandidateTestProfile).where(
+            CandidateTestProfile.candidate_test_id == candidate_test_id
+        )
+    ).first()
+
+    assert candidate_test_profile is not None
+    assert candidate_test_profile.entity_id == entity.id
+    assert candidate_test_profile.candidate_test_id == candidate_test_id
 
 
 def test_start_test_inactive_test(client: TestClient, db: SessionDep) -> None:
