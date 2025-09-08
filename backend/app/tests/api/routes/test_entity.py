@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.entity import Entity, EntityType
+from app.models.location import Block, Country, District, State
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import assert_paginated_response, random_lower_string
@@ -484,6 +485,77 @@ def test_create_entity(
     assert "EntityType is required for an entity." in response_data["detail"]
 
 
+def test_create_entity_with_full_location(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    # Create EntityType
+    entity_type = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(entity_type)
+
+    # Create Country
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    # Create State
+    state = State(name=random_lower_string(), country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    # Create District
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    # Create Block
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    db.refresh(entity_type)
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "entity_type_id": entity_type.id,
+        "state_id": state.id,
+        "district_id": district.id,
+        "block_id": block.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/entity/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+
+    assert response_data["name"] == data["name"]
+    assert response_data["description"] == data["description"]
+    assert response_data["entity_type"]["id"] == entity_type.id
+    assert response_data["entity_type"]["name"] == entity_type.name
+    assert response_data["state"]["id"] == state.id
+    assert response_data["state"]["name"] == state.name
+    assert response_data["district"]["id"] == district.id
+    assert response_data["district"]["name"] == district.name
+    assert response_data["block"]["id"] == block.id
+    assert response_data["block"]["name"] == block.name
+
+
 def test_create_entity_missing_entitytype(
     client: TestClient,
     db: SessionDep,
@@ -664,6 +736,79 @@ def test_get_entities_base_case(
 
     assert "items" in filter_response
     assert len(filter_response["items"]) == 1
+
+
+def test_get_entities(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    # Country
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    # State
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    # District
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    # Block
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    # EntityType
+    entity_type = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    # Entity with state, district, block
+    entity = Entity(
+        name="TestEntity",
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?name=test", headers=get_user_superadmin_token
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    items = data["items"]
+    entity_resp = next((i for i in items if i["id"] == entity.id), None)
+    assert entity_resp is not None
+    assert entity_resp["name"] == "TestEntity"
+    assert entity_resp["entity_type"]["id"] == entity_type.id
+    assert entity_resp["district"]["id"] == district.id
+    assert entity_resp["state"]["id"] == state.id
+    assert entity_resp["block"]["id"] == block.id
+    assert "created_date" in entity_resp
+    assert "modified_date" in entity_resp
 
 
 def test_read_entity_with_sort(

@@ -163,7 +163,6 @@ def test_read_roles(
     )
     assert response.status_code == 200
     content = response.json()
-    print("help", content)
     assert len(content["data"]) >= 2
 
     data = content["data"]

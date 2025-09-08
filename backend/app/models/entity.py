@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.location import BlockPublic, DistrictPublic, StatePublic
+from app.models.organization import Organization
 
 if TYPE_CHECKING:
-    from app.models import Organization, User
+    from app.models.user import User
 
 
 class EntityTypeBase(SQLModel):
@@ -114,9 +116,9 @@ class EntityPublic(EntityBase):
     created_date: datetime
     modified_date: datetime
     entity_type: EntityType | None = None
-    state_id: int | None = None
-    district_id: int | None = None
-    block_id: int | None = None
+    state: StatePublic | None = None
+    district: DistrictPublic | None = None
+    block: BlockPublic | None = None
     created_by_id: int
 
 

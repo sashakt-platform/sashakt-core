@@ -7,13 +7,16 @@ from sqlmodel import and_, func, select
 from app.api.deps import CurrentUser, Pagination, SessionDep
 from app.models import (
     Entity,
+    EntityCreate,
+    EntityPublic,
     EntityType,
     EntityTypeCreate,
     EntityTypePublic,
     EntityTypeUpdate,
+    EntityUpdate,
     Message,
 )
-from app.models.entity import EntityCreate, EntityPublic, EntityUpdate
+from app.models.location import Block, District, State
 
 router_entitytype = APIRouter(
     prefix="/entitytype",
@@ -171,9 +174,16 @@ def create_entity(
     session.commit()
     session.refresh(entity)
     session.refresh(entity_type)
+    state = session.get(State, entity.state_id) if entity.state_id else None
+    district = session.get(District, entity.district_id) if entity.district_id else None
+    block = session.get(Block, entity.block_id) if entity.block_id else None
 
     return EntityPublic(
-        **entity.model_dump(exclude={"entity_type_id"}), entity_type=entity_type
+        **entity.model_dump(exclude={"entity_type_id"}),
+        entity_type=entity_type,
+        state=state,
+        district=district,
+        block=block,
     )
 
 
@@ -230,10 +240,21 @@ def get_entities(
                 or entity_type.organization_id != current_user.organization_id
             ):
                 entity_type = None
+        state = session.get(State, entity.state_id) if entity.state_id else None
+        district = (
+            session.get(District, entity.district_id) if entity.district_id else None
+        )
+        block = session.get(Block, entity.block_id) if entity.block_id else None
 
         entity_public_list.append(
             EntityPublic(
-                **entity.model_dump(exclude={"entity_type_id"}), entity_type=entity_type
+                **entity.model_dump(
+                    exclude={"entity_type_id", "state_id", "district_id", "block_id"}
+                ),
+                entity_type=entity_type,
+                state=state,
+                district=district,
+                block=block,
             )
         )
 
@@ -259,9 +280,18 @@ def get_entity_by_id(
             or entity_type.organization_id != current_user.organization_id
         ):
             entity_type = None
+    state = session.get(State, entity.state_id) if entity.state_id else None
+    district = session.get(District, entity.district_id) if entity.district_id else None
+    block = session.get(Block, entity.block_id) if entity.block_id else None
 
     return EntityPublic(
-        **entity.model_dump(exclude={"entity_type_id"}), entity_type=entity_type
+        **entity.model_dump(
+            exclude={"entity_type_id", "state_id", "district_id", "block_id"}
+        ),
+        entity_type=entity_type,
+        state=state,
+        district=district,
+        block=block,
     )
 
 
@@ -294,9 +324,18 @@ def update_entity(
     session.refresh(entity)
 
     entity_type = session.get(EntityType, entity.entity_type_id)
+    state = session.get(State, entity.state_id) if entity.state_id else None
+    district = session.get(District, entity.district_id) if entity.district_id else None
+    block = session.get(Block, entity.block_id) if entity.block_id else None
 
     return EntityPublic(
-        **entity.model_dump(exclude={"entity_type_id"}), entity_type=entity_type
+        **entity.model_dump(
+            exclude={"entity_type_id", "state_id", "district_id", "block_id"}
+        ),
+        entity_type=entity_type,
+        state=state,
+        district=district,
+        block=block,
     )
 
 

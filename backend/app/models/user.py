@@ -5,11 +5,12 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
-from app.models.entity import Entity, EntityType
 
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
+        Entity,
+        EntityType,
         Organization,
         QuestionRevision,
         Role,
