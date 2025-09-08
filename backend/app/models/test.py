@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import Self
+from typing_extensions import Self, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
@@ -17,8 +17,25 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, District, QuestionRevision, State, User
-    from app.models.tag import Tag
+    from app.models import (
+        Candidate,
+        District,
+        QuestionRevision,
+        State,
+        Tag,
+        TagPublic,
+        User,
+    )
+
+
+class TagRandomCreate(TypedDict):
+    tag_id: int
+    count: int
+
+
+class TagRandomPublic(SQLModel):
+    tag: "TagPublic"
+    count: int
 
 
 class TestTag(SQLModel, table=True):
@@ -202,6 +219,12 @@ class Test(TestBase, table=True):
         title="User ID",
         description="ID of the user who created the test.",
     )
+    random_tag_count: list[TagRandomCreate] | None = Field(
+        sa_type=JSON,
+        default=None,
+        title="Tag-based Randomization Configuration",
+        description="Specifies how many random questions to select for each tag. Each item includes a tag ID and the count of random questions to select from that tag.",
+    )
 
 
 class TestCreate(TestBase):
@@ -209,6 +232,7 @@ class TestCreate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
+    random_tag_count: list[TagRandomCreate] | None = None
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -227,6 +251,7 @@ class TestPublic(TestBase):
     states: list["State"]
     districts: list["District"]
     total_questions: int | None = None
+    random_tag_counts: list[TagRandomPublic] | None = None
     created_by_id: int = Field(
         foreign_key="user.id",
         title="User ID",
@@ -239,6 +264,7 @@ class TestUpdate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
+    random_tag_count: list[TagRandomCreate] | None = None
 
 
 class TestPublicLimited(TestBase):
