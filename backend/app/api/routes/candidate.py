@@ -235,7 +235,7 @@ def start_test_for_candidate(
         )
 
     if test.random_tag_count:
-        extra_question_ids = set()
+        extra_question_ids: set[int] = set()
 
         for tag_rule in test.random_tag_count:
             tag_id = tag_rule["tag_id"]
@@ -248,7 +248,7 @@ def start_test_for_candidate(
                 .where(QuestionTag.tag_id == tag_id)
                 .where(
                     not_(
-                        Question.last_revision_id.in_(
+                        col(Question.last_revision_id).in_(
                             extra_question_ids | set(question_revision_ids)
                         )
                     )

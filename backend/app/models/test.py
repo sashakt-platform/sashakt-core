@@ -28,12 +28,12 @@ if TYPE_CHECKING:
     )
 
 
-class Tag_randomCreate(TypedDict):
+class TagRandomCreate(TypedDict):
     tag_id: int
     count: int
 
 
-class Tag_randomPublic(SQLModel):
+class TagRandomPublic(SQLModel):
     tag: "TagPublic"
     count: int
 
@@ -219,7 +219,7 @@ class Test(TestBase, table=True):
         title="User ID",
         description="ID of the user who created the test.",
     )
-    random_tag_count: list[Tag_randomCreate] | None = Field(
+    random_tag_count: list[TagRandomCreate] | None = Field(
         sa_type=JSON,
         default=None,
         title="Tag-based Randomization Configuration",
@@ -232,7 +232,7 @@ class TestCreate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
-    random_tag_count: list[Tag_randomCreate] | None = None
+    random_tag_count: list[TagRandomCreate] | None = None
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -251,7 +251,7 @@ class TestPublic(TestBase):
     states: list["State"]
     districts: list["District"]
     total_questions: int | None = None
-    random_tag_counts: list[Tag_randomPublic] | None = None
+    random_tag_counts: list[TagRandomPublic] | None = None
     created_by_id: int = Field(
         foreign_key="user.id",
         title="User ID",
@@ -264,7 +264,7 @@ class TestUpdate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
-    random_tag_count: list[Tag_randomCreate] | None = None
+    random_tag_count: list[TagRandomCreate] | None = None
 
 
 class TestPublicLimited(TestBase):
