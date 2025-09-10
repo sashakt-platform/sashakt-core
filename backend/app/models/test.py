@@ -18,6 +18,7 @@ class MarksLevelEnum(str, enum.Enum):
 
 if TYPE_CHECKING:
     from app.models import (
+        Block,
         Candidate,
         District,
         QuestionRevision,
@@ -276,6 +277,9 @@ class TestUpdate(TestBase):
 class EntityPublicLimited(SQLModel):
     id: int
     name: str
+    state: State | None = None
+    district: District | None = None
+    block: Block | None = None
 
 
 class TestPublicLimited(TestBase):
