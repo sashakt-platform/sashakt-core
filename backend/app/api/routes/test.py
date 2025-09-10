@@ -8,6 +8,7 @@ from sqlmodel import col, exists, func, select
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
+    Block,
     Message,
     QuestionRevision,
     State,
@@ -21,9 +22,11 @@ from app.models import (
     TestUpdate,
 )
 from app.models.candidate import CandidateTest, CandidateTestAnswer
+from app.models.entity import Entity
 from app.models.location import District
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
+    EntityPublicLimited,
     MarksLevelEnum,
     TagRandomCreate,
     TagRandomPublic,
@@ -81,6 +84,33 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
+    profile_list: list[EntityPublicLimited] = []
+    if test.candidate_profile:
+        state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
+        district_ids = select(TestDistrict.district_id).where(
+            TestDistrict.test_id == test.id
+        )
+
+        entities = session.exec(
+            select(Entity).where(
+                (col(Entity.state_id).in_(state_ids))
+                | (col(Entity.district_id).in_(district_ids))
+            )
+        ).all()
+
+        profile_list = [
+            EntityPublicLimited(
+                id=entity.id,
+                name=entity.name,
+                state=session.get(State, entity.state_id) if entity.state_id else None,
+                district=session.get(District, entity.district_id)
+                if entity.district_id
+                else None,
+                block=session.get(Block, entity.block_id) if entity.block_id else None,
+            )
+            for entity in entities
+        ]
+
     if (
         test.random_questions
         and test.no_of_random_questions is not None
@@ -102,8 +132,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         )
 
     return TestPublicLimited(
-        **test.model_dump(),
-        total_questions=total_questions,
+        **test.model_dump(), total_questions=total_questions, profile_list=profile_list
     )
 
 

@@ -17,6 +17,10 @@ if TYPE_CHECKING:
 # Storing Answers for a question in a test by a candidate
 
 
+class CandidateProfile(SQLModel):
+    entity_id: int
+
+
 class CandidateTestAnswerBase(SQLModel):
     __test__ = False
     candidate_test_id: int = Field(foreign_key="candidate_test.id", ondelete="CASCADE")
@@ -115,6 +119,17 @@ class CandidateTest(CandidateTestBase, table=True):
     question_revision_ids: list[int] = Field(
         default_factory=list, sa_column=Column(JSON)
     )
+
+
+class CandidateTestProfile(SQLModel, table=True):
+    __tablename__ = "candidate_test_profile"
+    __test__ = False
+    __table_args__ = (UniqueConstraint("candidate_test_id", "entity_id"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    candidate_test_id: int = Field(foreign_key="candidate_test.id", ondelete="CASCADE")
+    entity_id: int = Field(foreign_key="entity.id", ondelete="CASCADE")
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
 
 
 class CandidateTestCreate(CandidateTestBase):
@@ -238,6 +253,7 @@ class TestStatusSummary(SQLModel):
 class StartTestRequest(SQLModel):
     test_id: int
     device_info: str | None = None
+    candidate_profile: CandidateProfile | None = None
 
 
 class StartTestResponse(SQLModel):

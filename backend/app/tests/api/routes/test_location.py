@@ -89,7 +89,7 @@ def test_get_country(
 
     assert response.status_code == 200
     data = response.json()
-    assert_paginated_response(response, min_expected_total=12)
+    assert_paginated_response(response, min_expected_total=12, min_expected_pages=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/country/?is_active=False",
@@ -98,7 +98,7 @@ def test_get_country(
 
     assert response.status_code == 200
     data = response.json()
-    assert_paginated_response(response, min_expected_total=2)
+    assert_paginated_response(response, min_expected_total=2, min_expected_pages=1)
 
 
 def test_get_country_by_id(
