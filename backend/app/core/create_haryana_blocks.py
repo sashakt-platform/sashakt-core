@@ -10,12 +10,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def init() -> None:
+def init() -> dict[str, list[dict[str, str]]]:
     with Session(engine) as session:
         with open("app/core/haryana-blocks-create.json") as f:
             data = json.load(f)
 
-        created_blocks: list[Block] = []
+        created_blocks: list[dict[str, str]] = []
 
         for district_name, block_list in data.items():
             # get district (already exists in DB)
@@ -49,7 +49,7 @@ def init() -> None:
 
             session.commit()
 
-    return {"status": "success", "created_blocks": created_blocks}
+    return {"created_blocks": created_blocks}
 
 
 def main() -> None:
