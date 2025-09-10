@@ -1,0 +1,748 @@
+[
+  {
+    "district": "Ambala",
+    "block": "Ambala-1",
+    "clf": "Garima Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Ambala",
+    "block": "Ambala-1",
+    "clf": "Sanyam Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Ambala",
+    "block": "Ambala-1",
+    "clf": "Tejas Mahila Cluster Association"
+  },
+  { "district": "Ambala", "block": "Ambala-2", "clf": "Kalyana" },
+  {
+    "district": "Ambala",
+    "block": "Barara",
+    "clf": "Khushhal Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Ambala",
+    "block": "Barara",
+    "clf": "Darpan Mahila Cluster Association"
+  },
+  {
+    "district": "Ambala",
+    "block": "Naraingarh",
+    "clf": "Sangam Mahila Cluster Association"
+  },
+  {
+    "district": "Ambala",
+    "block": "Saha",
+    "clf": "Ms Shrishti Mahila Cluster Association Mahmoodpur"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Bawani Khera",
+    "clf": "Ujjala Mahila Mahasangh"
+  },
+  { "district": "Bhiwani", "block": "Bawani Khera", "clf": "Umang CLF" },
+  {
+    "district": "Bhiwani",
+    "block": "Behal",
+    "clf": "Sakhi Mahila Block Sangthan Behal"
+  },
+  { "district": "Bhiwani", "block": "Bhiwani", "clf": "Nari Shakti" },
+  {
+    "district": "Bhiwani",
+    "block": "Bhiwani",
+    "clf": "Jagruk Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Bhiwani",
+    "clf": "Ummid Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Bhiwani",
+    "clf": "Kalpana Mahila Cluster"
+  },
+  { "district": "Bhiwani", "block": "Kairu", "clf": "Mahila Shakti Clf" },
+  {
+    "district": "Bhiwani",
+    "block": "Kairu",
+    "clf": "Shiv Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Loharu",
+    "clf": "Sangharsh Mahila Cluster Level Federation"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Loharu",
+    "clf": "Peehar Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Siwani",
+    "clf": "Pragati Mahila Federation"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Siwani",
+    "clf": "Sangam Mahila Federation"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Tosham",
+    "clf": "Mehak Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Bhiwani",
+    "block": "Tosham",
+    "clf": "Utsukta Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Charkhi Dadri",
+    "block": "Badhra",
+    "clf": "Umanag Mahila Cluster Sangthan"
+  },
+  { "district": "Charkhi Dadri", "block": "Bond", "clf": "Nai Soch CLF" },
+  {
+    "district": "Charkhi Dadri",
+    "block": "Bond",
+    "clf": "Shivam Mahila Cluster Sangthan"
+  },
+  { "district": "Charkhi Dadri", "block": "Charkhi Dadri", "clf": "Udaan" },
+  {
+    "district": "Charkhi Dadri",
+    "block": "Dadri",
+    "clf": "Naya Sawera Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Charkhi Dadri",
+    "block": "Jhojhu",
+    "clf": "Jhojhu Pratham Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Charkhi Dadri",
+    "block": "Jhojhu",
+    "clf": "Jhojhu Divinity Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Faridabad",
+    "block": "Ballabhgarh",
+    "clf": "Sukanya Federation"
+  },
+  {
+    "district": "Faridabad",
+    "block": "Ballabhgarh",
+    "clf": "Sahara Mahila Cluster Federation"
+  },
+  {
+    "district": "Faridabad",
+    "block": "Faridabad",
+    "clf": "Jeevan Jyoti Mahila Cluster Federation"
+  },
+  {
+    "district": "Faridabad",
+    "block": "Tigaon",
+    "clf": "Nari Shakti Nirman Mahila Cluster Federation"
+  },
+  { "district": "Fatehabad", "block": "Bhattu", "clf": "Sarojini Clf" },
+  { "district": "Fatehabad", "block": "Bhattu", "clf": "Savitri Bai Clf" },
+  {
+    "district": "Fatehabad",
+    "block": "Bhuna",
+    "clf": "Abhilasa Mahila Maha Sangthan"
+  },
+  { "district": "Fatehabad", "block": "Bhuna", "clf": "Kalpna" },
+  {
+    "district": "Fatehabad",
+    "block": "Fatehabad",
+    "clf": "Prerana Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Fatehabad",
+    "block": "Fatehabad",
+    "clf": "Ummeed Mahila Cluster Sangthan"
+  },
+  { "district": "Fatehabad", "block": "Jakhal", "clf": "Lakshya CLF" },
+  {
+    "district": "Fatehabad",
+    "block": "Jakhal",
+    "clf": "Neerja Mahila Cluster Sangthan"
+  },
+  { "district": "Fatehabad", "block": "Nagpur", "clf": "Pragati CLF" },
+  {
+    "district": "Fatehabad",
+    "block": "Nagpur",
+    "clf": "Ujjwal Mahila Maha Sangathan"
+  },
+  {
+    "district": "Fatehabad",
+    "block": "Ratia",
+    "clf": "Pehchan Mahila Cluster Sangthan, Ratia"
+  },
+  {
+    "district": "Fatehabad",
+    "block": "Ratia",
+    "clf": "Parivartan Mahila Cluster Sangthan, Ratia"
+  },
+  {
+    "district": "Fatehabad",
+    "block": "Tohana",
+    "clf": "Saksham Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Fatehabad",
+    "block": "Tohana",
+    "clf": "Chetna Mahila Cluster Sangthan"
+  },
+  { "district": "Gurgaon", "block": "Farrukh Nagar", "clf": "Shikhar" },
+  {
+    "district": "Gurgaon",
+    "block": "Farrukh Nagar",
+    "clf": "Kalpna Mahila Cluster Level Foundation"
+  },
+  { "district": "Gurgaon", "block": "Pataudi", "clf": "Nari Shakti" },
+  { "district": "Gurgaon", "block": "Pataudi", "clf": "Sahara CLF" },
+  {
+    "district": "Hisar",
+    "block": "Adampur",
+    "clf": "Anubhav Mahila Cluster Federation"
+  },
+  {
+    "district": "Hisar",
+    "block": "Agroha",
+    "clf": "Sadbhawana Mahila Cluster Sangthan"
+  },
+  { "district": "Hisar", "block": "Barwala", "clf": "Sakham CLF" },
+  {
+    "district": "Hisar",
+    "block": "Hansi-1",
+    "clf": "Ibadat Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Hisar",
+    "block": "Hansi-2",
+    "clf": "Gagan Mahila Cluster Sangthan"
+  },
+  { "district": "Hisar", "block": "Hisar-1", "clf": "Sankalp" },
+  {
+    "district": "Hisar",
+    "block": "Hisar-1",
+    "clf": "Paryatan Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Hisar",
+    "block": "Hisar-2",
+    "clf": "Safal Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Hisar",
+    "block": "Narnaund",
+    "clf": "Anmol Mahila Block Federation"
+  },
+  {
+    "district": "Hisar",
+    "block": "Narnaund",
+    "clf": "Pratibha Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Hisar",
+    "block": "Uklana",
+    "clf": "Nari Shakti Mahila Cluster Sangthan"
+  },
+  { "district": "Jhajjar", "block": "Badli", "clf": "Ekta Mahila Blf" },
+  { "district": "Jhajjar", "block": "Bahadurgarh", "clf": "Lakshay Mahila" },
+  {
+    "district": "Jhajjar",
+    "block": "Bahadurgarh",
+    "clf": "Aajeevika Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Jhajjar",
+    "block": "Beri",
+    "clf": "Sakhi Mahila Block Sangathan"
+  },
+  { "district": "Jhajjar", "block": "Jhajjar", "clf": "Shikhar Mahila Clf" },
+  { "district": "Jhajjar", "block": "Jhajjar", "clf": "Sakhi Mahila Clf" },
+  { "district": "Jhajjar", "block": "Jhajjar", "clf": "Nayi Soch Mahila Clf" },
+  { "district": "Jhajjar", "block": "Matannail", "clf": "Unnati CLF" },
+  {
+    "district": "Jhajjar",
+    "block": "Matannail",
+    "clf": "Aadarsh Mahila Block Sangthan"
+  },
+  {
+    "district": "Jhajjar",
+    "block": "Salhawas",
+    "clf": "Shiv Mahima Mahila Block Level Federation"
+  },
+  {
+    "district": "Jind",
+    "block": "Alewa",
+    "clf": "Bhumi Mahila Cluster Federation"
+  },
+  {
+    "district": "Jind",
+    "block": "Jind",
+    "clf": "Sanjivani Mahila Cluster Federation"
+  },
+  {
+    "district": "Jind",
+    "block": "Jind",
+    "clf": "Updesh Mahila Cluster Federation"
+  },
+  { "district": "Jind", "block": "Jind", "clf": "Geeta Mahila Clf" },
+  {
+    "district": "Jind",
+    "block": "Julana",
+    "clf": "Sartaj Mahila Cluster Federation"
+  },
+  {
+    "district": "Jind",
+    "block": "Narwana",
+    "clf": "Kalpna Mahila Cluster Level Federation Narwana"
+  },
+  { "district": "Jind", "block": "Narwana", "clf": "Durga Mahila Clf" },
+  { "district": "Jind", "block": "Safidon", "clf": "Jyoti Vandan" },
+  {
+    "district": "Jind",
+    "block": "Safidon",
+    "clf": "Jagriti Mahila Cluster Federation"
+  },
+  {
+    "district": "Jind",
+    "block": "Uchana",
+    "clf": "Navodaya Mahila Cluster Federation Uchana"
+  },
+  { "district": "Jind", "block": "Uchana", "clf": "Sahyog Mahila Clf" },
+  {
+    "district": "Jind",
+    "block": "Ujhana",
+    "clf": "Tulsi Mahila Cluster Federation Ujhana"
+  },
+  { "district": "Kaithal", "block": "Dhand", "clf": "Nari Shakti" },
+  { "district": "Kaithal", "block": "Dhand", "clf": "Nari Ekta" },
+  {
+    "district": "Kaithal",
+    "block": "Guhla",
+    "clf": "Savera Mahilla Cluster Sangthan"
+  },
+  { "district": "Kaithal", "block": "Guhla", "clf": "Peehar CLF" },
+  { "district": "Kaithal", "block": "Guhla", "clf": "Milan Clf" },
+  { "district": "Kaithal", "block": "Kaithal", "clf": "Armaan CLF" },
+  { "district": "Kaithal", "block": "Kaithal", "clf": "Sathi" },
+  { "district": "Kaithal", "block": "Kaithal", "clf": "Sangam" },
+  { "district": "Kaithal", "block": "Kalayat", "clf": "Maatar Shakti Clf" },
+  { "district": "Kaithal", "block": "Kalayat", "clf": "Durga Shakti Clf" },
+  { "district": "Kaithal", "block": "Pundri", "clf": "Rishi Pundrik" },
+  { "district": "Kaithal", "block": "Pundri", "clf": "Pehchan" },
+  { "district": "Kaithal", "block": "Pundri", "clf": "Udaan" },
+  { "district": "Kaithal", "block": "Rajound", "clf": "Geet Clf" },
+  {
+    "district": "Kaithal",
+    "block": "Siwan",
+    "clf": "Siwan Mahila Block Saghathan"
+  },
+  {
+    "district": "Karnal",
+    "block": "Assandh",
+    "clf": "Nai Disha Mahila Cluster Federation"
+  },
+  {
+    "district": "Karnal",
+    "block": "Chirao",
+    "clf": "Milan Mahila Cluster Federation Nissing"
+  },
+  { "district": "Karnal", "block": "Gharaunda", "clf": "Sarthi Mahila" },
+  {
+    "district": "Karnal",
+    "block": "Gharaunda",
+    "clf": "Aajeevika Mahila Cluster Federation"
+  },
+  {
+    "district": "Karnal",
+    "block": "Gharaunda",
+    "clf": "Vir Mahila Cluster Level Federation"
+  },
+  {
+    "district": "Karnal",
+    "block": "Gharaunda",
+    "clf": "Pratigya Mahila Cluster Federation"
+  },
+  { "district": "Karnal", "block": "Indri", "clf": "Indri Mahila Clf" },
+  { "district": "Karnal", "block": "Indri", "clf": "Safalta Mahila Clf" },
+  {
+    "district": "Karnal",
+    "block": "Indri",
+    "clf": "Ganga Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Karnal",
+    "block": "Indri",
+    "clf": "Gaurav Mahila Cluster Federation"
+  },
+  {
+    "district": "Karnal",
+    "block": "Karnal",
+    "clf": "Amaya Mahila Cluster Federation"
+  },
+  {
+    "district": "Karnal",
+    "block": "Karnal",
+    "clf": "Jannat Mahila Cluster Federation"
+  },
+  { "district": "Karnal", "block": "Kunjpura", "clf": "Naitik Clf" },
+  {
+    "district": "Karnal",
+    "block": "Munak",
+    "clf": "Prerna Mahila Cluster Fedration"
+  },
+  { "district": "Karnal", "block": "Munak", "clf": "Pargati Mahila CLF" },
+  {
+    "district": "Karnal",
+    "block": "Nilokheri",
+    "clf": "Vaani Mahila Cluster Level Federation"
+  },
+  { "district": "Karnal", "block": "Nissing", "clf": "Nissing Clf" },
+  {
+    "district": "Kurukshetra",
+    "block": "Babain",
+    "clf": "Ugta Suraj Cluster Level Federation"
+  },
+  {
+    "district": "Kurukshetra",
+    "block": "Ismailabad",
+    "clf": "Satkar Cluster Level Federation"
+  },
+  { "district": "Kurukshetra", "block": "Ladwa", "clf": "Suraj" },
+  { "district": "Kurukshetra", "block": "Pipli", "clf": "Radhe Radhe" },
+  {
+    "district": "Kurukshetra",
+    "block": "Shahbad",
+    "clf": "Nai Umang Mahila Mahasangh"
+  },
+  {
+    "district": "Kurukshetra",
+    "block": "Thanesar",
+    "clf": "Nari Shakti Mahila Sangathan"
+  },
+  { "district": "Kurukshetra", "block": "Thanesar", "clf": "Nari Ekta" },
+  {
+    "district": "Mahendragarh",
+    "block": "Ateli",
+    "clf": "Nai Manjil Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Mahendragarh",
+    "block": "Ateli Nangal",
+    "clf": "Nai Pahchan Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Mahendragarh",
+    "block": "Nangle Choudhary",
+    "clf": "Pragati Mahila Cluster Sangthan"
+  },
+  { "district": "Mahendragarh", "block": "Narnaul", "clf": "Junoon CLF" },
+  {
+    "district": "Mahendragarh",
+    "block": "Narnaul",
+    "clf": "Prerna Mahila Cluster Sangthan"
+  },
+  { "district": "Mahendragarh", "block": "Sihma", "clf": "Sarthak Mahila" },
+  {
+    "district": "Mewat",
+    "block": "Ferozepur Jhirka",
+    "clf": "Parivartan Clf Ferozepur Jhirka"
+  },
+  {
+    "district": "Mewat",
+    "block": "Ferozepur Jhirka",
+    "clf": "Arawali Cluster Level Federation Sakras"
+  },
+  {
+    "district": "Mewat",
+    "block": "Ferozepur Jhirka",
+    "clf": "Prayas Clf Basai Meo"
+  },
+  { "district": "Mewat", "block": "Indri", "clf": "Sarthak" },
+  { "district": "Mewat", "block": "Indri", "clf": "Sarthi Clf Indri" },
+  {
+    "district": "Mewat",
+    "block": "Nagina",
+    "clf": "Talim Mahila Cluster Level Federation"
+  },
+  {
+    "district": "Mewat",
+    "block": "Nagina",
+    "clf": "Pratigya Mahila Cluster Level Federation"
+  },
+  {
+    "district": "Mewat",
+    "block": "Nagina",
+    "clf": "Manjeel Mahila Cluster Federation Nagina"
+  },
+  {
+    "district": "Mewat",
+    "block": "Nuh",
+    "clf": "Sahara Cluster Levelfederation Nuh"
+  },
+  { "district": "Mewat", "block": "Nuh", "clf": "Ek Pehel CLF" },
+  { "district": "Mewat", "block": "Pingwan", "clf": "Talim CLF" },
+  {
+    "district": "Mewat",
+    "block": "Pingwan",
+    "clf": "Nayab Mahila Cluster Level Federation Pinangwan"
+  },
+  {
+    "district": "Mewat",
+    "block": "Pingwan",
+    "clf": "Kamyab Mahila Cluster Level Federation Pinangwan"
+  },
+  { "district": "Mewat", "block": "Punhana", "clf": "Ek Prayas Clf Punhana" },
+  {
+    "district": "Mewat",
+    "block": "Punhana",
+    "clf": "Inayat Mahila Cluster Federation Punhana"
+  },
+  {
+    "district": "Mewat",
+    "block": "Punhana",
+    "clf": "Bulandi Mahila Cluster Level Federation Bichor"
+  },
+  {
+    "district": "Mewat",
+    "block": "Tauru",
+    "clf": "Aagaz Mahila Cluster Federation Tauru Nuh"
+  },
+  {
+    "district": "Mewat",
+    "block": "Tauru",
+    "clf": "Udaan Mahila Cluster Federation Khori Kalan Tauru Mewat"
+  },
+  {
+    "district": "Mewat",
+    "block": "Tauru",
+    "clf": "Saheli Mahila Cluster Federation Mohdpurahir"
+  },
+  { "district": "Palwal", "block": "Badoli", "clf": "Vishwas Clf Badoli" },
+  {
+    "district": "Palwal",
+    "block": "Hathin",
+    "clf": "Pargati Mahila Cluster Level Federation"
+  },
+  {
+    "district": "Palwal",
+    "block": "Hathin",
+    "clf": "Vikas Mahila Block Sangthan"
+  },
+  {
+    "district": "Palwal",
+    "block": "Hodal",
+    "clf": "Nai Soch Mahila Cluster Level Federation Hodal"
+  },
+  {
+    "district": "Palwal",
+    "block": "Hodal",
+    "clf": "Nai Ummang Mahila Cluster Level Federation"
+  },
+  { "district": "Palwal", "block": "Palwal", "clf": "Ekta" },
+  {
+    "district": "Palwal",
+    "block": "Prithala",
+    "clf": "Ujjwal Mahila Clf Prithala"
+  },
+  { "district": "Panchkula", "block": "Barwala", "clf": "Barwala" },
+  {
+    "district": "Panchkula",
+    "block": "Barwala",
+    "clf": "Nari Shakti Mahila Clf"
+  },
+  {
+    "district": "Panchkula",
+    "block": "Morni",
+    "clf": "Morni Mahila Block Sangthan"
+  },
+  {
+    "district": "Panchkula",
+    "block": "Pinjore",
+    "clf": "Vikas Mahila Block Sangthan"
+  },
+  { "district": "Panchkula", "block": "Pinjore", "clf": "Raitan" },
+  {
+    "district": "Panchkula",
+    "block": "Raipurrani",
+    "clf": "Raipur Rani Mahila Block Sangathan"
+  },
+  { "district": "Panipat", "block": "Bapoli", "clf": "Sakhi Mahila CLF" },
+  {
+    "district": "Panipat",
+    "block": "Israna",
+    "clf": "Nai Kiran Mahila Cluster Level Federation"
+  },
+  { "district": "Panipat", "block": "Madlauda", "clf": "Shakti" },
+  {
+    "district": "Panipat",
+    "block": "Panipat",
+    "clf": "Abhilasha Mahila Block Sangthan"
+  },
+  { "district": "Panipat", "block": "Panipat", "clf": "Ekta Mahila Clf" },
+  { "district": "Panipat", "block": "Samalkha", "clf": "Radha Mahila Clf" },
+  {
+    "district": "Panipat",
+    "block": "Samalkha",
+    "clf": "Sahara Mahila Block Sangathan"
+  },
+  { "district": "Panipat", "block": "Samalkha", "clf": "Tulsi Mahila Clf" },
+  {
+    "district": "Panipat",
+    "block": "Sanoli Khurd",
+    "clf": "Shiv Mahila Cluster Sangthan"
+  },
+  { "district": "Rewari", "block": "Bawal", "clf": "Nayi Soch" },
+  { "district": "Rewari", "block": "Bawal", "clf": "Nai Disha Clf" },
+  { "district": "Rewari", "block": "Dharuhera", "clf": "Nari Shakti" },
+  { "district": "Rewari", "block": "Dharuhera", "clf": "Lakshay Clf" },
+  { "district": "Rewari", "block": "Dharuhera", "clf": "Unnati Clf" },
+  { "district": "Rewari", "block": "Jatushana", "clf": "Janak Clf" },
+  { "district": "Rewari", "block": "Nahar", "clf": "Garima Clf" },
+  {
+    "district": "Rewari",
+    "block": "Rewari",
+    "clf": "Naya Savera Mahila Cluster Federation"
+  },
+  { "district": "Rewari", "block": "Rewari", "clf": "Nai Kiran Clf" },
+  {
+    "district": "Rohtak",
+    "block": "Kalanaur",
+    "clf": "Nari Ka Gourav Mahila Block Sangthan"
+  },
+  { "district": "Rohtak", "block": "Lakhan Majra", "clf": "Prerna" },
+  {
+    "district": "Rohtak",
+    "block": "Maham",
+    "clf": "Nai Kiran Mahila Block Sangthan"
+  },
+  { "district": "Rohtak", "block": "Rohtak", "clf": "Sarthak Mahila CLF" },
+  {
+    "district": "Rohtak",
+    "block": "Rohtak",
+    "clf": "Navodya Mahila Cluster Sangathan"
+  },
+  {
+    "district": "Rohtak",
+    "block": "Sampla",
+    "clf": "Sanskriti Mahila Block Sangthan"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Dabwali Block",
+    "clf": "Durga Mahila Clf, Ganga"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Dabwali Block",
+    "clf": "Surbhi Mahila Clf, Dabwali Village"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Ellenabad",
+    "clf": "Nai Umang Mahila Cluster Sangthan"
+  },
+  { "district": "Sirsa", "block": "Nathusari Chopta", "clf": "Lakshya CLF" },
+  {
+    "district": "Sirsa",
+    "block": "Nathusari Chopta",
+    "clf": "Nai Soch Mahila Clf, Nathusari Kalan"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Nathusari Chopta",
+    "clf": "Pahchan Mahila Clf, Jamal"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Odhan",
+    "clf": "Himmat Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Odhan",
+    "clf": "Pragati Mahila Cluster Sangthan"
+  },
+  { "district": "Sirsa", "block": "Rania", "clf": "Bhawana Clf" },
+  {
+    "district": "Sirsa",
+    "block": "Sirsa",
+    "clf": "Unnati Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Sirsa",
+    "clf": "Jagriti Mahila Cluster Sangathan - Moriwala"
+  },
+  {
+    "district": "Sirsa",
+    "block": "Sirsa",
+    "clf": "Gunj Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Sonipat",
+    "block": "Ganaur",
+    "clf": "Nari Shakti Mahila Cluster Federation Ganaur Sonipat"
+  },
+  {
+    "district": "Sonipat",
+    "block": "Muruthal",
+    "clf": "Nai Ummang Mahila Cluster Federation"
+  },
+  { "district": "Sonipat", "block": "Rai", "clf": "Ujala Mahila" },
+  {
+    "district": "Sonipat",
+    "block": "Sonipat",
+    "clf": "Mahila Shakti Mhasangh"
+  },
+  { "district": "Sonipat", "block": "Sonipat", "clf": "Nariekta Mahila CLF" },
+  {
+    "district": "Yamunanagar",
+    "block": "Bilaspur",
+    "clf": "Sanjeevani Mahila Cluster Level Federation"
+  },
+  { "district": "Yamunanagar", "block": "Bilaspur", "clf": "Arman" },
+  {
+    "district": "Yamunanagar",
+    "block": "Chhachhrauli",
+    "clf": "Utsaha Cluster Level Federation"
+  },
+  { "district": "Yamunanagar", "block": "Chhachhrauli", "clf": "Umid" },
+  {
+    "district": "Yamunanagar",
+    "block": "Jagadhri",
+    "clf": "Nai Lahar Cluster Mahila Sangthan Nagal"
+  },
+  {
+    "district": "Yamunanagar",
+    "block": "Jagadhri",
+    "clf": "Sadbhawana Mahila Cluster Federation"
+  },
+  {
+    "district": "Yamunanagar",
+    "block": "Partapnagar",
+    "clf": "Unnati Mahila Cluster Sangathan"
+  },
+  { "district": "Yamunanagar", "block": "Radaur", "clf": "Hamari Aawaj" },
+  {
+    "district": "Yamunanagar",
+    "block": "Radaur",
+    "clf": "Badhte Kadam Mahila Cluster Mahasangh"
+  },
+  {
+    "district": "Yamunanagar",
+    "block": "Sadaura-Part",
+    "clf": "Sadhaura Mahila Cluster Sangthan"
+  },
+  {
+    "district": "Yamunanagar",
+    "block": "Saraswati Nagar",
+    "clf": "Nav Nirman CLF"
+  }
+]
