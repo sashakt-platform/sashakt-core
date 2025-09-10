@@ -4465,3 +4465,87 @@ def test_get_list_of_entities_test_public(
 
     expected_ids = {entity_A.id, entity_B.id, entity_C.id, entity_D.id}
     assert expected_ids.issubset(returned_ids)
+
+
+def test_get_public_test_empty_profile_list(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+
+    db.add_all([entity_A, entity_B])
+    db.commit()
+
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+    db.refresh(test_district)
+
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    profile_list = data["profile_list"]
+    assert profile_list == []
