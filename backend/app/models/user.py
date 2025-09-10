@@ -9,6 +9,8 @@ from app.core.timezone import get_timezone_aware_now
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
+        Entity,
+        EntityType,
         Organization,
         QuestionRevision,
         Role,
@@ -102,6 +104,8 @@ class User(UserBase, table=True):
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
     tags: list["Tag"] = Relationship(back_populates="created_by")
+    entity_types: list["EntityType"] = Relationship(back_populates="created_by")
+    entities: list["Entity"] = Relationship(back_populates="created_by")
     organization: "Organization" = Relationship(back_populates="users")
     role: "Role" = Relationship(back_populates="users")
     created_by: "User" = Relationship(

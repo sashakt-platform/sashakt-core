@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
@@ -19,13 +19,12 @@ class MarksLevelEnum(str, enum.Enum):
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
-        District,
         QuestionRevision,
-        State,
         Tag,
         TagPublic,
         User,
     )
+    from app.models.location import Block, District, State
 
 
 class TagRandomCreate(TypedDict):
@@ -184,6 +183,12 @@ class TestBase(SQLModel):
         sa_type=JSON,
         description="Scoring rules for this test",
     )
+    candidate_profile: bool = Field(
+        default=False,
+        title="Candidate Profile",
+        description="Field to set whether candidate profile is to be filled before the test or not.",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):
@@ -267,8 +272,17 @@ class TestUpdate(TestBase):
     random_tag_count: list[TagRandomCreate] | None = None
 
 
+class EntityPublicLimited(SQLModel):
+    id: int
+    name: str
+    state: Union["State", None] = None
+    district: Union["District", None] = None
+    block: Union["Block", None] = None
+
+
 class TestPublicLimited(TestBase):
     """Limited public information for test landing page"""
 
     id: int
     total_questions: int
+    profile_list: list["EntityPublicLimited"] | None = None

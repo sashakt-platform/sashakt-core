@@ -25,7 +25,7 @@ router = APIRouter(
     "/",
     response_model=RolesPublic,
 )
-def read_roles(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
+def read_roles(session: SessionDep, skip: int = 0, limit: int = 150) -> Any:
     """
     Retrieve roles.
     """

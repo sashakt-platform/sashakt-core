@@ -14,6 +14,8 @@ from app.models import (
     CandidateTestAnswer,
     Country,
     District,
+    Entity,
+    EntityType,
     Organization,
     Permission,
     Question,
@@ -45,6 +47,10 @@ def db() -> Generator[Session, None, None]:
             statement = delete(RolePermission)
             session.execute(statement)
             statement = delete(Permission)
+            session.execute(statement)
+            statement = delete(Entity)
+            session.execute(statement)
+            statement = delete(EntityType)
             session.execute(statement)
             statement = delete(QuestionTag)
             session.execute(statement)

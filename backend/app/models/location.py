@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
-from app.models.test import Test, TestDistrict, TestState
+from app.models.test import Test, TestDistrict, TestPublicLimited, TestState
 from app.models.user import User, UserState
 
 if TYPE_CHECKING:
@@ -170,3 +170,6 @@ class BlockUpdate(BlockBase):
 
 
 # -----Models for Block-----
+
+# -----Rebuild models to resolve circular imports-----
+TestPublicLimited.model_rebuild()
