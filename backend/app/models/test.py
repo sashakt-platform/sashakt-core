@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
@@ -19,13 +19,12 @@ class MarksLevelEnum(str, enum.Enum):
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
-        District,
         QuestionRevision,
-        State,
         Tag,
         TagPublic,
         User,
     )
+    from app.models.location import Block, District, State
 
 
 class TagRandomCreate(TypedDict):
@@ -276,6 +275,9 @@ class TestUpdate(TestBase):
 class EntityPublicLimited(SQLModel):
     id: int
     name: str
+    state: Union["State", None] = None
+    district: Union["District", None] = None
+    block: Union["Block", None] = None
 
 
 class TestPublicLimited(TestBase):

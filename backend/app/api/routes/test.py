@@ -8,6 +8,7 @@ from sqlmodel import col, exists, func, select
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
+    Block,
     Message,
     QuestionRevision,
     State,
@@ -85,20 +86,31 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         raise HTTPException(status_code=400, detail="Test has already ended")
     profile_list: list[EntityPublicLimited] = []
     if test.candidate_profile:
-        test_state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
-        test_district_ids = select(TestDistrict.district_id).where(
+        state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
+        district_ids = select(TestDistrict.district_id).where(
             TestDistrict.test_id == test.id
         )
-        profile_query = select(Entity.id, Entity.name).where(
-            (col(Entity.state_id).in_(test_state_ids))
-            | (col(Entity.district_id).in_(test_district_ids))
-        )
-        profile_list_raw = session.exec(profile_query).all()
+
+        entities = session.exec(
+            select(Entity).where(
+                (col(Entity.state_id).in_(state_ids))
+                | (col(Entity.district_id).in_(district_ids))
+            )
+        ).all()
+
         profile_list = [
-            EntityPublicLimited(id=entity_id, name=entity_name)
-            for entity_id, entity_name in profile_list_raw
-            if entity_id is not None
+            EntityPublicLimited(
+                id=entity.id,
+                name=entity.name,
+                state=session.get(State, entity.state_id) if entity.state_id else None,
+                district=session.get(District, entity.district_id)
+                if entity.district_id
+                else None,
+                block=session.get(Block, entity.block_id) if entity.block_id else None,
+            )
+            for entity in entities
         ]
+
     if (
         test.random_questions
         and test.no_of_random_questions is not None
