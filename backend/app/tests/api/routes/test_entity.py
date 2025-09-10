@@ -2,8 +2,10 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
 from app.core.config import settings
+from app.models.candidate import Candidate, CandidateTest
 from app.models.entity import Entity, EntityType
 from app.models.location import Block, Country, District, State
+from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import assert_paginated_response, random_lower_string
@@ -1197,6 +1199,79 @@ def test_delete_entity_by_id(
     response_data = response.json()
     assert response.status_code == 404
     assert response_data["detail"] == "Entity not found"
+
+
+def test_delete_linked_entity_should_fail(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "test_id": test.id,
+        "device_info": "example",
+        "candidate_profile": {"entity_id": entity.id},
+    }
+
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    data = response.json()
+    assert response.status_code == 200
+    assert "candidate_uuid" in data
+    assert "candidate_test_id" in data
+
+    candidate_test_id = data["candidate_test_id"]
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.test_id == test.id
+    assert candidate_test.device == "example"
+    assert candidate_test.consent is True
+
+    candidate = db.get(Candidate, candidate_test.candidate_id)
+    assert candidate is not None
+    assert candidate.identity is not None
+    assert candidate.user_id is None
+    response = client.delete(
+        f"{settings.API_V1_STR}/entity/{entity.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 400
+    assert "Cannot delete " in response_data["detail"]
 
 
 def test_delete_entity_not_found(

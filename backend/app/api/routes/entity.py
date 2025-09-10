@@ -16,6 +16,7 @@ from app.models import (
     EntityUpdate,
     Message,
 )
+from app.models.candidate import CandidateTestProfile
 from app.models.location import Block, District, State
 
 router_entitytype = APIRouter(
@@ -345,6 +346,15 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
     entity = session.get(Entity, entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
+
+    attempted_entity_exists = session.exec(
+        select(CandidateTestProfile).where(CandidateTestProfile.entity_id == entity.id)
+    ).first()
+    if attempted_entity_exists:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete entity because it is referenced in Candidate Profile",
+        )
 
     session.delete(entity)
     session.commit()
