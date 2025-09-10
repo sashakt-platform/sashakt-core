@@ -1,8 +1,8 @@
-"""create entity and entity type table
+"""created entity and entity type table
 
-Revision ID: 1d87b90c988a
-Revises: db0ce83e0de2
-Create Date: 2025-09-08 16:59:33.200050
+Revision ID: 449d29a9e71d
+Revises: fe4b0aece325
+Create Date: 2025-09-10 22:56:13.151627
 
 """
 from alembic import op
@@ -11,8 +11,8 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '1d87b90c988a'
-down_revision = 'db0ce83e0de2'
+revision = '449d29a9e71d'
+down_revision = 'fe4b0aece325'
 branch_labels = None
 depends_on = None
 
