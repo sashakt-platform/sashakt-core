@@ -15,7 +15,7 @@ def init() -> None:
         with open("app/core/haryana-blocks-create.json") as f:
             data = json.load(f)
 
-        created_blocks = []
+        created_blocks: list[Block] = []
 
         for district_name, block_list in data.items():
             # get district (already exists in DB)
@@ -43,6 +43,9 @@ def init() -> None:
                     session.add(block)
                     session.commit()
                     session.refresh(block)
+                    created_blocks.append(
+                        {"district": district.name, "block": block_name}
+                    )
 
             session.commit()
 
