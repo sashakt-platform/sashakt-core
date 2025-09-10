@@ -157,6 +157,9 @@ def create_entity(
                 func.lower(func.trim(Entity.name))
                 == entity_create.name.strip().lower(),
                 Entity.entity_type_id == entity_type_id,
+                Entity.state_id == entity_create.state_id,
+                Entity.district_id == entity_create.district_id,
+                Entity.block_id == entity_create.block_id,
             )
         )
     ).first()

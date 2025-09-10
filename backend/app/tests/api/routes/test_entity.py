@@ -683,6 +683,102 @@ def test_prevent_duplicate_entity_creation(
     assert "already exists" in response.json()["detail"]
 
 
+def test_prevent_duplicate_entity_creation_with_location(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    entitytype = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(entitytype)
+    db.commit()
+    db.refresh(entitytype)
+
+    entitytype2 = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(entitytype2)
+    db.commit()
+    db.refresh(entitytype2)
+
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    state = State(name=random_lower_string(), country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    name = random_lower_string()
+    data = {
+        "name": name,
+        "description": random_lower_string(),
+        "entity_type_id": entitytype.id,
+        "state_id": state.id,
+        "district_id": district.id,
+        "block_id": block.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/entity/",
+        json=data,
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["name"] == data["name"]
+    assert response_data["entity_type"]["id"] == entitytype.id
+
+    response1 = client.post(
+        f"{settings.API_V1_STR}/entity/", json=data, headers=get_user_superadmin_token
+    )
+    assert response1.status_code == 400
+    assert "already exists" in response1.json()["detail"]
+
+    data2 = {
+        "name": name,
+        "entity_type_id": entitytype2.id,
+        "state_id": state.id,
+        "district_id": district.id,
+        "block_id": block.id,
+    }
+    response2 = client.post(
+        f"{settings.API_V1_STR}/entity/",
+        json=data2,
+        headers=get_user_superadmin_token,
+    )
+    response_data2 = response2.json()
+    assert response2.status_code == 200
+    assert response_data2["name"] == data2["name"]
+    assert response_data2["entity_type"]["id"] == entitytype2.id
+
+    response3 = client.post(
+        f"{settings.API_V1_STR}/entity/", json=data2, headers=get_user_superadmin_token
+    )
+    assert response3.status_code == 400
+    assert "already exists" in response3.json()["detail"]
+
+
 def test_get_entities_base_case(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
