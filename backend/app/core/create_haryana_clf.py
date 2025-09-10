@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Any
 
 from sqlmodel import Session, select
 
@@ -14,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def init() -> None:
+def init() -> Any:
     with Session(engine) as session:
         user = session.exec(
             select(User).where(User.full_name == settings.FIRST_SUPERUSER_FULLNAME)
@@ -31,8 +32,8 @@ def init() -> None:
             clf_entity_type = EntityType(
                 name="CLF",
                 description="Cluster Level Federation",
-                organization_id=organization.id,
-                created_by_id=user.id,
+                organization_id=organization.id if organization else None,
+                created_by_id=user.id if user else None,
             )
             session.add(clf_entity_type)
             session.commit()
@@ -92,7 +93,7 @@ def init() -> None:
                 state_id=state_id,
                 district_id=district.id,
                 block_id=block.id,
-                created_by_id=user.id,
+                created_by_id=user.id if user else None,
             )
             session.add(clf)
             session.commit()
