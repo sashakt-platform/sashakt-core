@@ -1,0 +1,118 @@
+{
+  "Ambala": ["Ambala-1", "Ambala-2", "Barara", "Naraingarh", "Saha"],
+  "Bhiwani": [
+    "Bawani Khera",
+    "Behal",
+    "Bhiwani",
+    "Kairu",
+    "Loharu",
+    "Siwani",
+    "Tosham"
+  ],
+  "Charkhi Dadri": ["Badhra", "Bond", "Charkhi Dadri", "Dadri", "Jhojhu"],
+  "Faridabad": ["Ballabhgarh", "Faridabad", "Tigaon"],
+  "Fatehabad": [
+    "Bhattu",
+    "Bhuna",
+    "Fatehabad",
+    "Jakhal",
+    "Nagpur",
+    "Ratia",
+    "Tohana"
+  ],
+  "Gurgaon": ["Farrukh Nagar", "Pataudi"],
+  "Hisar": [
+    "Adampur",
+    "Agroha",
+    "Barwala",
+    "Hansi-1",
+    "Hansi-2",
+    "Hisar-1",
+    "Hisar-2",
+    "Narnaund",
+    "Uklana"
+  ],
+  "Jhajjar": [
+    "Badli",
+    "Bahadurgarh",
+    "Beri",
+    "Jhajjar",
+    "Matannail",
+    "Salhawas"
+  ],
+  "Jind": ["Alewa", "Jind", "Julana", "Narwana", "Safidon", "Uchana", "Ujhana"],
+  "Kaithal": [
+    "Dhand",
+    "Guhla",
+    "Kaithal",
+    "Kalayat",
+    "Pundri",
+    "Rajound",
+    "Siwan"
+  ],
+  "Karnal": [
+    "Assandh",
+    "Chirao",
+    "Gharaunda",
+    "Indri",
+    "Karnal",
+    "Kunjpura",
+    "Munak",
+    "Nilokheri",
+    "Nissing"
+  ],
+  "Kurukshetra": [
+    "Babain",
+    "Ismailabad",
+    "Ladwa",
+    "Pipli",
+    "Shahbad",
+    "Thanesar"
+  ],
+  "Mahendragarh": [
+    "Ateli",
+    "Ateli Nangal",
+    "Nangle Choudhary",
+    "Narnaul",
+    "Sihma"
+  ],
+  "Mewat": [
+    "Ferozepur Jhirka",
+    "Indri",
+    "Nagina",
+    "Nuh",
+    "Pingwan",
+    "Punhana",
+    "Tauru"
+  ],
+  "Palwal": ["Badoli", "Hathin", "Hodal", "Palwal", "Prithala"],
+  "Panchkula": ["Barwala", "Morni", "Pinjore", "Raipurrani"],
+  "Panipat": [
+    "Bapoli",
+    "Israna",
+    "Madlauda",
+    "Panipat",
+    "Samalkha",
+    "Sanoli Khurd"
+  ],
+  "Rewari": ["Bawal", "Dharuhera", "Jatushana", "Nahar", "Rewari"],
+  "Rohtak": ["Kalanaur", "Lakhan Majra", "Maham", "Rohtak", "Sampla"],
+  "Sirsa": [
+    "Dabwali Block",
+    "Ellenabad",
+    "Nathusari Chopta",
+    "Odhan",
+    "Rania",
+    "Sirsa"
+  ],
+  "Sonipat": ["Ganaur", "Muruthal", "Rai", "Sonipat"],
+  "Yamunanagar": [
+    "Bilaspur",
+    "Chhachhrauli",
+    "Jagadhri",
+    "Partapnagar",
+    "Radaur",
+    "Sadaura-Part",
+    "Saraswati Nagar"
+  ]
+}
