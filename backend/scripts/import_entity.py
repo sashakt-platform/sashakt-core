@@ -125,9 +125,6 @@ def import_entities_from_csv(csv_file_path: str) -> None:
                             entity_name,
                             entity_type_name,
                             organization_name,
-                            block_name,
-                            district_name,
-                            state_name,
                         ]
                     ):
                         error_msg = "Empty values in row"
@@ -230,7 +227,7 @@ def import_entities_from_csv(csv_file_path: str) -> None:
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: python import_entities.py <csv_file_path>")
+        print("Usage: python import_entity.py <csv_file_path>")
         print("\nCSV format expected:")
         print(
             "entity_name,entity_type_name,organization_name,block_name,district_name,state_name"
