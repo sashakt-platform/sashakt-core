@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page, paginate
 from sqlmodel import col, exists, func, select
 
@@ -23,11 +23,23 @@ from app.models import (
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.location import District
 from app.models.tag import Tag
-from app.models.test import MarksLevelEnum, TestDistrict
+from app.models.test import DeleteTest, MarksLevelEnum, TestDistrict
 from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
+
+
+def check_linked_question(session: SessionDep, test_id: int) -> bool:
+    query = select(
+        exists().where(
+            col(CandidateTestAnswer.candidate_test_id).in_(
+                select(CandidateTest.id).where(CandidateTest.test_id == test_id)
+            )
+        )
+    )
+    result = session.scalar(query)
+    return bool(result)
 
 
 def validate_test_time_config(
@@ -722,6 +734,67 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     session.commit()
 
     return Message(message="Test deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteTest,
+    dependencies=[Depends(permission_dependency("delete_test"))],
+)
+def bulk_delete_question(
+    session: SessionDep, test_ids: list[int] = Body(...)
+) -> DeleteTest:
+    """bulk delete test"""
+    success_count = 0
+    failure_list: list[TestPublic] = []
+
+    db_test = session.exec(select(Test).where(col(Test.id).in_(test_ids))).all()
+
+    found_ids = {q.id for q in db_test}
+    missing_ids = set(test_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail=f"Test IDs not found in DB: {missing_ids}"
+        )
+
+    for test in db_test:
+        if test.id is not None and check_linked_question(session, test.id):
+            tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+            tags = session.exec(tags_query).all()
+            question_revision_query = (
+                select(QuestionRevision)
+                .join(TestQuestion)
+                .where(TestQuestion.test_id == test.id)
+            )
+            question_revisions = session.exec(question_revision_query).all()
+            state_query = (
+                select(State).join(TestState).where(TestState.test_id == test.id)
+            )
+            states = session.exec(state_query).all()
+            district_query = (
+                select(District)
+                .join(TestDistrict)
+                .where(TestDistrict.test_id == test.id)
+            )
+            districts = session.exec(district_query).all()
+            if test:
+                failure_list.append(
+                    TestPublic(
+                        **test.model_dump(),
+                        tags=tags,
+                        question_revisions=question_revisions,
+                        states=states,
+                        districts=districts,
+                    )
+                )
+        else:
+            session.delete(test)
+            success_count += 1
+
+    session.commit()
+    return DeleteTest(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 @router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)

@@ -2121,6 +2121,63 @@ def test_delete_test(
     assert "id" not in data
 
 
+def test_bulk_delete_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        no_of_random_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    test2 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        no_of_random_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test2)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test.id, test2.id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None or len(data["delete_failure_list"]) == 0
+
+
 def test_get_public_test_info(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -4237,6 +4294,141 @@ def test_delete_test_with_attempted_candidate_should_fail(
         f"{settings.API_V1_STR}/test/{test_id2}",
         headers=get_user_superadmin_token,
     )
+
+    assert response.status_code == 200
+
+
+def test_bulk_delete_test_with_attempted_candidate_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+        is_mandatory=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+        "tag_ids": [tag.id],
+        "state_ids": [state.id],
+        "district_ids": [district.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test_id,
+        candidate_id=candidate.id,
+        device="device 1",
+        consent=True,
+        start_time="2025-01-01T10:00:00Z",
+        is_submitted=True,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response=[2],
+            visited=True,
+            time_spent=15,
+        )
+    )
+    db.commit()
+
+    test_payload1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload1,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    test_id2 = response.json()["id"]
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test_id, test_id2],
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert data["delete_success_count"] == 1
+    assert len(data["delete_failure_list"]) == 1
 
     assert response.status_code == 200
 

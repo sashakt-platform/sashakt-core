@@ -241,6 +241,11 @@ class TestUpdate(TestBase):
     district_ids: list[int] = []
 
 
+class DeleteTest(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TestPublic] | None = None
+
+
 class TestPublicLimited(TestBase):
     """Limited public information for test landing page"""
 
