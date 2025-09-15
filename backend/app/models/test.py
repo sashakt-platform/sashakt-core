@@ -1,10 +1,10 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import Self
+from typing_extensions import Self, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
@@ -17,8 +17,24 @@ class MarksLevelEnum(str, enum.Enum):
 
 
 if TYPE_CHECKING:
-    from app.models import Candidate, District, QuestionRevision, State, User
-    from app.models.tag import Tag
+    from app.models import (
+        Candidate,
+        QuestionRevision,
+        Tag,
+        TagPublic,
+        User,
+    )
+    from app.models.location import Block, District, State
+
+
+class TagRandomCreate(TypedDict):
+    tag_id: int
+    count: int
+
+
+class TagRandomPublic(SQLModel):
+    tag: "TagPublic"
+    count: int
 
 
 class TestTag(SQLModel, table=True):
@@ -167,6 +183,12 @@ class TestBase(SQLModel):
         sa_type=JSON,
         description="Scoring rules for this test",
     )
+    candidate_profile: bool = Field(
+        default=False,
+        title="Candidate Profile",
+        description="Field to set whether candidate profile is to be filled before the test or not.",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):
@@ -202,6 +224,12 @@ class Test(TestBase, table=True):
         title="User ID",
         description="ID of the user who created the test.",
     )
+    random_tag_count: list[TagRandomCreate] | None = Field(
+        sa_type=JSON,
+        default=None,
+        title="Tag-based Randomization Configuration",
+        description="Specifies how many random questions to select for each tag. Each item includes a tag ID and the count of random questions to select from that tag.",
+    )
 
 
 class TestCreate(TestBase):
@@ -209,6 +237,7 @@ class TestCreate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
+    random_tag_count: list[TagRandomCreate] | None = None
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -227,6 +256,7 @@ class TestPublic(TestBase):
     states: list["State"]
     districts: list["District"]
     total_questions: int | None = None
+    random_tag_counts: list[TagRandomPublic] | None = None
     created_by_id: int = Field(
         foreign_key="user.id",
         title="User ID",
@@ -239,6 +269,15 @@ class TestUpdate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
+    random_tag_count: list[TagRandomCreate] | None = None
+
+
+class EntityPublicLimited(SQLModel):
+    id: int
+    name: str
+    state: Union["State", None] = None
+    district: Union["District", None] = None
+    block: Union["Block", None] = None
 
 
 class DeleteTest(SQLModel):
@@ -251,3 +290,4 @@ class TestPublicLimited(TestBase):
 
     id: int
     total_questions: int
+    profile_list: list["EntityPublicLimited"] | None = None

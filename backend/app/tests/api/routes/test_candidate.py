@@ -18,8 +18,10 @@ from app.models import (
     Test,
     TestCandidatePublic,
 )
+from app.models.candidate import CandidateTestProfile
+from app.models.entity import Entity, EntityType
 from app.models.location import Country, District, State
-from app.models.question import QuestionType
+from app.models.question import QuestionTag, QuestionType
 from app.models.tag import Tag, TagType
 from app.models.test import TestDistrict, TestQuestion, TestState, TestTag
 from app.tests.utils.organization import create_random_organization
@@ -1207,6 +1209,83 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
     # Verify end_time is None initially (will be set when test is submitted)
     assert candidate_test.end_time is None
     assert candidate_test.is_submitted is False
+
+
+def test_start_test_for_candidate_with_entity(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test the start_test endpoint with entity_id inside candidate_profile."""
+
+    user = create_random_user(db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "test_id": test.id,
+        "device_info": "example",
+        "candidate_profile": {"entity_id": entity.id},
+    }
+
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    data = response.json()
+    assert response.status_code == 200
+    assert "candidate_uuid" in data
+    assert "candidate_test_id" in data
+
+    candidate_test_id = data["candidate_test_id"]
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.test_id == test.id
+    assert candidate_test.device == "example"
+    assert candidate_test.consent is True
+
+    candidate = db.get(Candidate, candidate_test.candidate_id)
+    assert candidate is not None
+    assert candidate.identity is not None
+    assert candidate.user_id is None
+
+    candidate_test_profile = db.exec(
+        select(CandidateTestProfile).where(
+            CandidateTestProfile.candidate_test_id == candidate_test_id
+        )
+    ).first()
+
+    assert candidate_test_profile is not None
+    assert candidate_test_profile.entity_id == entity.id
+    assert candidate_test_profile.candidate_test_id == candidate_test_id
 
 
 def test_start_test_inactive_test(client: TestClient, db: SessionDep) -> None:
@@ -4549,6 +4628,905 @@ def test_candidate_test_question_ids_are_random(
     assert returned_ids_2 == stored_ids_2
     assert stored_ids != stored_ids_2
     assert len(stored_ids) == len(stored_ids_2)
+
+
+def test_candidate_test_question_ids_tag_randomize(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag1)
+    db.commit()
+    db.refresh(tag1)
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag2)
+    db.commit()
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 2},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_question_ids = []
+    questions_tags = [(tag1.id, 2), (tag2.id, 2)]
+    for tag_id, count in questions_tags:
+        for i in range(count):
+            question = Question(
+                created_by_id=user.id,
+                organization_id=user.organization_id,
+                is_active=True,
+                is_deleted=False,
+            )
+            db.add(question)
+            db.commit()
+            db.refresh(question)
+
+            qrev = QuestionRevision(
+                question_text=f"Q_{tag_id}_{i}",
+                created_by_id=user.id,
+                question_id=question.id,
+                question_type="single_choice",
+                options=[{"id": 1, "key": "A", "value": "Option"}],
+                correct_answer=[1],
+            )
+            db.add(qrev)
+            db.commit()
+            db.refresh(qrev)
+            all_question_ids.append(qrev.id)
+
+            tq = TestQuestion(test_id=test.id, question_revision_id=qrev.id)
+            db.add(tq)
+
+            qt = QuestionTag(question_id=question.id, tag_id=tag_id)
+            db.add(qt)
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
+    ).first()
+    assert candidate_test is not None
+    stored_ids = candidate_test.question_revision_ids
+    assert len(stored_ids) == 4
+    assert set(stored_ids).issubset(set(all_question_ids))
+
+
+def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+    tag_a = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    tag_b = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag_a, tag_b])
+    db.commit()
+    db.refresh(tag_a)
+    db.refresh(tag_b)
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[
+            {"tag_id": tag_a.id, "count": 6},
+            {"tag_id": tag_b.id, "count": 3},
+        ],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_qr_ids = []
+    for i in range(5):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+        qrev = QuestionRevision(
+            question_text=f"Q_tagA_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag_a.id))
+
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tagB_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag_b.id))
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert response_1.status_code == 200
+    data_1 = response_1.json()
+    candidate_test_1 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data_1["candidate_test_id"])
+    ).first()
+    assert candidate_test_1 is not None
+    stored_ids_1 = candidate_test_1.question_revision_ids
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert response_2.status_code == 200
+    data_2 = response_2.json()
+    candidate_test_2 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data_2["candidate_test_id"])
+    ).first()
+    assert candidate_test_2 is not None
+    stored_ids_2 = candidate_test_2.question_revision_ids
+    assert set(stored_ids_1).issubset(set(all_qr_ids))
+    assert set(stored_ids_2).issubset(set(all_qr_ids))
+    assert len(stored_ids_1) == 8
+    assert len(stored_ids_2) == 8
+    assert len(stored_ids_1) == len(set(stored_ids_1))
+    assert len(stored_ids_2) == len(set(stored_ids_2))
+    assert stored_ids_1 != stored_ids_2
+
+
+def test_candidate_tag_random_count_update(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[{"tag_id": tag.id, "count": 2}],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_qr_ids = []
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag.id))
+
+    db.commit()
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 120,
+        "marks": 100,
+        "shuffle": True,
+        "random_tag_count": [{"tag_id": tag.id, "count": 4}],
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
+    ).first()
+    assert candidate_test is not None
+
+    stored_ids = candidate_test.question_revision_ids
+    assert set(stored_ids).issubset(set(all_qr_ids))
+    assert len(stored_ids) == 4
+    assert len(stored_ids) == len(set(stored_ids))
+
+
+def test_candidate_question_ids_random_and_tag_combined_two_candidates(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag_a = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    tag_b = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag_a, tag_b])
+    db.commit()
+    db.refresh(tag_a)
+    db.refresh(tag_b)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[
+            {"tag_id": tag_a.id, "count": 6},
+            {"tag_id": tag_b.id, "count": 3},
+        ],
+        no_of_random_questions=2,
+        random_questions=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_qr_ids = []
+
+    for i in range(5):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tagA_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag_a.id))
+
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tagB_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag_b.id))
+
+    for i in range(4):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_extra_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+
+        db.add(TestQuestion(test_id=test.id, question_revision_id=qrev.id))
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+
+    # Candidate 1
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert response_1.status_code == 200
+    data_1 = response_1.json()
+    candidate_test_1 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data_1["candidate_test_id"])
+    ).first()
+    assert candidate_test_1 is not None
+    stored_ids_1 = candidate_test_1.question_revision_ids
+
+    # Candidate 2
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert response_2.status_code == 200
+    data_2 = response_2.json()
+    candidate_test_2 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data_2["candidate_test_id"])
+    ).first()
+    assert candidate_test_2 is not None
+    stored_ids_2 = candidate_test_2.question_revision_ids
+
+    assert set(stored_ids_1).issubset(set(all_qr_ids))
+    assert set(stored_ids_2).issubset(set(all_qr_ids))
+    assert len(stored_ids_1) == 10
+    assert len(stored_ids_2) == 10
+    assert len(stored_ids_1) == len(set(stored_ids_1))
+    assert len(stored_ids_2) == len(set(stored_ids_2))
+    assert stored_ids_1 != stored_ids_2
+
+
+def test_candidate_question_ids_random_tag_with_all_test_questions(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag_a = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    tag_b = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag_a, tag_b])
+    db.commit()
+    db.refresh(tag_a)
+    db.refresh(tag_b)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[
+            {"tag_id": tag_b.id, "count": 3},
+        ],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_qr_ids = []
+
+    for i in range(5):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tagA_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag_a.id))
+
+    for i in range(10):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tagB_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+        question.last_revision_id = qrev.id
+        db.commit()
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag_b.id))
+
+    for i in range(4):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_extra_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        all_qr_ids.append(qrev.id)
+
+        db.add(TestQuestion(test_id=test.id, question_revision_id=qrev.id))
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+
+    # Candidate 1
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert response_1.status_code == 200
+    data_1 = response_1.json()
+    candidate_test_1 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data_1["candidate_test_id"])
+    ).first()
+    assert candidate_test_1 is not None
+    stored_ids_1 = candidate_test_1.question_revision_ids
+
+    # Candidate 2
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert response_2.status_code == 200
+    data_2 = response_2.json()
+    candidate_test_2 = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data_2["candidate_test_id"])
+    ).first()
+    assert candidate_test_2 is not None
+    stored_ids_2 = candidate_test_2.question_revision_ids
+
+    assert set(stored_ids_1).issubset(set(all_qr_ids))
+    assert set(stored_ids_2).issubset(set(all_qr_ids))
+    assert len(stored_ids_1) == 7
+    assert len(stored_ids_2) == 7
+    assert len(stored_ids_1) == len(set(stored_ids_1))
+    assert len(stored_ids_2) == len(set(stored_ids_2))
+    assert stored_ids_1 != stored_ids_2
+
+
+def test_candidate_test_question_ids_tag_randomize_with_dual_tag(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 2},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    all_qr_ids = []
+
+    question_a = Question(
+        created_by_id=user.id,
+        organization_id=organization.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(question_a)
+    db.commit()
+    db.refresh(question_a)
+
+    qrev_a = QuestionRevision(
+        question_text=random_lower_string(),
+        created_by_id=user.id,
+        question_id=question_a.id,
+        question_type="single_choice",
+        options=[{"id": 1, "key": "A", "value": "Option"}],
+        correct_answer=[1],
+    )
+    db.add(qrev_a)
+    db.commit()
+    db.refresh(qrev_a)
+    all_qr_ids.append(qrev_a.id)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qrev_a.id))
+    db.add(QuestionTag(question_id=question_a.id, tag_id=tag1.id))
+
+    question_dual = Question(
+        created_by_id=user.id,
+        organization_id=organization.id,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(question_dual)
+    db.commit()
+    db.refresh(question_dual)
+
+    qrev_dual = QuestionRevision(
+        question_text=random_lower_string(),
+        created_by_id=user.id,
+        question_id=question_dual.id,
+        question_type="single_choice",
+        options=[{"id": 1, "key": "A", "value": "Option"}],
+        correct_answer=[1],
+    )
+    db.add(qrev_dual)
+    db.commit()
+    db.refresh(qrev_dual)
+    all_qr_ids.append(qrev_dual.id)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qrev_dual.id))
+    db.add_all(
+        [
+            QuestionTag(question_id=question_dual.id, tag_id=tag1.id),
+            QuestionTag(question_id=question_dual.id, tag_id=tag2.id),
+        ]
+    )
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
+    ).first()
+    assert candidate_test is not None
+
+    stored_ids = candidate_test.question_revision_ids
+    assert set(stored_ids).issubset(set(all_qr_ids))
+    assert len(stored_ids) == 2
+    assert len(stored_ids) == len(set(stored_ids))
+
+
+def test_random_questions_by_tag_skipping_selected_questions(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 3},
+        ],
+        is_active=True,
+        is_deleted=False,
+    )
+
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    for i in range(3):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tag1_tag2_index_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+
+        db.add(QuestionTag(question_id=question.id, tag_id=tag1.id))
+        db.add(QuestionTag(question_id=question.id, tag_id=tag2.id))
+        question.last_revision_id = qrev.id
+        db.commit()
+        db.refresh(question)
+
+    db.commit()
+
+    question_revision_tag2_only = []
+    for i in range(3):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=organization.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Q_tag2_only_index_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+        question.last_revision_id = qrev.id
+        question_revision_tag2_only.append(qrev.id)
+        db.add(QuestionTag(question_id=question.id, tag_id=tag2.id))
+        db.commit()
+        db.refresh(question)
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test_id = data["candidate_test_id"]
+    candidate_uuid = data["candidate_uuid"]
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert get_response.status_code == 200
+    returned_data = get_response.json()
+    assert len(returned_data["question_revisions"]) == 6
+
+    # Extract the question revisions returned from the API
+    question_revisions = returned_data["question_revisions"]
+    question_revision_ids = [qr["id"] for qr in question_revisions]
+
+    # Verify that all question_revision_tag2_only IDs are in the returned data
+    for qr_id in question_revision_tag2_only:
+        assert qr_id in question_revision_ids, (
+            f"Question revision {qr_id} not found in returned data"
+        )
 
 
 def test_candidate_test_question_ids_in_order(

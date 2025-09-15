@@ -8,6 +8,7 @@ from sqlmodel import col, exists, func, select
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.models import (
+    Block,
     Message,
     QuestionRevision,
     State,
@@ -21,9 +22,17 @@ from app.models import (
     TestUpdate,
 )
 from app.models.candidate import CandidateTest, CandidateTestAnswer
+from app.models.entity import Entity
 from app.models.location import District
-from app.models.tag import Tag
-from app.models.test import DeleteTest, MarksLevelEnum, TestDistrict
+from app.models.tag import Tag, TagPublic
+from app.models.test import (
+    DeleteTest,
+    EntityPublicLimited,
+    MarksLevelEnum,
+    TagRandomCreate,
+    TagRandomPublic,
+    TestDistrict,
+)
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -40,6 +49,20 @@ def check_linked_question(session: SessionDep, test_id: int) -> bool:
     )
     result = session.scalar(query)
     return bool(result)
+
+
+def build_random_tag_public(
+    session: SessionDep,
+    tag_count_mapping: list[TagRandomCreate],
+) -> list[TagRandomPublic]:
+    out: list[TagRandomPublic] = []
+    for tag_count in tag_count_mapping or []:
+        tag = session.get(Tag, tag_count.get("tag_id"))
+        if not tag:
+            continue
+        count = max(int(tag_count.get("count") or 0), 0)
+        out.append(TagRandomPublic(tag=TagPublic.model_validate(tag), count=count))
+    return out
 
 
 def validate_test_time_config(
@@ -74,6 +97,33 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
+    profile_list: list[EntityPublicLimited] = []
+    if test.candidate_profile:
+        state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
+        district_ids = select(TestDistrict.district_id).where(
+            TestDistrict.test_id == test.id
+        )
+
+        entities = session.exec(
+            select(Entity).where(
+                (col(Entity.state_id).in_(state_ids))
+                | (col(Entity.district_id).in_(district_ids))
+            )
+        ).all()
+
+        profile_list = [
+            EntityPublicLimited(
+                id=entity.id,
+                name=entity.name,
+                state=session.get(State, entity.state_id) if entity.state_id else None,
+                district=session.get(District, entity.district_id)
+                if entity.district_id
+                else None,
+                block=session.get(Block, entity.block_id) if entity.block_id else None,
+            )
+            for entity in entities
+        ]
+
     if (
         test.random_questions
         and test.no_of_random_questions is not None
@@ -89,9 +139,13 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         question_revisions = session.exec(question_revision_query).all()
         total_questions = len(question_revisions)
 
+    if test.random_tag_count:
+        total_questions += sum(
+            tag_rule.get("count", 0) for tag_rule in test.random_tag_count
+        )
+
     return TestPublicLimited(
-        **test.model_dump(),
-        total_questions=total_questions,
+        **test.model_dump(), total_questions=total_questions, profile_list=profile_list
     )
 
 
@@ -140,6 +194,9 @@ def create_test(
     session.add(test)
     session.commit()
     session.refresh(test)
+    random_tag_public: list[TagRandomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = build_random_tag_public(session, test.random_tag_count)
 
     if test_create.tag_ids:
         tag_ids = test_create.tag_ids
@@ -205,6 +262,7 @@ def create_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -404,6 +462,9 @@ def get_test(
             select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
         )
         districts = session.exec(districts_query).all()
+        random_tag_public: list[TagRandomPublic] | None = None
+        if test.random_tag_count:
+            random_tag_public = build_random_tag_public(session, test.random_tag_count)
 
         test_public.append(
             TestPublic(
@@ -412,6 +473,7 @@ def get_test(
                 question_revisions=question_revisions,
                 states=states,
                 districts=districts,
+                random_tag_counts=random_tag_public,
             )
         )
 
@@ -444,6 +506,9 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
         select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     )
     districts = session.exec(district_query).all()
+    random_tag_public: list[TagRandomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = build_random_tag_public(session, test.random_tag_count)
 
     return TestPublic(
         **test.model_dump(),
@@ -451,6 +516,7 @@ def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -651,6 +717,9 @@ def update_test(
         select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     )
     districts = session.exec(district_query).all()
+    random_tag_public: list[TagRandomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = build_random_tag_public(session, test.random_tag_count)
 
     return TestPublic(
         **test.model_dump(),
@@ -658,6 +727,7 @@ def update_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -696,6 +766,9 @@ def visibility_test(
         select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     )
     districts = session.exec(district_query).all()
+    random_tag_public: list[TagRandomPublic] | None = None
+    if test.random_tag_count:
+        random_tag_public = build_random_tag_public(session, test.random_tag_count)
 
     return TestPublic(
         **test.model_dump(),
@@ -703,6 +776,7 @@ def visibility_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )
 
 
@@ -884,6 +958,9 @@ def clone_test(
     question_revisions = session.exec(question_revision_query).all()
     state_query = select(State).join(TestState).where(TestState.test_id == new_test.id)
     states = session.exec(state_query).all()
+    random_tag_public: list[TagRandomPublic] | None = None
+    if new_test.random_tag_count:
+        random_tag_public = build_random_tag_public(session, new_test.random_tag_count)
 
     return TestPublic(
         **new_test.model_dump(),
@@ -891,4 +968,5 @@ def clone_test(
         question_revisions=question_revisions,
         states=states,
         districts=districts,
+        random_tag_counts=random_tag_public,
     )

@@ -32,12 +32,14 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
     StartTestResponse,
     TestStatusSummary,
 )
+from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -232,6 +234,40 @@ def start_test_for_candidate(
             question_revision_ids,
             min(test.no_of_random_questions, len(question_revision_ids)),
         )
+
+    if test.random_tag_count:
+        extra_question_ids: set[int] = set()
+
+        for tag_rule in test.random_tag_count:
+            tag_id = tag_rule["tag_id"]
+            count = tag_rule["count"]
+
+            question_ids_for_tag = session.exec(
+                select(Question.last_revision_id)
+                .join(QuestionTag)
+                .where(Question.id == QuestionTag.question_id)
+                .where(QuestionTag.tag_id == tag_id)
+                .where(
+                    not_(
+                        col(Question.last_revision_id).in_(
+                            extra_question_ids | set(question_revision_ids)
+                        )
+                    )
+                )
+            ).all()
+
+            question_revision_ids_for_tag = [
+                rev_id for rev_id in question_ids_for_tag if rev_id is not None
+            ]
+
+            chosen_question_revision_ids = random.sample(
+                question_revision_ids_for_tag,
+                min(len(question_revision_ids_for_tag), count),
+            )
+            extra_question_ids.update(chosen_question_revision_ids)
+
+        question_revision_ids = list(set(question_revision_ids) | extra_question_ids)
+
     if test.shuffle:
         random.shuffle(question_revision_ids)
 
@@ -267,6 +303,16 @@ def start_test_for_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
+    if (
+        start_test_request.candidate_profile
+        and start_test_request.candidate_profile.entity_id
+    ):
+        candidate_test_profile = CandidateTestProfile(
+            candidate_test_id=candidate_test.id,
+            entity_id=start_test_request.candidate_profile.entity_id,
+        )
+        session.add(candidate_test_profile)
+        session.commit()
 
     return StartTestResponse(
         candidate_uuid=candidate.identity,
