@@ -86,17 +86,21 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         raise HTTPException(status_code=400, detail="Test has already ended")
     profile_list: list[EntityPublicLimited] = []
     if test.candidate_profile:
-        state_ids = select(TestState.state_id).where(TestState.test_id == test.id)
-        district_ids = select(TestDistrict.district_id).where(
+        query = select(Entity).where(Entity.is_active.is_(True))
+        district_query = select(TestDistrict.district_id).where(
             TestDistrict.test_id == test.id
         )
+        district_ids = session.exec(district_query).all()
 
-        entities = session.exec(
-            select(Entity).where(
-                (col(Entity.state_id).in_(state_ids))
-                | (col(Entity.district_id).in_(district_ids))
-            )
-        ).all()
+        if district_ids:
+            query = query.where(col(Entity.district_id).in_(district_ids))
+        else:
+            state_query = select(TestState.state_id).where(TestState.test_id == test.id)
+            state_ids = session.exec(state_query).all()
+            if state_ids:
+                query = query.where(col(Entity.state_id).in_(state_ids))
+
+        entities = session.exec(query).all()
 
         profile_list = [
             EntityPublicLimited(
