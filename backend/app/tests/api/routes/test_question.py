@@ -2137,6 +2137,66 @@ def test_bulk_tag_operations(
     assert current_tags[0]["id"] == tags[3].id
 
 
+def test_add_and_delete_question_with_state_link(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    state = State(name=random_lower_string(), country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "state_ids": [state.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    created_q = response.json()
+    question_id = created_q["id"]
+
+    links = db.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question_id)
+    ).all()
+    assert len(links) == 1
+    assert links[0].state_id == state.id
+
+    response = client.delete(f"{settings.API_V1_STR}/questions/{question_id}")
+    data = response.json()
+    assert response.status_code == 200
+    assert "deleted" in data["message"]
+    links_after = db.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question_id)
+    ).all()
+    assert links_after == []
+
+    resp_after = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    assert resp_after.status_code == 404
+
+
 def test_bulk_location_operations(
     client: TestClient,
     db: SessionDep,
