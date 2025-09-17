@@ -4777,6 +4777,9 @@ def test_start_test_skips_inactive_questions(
         db.add(qrev)
         db.commit()
         db.refresh(qrev)
+        question.last_revision_id = qrev.id
+        db.commit()
+        db.refresh(question)
 
         qt = QuestionTag(question_id=question.id, tag_id=tag.id)
         db.add(qt)
