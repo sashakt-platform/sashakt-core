@@ -280,6 +280,11 @@ class EntityPublicLimited(SQLModel):
     block: Union["Block", None] = None
 
 
+class DeleteTest(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TestPublic] | None = None
+
+
 class TestPublicLimited(TestBase):
     """Limited public information for test landing page"""
 
