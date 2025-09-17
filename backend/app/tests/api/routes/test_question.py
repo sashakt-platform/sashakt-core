@@ -2188,6 +2188,13 @@ def test_add_and_delete_question_with_state_link(
     data = response.json()
     assert response.status_code == 200
     assert "deleted" in data["message"]
+    links_after = db.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question_id)
+    ).all()
+    assert links_after == []
+
+    resp_after = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    assert resp_after.status_code == 404
 
 
 def test_bulk_location_operations(
