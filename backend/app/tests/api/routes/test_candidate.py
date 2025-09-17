@@ -4723,6 +4723,79 @@ def test_candidate_test_question_ids_tag_randomize(
     assert set(stored_ids).issubset(set(all_question_ids))
 
 
+def test_start_test_skips_inactive_questions(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    organization = create_random_organization(db)
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        shuffle=True,
+        random_tag_count=[{"tag_id": tag.id, "count": 2}],
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    for i in range(2):
+        question = Question(
+            created_by_id=user.id,
+            organization_id=user.organization_id,
+            is_active=False,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        qrev = QuestionRevision(
+            question_text=f"Inactive Q_{i}",
+            created_by_id=user.id,
+            question_id=question.id,
+            question_type="single_choice",
+            options=[{"id": 1, "key": "A", "value": "Option"}],
+            correct_answer=[1],
+        )
+        db.add(qrev)
+        db.commit()
+        db.refresh(qrev)
+
+        qt = QuestionTag(question_id=question.id, tag_id=tag.id)
+        db.add(qt)
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.exec(
+        select(CandidateTest).where(CandidateTest.id == data["candidate_test_id"])
+    ).first()
+    assert candidate_test is not None
+    stored_ids = candidate_test.question_revision_ids
+    assert stored_ids == [] or len(stored_ids) == 0
+
+
 def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
     client: TestClient, db: SessionDep
 ) -> None:
