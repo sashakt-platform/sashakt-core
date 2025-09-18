@@ -1,0 +1,96 @@
+"""
+Sort field configurations for all models.
+
+This module defines which fields can be sorted for each model and maps
+API field names to actual database columns/relationships.
+"""
+
+from app.models import (
+    Entity,
+    Question,
+    QuestionRevision,
+    Tag,
+    TagType,
+    Test,
+    User,
+)
+from app.models.role import Role
+
+# User sorting configuration
+UserSortConfig = {
+    "full_name": User.full_name,
+    "email": User.email,
+    "phone": User.phone,
+    "created_date": User.created_date,
+    "modified_date": User.modified_date,
+    "is_active": User.is_active,
+    "role_name": Role.name,
+}
+
+
+# Question sorting configuration
+QuestionSortConfig = {
+    "created_date": Question.created_date,
+    "modified_date": Question.modified_date,
+    "is_active": Question.is_active,
+    "question_text": QuestionRevision.question_text,
+}
+
+
+# Test sorting configuration
+TestSortConfig = {
+    "name": Test.name,
+    "created_date": Test.created_date,
+    "modified_date": Test.modified_date,
+    "is_active": Test.is_active,
+}
+
+
+# Tag sorting configuration
+TagSortConfig = {
+    "name": Tag.name,
+    "created_date": Tag.created_date,
+    "modified_date": Tag.modified_date,
+    "is_active": Tag.is_active,
+    "tag_type_name": TagType.name,
+}
+
+
+# TagType sorting configuration
+TagTypeSortConfig = {
+    "name": TagType.name,
+    "created_date": TagType.created_date,
+    "modified_date": TagType.modified_date,
+    "is_active": TagType.is_active,
+}
+
+
+# Entity sorting configuration
+EntitySortConfig = {
+    "name": Entity.name,
+    "description": Entity.description,
+    "created_date": Entity.created_date,
+    "modified_date": Entity.modified_date,
+}
+
+
+# Export all configurations for easy import
+ALL_SORT_CONFIGS = {
+    "User": UserSortConfig,
+    "Question": QuestionSortConfig,
+    "Test": TestSortConfig,
+    "Tag": TagSortConfig,
+    "TagType": TagTypeSortConfig,
+    "Entity": EntitySortConfig,
+}
+
+
+def get_sort_config(model_name: str):
+    """Get sort configuration for a model by name"""
+    return ALL_SORT_CONFIGS.get(model_name)
+
+
+def get_sortable_fields(model_name: str) -> list[str]:
+    """Get list of sortable field names for a model"""
+    config = get_sort_config(model_name)
+    return list(config.keys()) if config else []
