@@ -19,7 +19,7 @@ from app.models import (
 from app.models.role import Role
 
 # User sorting configuration
-UserSortConfig = {
+UserSortConfig: Any = {
     "full_name": User.full_name,
     "email": User.email,
     "phone": User.phone,
@@ -31,7 +31,7 @@ UserSortConfig = {
 
 
 # Question sorting configuration
-QuestionSortConfig = {
+QuestionSortConfig: Any = {
     "created_date": Question.created_date,
     "modified_date": Question.modified_date,
     "is_active": Question.is_active,
@@ -40,7 +40,7 @@ QuestionSortConfig = {
 
 
 # Test sorting configuration
-TestSortConfig = {
+TestSortConfig: Any = {
     "name": Test.name,
     "created_date": Test.created_date,
     "modified_date": Test.modified_date,
@@ -49,7 +49,7 @@ TestSortConfig = {
 
 
 # Tag sorting configuration
-TagSortConfig = {
+TagSortConfig: Any = {
     "name": Tag.name,
     "created_date": Tag.created_date,
     "modified_date": Tag.modified_date,
@@ -59,7 +59,7 @@ TagSortConfig = {
 
 
 # TagType sorting configuration
-TagTypeSortConfig = {
+TagTypeSortConfig: Any = {
     "name": TagType.name,
     "created_date": TagType.created_date,
     "modified_date": TagType.modified_date,
@@ -68,7 +68,7 @@ TagTypeSortConfig = {
 
 
 # Entity sorting configuration
-EntitySortConfig = {
+EntitySortConfig: Any = {
     "name": Entity.name,
     "description": Entity.description,
     "created_date": Entity.created_date,
