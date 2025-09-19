@@ -5,6 +5,8 @@ This module defines which fields can be sorted for each model and maps
 API field names to actual database columns/relationships.
 """
 
+from typing import Any
+
 from app.models import (
     Entity,
     Question,
@@ -85,7 +87,7 @@ ALL_SORT_CONFIGS = {
 }
 
 
-def get_sort_config(model_name: str):
+def get_sort_config(model_name: str) -> Any:
     """Get sort configuration for a model by name"""
     return ALL_SORT_CONFIGS.get(model_name)
 

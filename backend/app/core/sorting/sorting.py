@@ -36,7 +36,7 @@ class SortingParams:
     def apply_to_query(
         self,
         query: Any,
-        sort_config: dict[str, InstrumentedAttribute | Column],
+        sort_config: dict[str, InstrumentedAttribute[Any] | Column[Any]],
     ) -> Any:
         """
         Apply sorting to a SQLModel query based on the sort configuration.
@@ -120,7 +120,7 @@ def validate_sort_field(field_name: str, allowed_fields: list[str]) -> None:
 
 
 def get_sort_column(
-    field_name: str, sort_config: dict[str, InstrumentedAttribute | Column]
-) -> InstrumentedAttribute | Column | None:
+    field_name: str, sort_config: dict[str, InstrumentedAttribute[Any] | Column[Any]]
+) -> InstrumentedAttribute[Any] | Column[Any] | None:
     """Get the database column for a sort field"""
     return sort_config.get(field_name)
