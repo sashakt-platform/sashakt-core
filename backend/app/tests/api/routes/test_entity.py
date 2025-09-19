@@ -973,7 +973,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity name ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?order_by=name",
+        f"{settings.API_V1_STR}/entity/?sort_by=name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -985,7 +985,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity name DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?order_by=-name",
+        f"{settings.API_V1_STR}/entity/?sort_by=name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -996,7 +996,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity_type_name ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?order_by=entity_type_name",
+        f"{settings.API_V1_STR}/entity/?sort_by=entity_type_name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1012,7 +1012,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity_type_name DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?order_by=-entity_type_name",
+        f"{settings.API_V1_STR}/entity/?sort_by=entity_type_name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200

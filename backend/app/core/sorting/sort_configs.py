@@ -9,6 +9,7 @@ from typing import Any
 
 from app.models import (
     Entity,
+    EntityType,
     Question,
     QuestionRevision,
     Tag,
@@ -73,6 +74,7 @@ EntitySortConfig: Any = {
     "description": Entity.description,
     "created_date": Entity.created_date,
     "modified_date": Entity.modified_date,
+    "entity_type_name": EntityType.name,
 }
 
 

@@ -1544,7 +1544,7 @@ def test_read_tag_with_sort(
     expected = ["C++", "Django", "Git", "Python"]
     expected_tagtypes = ["AlphaType", "BetaType", "GammaType"]
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=name",
+        f"{settings.API_V1_STR}/tag/?sort_by=name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1552,7 +1552,7 @@ def test_read_tag_with_sort(
     response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected)
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=-name",
+        f"{settings.API_V1_STR}/tag/?sort_by=name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1560,7 +1560,7 @@ def test_read_tag_with_sort(
     assert response_names == sorted(expected, reverse=True)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name",
+        f"{settings.API_V1_STR}/tag/?sort_by=tag_type_name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1574,7 +1574,7 @@ def test_read_tag_with_sort(
     assert tagtypes == sorted(tagtypes)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=-tag_type_name",
+        f"{settings.API_V1_STR}/tag/?sort_by=tag_type_name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
