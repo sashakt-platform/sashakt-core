@@ -412,7 +412,8 @@ def get_questions(
     # Join QuestionRevision table if needed for search or sorting by question_text
     if question_text is not None or sorting.sort_by == "question_text":
         query = query.join(
-            QuestionRevision, Question.last_revision_id == QuestionRevision.id
+            QuestionRevision,
+            Question.last_revision_id == QuestionRevision.id,  # type: ignore
         )
 
         # apply search filter only if provided
