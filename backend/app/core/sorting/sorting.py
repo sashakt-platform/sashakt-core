@@ -61,12 +61,15 @@ class SortingParams:
                 detail=f"Invalid sort field '{self.sort_by}'. Allowed fields: {allowed_fields}",
             )
 
-        sort_column = sort_config[self.sort_by]
+        sort_field = sort_config[self.sort_by]
 
-        # handle relationship fields that require joins
-        if hasattr(sort_column, "property") and hasattr(sort_column.property, "mapper"):
-            related_model = sort_column.property.mapper.class_
-            query = query.outerjoin(related_model)
+        # handle relationship fields
+        if isinstance(sort_field, tuple):
+            # relationship field format: (relationship, column)
+            relationship, sort_column = sort_field
+            query = query.outerjoin(relationship)
+        else:
+            sort_column = sort_field
 
         # apply sorting
         if self.sort_order == SortOrder.DESC:

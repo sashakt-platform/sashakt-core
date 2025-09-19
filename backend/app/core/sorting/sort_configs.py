@@ -55,7 +55,7 @@ TagSortConfig: Any = {
     "created_date": Tag.created_date,
     "modified_date": Tag.modified_date,
     "is_active": Tag.is_active,
-    "tag_type_name": TagType.name,
+    "tag_type_name": (Tag.tag_type, TagType.name),
 }
 
 
@@ -74,7 +74,7 @@ EntitySortConfig: Any = {
     "description": Entity.description,
     "created_date": Entity.created_date,
     "modified_date": Entity.modified_date,
-    "entity_type_name": EntityType.name,
+    "entity_type_name": (Entity.entity_type, EntityType.name),
 }
 
 
