@@ -3,7 +3,7 @@ import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from fastapi import (
     APIRouter,
@@ -20,6 +20,12 @@ from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
+from app.core.sorting import (
+    QuestionSortConfig,
+    SortingParams,
+    SortOrder,
+    create_sorting_dependency,
+)
 from app.models import (
     CandidateTest,
     Message,
@@ -52,6 +58,10 @@ from app.models.utils import MarkingScheme
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
+# create sorting dependency
+QuestionSorting = create_sorting_dependency(QuestionSortConfig)
+QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
+
 
 def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
@@ -73,13 +83,17 @@ def build_question_response(
     options_dict = None
     if revision.options:
         options_dict = [
-            opt
-            if isinstance(opt, dict)
-            else opt.dict()
-            if hasattr(opt, "dict") and callable(opt.dict)
-            else vars(opt)
-            if hasattr(opt, "__dict__")
-            else opt
+            (
+                opt
+                if isinstance(opt, dict)
+                else (
+                    opt.dict()
+                    if hasattr(opt, "dict") and callable(opt.dict)
+                    else vars(opt)
+                    if hasattr(opt, "__dict__")
+                    else opt
+                )
+            )
             for opt in revision.options
         ]
 
@@ -98,9 +112,11 @@ def build_question_response(
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type=get_tag_type_by_id(session, tag_type_id=tag.tag_type_id)
-                if tag.tag_type_id
-                else None,
+                tag_type=(
+                    get_tag_type_by_id(session, tag_type_id=tag.tag_type_id)
+                    if tag.tag_type_id
+                    else None
+                ),
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -162,13 +178,17 @@ def prepare_for_db(
     options: list[Option] | None = None
     if data.options:
         options = [
-            opt
-            if isinstance(opt, dict)
-            else opt.dict()
-            if hasattr(opt, "dict") and callable(opt.dict)
-            else vars(opt)
-            if hasattr(opt, "__dict__")
-            else opt
+            (
+                opt
+                if isinstance(opt, dict)
+                else (
+                    opt.dict()
+                    if hasattr(opt, "dict") and callable(opt.dict)
+                    else vars(opt)
+                    if hasattr(opt, "__dict__")
+                    else opt
+                )
+            )
             for opt in data.options
         ]
 
@@ -368,6 +388,7 @@ class CandidateTestInfoDict(TypedDict):
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: QuestionSortingDep,
     params: Pagination = Depends(),
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
@@ -379,19 +400,28 @@ def get_questions(
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[QuestionPublic]:
-    """Get all questions with optional filtering."""
+    """
+    Get all questions with optional filtering and sorting.
+    """
     # Start with a basic query
     empty_result = cast(Page[QuestionPublic], paginate([], params))
     query = select(Question).where(
         Question.organization_id == current_user.organization_id
     )
-    if question_text:
-        query = query.join(QuestionRevision).where(
-            Question.last_revision_id == QuestionRevision.id
+
+    # Join QuestionRevision table if needed for search or sorting by question_text
+    if question_text is not None or sorting.sort_by == "question_text":
+        query = query.join(
+            QuestionRevision, Question.last_revision_id == QuestionRevision.id
         )
-        query = query.where(
-            func.lower(QuestionRevision.question_text).contains(question_text.lower())
-        )
+
+        # apply search filter only if provided
+        if question_text:
+            query = query.where(
+                func.lower(QuestionRevision.question_text).contains(
+                    question_text.lower()
+                )
+            )
 
     # Apply filters only if they're provided
     if is_deleted is not None:
@@ -462,8 +492,11 @@ def get_questions(
             else:
                 return empty_result
 
-    # Apply pagination
-    # query = query.offset(skip).limit(limit)
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    query = sorting_with_default.apply_to_query(query, QuestionSortConfig)
 
     # Execute query and get all questions
     questions = session.exec(query).all()
@@ -790,13 +823,17 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     options_dict = None
     if revision.options:
         options_dict = [
-            opt
-            if isinstance(opt, dict)
-            else opt.dict()
-            if hasattr(opt, "dict") and callable(opt.dict)
-            else vars(opt)
-            if hasattr(opt, "__dict__")
-            else opt
+            (
+                opt
+                if isinstance(opt, dict)
+                else (
+                    opt.dict()
+                    if hasattr(opt, "dict") and callable(opt.dict)
+                    else vars(opt)
+                    if hasattr(opt, "__dict__")
+                    else opt
+                )
+            )
             for opt in revision.options
         ]
 
