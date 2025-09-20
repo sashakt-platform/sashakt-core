@@ -5,6 +5,7 @@ from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.permission import PermissionPublic
 
 if TYPE_CHECKING:
     from app.models import (
@@ -137,3 +138,33 @@ class UserPublic(UserBase):
 class UsersPublic(SQLModel):
     data: list[UserPublic]
     count: int
+
+
+class UserPublicMe(SQLModel):
+    id: int
+    created_date: datetime
+    modified_date: datetime
+    is_deleted: bool
+    full_name: str = Field(
+        max_length=255,
+        title="Full Name of the User",
+        description="Enter Full Name of the User",
+    )
+    email: EmailStr = Field(
+        unique=True,
+        index=True,
+        max_length=255,
+        title="Email of the User",
+        description="Enter Email Address",
+    )
+    phone: str = Field(max_length=255)
+    role: "Role" = Field(default=None, description="shows role of the user ")
+    organization_id: int = Field(foreign_key="organization.id")
+    created_by_id: int | None = Field(default=None, foreign_key="user.id")
+    is_active: bool = Field(default=True)
+    permissions: list[PermissionPublic] = Field(
+        default=None, description="shows all permission user has "
+    )
+    states: list["State"] | None = Field(
+        default=None, description="states associated with this user"
+    )
