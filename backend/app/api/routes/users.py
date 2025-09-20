@@ -168,16 +168,17 @@ def read_user_me(
     Get current user.
     """
     role = session.get(Role, current_user.role_id)
-    if not role:
-        raise HTTPException(status_code=400, detail="User has an invalid role")
 
-    permissions = session.exec(
-        select(Permission)
-        .join(RolePermission)
-        .where(RolePermission.permission_id == Permission.id)
-        .where(RolePermission.role_id == role.id)
-    ).all()
-
+    permissions = (
+        session.exec(
+            select(Permission)
+            .join(RolePermission)
+            .where(RolePermission.permission_id == Permission.id)
+            .where(RolePermission.role_id == role.id)
+        ).all()
+        if role
+        else []
+    )
     states = session.exec(
         select(State)
         .join(UserState)
