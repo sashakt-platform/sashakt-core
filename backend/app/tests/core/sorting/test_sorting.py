@@ -20,19 +20,19 @@ TestSortConfig: Any = {
 class TestSortingParams:
     """Test SortingParams class"""
 
-    def test_init_defaults(self):
+    def test_init_defaults(self) -> None:
         """Test SortingParams initialization with defaults"""
         sorting = SortingParams()
         assert sorting.sort_by is None
         assert sorting.sort_order == SortOrder.ASC
 
-    def test_init_with_params(self):
+    def test_init_with_params(self) -> None:
         """Test SortingParams initialization with parameters"""
         sorting = SortingParams(sort_by="name", sort_order=SortOrder.DESC)
         assert sorting.sort_by == "name"
         assert sorting.sort_order == SortOrder.DESC
 
-    def test_is_sorting_requested(self):
+    def test_is_sorting_requested(self) -> None:
         """Test is_sorting_requested method"""
         sorting_none = SortingParams()
         sorting_with_field = SortingParams(sort_by="name")
@@ -40,7 +40,7 @@ class TestSortingParams:
         assert not sorting_none.is_sorting_requested()
         assert sorting_with_field.is_sorting_requested()
 
-    def test_apply_to_query_no_sorting(self):
+    def test_apply_to_query_no_sorting(self) -> None:
         """Test apply_to_query when no sorting is requested"""
         sorting = SortingParams()
         mock_query = "mock_query"
@@ -48,7 +48,7 @@ class TestSortingParams:
         result_query = sorting.apply_to_query(mock_query, TestSortConfig)
         assert result_query == mock_query
 
-    def test_apply_to_query_invalid_field(self):
+    def test_apply_to_query_invalid_field(self) -> None:
         """Test apply_to_query with invalid sort field"""
         sorting = SortingParams(sort_by="invalid_field")
         mock_query = "mock_query"
@@ -63,21 +63,21 @@ class TestSortingParams:
 class TestSortOrder:
     """Test SortOrder enum"""
 
-    def test_enum_values(self):
+    def test_enum_values(self) -> None:
         """Test SortOrder enum values"""
-        assert SortOrder.ASC == "asc"
-        assert SortOrder.DESC == "desc"
+        assert SortOrder.ASC.value == "asc"
+        assert SortOrder.DESC.value == "desc"
 
 
 class TestCreateSortingDependency:
     """Test create_sorting_dependency function"""
 
-    def test_create_dependency_function(self):
+    def test_create_dependency_function(self) -> None:
         """Test that create_sorting_dependency creates a callable function"""
         dependency_func = create_sorting_dependency(TestSortConfig)
         assert callable(dependency_func)
 
-    def test_dependency_with_valid_params(self):
+    def test_dependency_with_valid_params(self) -> None:
         """Test dependency function with valid parameters"""
         dependency_func = create_sorting_dependency(TestSortConfig)
 
@@ -87,7 +87,7 @@ class TestCreateSortingDependency:
         assert result.sort_by == "name"
         assert result.sort_order == SortOrder.ASC
 
-    def test_dependency_with_none_params(self):
+    def test_dependency_with_none_params(self) -> None:
         """Test dependency function with None parameters"""
         dependency_func = create_sorting_dependency(TestSortConfig)
 
