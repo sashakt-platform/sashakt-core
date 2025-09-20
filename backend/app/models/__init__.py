@@ -111,6 +111,7 @@ from .user import (
     User,
     UserCreate,
     UserPublic,
+    UserPublicMe,
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
@@ -218,6 +219,7 @@ __all__ = [
     "QuestionLocationsUpdate",
     "QuestionTagsUpdate",
     "TestDistrict",
+    "UserPublicMe",
     "Entity",
     "EntityBase",
     "EntityCreate",
@@ -234,3 +236,4 @@ __all__ = [
 TestCandidatePublic.model_rebuild()
 TestPublic.model_rebuild()
 UserPublic.model_rebuild()
+UserPublicMe.model_rebuild()
