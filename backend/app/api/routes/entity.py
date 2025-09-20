@@ -1,10 +1,16 @@
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page, paginate
 from sqlmodel import and_, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
+from app.core.sorting import (
+    EntitySortConfig,
+    SortingParams,
+    SortOrder,
+    create_sorting_dependency,
+)
 from app.models import (
     Entity,
     EntityCreate,
@@ -27,6 +33,10 @@ router_entity = APIRouter(
     prefix="/entity",
     tags=["Entity"],
 )
+
+# create sorting dependency
+EntitySorting = create_sorting_dependency(EntitySortConfig)
+EntitySortingDep = Annotated[SortingParams, Depends(EntitySorting)]
 
 
 # Routers for EntityType
@@ -196,14 +206,9 @@ def create_entity(
 def get_entities(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: EntitySortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
-    order_by: list[str] = Query(
-        default=["entity_type_name", "name"],
-        title="Order by",
-        description="Order by fields: entity_type_name, name. Prefix with '-' for descending.",
-        examples=["-name", "entity_type_name"],
-    ),
 ) -> Page[EntityPublic]:
     query = select(Entity)
 
@@ -212,25 +217,9 @@ def get_entities(
             func.trim(func.lower(Entity.name)).like(f"%{name.strip().lower()}%")
         )
 
-    join_entity_type = any("entity_type_name" in field for field in order_by)
-    if join_entity_type:
-        query = query.outerjoin(EntityType)
-
-    ordering = []
-    for field in order_by:
-        desc = field.startswith("-")
-        field_name = field[1:] if desc else field
-        if field_name == "entity_type_name":
-            col = getattr(EntityType, "name", None)
-        else:
-            col = getattr(Entity, field_name, None)
-
-        if col is None:
-            continue
-        ordering.append(col.desc() if desc else col.asc())
-
-    if ordering:
-        query = query.order_by(*ordering)
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none("name", SortOrder.ASC)
+    query = sorting_with_default.apply_to_query(query, EntitySortConfig)
 
     entities = session.exec(query).all()
     entity_public_list = []
