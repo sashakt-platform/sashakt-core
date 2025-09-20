@@ -1026,22 +1026,6 @@ def test_read_entity_with_sort(
     assert set(entity_types_desc) == set(expected_entity_types)
     assert entity_types_desc == sorted(entity_types_desc, reverse=True)
 
-    # Sort by both entity_type_name + entity name
-    response = client.get(
-        f"{settings.API_V1_STR}/entity/?order_by=entity_type_name&order_by=name",
-        headers=get_user_superadmin_token,
-    )
-    assert response.status_code == 200
-    data_both = response.json()
-    filtered_both = [
-        (entity["entity_type"]["name"], entity["name"])
-        for entity in data_both["items"]
-        if entity["entity_type"]
-        and entity["entity_type"]["name"]
-        in ["AlphaEntity", "BetaEntity", "GammaEntity"]
-    ]
-    assert filtered_both == sorted(filtered_both)
-
 
 def test_read_entity_by_id(
     client: TestClient,

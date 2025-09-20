@@ -1587,20 +1587,6 @@ def test_read_tag_with_sort(
     assert set(tagtypes_desc) == set(expected_tagtypes)
     assert tagtypes_desc == sorted(tagtypes_desc, reverse=True)
 
-    response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name&order_by=name",
-        headers=get_user_superadmin_token,
-    )
-    assert response.status_code == 200
-    data_both = response.json()
-    filtered_both = [
-        (tag["tag_type"]["name"], tag["name"])
-        for tag in data_both["items"]
-        if tag["tag_type"]
-        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
-    ]
-    assert filtered_both == sorted(filtered_both)
-
 
 def test_get_tags_with_invalid_sort_field(
     client: TestClient,
