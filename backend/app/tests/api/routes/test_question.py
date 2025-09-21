@@ -1316,25 +1316,20 @@ def test_question_location_operations(
     assert len(response.json()) >= 1
 
 
-def test_delete_question(client: TestClient, db: SessionDep) -> None:
-    # Create organization
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    # Create user
-    user = create_random_user(db)
-    db.refresh(user)
-
+def test_delete_single_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
     # Create question
-    q1 = Question(organization_id=org.id)
+    q1 = Question(organization_id=org_id)
     db.add(q1)
     db.flush()
 
     rev1 = QuestionRevision(
         question_id=q1.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[
@@ -1351,19 +1346,182 @@ def test_delete_question(client: TestClient, db: SessionDep) -> None:
     db.refresh(q1)
 
     # Delete non-existent question
-    response = client.delete(f"{settings.API_V1_STR}/questions/99999")
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/99999",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 404
 
     # Delete question
-    response = client.delete(f"{settings.API_V1_STR}/questions/{q1.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
     assert "deleted" in data["message"]
 
-    # Check that it's no longer accessible via API
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+    )
+    assert response.status_code == 404
+
+
+def test_delete_bulk_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    # Create question
+    q1 = Question(organization_id=org_id)
+    q2 = Question(
+        organization_id=org_id,
+    )
+    db.add(q1)
+    db.add(q2)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev1)
+    db.flush()
+    rev2 = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.add(rev2)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    q2.last_revision_id = rev2.id
+    db.commit()
+    db.refresh(q1)
+    db.refresh(q2)
+    test = Test(
+        name=random_lower_string(),
+        organization_id=org_id,
+        time_limit=60,
+        marks=10,
+        created_by_id=user_id,
+    )
+    db.add(test)
+    db.flush()
+
+    test_question = TestQuestion(test_id=test.id, question_revision_id=rev2.id)
+    db.add(test_question)
+    q2_tag = QuestionTag(
+        question_id=q2.id,
+        tag_id=tag.id,
+    )
+    db.add(q2_tag)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[q1.id, q2.id, 99999],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert "invalid" in response.json()["detail"].lower()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[q1.id, q2.id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 1
+    assert any(f["id"] == q2.id for f in data["delete_failure_list"])
+
+    db.refresh(q2)
+    assert q2.is_active is True
+
     response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}")
     assert response.status_code == 404
+    response = client.get(f"{settings.API_V1_STR}/questions/{q2.id}")
+    assert response.status_code == 200
+
+
+def test_bulk_delete_multiple_tenants(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user_a_id = create_random_user(db, organization_id).id
+    user_b = create_random_user(db)
+
+    question_a = Question(organization_id=organization_id)
+    question_b = Question(organization_id=user_b.organization_id)
+    db.add_all([question_a, question_b])
+    db.flush()
+    rev_a = QuestionRevision(
+        question_id=question_a.id,
+        created_by_id=user_a_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"id": 1, "key": "A", "value": "Option 1"}],
+        correct_answer=[1],
+    )
+    rev_b = QuestionRevision(
+        question_id=question_b.id,
+        created_by_id=user_b.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[{"id": 1, "key": "A", "value": "Option 1"}],
+        correct_answer=[1],
+    )
+    db.add_all([rev_a, rev_b])
+    db.commit()
+    db.refresh(rev_a)
+    db.refresh(rev_b)
+    question_a.last_revision_id = rev_a.id
+    question_b.last_revision_id = rev_b.id
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_a.id, question_b.id],
+        headers=get_user_systemadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 404
+    assert "invalid" in data["detail"].lower()
 
 
 def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> None:
@@ -1469,23 +1627,19 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
 
 
 def test_delete_question_associated_with_test_should_fail(
-    client: TestClient, db: SessionDep
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
 
-    user = create_random_user(db)
-    db.refresh(user)
-
-    q1 = Question(organization_id=org.id)
+    q1 = Question(organization_id=org_id)
     db.add(q1)
     db.flush()
 
     rev1 = QuestionRevision(
         question_id=q1.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
         question_text=random_lower_string(),
         question_type=QuestionType.single_choice,
         options=[{"id": 1, "key": "A", "value": "Option 1"}],
@@ -1499,10 +1653,10 @@ def test_delete_question_associated_with_test_should_fail(
 
     test = Test(
         name=random_lower_string(),
-        organization_id=org.id,
+        organization_id=org_id,
         time_limit=60,
         marks=10,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(test)
     db.flush()
@@ -1511,7 +1665,10 @@ def test_delete_question_associated_with_test_should_fail(
     db.add(test_question)
     db.commit()
 
-    response = client.delete(f"{settings.API_V1_STR}/questions/{q1.id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 400
@@ -2184,7 +2341,10 @@ def test_add_and_delete_question_with_state_link(
     assert len(links) == 1
     assert links[0].state_id == state.id
 
-    response = client.delete(f"{settings.API_V1_STR}/questions/{question_id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert "deleted" in data["message"]
@@ -3692,8 +3852,10 @@ def test_check_question_duplication_if_deleted(
     db.commit()
 
     # Delete the question
-    delete_response = client.delete(
-        f"{settings.API_V1_STR}/questions/{question_id}",
+    delete_response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id],
         headers=get_user_superadmin_token,
     )
     assert delete_response.status_code == 200

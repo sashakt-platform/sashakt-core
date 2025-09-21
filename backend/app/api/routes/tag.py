@@ -1,8 +1,8 @@
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import and_, exists, func, not_, or_, select
+from sqlmodel import and_, col, exists, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -17,6 +17,7 @@ from app.models import (
     TagUpdate,
 )
 from app.models.question import Question, QuestionTag
+from app.models.tag import DeleteTag, DeleteTagtype
 from app.models.test import Test, TestTag
 
 router_tagtype = APIRouter(
@@ -32,6 +33,42 @@ router_tag = APIRouter(
 
 
 # Routers fro Tag-Types
+
+
+def check_linked_tag(session: SessionDep, tagtype_id: int) -> bool:
+    has_active_tags = session.exec(
+        select(Tag).where(
+            Tag.tag_type_id == tagtype_id,
+        )
+    ).first()
+
+    return bool(has_active_tags)
+
+
+def check_linked_question_or_test(session: SessionDep, tag_id: int) -> bool:
+    has_questions = session.exec(
+        select(
+            exists().where(
+                and_(
+                    QuestionTag.tag_id == tag_id,
+                    QuestionTag.question_id == Question.id,
+                    not_(Question.is_deleted),
+                )
+            )
+        )
+    ).one()
+    has_tests = session.exec(
+        select(
+            exists().where(
+                and_(
+                    TestTag.tag_id == tag_id,
+                    TestTag.test_id == Test.id,
+                    not_(Test.is_deleted),
+                )
+            )
+        )
+    ).one()
+    return bool(has_questions) or bool(has_tests)
 
 
 @router_tagtype.post("/", response_model=TagTypePublic)
@@ -116,7 +153,11 @@ def update_tagtype(
     return tagtype
 
 
-@router_tagtype.patch("/{tagtype_id}", response_model=TagTypePublic)
+@router_tagtype.patch(
+    "/{tagtype_id}",
+    response_model=TagTypePublic,
+    dependencies=[Depends(permission_dependency("delete_tag"))],
+)
 def visibility_tagtype(
     tagtype_id: int,
     session: SessionDep,
@@ -138,17 +179,54 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     if not tagtype:
         raise HTTPException(status_code=404, detail="Tag Type not found")
 
-    has_active_tags = session.exec(
-        select(Tag).where(Tag.tag_type_id == tagtype_id, not_(Tag.is_deleted))
-    ).first()
-
-    if has_active_tags:
+    if check_linked_tag(session, tagtype_id):
         raise HTTPException(
             status_code=400, detail="Cannot delete Tag Type as it has associated Tags"
         )
     session.delete(tagtype)
     session.commit()
     return Message(message="Tag Type deleted successfully")
+
+
+@router_tagtype.delete(
+    "/",
+    response_model=DeleteTagtype,
+)
+def bulk_delete_tagtype(
+    session: SessionDep, current_user: CurrentUser, tagtype_ids: list[int] = Body(...)
+) -> DeleteTagtype:
+    """Bulk delete TagTypes that have no associated Tags."""
+    success_count = 0
+    failure_list = []
+    db_tagtype = session.exec(
+        select(TagType)
+        .where(col(TagType.id).in_(tagtype_ids))
+        .where(TagType.organization_id == current_user.organization_id)
+    ).all()
+
+    found_ids = {q.id for q in db_tagtype}
+    missing_ids = set(tagtype_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid TagTypes selected for deletion"
+        )
+
+    for tagtype in db_tagtype:
+        if tagtype.id and check_linked_tag(session, tagtype.id):
+            failure_list.append(
+                TagTypePublic(
+                    **tagtype.model_dump(),
+                )
+            )
+        else:
+            session.delete(tagtype)
+            success_count += 1
+
+    session.commit()
+
+    return DeleteTagtype(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 # Routers for Tags
@@ -351,30 +429,7 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
 
-    has_questions = session.exec(
-        select(
-            exists().where(
-                and_(
-                    QuestionTag.tag_id == tag_id,
-                    QuestionTag.question_id == Question.id,
-                    not_(Question.is_deleted),
-                )
-            )
-        )
-    ).one()
-    has_tests = session.exec(
-        select(
-            exists().where(
-                and_(
-                    TestTag.tag_id == tag_id,
-                    TestTag.test_id == Test.id,
-                    not_(Test.is_deleted),
-                )
-            )
-        )
-    ).one()
-
-    if has_questions or has_tests:
+    if check_linked_question_or_test(session, tag_id):
         raise HTTPException(
             status_code=400,
             detail="Tag is associated with a question or test and cannot be deleted.",
@@ -384,3 +439,44 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
     session.commit()
 
     return Message(message="Tag deleted successfully")
+
+
+@router_tag.delete(
+    "/",
+    response_model=DeleteTag,
+    dependencies=[Depends(permission_dependency("delete_tag"))],
+)
+def bulk_delete_tag(
+    session: SessionDep, current_user: CurrentUser, tag_ids: list[int] = Body(...)
+) -> DeleteTag:
+    success_count = 0
+    failure_list = []
+    db_tag = session.exec(
+        select(Tag)
+        .where(col(Tag.id).in_(tag_ids))
+        .where(Tag.organization_id == current_user.organization_id)
+    ).all()
+
+    found_ids = {q.id for q in db_tag}
+    missing_ids = set(tag_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Tags selected for deletion"
+        )
+
+    for tag in db_tag:
+        if tag.id and check_linked_question_or_test(session, tag.id):
+            failure_list.append(
+                TagPublic(
+                    **tag.model_dump(),
+                )
+            )
+        else:
+            session.delete(tag)
+            success_count += 1
+
+    session.commit()
+
+    return DeleteTag(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )

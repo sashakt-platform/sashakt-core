@@ -19,10 +19,9 @@ from sqlalchemy import desc, func
 from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, Pagination, SessionDep
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import (
     CandidateTest,
-    Message,
     Organization,
     Question,
     QuestionCreate,
@@ -44,13 +43,26 @@ from app.models import (
 )
 from app.models.question import (
     BulkUploadQuestionsResponse,
+    DeleteQuestion,
     Option,
     QuestionRevisionInfo,
 )
 from app.models.test import TestQuestion
-from app.models.utils import MarkingScheme
+from app.models.utils import MarkingScheme, Message
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
+
+
+def check_linked_test(session: SessionDep, question_id: int) -> bool:
+    query = (
+        select(TestQuestion)
+        .join(QuestionRevision)
+        .where(QuestionRevision.id == TestQuestion.question_revision_id)
+        .where(QuestionRevision.question_id == question_id)
+    )
+    linked_tests = session.exec(query).first()
+
+    return bool(linked_tests)
 
 
 def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
@@ -579,20 +591,16 @@ def get_question_candidate_tests(
     return candidate_test_info_list
 
 
-@router.delete("/{question_id}")
+@router.delete(
+    "/{question_id}", dependencies=[Depends(permission_dependency("delete_question"))]
+)
 def delete_question(question_id: int, session: SessionDep) -> Message:
     """Soft delete a question."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    query = (
-        select(TestQuestion)
-        .join(QuestionRevision)
-        .where(QuestionRevision.id == TestQuestion.question_revision_id)
-        .where(QuestionRevision.question_id == question_id)
-    )
-    linked_tests = session.exec(query).first()
-    if linked_tests:
+
+    if check_linked_test(session, question_id):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete question because it is linked to a test",
@@ -601,6 +609,69 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     session.commit()
 
     return Message(message="Question deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteQuestion,
+    dependencies=[Depends(permission_dependency("delete_question"))],
+)
+def bulk_delete_question(
+    session: SessionDep, current_user: CurrentUser, question_ids: list[int] = Body(...)
+) -> DeleteQuestion:
+    """Soft delete a question."""
+    success_count = 0
+    failure_list = []
+    db_questions = session.exec(
+        select(Question)
+        .where(col(Question.id).in_(question_ids))
+        .where(Question.organization_id == current_user.organization_id)
+    ).all()
+
+    found_ids = {q.id for q in db_questions}
+    missing_ids = set(question_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Questions selected for deletion"
+        )
+
+    for question in db_questions:
+        if question.id is not None and check_linked_test(session, question.id):
+            revision = session.exec(
+                select(QuestionRevision).where(
+                    QuestionRevision.id == question.last_revision_id
+                )
+            ).first()
+
+            locations = session.exec(
+                select(QuestionLocation).where(
+                    QuestionLocation.question_id == question.id
+                )
+            ).all()
+
+            tags = session.exec(
+                select(Tag)
+                .join(QuestionTag)
+                .where(QuestionTag.tag_id == Tag.id)
+                .where(QuestionTag.question_id == question.id)
+            ).all()
+            tags_list: list[Tag] | None = list(tags) if tags else None
+            if revision:
+                failure_list.append(
+                    build_question_response(
+                        session, question, revision, list(locations), tags_list
+                    )
+                )
+        else:
+            session.delete(question)
+            session.commit()
+            success_count += 1
+
+    session.commit()
+
+    return DeleteQuestion(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 @router.get("/{question_id}", response_model=QuestionPublic)
