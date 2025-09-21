@@ -130,10 +130,12 @@ def update_user_me(
     permissions, states = crud.get_user_permission_states(
         session=session, user=current_user
     )
-    return UserPublicMe(
-        **current_user.model_dump(),
-        permissions=permissions,
-        states=states,
+    base = UserPublicMe.model_validate(current_user)
+    return base.model_copy(
+        update={
+            "permissions": permissions,
+            "states": states,
+        }
     )
 
 
@@ -176,10 +178,12 @@ def read_user_me(
     permissions, states = crud.get_user_permission_states(
         session=session, user=current_user
     )
-    return UserPublicMe(
-        **current_user.model_dump(),
-        permissions=permissions,
-        states=states,
+    base = UserPublicMe.model_validate(current_user)
+    return base.model_copy(
+        update={
+            "permissions": permissions,
+            "states": states,
+        }
     )
 
 
