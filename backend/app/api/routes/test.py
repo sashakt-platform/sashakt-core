@@ -817,7 +817,8 @@ def bulk_delete_question(
 
     db_test = session.exec(
         select(Test)
-        .join(User, Test.created_by_id == User.id)
+        .join(User)
+        .where(Test.created_by_id == User.id)
         .where(col(Test.id).in_(test_ids), User.organization_id == current_user_org_id)
     ).all()
 
