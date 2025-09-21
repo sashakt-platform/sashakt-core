@@ -24,8 +24,7 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
-from app.models.permission import Permission
-from app.models.role import Role, RolePermission
+from app.models.role import Role
 from app.models.user import UserPublicMe, UserState
 from app.utils import generate_new_account_email, send_email
 
@@ -107,7 +106,7 @@ def create_user(
 
 @router.patch(
     "/me",
-    response_model=UserPublic,
+    response_model=UserPublicMe,
     dependencies=[Depends(permission_dependency("update_user_me"))],
 )
 def update_user_me(
@@ -128,7 +127,14 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+    permissions, states = crud.get_user_permission_states(
+        session=session, user=current_user
+    )
+    return UserPublicMe(
+        **current_user.model_dump(),
+        permissions=permissions,
+        states=states,
+    )
 
 
 @router.patch(
@@ -167,28 +173,11 @@ def read_user_me(
     """
     Get current user.
     """
-    role = session.get(Role, current_user.role_id)
-
-    permissions = (
-        session.exec(
-            select(Permission)
-            .join(RolePermission)
-            .where(RolePermission.permission_id == Permission.id)
-            .where(RolePermission.role_id == role.id)
-        ).all()
-        if role
-        else []
+    permissions, states = crud.get_user_permission_states(
+        session=session, user=current_user
     )
-    states = session.exec(
-        select(State)
-        .join(UserState)
-        .where(State.id == UserState.state_id)
-        .where(UserState.user_id == current_user.id)
-    ).all()
-
     return UserPublicMe(
         **current_user.model_dump(),
-        role=role,
         permissions=permissions,
         states=states,
     )
