@@ -193,20 +193,22 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     response_model=DeleteTagtype,
 )
 def bulk_delete_tagtype(
-    session: SessionDep, tagtype_ids: list[int] = Body(...)
+    session: SessionDep, current_user: CurrentUser, tagtype_ids: list[int] = Body(...)
 ) -> DeleteTagtype:
     """Bulk delete TagTypes that have no associated Tags."""
     success_count = 0
     failure_list = []
     db_tagtype = session.exec(
-        select(TagType).where(col(TagType.id).in_(tagtype_ids))
+        select(TagType)
+        .where(col(TagType.id).in_(tagtype_ids))
+        .where(TagType.organization_id == current_user.organization_id)
     ).all()
 
     found_ids = {q.id for q in db_tagtype}
     missing_ids = set(tagtype_ids) - found_ids
     if missing_ids:
         raise HTTPException(
-            status_code=404, detail=f"Tagtype IDs not found in DB: {missing_ids}"
+            status_code=404, detail="Invalid TagTypes selected for deletion"
         )
 
     for tagtype in db_tagtype:
@@ -444,16 +446,22 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
     response_model=DeleteTag,
     dependencies=[Depends(permission_dependency("delete_tag"))],
 )
-def bulk_delete_tag(session: SessionDep, tag_ids: list[int] = Body(...)) -> DeleteTag:
+def bulk_delete_tag(
+    session: SessionDep, current_user: CurrentUser, tag_ids: list[int] = Body(...)
+) -> DeleteTag:
     success_count = 0
     failure_list = []
-    db_tag = session.exec(select(Tag).where(col(Tag.id).in_(tag_ids))).all()
+    db_tag = session.exec(
+        select(Tag)
+        .where(col(Tag.id).in_(tag_ids))
+        .where(Tag.organization_id == current_user.organization_id)
+    ).all()
 
     found_ids = {q.id for q in db_tag}
     missing_ids = set(tag_ids) - found_ids
     if missing_ids:
         raise HTTPException(
-            status_code=404, detail=f"Tag IDs not found in DB: {missing_ids}"
+            status_code=404, detail="Invalid Tags selected for deletion"
         )
 
     for tag in db_tag:

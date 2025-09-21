@@ -4862,6 +4862,51 @@ def test_bulk_delete_test_with_attempted_candidate_should_fail(
     assert response.status_code == 200
 
 
+def test_bulk_delete_multiple_tenant(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_a_id = create_random_user(db, organization_id=org_id).id
+    user_b_id = create_random_user(db).id
+
+    test_a = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        is_active=True,
+        created_by_id=user_a_id,
+    )
+    test_b = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        is_active=True,
+        created_by_id=user_b_id,
+    )
+    db.add_all([test_a, test_b])
+    db.commit()
+    db.refresh(test_a)
+    db.refresh(test_b)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test_a.id, test_b.id],
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+
+    assert "invalid" in data["detail"].lower()
+
+    assert response.status_code == 404
+
+
 def test_delete_test_with_no_attempted_candidates_should_pass(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:

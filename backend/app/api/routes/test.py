@@ -788,17 +788,8 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    attempted_answer_exists = session.scalar(
-        select(
-            exists().where(
-                col(CandidateTestAnswer.candidate_test_id).in_(
-                    select(CandidateTest.id).where(CandidateTest.test_id == test_id)
-                )
-            )
-        )
-    )
 
-    if attempted_answer_exists:
+    if check_linked_question(session, test_id):
         raise HTTPException(
             status_code=422,
             detail="Cannot delete test. One or more answers have already been submitted for its questions.",
@@ -816,19 +807,25 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     dependencies=[Depends(permission_dependency("delete_test"))],
 )
 def bulk_delete_question(
-    session: SessionDep, test_ids: list[int] = Body(...)
+    session: SessionDep, current_user: CurrentUser, test_ids: list[int] = Body(...)
 ) -> DeleteTest:
     """bulk delete test"""
     success_count = 0
     failure_list: list[TestPublic] = []
 
-    db_test = session.exec(select(Test).where(col(Test.id).in_(test_ids))).all()
+    current_user_org_id = current_user.organization_id
+
+    db_test = session.exec(
+        select(Test)
+        .join(User, Test.created_by_id == User.id)
+        .where(col(Test.id).in_(test_ids), User.organization_id == current_user_org_id)
+    ).all()
 
     found_ids = {q.id for q in db_test}
     missing_ids = set(test_ids) - found_ids
     if missing_ids:
         raise HTTPException(
-            status_code=404, detail=f"Test IDs not found in DB: {missing_ids}"
+            status_code=404, detail="Invalid Tests selected for deletion"
         )
 
     for test in db_test:

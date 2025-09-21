@@ -617,20 +617,22 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     dependencies=[Depends(permission_dependency("delete_question"))],
 )
 def bulk_delete_question(
-    session: SessionDep, question_ids: list[int] = Body(...)
+    session: SessionDep, current_user: CurrentUser, question_ids: list[int] = Body(...)
 ) -> DeleteQuestion:
     """Soft delete a question."""
     success_count = 0
     failure_list = []
     db_questions = session.exec(
-        select(Question).where(col(Question.id).in_(question_ids))
+        select(Question)
+        .where(col(Question.id).in_(question_ids))
+        .where(Question.organization_id == current_user.organization_id)
     ).all()
 
     found_ids = {q.id for q in db_questions}
     missing_ids = set(question_ids) - found_ids
     if missing_ids:
         raise HTTPException(
-            status_code=404, detail=f"Question IDs not found in DB: {missing_ids}"
+            status_code=404, detail="Invalid Questions selected for deletion"
         )
 
     for question in db_questions:
