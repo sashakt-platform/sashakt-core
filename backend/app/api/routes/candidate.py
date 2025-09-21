@@ -244,8 +244,13 @@ def start_test_for_candidate(
 
             question_ids_for_tag = session.exec(
                 select(Question.last_revision_id)
-                .join(QuestionTag)
-                .where(Question.id == QuestionTag.question_id)
+                .join(
+                    QuestionTag,
+                    and_(
+                        Question.id == QuestionTag.question_id,
+                        Question.is_active,
+                    ),
+                )
                 .where(QuestionTag.tag_id == tag_id)
                 .where(
                     not_(

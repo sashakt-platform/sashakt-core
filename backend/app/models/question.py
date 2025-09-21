@@ -245,7 +245,9 @@ class Question(SQLModel, table=True):
         back_populates="question", cascade_delete=True
     )
     # Geographic locations associated with this question
-    locations: list["QuestionLocation"] = Relationship(back_populates="question")
+    locations: list["QuestionLocation"] = Relationship(
+        back_populates="question", cascade_delete=True
+    )
     # Tags associated with this question
     tags: list["Tag"] = Relationship(
         back_populates="questions",
