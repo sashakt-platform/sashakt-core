@@ -2341,7 +2341,10 @@ def test_add_and_delete_question_with_state_link(
     assert len(links) == 1
     assert links[0].state_id == state.id
 
-    response = client.delete(f"{settings.API_V1_STR}/questions/{question_id}")
+    response = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
     assert response.status_code == 200
     assert "deleted" in data["message"]
