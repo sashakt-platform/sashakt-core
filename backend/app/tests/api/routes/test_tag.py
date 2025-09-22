@@ -8,7 +8,7 @@ from sqlmodel import select
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import Organization, Tag, TagType, User
-from app.models.question import QuestionTag, QuestionType
+from app.models.question import Question, QuestionRevision, QuestionTag, QuestionType
 from app.models.test import Test, TestTag
 from app.tests.utils.user import create_random_user, get_current_user_data
 
@@ -397,6 +397,150 @@ def test_delete_tagtype_by_id(
     )
     response_data = response.json()
     assert response.status_code == 404
+
+
+def test_bulk_delete_tagtype_with_dependency(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_id = create_random_user(db).id
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    tagtype1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype3 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add_all([tagtype1, tagtype2, tagtype3])
+    db.commit()
+    db.refresh(tagtype1)
+    db.refresh(tagtype2)
+    db.refresh(tagtype3)
+    tag = Tag(
+        name=random_lower_string(),
+        tag_type_id=tagtype1.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=[-90],
+    )
+    assert response.status_code == 404
+    assert "invalid" in response.json()["detail"].lower()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=[tagtype1.id, tagtype2.id, tagtype3.id],
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 2
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == tagtype1.id
+
+
+def test_bulk_delete_tagtype(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_id = create_random_user(db).id
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+
+    tagtype1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add_all([tagtype1, tagtype2])
+    db.commit()
+    db.refresh(tagtype1)
+    db.refresh(tagtype2)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+        json=[tagtype1.id, tagtype2.id],
+    )
+    response_data = response.json()
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 2
+    assert (
+        response_data["delete_failure_list"] is None
+        or len(response_data["delete_failure_list"]) == 0
+    )
+
+
+def test_bulk_delete_tagtype_multiple_tenants(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user_a = create_random_user(db)
+    user_b_id = create_random_user(db, organization_id).id
+
+    tagtype1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user_a.organization_id,
+        created_by_id=user_a.id,
+    )
+    tagtype2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_b_id,
+    )
+
+    db.add_all([tagtype1, tagtype2])
+    db.commit()
+    db.refresh(tagtype1)
+    db.refresh(tagtype2)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_systemadmin_token,
+        json=[tagtype1.id, tagtype2.id],
+    )
+    assert response.status_code == 404
+    assert "invalid" in response.json()["detail"].lower()
 
 
 # Test cases for Tags
@@ -1086,6 +1230,283 @@ def test_delete_tag_by_id(
     response_data = response.json()
     assert response.status_code == 404
     assert response_data["detail"] == "Tag not found"
+
+
+def test_bulk_delete_tags_with_invalid_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user, organization = setup_user_organization(db)
+    user_b = create_random_user(db)
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_b.id,
+        organization_id=organization.id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_b.id,
+        organization_id=organization.id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+        json=[tag1.id, tag2.id, -90],
+    )
+    response_data = response.json()
+
+    assert response.status_code == 404
+    assert "invalid" in response_data["detail"].lower()
+
+
+def test_bulk_delete_tags_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    # Setup users and organization
+
+    user_a_id = create_random_user(db).id
+    user_b_id = create_random_user(db).id
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+
+    # Add a tag type
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_a_id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_a_id,
+        organization_id=organization_id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        created_by_id=user_b_id,
+        organization_id=organization_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+        json=[tag1.id, tag2.id],
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 2
+    assert response_data["delete_failure_list"] is None
+
+
+def test_bulk_delete_tags_linked_to_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+
+    user_a_id = create_random_user(db, organization_id).id
+    user_b_id = create_random_user(db, organization_id).id
+    user_c_id = create_random_user(db, organization_id).id
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_a_id,
+        organization_id=organization_id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_b_id,
+        organization_id=organization_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_c_id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_tag = TestTag(test_id=test.id, tag_id=tag1.id)
+    db.add(test_tag)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+        json=[tag1.id, tag2.id],
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 1
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == tag1.id
+
+
+def test_bulk_delete_tags_linked_to_question(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user_a_id = create_random_user(db, organization_id).id
+    user_b_id = create_random_user(db, organization_id).id
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_b_id,
+        organization_id=organization_id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_b_id,
+        organization_id=organization_id,
+    )
+    tag3 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_b_id,
+        organization_id=organization_id,
+    )
+    db.add_all([tag1, tag2, tag3])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+    db.refresh(tag3)
+
+    q1 = Question(organization_id=organization_id)
+    db.add(q1)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_a_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    db.commit()
+    db.refresh(q1)
+
+    question_tag = QuestionTag(question_id=q1.id, tag_id=tag1.id)
+    db.add(question_tag)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_superadmin_token,
+        json=[tag1.id, tag2.id, tag3.id],
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert response_data["delete_success_count"] == 2
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == tag1.id
+
+
+def test_bulk_delete_tags_multiple_tenant(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_a = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user_b = create_random_user(db, organization_id)
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_a.id,
+        organization_id=user_a.organization_id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_b.id,
+        organization_id=organization_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/tag/",
+        headers=get_user_systemadmin_token,
+        json=[tag1.id, tag2.id],
+    )
+    response_data = response.json()
+
+    assert response.status_code == 404
+    assert "invalid" in response_data["detail"].lower()
 
 
 def test_inactive_tag_not_listed(

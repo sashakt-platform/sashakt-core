@@ -22,6 +22,7 @@ from app.core.sorting import (
 )
 from app.models import (
     Message,
+    State,
     UpdatePassword,
     User,
     UserCreate,
@@ -29,9 +30,8 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
-from app.models.location import State
 from app.models.role import Role
-from app.models.user import UserState
+from app.models.user import UserPublicMe, UserState
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -124,7 +124,7 @@ def create_user(
 
 @router.patch(
     "/me",
-    response_model=UserPublic,
+    response_model=UserPublicMe,
     dependencies=[Depends(permission_dependency("update_user_me"))],
 )
 def update_user_me(
@@ -145,7 +145,16 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+    permissions, states = crud.get_user_permission_states(
+        session=session, user=current_user
+    )
+    base = UserPublicMe.model_validate(current_user)
+    return base.model_copy(
+        update={
+            "permissions": permissions,
+            "states": states,
+        }
+    )
 
 
 @router.patch(
@@ -174,14 +183,26 @@ def update_password_me(
 
 @router.get(
     "/me",
-    response_model=UserPublic,
+    response_model=UserPublicMe,
     dependencies=[Depends(permission_dependency("read_user"))],
 )
-def read_user_me(current_user: CurrentUser) -> Any:
+def read_user_me(
+    current_user: CurrentUser,
+    session: SessionDep,
+) -> Any:
     """
     Get current user.
     """
-    return current_user
+    permissions, states = crud.get_user_permission_states(
+        session=session, user=current_user
+    )
+    base = UserPublicMe.model_validate(current_user)
+    return base.model_copy(
+        update={
+            "permissions": permissions,
+            "states": states,
+        }
+    )
 
 
 @router.delete(
