@@ -23,12 +23,10 @@ from app.models.test import Test, TestTag
 router_tagtype = APIRouter(
     prefix="/tagtype",
     tags=["TagType"],
-    dependencies=[Depends(permission_dependency("create_tag"))],
 )
 router_tag = APIRouter(
     prefix="/tag",
     tags=["Tag"],
-    dependencies=[Depends(permission_dependency("create_tag"))],
 )
 
 
@@ -71,7 +69,11 @@ def check_linked_question_or_test(session: SessionDep, tag_id: int) -> bool:
     return bool(has_questions) or bool(has_tests)
 
 
-@router_tagtype.post("/", response_model=TagTypePublic)
+@router_tagtype.post(
+    "/",
+    response_model=TagTypePublic,
+    dependencies=[Depends(permission_dependency("create_tag"))],
+)
 def create_tagtype(
     tagtype_create: TagTypeCreate,
     session: SessionDep,
@@ -100,7 +102,11 @@ def create_tagtype(
     return tag_type
 
 
-@router_tagtype.get("/", response_model=Page[TagTypePublic])
+@router_tagtype.get(
+    "/",
+    response_model=Page[TagTypePublic],
+    dependencies=[Depends(permission_dependency("read_tag"))],
+)
 def get_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
@@ -120,7 +126,11 @@ def get_tagtype(
     return cast(Page[TagType], paginate(tagtype, params=params))
 
 
-@router_tagtype.get("/{tagtype_id}", response_model=TagTypePublic)
+@router_tagtype.get(
+    "/{tagtype_id}",
+    response_model=TagTypePublic,
+    dependencies=[Depends(permission_dependency("read_tag"))],
+)
 def get_tagtype_by_id(
     tagtype_id: int,
     session: SessionDep,
@@ -136,7 +146,11 @@ def get_tagtype_by_id(
     return tagtype
 
 
-@router_tagtype.put("/{tagtype_id}", response_model=TagTypePublic)
+@router_tagtype.put(
+    "/{tagtype_id}",
+    response_model=TagTypePublic,
+    dependencies=[Depends(permission_dependency("update_tag"))],
+)
 def update_tagtype(
     tagtype_id: int,
     updated_data: TagTypeUpdate,
@@ -156,7 +170,7 @@ def update_tagtype(
 @router_tagtype.patch(
     "/{tagtype_id}",
     response_model=TagTypePublic,
-    dependencies=[Depends(permission_dependency("delete_tag"))],
+    dependencies=[Depends(permission_dependency("update_tag"))],
 )
 def visibility_tagtype(
     tagtype_id: int,
@@ -173,7 +187,9 @@ def visibility_tagtype(
     return tagtype
 
 
-@router_tagtype.delete("/{tagtype_id}")
+@router_tagtype.delete(
+    "/{tagtype_id}", dependencies=[Depends(permission_dependency("delete_tag"))]
+)
 def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype:
@@ -233,7 +249,11 @@ def bulk_delete_tagtype(
 
 
 # Create a Tag
-@router_tag.post("/", response_model=TagPublic)
+@router_tag.post(
+    "/",
+    response_model=TagPublic,
+    dependencies=[Depends(permission_dependency("create_tag"))],
+)
 def create_tag(
     tag_create: TagCreate,
     session: SessionDep,
@@ -286,7 +306,11 @@ def create_tag(
 
 
 # Get all Tags
-@router_tag.get("/", response_model=Page[TagPublic])
+@router_tag.get(
+    "/",
+    response_model=Page[TagPublic],
+    dependencies=[Depends(permission_dependency("read_tag"))],
+)
 def get_tags(
     session: SessionDep,
     current_user: CurrentUser,
@@ -346,7 +370,11 @@ def get_tags(
 
 
 # Get Tag by ID
-@router_tag.get("/{tag_id}", response_model=TagPublic)
+@router_tag.get(
+    "/{tag_id}",
+    response_model=TagPublic,
+    dependencies=[Depends(permission_dependency("read_tag"))],
+)
 def get_tag_by_id(
     tag_id: int,
     session: SessionDep,
@@ -368,7 +396,11 @@ def get_tag_by_id(
 
 
 # Update a Tag
-@router_tag.put("/{tag_id}", response_model=TagPublic)
+@router_tag.put(
+    "/{tag_id}",
+    response_model=TagPublic,
+    dependencies=[Depends(permission_dependency("update_tag"))],
+)
 def update_tag(
     tag_id: int,
     updated_data: TagUpdate,
@@ -395,7 +427,11 @@ def update_tag(
 # Set visibility of Tag
 
 
-@router_tag.patch("/{tag_id}", response_model=TagPublic)
+@router_tag.patch(
+    "/{tag_id}",
+    response_model=TagPublic,
+    dependencies=[Depends(permission_dependency("update_tag"))],
+)
 def visibility_tag(
     tag_id: int,
     session: SessionDep,
@@ -423,7 +459,9 @@ def visibility_tag(
 
 
 # Delete a Tag
-@router_tag.delete("/{tag_id}")
+@router_tag.delete(
+    "/{tag_id}", dependencies=[Depends(permission_dependency("delete_tag"))]
+)
 def delete_tag(tag_id: int, session: SessionDep) -> Message:
     tag = session.get(Tag, tag_id)
     if not tag:

@@ -5,7 +5,8 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash, verify_password
-from app.models.user import User, UserCreate, UserUpdate
+from app.models import Permission, Role, RolePermission, State
+from app.models.user import User, UserCreate, UserState, UserUpdate
 
 
 def create_user(
@@ -67,3 +68,32 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
     if not verify_password(password, db_user.hashed_password):
         return None
     return db_user
+
+
+def get_user_permission_states(
+    *, session: Session, user: User
+) -> tuple[list[str], list[State]]:
+    role = session.get(Role, user.role_id)
+
+    permissions = (
+        list(
+            session.exec(
+                select(Permission.name)
+                .join(RolePermission)
+                .where(RolePermission.permission_id == Permission.id)
+                .where(RolePermission.role_id == role.id)
+            ).all()
+        )
+        if role
+        else []
+    )
+    states = list(
+        session.exec(
+            select(State)
+            .join(UserState)
+            .where(State.id == UserState.state_id)
+            .where(UserState.user_id == user.id)
+        ).all()
+    )
+
+    return permissions, states

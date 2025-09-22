@@ -129,11 +129,13 @@ class UserPublic(UserBase):
     modified_date: datetime
     is_deleted: bool
     created_by_id: int | None
-    states: list["State"] | None = Field(
-        default=None, description="states associated with this user"
-    )
+    states: list["State"] | None
 
 
 class UsersPublic(SQLModel):
     data: list[UserPublic]
     count: int
+
+
+class UserPublicMe(UserPublic):
+    permissions: list[str] = []
