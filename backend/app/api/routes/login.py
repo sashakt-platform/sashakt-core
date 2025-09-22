@@ -156,10 +156,14 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     """
     Reset password
     """
-    email = verify_password_reset_token(token=body.token)
-    if not email:
+    raw_user_id = verify_password_reset_token(token=body.token)
+    if not raw_user_id:
         raise HTTPException(status_code=400, detail="Invalid token")
-    user = crud.get_user_by_email(session=session, email=email)
+    try:
+        user_id = int(raw_user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid token format")
+    user = crud.get_user_by_id(session=session, id=user_id)
     if not user:
         raise HTTPException(
             status_code=404,
