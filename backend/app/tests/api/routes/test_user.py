@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
-from app.models import Role, User, UserCreate
+from app.models import Permission, Role, RolePermission, User, UserCreate
 from app.models.location import Country, State
 from app.models.question import Question, QuestionRevision, QuestionType
 from app.tests.utils.organization import (
@@ -41,6 +41,28 @@ def test_get_users_normal_user_me(
     assert current_user
     assert current_user["is_active"] is True
     assert current_user["email"] == settings.EMAIL_TEST_USER
+
+
+def test_get_logged_user_me_permissions(
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
+) -> None:
+    r = client.get(
+        f"{settings.API_V1_STR}/users/me", headers=get_user_systemadmin_token
+    )
+    current_user = r.json()
+    assert current_user
+    assert current_user["is_active"] is True
+    assert current_user["role_id"] is not None
+    assert "permissions" in current_user
+
+    permission_names = db.exec(
+        select(Permission.name)
+        .join(RolePermission)
+        .where(RolePermission.role_id == current_user["role_id"])
+    ).all()
+    assert permission_names is not None
+    assert isinstance(permission_names, list)
+    assert set(current_user["permissions"]) == set(permission_names)
 
 
 def test_create_user_new_email(
