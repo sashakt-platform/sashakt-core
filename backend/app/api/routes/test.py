@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page, paginate
 from sqlmodel import col, exists, func, select
 
@@ -26,6 +26,7 @@ from app.models.entity import Entity
 from app.models.location import District
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
+    DeleteTest,
     EntityPublicLimited,
     MarksLevelEnum,
     TagRandomCreate,
@@ -36,6 +37,18 @@ from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
+
+
+def check_linked_question(session: SessionDep, test_id: int) -> bool:
+    query = select(
+        exists().where(
+            col(CandidateTestAnswer.candidate_test_id).in_(
+                select(CandidateTest.id).where(CandidateTest.test_id == test_id)
+            )
+        )
+    )
+    result = session.scalar(query)
+    return bool(result)
 
 
 def build_random_tag_public(
@@ -779,17 +792,8 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    attempted_answer_exists = session.scalar(
-        select(
-            exists().where(
-                col(CandidateTestAnswer.candidate_test_id).in_(
-                    select(CandidateTest.id).where(CandidateTest.test_id == test_id)
-                )
-            )
-        )
-    )
 
-    if attempted_answer_exists:
+    if check_linked_question(session, test_id):
         raise HTTPException(
             status_code=422,
             detail="Cannot delete test. One or more answers have already been submitted for its questions.",
@@ -799,6 +803,74 @@ def delete_test(test_id: int, session: SessionDep) -> Message:
     session.commit()
 
     return Message(message="Test deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteTest,
+    dependencies=[Depends(permission_dependency("delete_test"))],
+)
+def bulk_delete_question(
+    session: SessionDep, current_user: CurrentUser, test_ids: list[int] = Body(...)
+) -> DeleteTest:
+    """bulk delete test"""
+    success_count = 0
+    failure_list: list[TestPublic] = []
+
+    current_user_org_id = current_user.organization_id
+
+    db_test = session.exec(
+        select(Test)
+        .join(User)
+        .where(Test.created_by_id == User.id)
+        .where(col(Test.id).in_(test_ids), User.organization_id == current_user_org_id)
+    ).all()
+
+    found_ids = {q.id for q in db_test}
+    missing_ids = set(test_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Tests selected for deletion"
+        )
+
+    for test in db_test:
+        if test.id is not None and check_linked_question(session, test.id):
+            tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+            tags = session.exec(tags_query).all()
+            question_revision_query = (
+                select(QuestionRevision)
+                .join(TestQuestion)
+                .where(TestQuestion.test_id == test.id)
+            )
+            question_revisions = session.exec(question_revision_query).all()
+            state_query = (
+                select(State).join(TestState).where(TestState.test_id == test.id)
+            )
+            states = session.exec(state_query).all()
+            district_query = (
+                select(District)
+                .join(TestDistrict)
+                .where(TestDistrict.test_id == test.id)
+            )
+            districts = session.exec(district_query).all()
+            if test:
+                failure_list.append(
+                    TestPublic(
+                        **test.model_dump(),
+                        tags=tags,
+                        question_revisions=question_revisions,
+                        states=states,
+                        districts=districts,
+                    )
+                )
+        else:
+            session.delete(test)
+            success_count += 1
+
+    session.commit()
+    return DeleteTest(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
 
 
 @router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)
