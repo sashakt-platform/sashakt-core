@@ -251,7 +251,7 @@ class TestPublic(TestBase):
     created_date: datetime
     modified_date: datetime
     is_deleted: bool
-    tags: list["Tag"]
+    tags: list["TagPublic"]
     question_revisions: list["QuestionRevision"]
     states: list["State"]
     districts: list["District"]
