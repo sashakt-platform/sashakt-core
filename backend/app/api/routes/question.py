@@ -26,7 +26,6 @@ from app.core.sorting import (
     SortOrder,
     create_sorting_dependency,
 )
-
 from app.models import (
     CandidateTest,
     Organization,
