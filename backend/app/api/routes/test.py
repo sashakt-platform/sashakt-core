@@ -1,12 +1,23 @@
 from datetime import datetime
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page, paginate
 from sqlmodel import col, exists, func, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    Pagination,
+    SessionDep,
+    permission_dependency,
+)
 from app.api.routes.utils import get_current_time
+from app.core.sorting import (
+    SortingParams,
+    SortOrder,
+    TestSortConfig,
+    create_sorting_dependency,
+)
 from app.models import (
     Block,
     Message,
@@ -37,6 +48,10 @@ from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
+
+# create sorting dependency
+TestSorting = create_sorting_dependency(TestSortConfig)
+TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
 
 
 def check_linked_question(session: SessionDep, test_id: int) -> bool:
@@ -120,9 +135,11 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
                 id=entity.id,
                 name=entity.name,
                 state=session.get(State, entity.state_id) if entity.state_id else None,
-                district=session.get(District, entity.district_id)
-                if entity.district_id
-                else None,
+                district=(
+                    session.get(District, entity.district_id)
+                    if entity.district_id
+                    else None
+                ),
                 block=session.get(Block, entity.block_id) if entity.block_id else None,
             )
             for entity in entities
@@ -279,6 +296,7 @@ def create_test(
 def get_test(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: TestSortingDep,
     params: Pagination = Depends(),
     marks_level: MarksLevelEnum | None = None,
     name: str | None = None,
@@ -308,30 +326,18 @@ def get_test(
     district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
-    order_by: list[str] = Query(
-        default=["created_date"],
-        title="Order by",
-        description="Order by fields",
-        examples=["-created_date", "name"],
-    ),
 ) -> Page[TestPublic]:
     query = select(Test).join(User).where(Test.created_by_id == User.id)
     query = query.where(User.organization_id == current_user.organization_id)
     empty_result = cast(Page[TestPublic], paginate([], params))
 
-    for order in order_by:
-        is_desc = order.startswith("-")
-        order = order.lstrip("-")
-        column = getattr(Test, order, None)
-        if column is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid order_by field: {order}",
-            )
-        query = query.order_by(column.desc() if is_desc else column)
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    query = sorting_with_default.apply_to_query(query, TestSortConfig)
 
     # Apply filters only if they're provided
-
     query = query.where(Test.is_deleted == is_deleted)
 
     if is_active is not None:

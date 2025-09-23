@@ -1965,7 +1965,7 @@ def test_read_tag_with_sort(
     expected = ["C++", "Django", "Git", "Python"]
     expected_tagtypes = ["AlphaType", "BetaType", "GammaType"]
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=name",
+        f"{settings.API_V1_STR}/tag/?sort_by=name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1973,7 +1973,7 @@ def test_read_tag_with_sort(
     response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected)
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=-name",
+        f"{settings.API_V1_STR}/tag/?sort_by=name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1981,7 +1981,7 @@ def test_read_tag_with_sort(
     assert response_names == sorted(expected, reverse=True)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name",
+        f"{settings.API_V1_STR}/tag/?sort_by=tag_type_name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1995,7 +1995,7 @@ def test_read_tag_with_sort(
     assert tagtypes == sorted(tagtypes)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=-tag_type_name",
+        f"{settings.API_V1_STR}/tag/?sort_by=tag_type_name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2007,20 +2007,6 @@ def test_read_tag_with_sort(
     ]
     assert set(tagtypes_desc) == set(expected_tagtypes)
     assert tagtypes_desc == sorted(tagtypes_desc, reverse=True)
-
-    response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name&order_by=name",
-        headers=get_user_superadmin_token,
-    )
-    assert response.status_code == 200
-    data_both = response.json()
-    filtered_both = [
-        (tag["tag_type"]["name"], tag["name"])
-        for tag in data_both["items"]
-        if tag["tag_type"]
-        and tag["tag_type"]["name"] in ["AlphaType", "BetaType", "GammaType"]
-    ]
-    assert filtered_both == sorted(filtered_both)
 
 
 def test_get_tags_with_invalid_sort_field(
