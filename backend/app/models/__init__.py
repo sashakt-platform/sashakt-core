@@ -67,6 +67,18 @@ from .permission import (
     PermissionsPublic,
     PermissionUpdate,
 )
+from .provider import (
+    OrganizationProvider,
+    OrganizationProviderCreate,
+    OrganizationProviderPublic,
+    OrganizationProviderUpdate,
+    Provider,
+    ProviderCreate,
+    ProviderPublic,
+    ProviderSyncStatus,
+    ProviderType,
+    ProviderUpdate,
+)
 from .question import (
     Option,
     Question,
@@ -230,6 +242,16 @@ __all__ = [
     "EntityTypePublic",
     "EntityTypeUpdate",
     "EntityUpdate",
+    "Provider",
+    "ProviderCreate",
+    "ProviderPublic",
+    "ProviderUpdate",
+    "ProviderType",
+    "ProviderSyncStatus",
+    "OrganizationProvider",
+    "OrganizationProviderCreate",
+    "OrganizationProviderPublic",
+    "OrganizationProviderUpdate",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
