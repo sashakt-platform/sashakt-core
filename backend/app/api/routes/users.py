@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page, paginate
@@ -14,6 +14,12 @@ from app.api.deps import (
 )
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
+from app.core.sorting import (
+    SortingParams,
+    SortOrder,
+    UserSortConfig,
+    create_sorting_dependency,
+)
 from app.models import (
     Message,
     State,
@@ -30,6 +36,10 @@ from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+# create sorting dependency
+UserSorting = create_sorting_dependency(UserSortConfig)
+UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
+
 
 @router.get(
     "/",
@@ -39,6 +49,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 def read_users(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: UserSortingDep,
     param: Pagination = Depends(),
 ) -> Page[UserPublic]:
     """
@@ -47,6 +58,13 @@ def read_users(
     current_user_organization_id = current_user.organization_id
 
     statement = select(User).where(User.organization_id == current_user_organization_id)
+
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    statement = sorting_with_default.apply_to_query(statement, UserSortConfig)
+
     users = session.exec(statement).all()
 
     return cast(Page[UserPublic], paginate(users, params=param))

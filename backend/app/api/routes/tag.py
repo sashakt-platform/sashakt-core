@@ -1,10 +1,22 @@
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
 from sqlmodel import and_, col, exists, func, not_, or_, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    Pagination,
+    SessionDep,
+    permission_dependency,
+)
+from app.core.sorting import (
+    SortingParams,
+    SortOrder,
+    TagSortConfig,
+    TagTypeSortConfig,
+    create_sorting_dependency,
+)
 from app.models import (
     Message,
     Tag,
@@ -29,8 +41,15 @@ router_tag = APIRouter(
     tags=["Tag"],
 )
 
+# create sorting dependencies
+TagSorting = create_sorting_dependency(TagSortConfig)
+TagSortingDep = Annotated[SortingParams, Depends(TagSorting)]
 
-# Routers fro Tag-Types
+TagTypeSorting = create_sorting_dependency(TagTypeSortConfig)
+TagTypeSortingDep = Annotated[SortingParams, Depends(TagTypeSorting)]
+
+
+# Routers for Tag-Types
 
 
 def check_linked_tag(session: SessionDep, tagtype_id: int) -> bool:
@@ -110,6 +129,7 @@ def create_tagtype(
 def get_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: TagTypeSortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[TagType]:
@@ -121,6 +141,12 @@ def get_tagtype(
         query = query.where(
             func.trim(func.lower(TagType.name)).like(f"%{name.strip().lower()}%")
         )
+
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    query = sorting_with_default.apply_to_query(query, TagTypeSortConfig)
 
     tagtype = session.exec(query).all()
     return cast(Page[TagType], paginate(tagtype, params=params))
@@ -314,14 +340,9 @@ def create_tag(
 def get_tags(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: TagSortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
-    order_by: list[str] = Query(
-        default=["tag_type_name", "name"],
-        title="Order by",
-        description="Order by fields: tag_type_name, name. Prefix with '-' for descending.",
-        examples=["-name", "tag_type_name"],
-    ),
 ) -> Page[TagPublic]:
     query = select(Tag).where(
         Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
@@ -330,24 +351,13 @@ def get_tags(
         query = query.where(
             func.trim(func.lower(Tag.name)).like(f"%{name.strip().lower()}%")
         )
-    join_tag_type = any("tag_type_name" in field for field in order_by)
-    if join_tag_type:
-        query = query.outerjoin(TagType)
 
-    ordering = []
-    for field in order_by:
-        desc = field.startswith("-")
-        field_name = field[1:] if desc else field
-        if field_name == "tag_type_name":
-            col = getattr(TagType, "name", None)
-        else:
-            col = getattr(Tag, field_name, None)
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    query = sorting_with_default.apply_to_query(query, TagSortConfig)
 
-        if col is None:
-            continue
-        ordering.append(col.desc() if desc else col.asc())
-    if ordering:
-        query = query.order_by(*ordering)
     tags = session.exec(query).all()
     tag_public = []
     for tag in tags:

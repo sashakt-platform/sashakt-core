@@ -1670,6 +1670,7 @@ def test_get_test_by_filter_created_by(
 def test_get_test_order_by(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
+    """Test the generic sorting system with sort_by and sort_order parameters"""
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
     user = create_random_user(db, organization_id=org_id)
@@ -1700,7 +1701,7 @@ def test_get_test_order_by(
     test_names = sorted([test_1.name, test_2.name, test_3.name], key=str.lower)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?order_by=name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?sort_by=name&sort_order=asc&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1712,7 +1713,7 @@ def test_get_test_order_by(
     assert data[2]["name"] == test_names[2]
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?order_by=-name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?sort_by=name&sort_order=desc&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -1724,6 +1725,7 @@ def test_get_test_order_by(
     assert data[1]["name"] == test_names[1]
     assert data[2]["name"] == test_names[0]
 
+    # Test default sorting, i.e modified_date DESC
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
@@ -1732,14 +1734,13 @@ def test_get_test_order_by(
     data = response.json()
     data = data["items"]
 
-    test_created_date = [item["created_date"] for item in data]
+    test_modified_dates = [item["modified_date"] for item in data]
 
-    sorted_test_created_date = sorted(test_created_date)
-
-    assert sorted_test_created_date == test_created_date
+    sorted_test_modified_dates_desc = sorted(test_modified_dates, reverse=True)
+    assert sorted_test_modified_dates_desc == test_modified_dates
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-created_date",
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&sort_by=created_date&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1748,24 +1749,20 @@ def test_get_test_order_by(
     test_created_date = [item["created_date"] for item in data]
 
     sorted_test_created_date = sorted(test_created_date, reverse=True)
-
     assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-name&order_by=created_date",
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&sort_by=created_date&sort_order=asc",
         headers=get_user_superadmin_token,
     )
 
     data = response.json()
     data = data["items"]
-    test_name_date = [
-        {"created_date": item["created_date"], "name": item["name"]} for item in data
-    ]
+    test_created_dates = [item["created_date"] for item in data]
 
-    sort_by_date = sorted(test_name_date, key=lambda x: x["created_date"])
-    sorted_array = sorted(sort_by_date, key=lambda x: x["name"].lower(), reverse=True)
-
-    assert sorted_array == test_name_date
+    # should be sorted by created_date in ascending order
+    sorted_by_created_date = sorted(test_created_dates)
+    assert sorted_by_created_date == test_created_dates
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?order_by=-setting",
