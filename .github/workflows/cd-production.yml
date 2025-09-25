@@ -1,0 +1,31 @@
+name: Deploy to Production on Version Tag
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Copy env file
+        run: cp .env.example .env
+
+      - name: Build Docker images
+        run: docker compose build
+
+      - name: Cleanup previous containers
+        run: docker compose down -v --remove-orphans
+
+      - name: Start backend + adminer
+        run: docker compose up -d --wait backend adminer
+
+      - name: Health check
+        run: curl http://localhost:8000/api/v1/utils/health-check
+
+      - name: Cleanup after tests
+        run: docker compose down -v --remove-orphans
