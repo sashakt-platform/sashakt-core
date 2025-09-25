@@ -96,6 +96,7 @@ def create_user(
     )
     states = None
     role = session.get(Role, user.role_id)
+    creator_role = session.get(Role, current_user.role_id)
 
     if role and role.name == "state_admin":
         if not user_in.state_ids:
@@ -112,6 +113,19 @@ def create_user(
         session.add_all(user_states)
         state_query = select(State).join(UserState).where(UserState.user_id == user.id)
         states = session.exec(state_query).all()
+    elif role and role.name == "test_admin":
+        if creator_role and creator_role.name == "state_admin":
+            creator_states = session.exec(
+                select(State)
+                .join(UserState)
+                .where(UserState.user_id == current_user.id)
+            ).all()
+            if creator_states:
+                user_states = [
+                    UserState(user_id=user.id, state_id=s.id) for s in creator_states
+                ]
+                session.add_all(user_states)
+                states = creator_states
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(

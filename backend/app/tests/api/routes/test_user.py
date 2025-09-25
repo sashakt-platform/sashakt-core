@@ -13,7 +13,11 @@ from app.tests.utils.organization import (
     create_random_organization,
 )
 from app.tests.utils.role import create_random_role
-from app.tests.utils.user import create_random_user, get_current_user_data
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
 from app.tests.utils.utils import (
     assert_paginated_response,
     random_email,
@@ -1275,3 +1279,77 @@ def test_cannot_delete_user_if_linked_to_question(
 
     assert delete_response.status_code == 400
     assert "failed to delete user" in delete_response.json()["detail"].lower()
+
+
+def test_create_test_admin_auto_inherits_state_admin_states(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert state_admin_role is not None
+    assert test_admin_role is not None
+
+    org = create_random_organization(db)
+    state_admin_email = random_email()
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+
+    response_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+
+    assert response_admin.status_code == 200
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": test_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=payload,
+    )
+    assert response.status_code == 200
+
+    new_user = response.json()
+    assert new_user["role_id"] == test_admin_role.id
+    assert "states" in new_user
+    assert len(new_user["states"]) == 1
+    assert new_user["states"][0]["id"] == state.id
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/users/{new_user['id']}",
+        headers=token_headers,
+    )
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    state_ids = [s["id"] for s in data["states"]]
+    assert state.id in state_ids
+    assert len(data["states"]) == 1
