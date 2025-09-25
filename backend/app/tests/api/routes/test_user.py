@@ -972,6 +972,111 @@ def test_create_state_admin_with_state_id(
         assert len(data["states"]) == 2
 
 
+def test_create_user_multiple_state_assignment_error(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        country = Country(name=random_lower_string(), is_active=True)
+        db.add(country)
+        db.commit()
+        db.refresh(country)
+
+        state1 = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
+        state2 = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
+        db.add_all([state1, state2])
+        db.commit()
+
+        email = random_email()
+        full_name = random_lower_string()
+        password = random_lower_string()
+        phone = random_lower_string()
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert role is not None
+
+        data = {
+            "email": email,
+            "password": password,
+            "phone": phone,
+            "role_id": role.id,
+            "full_name": full_name,
+            "organization_id": org_id,
+            "state_ids": [state1.id, state2.id],
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=get_user_superadmin_token,
+            json=data,
+        )
+        assert response.status_code == 400
+        assert (
+            response.json()["detail"]
+            == "A test-admin may be linked to at most one state."
+        )
+
+
+def test_create_test_admin_single_state_success(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        country = Country(name=random_lower_string(), is_active=True)
+        db.add(country)
+        db.commit()
+        db.refresh(country)
+
+        state1 = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
+        state2 = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
+        db.add_all([state1, state2])
+        db.commit()
+
+        email = random_email()
+        full_name = random_lower_string()
+        password = random_lower_string()
+        phone = random_lower_string()
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert role is not None
+
+        data = {
+            "email": email,
+            "password": password,
+            "phone": phone,
+            "role_id": role.id,
+            "full_name": full_name,
+            "organization_id": org_id,
+            "state_ids": [state1.id],
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=get_user_superadmin_token,
+            json=data,
+        )
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["role_id"] == role.id
+        assert "states" in response_data
+        assert len(response_data["states"]) == 1
+        assert response_data["states"][0]["id"] == state1.id
+
+
 def test_create_user_without_states(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:

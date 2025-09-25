@@ -113,21 +113,31 @@ def create_user(
         session.add_all(user_states)
         state_query = select(State).join(UserState).where(UserState.user_id == user.id)
         states = session.exec(state_query).all()
-    elif (
-        role
-        and role.name == "test_admin"
-        and creator_role
-        and creator_role.name == "state_admin"
-    ):
-        creator_states = session.exec(
-            select(State).join(UserState).where(UserState.user_id == current_user.id)
-        ).all()
+    elif role and role.name == "test_admin":
+        if creator_role and creator_role.name == "state_admin":
+            creator_states = session.exec(
+                select(State)
+                .join(UserState)
+                .where(UserState.user_id == current_user.id)
+            ).all()
 
-        session.add_all(
-            UserState(user_id=user.id, state_id=creator_state.id)
-            for creator_state in creator_states
-        )
-        states = creator_states
+            session.add_all(
+                UserState(user_id=user.id, state_id=creator_state.id)
+                for creator_state in creator_states
+            )
+            states = creator_states
+        else:
+            if user_in.state_ids:
+                if len(user_in.state_ids) != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A test-admin may be linked to at most one state.",
+                    )
+                existing_states = session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+                session.add(UserState(user_id=user.id, state_id=existing_states[0].id))
+                states = existing_states
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
