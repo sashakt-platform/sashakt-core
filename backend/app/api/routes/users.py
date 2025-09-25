@@ -95,9 +95,14 @@ def create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
     states = None
-    role = session.exec(select(Role).where(Role.id == user.role_id)).first()
+    role = session.get(Role, user.role_id)
 
-    if role and role.name == "state_admin" and user_in.state_ids:
+    if role and role.name == "state_admin":
+        if not user_in.state_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="A state-admin must be assigned at least one state.",
+            )
         existing_states = session.exec(
             select(State).where(col(State.id).in_(user_in.state_ids))
         ).all()

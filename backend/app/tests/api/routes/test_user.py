@@ -885,10 +885,9 @@ def test_create_state_admin_without_state_id(
             headers=superuser_token_headers,
             json=data,
         )
-        assert response.status_code == 200
+        assert response.status_code == 400
         data = response.json()
-        assert "states" in data
-        assert data["states"] is None
+        assert data["detail"] == "A state-admin must be assigned at least one state."
 
 
 def test_create_state_admin_with_state_id(
