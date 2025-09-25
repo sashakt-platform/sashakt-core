@@ -112,8 +112,16 @@ class OrganizationProviderCreate(SQLModel):
     is_enabled: bool = True
 
 
-class OrganizationProviderPublic(OrganizationProviderBase):
+class OrganizationProviderPublic(SQLModel):
+    """
+    Public representation of OrganizationProvider - excludes sensitive config_json
+    """
+
     id: int | None
+    organization_id: int
+    provider_id: int
+    is_enabled: bool
+    last_sync_timestamp: datetime | None
     created_date: datetime | None
     modified_date: datetime | None
     provider: ProviderPublic
