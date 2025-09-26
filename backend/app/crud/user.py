@@ -66,8 +66,18 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
         states = session.exec(state_query).all()
 
     user_public = UserPublic(
-        **db_user.model_dump(),  # or use a safer subset of fields
-        role_name=role_label,
+        id=db_user.id,
+        full_name=db_user.full_name,
+        created_date=db_user.created_date,
+        modified_date=db_user.modified_date,
+        email=db_user.email,
+        phone=db_user.phone,
+        role_id=db_user.role_id,
+        organization_id=db_user.organization_id,
+        created_by_id=db_user.created_by_id,
+        is_deleted=db_user.is_deleted,
+        is_active=db_user.is_active,
+        role_label=role_label,
         states=states or None,
     )
     return user_public

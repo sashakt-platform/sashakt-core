@@ -125,11 +125,10 @@ class User(UserBase, table=True):
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: int
-    role_name: str
+    role_label: str
     created_date: datetime
     modified_date: datetime
     is_deleted: bool
-    created_by_id: int | None
     states: list["State"] | None
 
 
