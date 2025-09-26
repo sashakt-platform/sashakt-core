@@ -133,6 +133,39 @@ class DataSyncService:
 
         return results
 
+    def _get_table_specific_last_sync(
+        self, organization_id: int, table_name: str
+    ) -> datetime | None:
+        """Get the last sync timestamp for a specific table from BigQuery metadata"""
+        try:
+            # Get the organization provider to access BigQuery
+            org_providers = self.get_organization_providers(organization_id)
+            if not org_providers:
+                return None
+
+            # Use the first BigQuery provider (assuming one per org)
+            for org_provider in org_providers:
+                if org_provider.provider.provider_type == ProviderType.BIGQUERY:
+                    from app.core.provider_config import provider_config_service
+
+                    decrypted_config = provider_config_service.get_config_for_use(
+                        org_provider.config_json
+                    )
+                    bigquery_service = BigQueryService(
+                        organization_id, decrypted_config
+                    )
+
+                    # Get table-specific sync metadata
+                    last_sync_timestamp, _ = bigquery_service.get_table_sync_metadata(
+                        table_name
+                    )
+                    return last_sync_timestamp
+
+            return None
+        except Exception:
+            # If we can't get table-specific timestamp, return None to do full sync
+            return None
+
     def test_provider_connection(self, organization_id: int, provider_id: int) -> bool:
         """Test connection to a BigQuery provider"""
         with Session(engine) as session:
@@ -169,68 +202,77 @@ class DataSyncService:
         data = {}
 
         with Session(engine) as session:
-            last_sync = None
-            if incremental:
-                last_sync = self._get_last_organization_sync(organization_id)
-
+            # Use table-specific sync timestamps for all tables
             data["users"] = self._extract_users_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["tests"] = self._extract_tests_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["questions"] = self._extract_questions_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["question_revisions"] = self._extract_question_revisions_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["candidates"] = self._extract_candidates_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["candidate_test_answers"] = self._extract_candidate_test_answers_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["candidate_tests"] = self._extract_candidate_tests_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["candidate_test_profiles"] = (
                 self._extract_candidate_test_profiles_data(
-                    session, organization_id, last_sync
+                    session, organization_id, incremental
                 )
             )
-            data["states"] = self._extract_states_data(session, last_sync)
-            data["districts"] = self._extract_districts_data(session, last_sync)
-            data["blocks"] = self._extract_blocks_data(session, last_sync)
+            data["states"] = self._extract_states_data(
+                session, organization_id, incremental
+            )
+            data["districts"] = self._extract_districts_data(
+                session, organization_id, incremental
+            )
+            data["blocks"] = self._extract_blocks_data(
+                session, organization_id, incremental
+            )
             data["entities"] = self._extract_entities_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["entity_types"] = self._extract_entity_types_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
-            data["tags"] = self._extract_tags_data(session, organization_id, last_sync)
+            data["tags"] = self._extract_tags_data(
+                session, organization_id, incremental
+            )
             data["question_tags"] = self._extract_question_tags_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
             data["test_questions"] = self._extract_test_questions_data(
-                session, organization_id, last_sync
+                session, organization_id, incremental
             )
 
         return data
 
     def _extract_users_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         statement = select(User).where(User.organization_id == organization_id)
 
-        if last_sync:
-            statement = statement.where(User.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "users"
+            )
+            if table_last_sync:
+                statement = statement.where(User.modified_date > table_last_sync)
 
         users = session.exec(statement).all()
         return [self._serialize_user(user) for user in users]
 
     def _extract_tests_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter tests by organization through created_by relationship
         statement = (
@@ -239,41 +281,56 @@ class DataSyncService:
             .where(User.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(Test.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "tests"
+            )
+            if table_last_sync:
+                statement = statement.where(Test.modified_date > table_last_sync)
 
         tests = session.exec(statement).all()
         return [self._serialize_test(test) for test in tests]
 
     def _extract_questions_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         statement = select(Question).where(Question.organization_id == organization_id)
 
-        if last_sync:
-            statement = statement.where(Question.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "questions"
+            )
+            if table_last_sync:
+                statement = statement.where(Question.modified_date > table_last_sync)
 
         questions = session.exec(statement).all()
         return [self._serialize_question(question) for question in questions]
 
     def _extract_candidates_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter candidates by organization through user relationship
+        # Filter candidates by organization through test creator relationship
         statement = (
             select(Candidate)
-            .join(User, Candidate.user_id == User.id)
+            .join(CandidateTest, Candidate.id == CandidateTest.candidate_id)
+            .join(Test, CandidateTest.test_id == Test.id)
+            .join(User, Test.created_by_id == User.id)
             .where(User.organization_id == organization_id)
+            .distinct()
         )
 
-        if last_sync:
-            statement = statement.where(Candidate.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "candidates"
+            )
+            if table_last_sync:
+                statement = statement.where(Candidate.modified_date > table_last_sync)
 
         candidates = session.exec(statement).all()
         return [self._serialize_candidate(candidate) for candidate in candidates]
 
     def _extract_candidate_test_answers_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter candidate test answers by organization through candidate_test → test → created_by relationship
         statement = (
@@ -286,14 +343,20 @@ class DataSyncService:
             .where(User.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(CandidateTestAnswer.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "candidate_test_answers"
+            )
+            if table_last_sync:
+                statement = statement.where(
+                    CandidateTestAnswer.modified_date > table_last_sync
+                )
 
         answers = session.exec(statement).all()
         return [self._serialize_candidate_test_answer(answer) for answer in answers]
 
     def _extract_candidate_tests_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter candidate tests by organization through test → created_by relationship
         statement = (
@@ -303,90 +366,123 @@ class DataSyncService:
             .where(User.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(CandidateTest.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "candidate_tests"
+            )
+            if table_last_sync:
+                statement = statement.where(
+                    CandidateTest.modified_date > table_last_sync
+                )
 
         candidate_tests = session.exec(statement).all()
         return [self._serialize_candidate_test(ct) for ct in candidate_tests]
 
     def _extract_states_data(
-        self, session: Session, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # States are shared across organizations, no org filtering needed
+        # States are shared across organizations, use table-specific sync timestamp
         statement = select(State).where(State.is_active)
 
-        if last_sync:
-            statement = statement.where(State.modified_date > last_sync)
+        if incremental:
+            # Get table-specific last sync timestamp from BigQuery metadata
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "states"
+            )
+            if table_last_sync:
+                statement = statement.where(State.modified_date > table_last_sync)
 
         states = session.exec(statement).all()
         return [self._serialize_state(state) for state in states]
 
     def _extract_districts_data(
-        self, session: Session, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Districts are shared across organizations, no org filtering needed
+        # Districts are shared across organizations, use table-specific sync timestamp
         statement = select(District).where(District.is_active)
 
-        if last_sync:
-            statement = statement.where(District.modified_date > last_sync)
+        if incremental:
+            # Get table-specific last sync timestamp from BigQuery metadata
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "districts"
+            )
+            if table_last_sync:
+                statement = statement.where(District.modified_date > table_last_sync)
 
         districts = session.exec(statement).all()
         return [self._serialize_district(district) for district in districts]
 
     def _extract_blocks_data(
-        self, session: Session, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Blocks are shared across organizations, no org filtering needed
+        # Blocks are shared across organizations, use table-specific sync timestamp
         statement = select(Block).where(Block.is_active)
 
-        if last_sync:
-            statement = statement.where(Block.modified_date > last_sync)
+        if incremental:
+            # Get table-specific last sync timestamp from BigQuery metadata
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "blocks"
+            )
+            if table_last_sync:
+                statement = statement.where(Block.modified_date > table_last_sync)
 
         blocks = session.exec(statement).all()
         return [self._serialize_block(block) for block in blocks]
 
     def _extract_entities_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter entities by organization through created_by relationship
+        # Filter entities by organization through entity_type relationship
         statement = (
             select(Entity)
-            .join(User, Entity.created_by_id == User.id)
-            .where(User.organization_id == organization_id)
+            .join(EntityType, Entity.entity_type_id == EntityType.id)
+            .where(EntityType.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(Entity.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "entities"
+            )
+            if table_last_sync:
+                statement = statement.where(Entity.modified_date > table_last_sync)
 
         entities = session.exec(statement).all()
         return [self._serialize_entity(entity) for entity in entities]
 
     def _extract_entity_types_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         statement = select(EntityType).where(
             EntityType.organization_id == organization_id
         )
 
-        if last_sync:
-            statement = statement.where(EntityType.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "entity_types"
+            )
+            if table_last_sync:
+                statement = statement.where(EntityType.modified_date > table_last_sync)
 
         entity_types = session.exec(statement).all()
         return [self._serialize_entity_type(et) for et in entity_types]
 
     def _extract_tags_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         statement = select(Tag).where(Tag.organization_id == organization_id)
 
-        if last_sync:
-            statement = statement.where(Tag.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "tags"
+            )
+            if table_last_sync:
+                statement = statement.where(Tag.modified_date > table_last_sync)
 
         tags = session.exec(statement).all()
         return [self._serialize_tag(tag) for tag in tags]
 
     def _extract_question_tags_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter question_tags by organization through question relationship
         statement = (
@@ -395,14 +491,18 @@ class DataSyncService:
             .where(Question.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(QuestionTag.created_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "question_tags"
+            )
+            if table_last_sync:
+                statement = statement.where(QuestionTag.created_date > table_last_sync)
 
         question_tags = session.exec(statement).all()
         return [self._serialize_question_tag(qt) for qt in question_tags]
 
     def _extract_question_revisions_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter question_revisions by organization through question relationship
         statement = (
@@ -411,14 +511,20 @@ class DataSyncService:
             .where(Question.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(QuestionRevision.modified_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "question_revisions"
+            )
+            if table_last_sync:
+                statement = statement.where(
+                    QuestionRevision.modified_date > table_last_sync
+                )
 
         question_revisions = session.exec(statement).all()
         return [self._serialize_question_revision(qr) for qr in question_revisions]
 
     def _extract_candidate_test_profiles_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter candidate_test_profiles by organization through candidate_test → test → created_by relationship
         statement = (
@@ -432,14 +538,20 @@ class DataSyncService:
             .where(User.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(CandidateTestProfile.created_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "candidate_test_profiles"
+            )
+            if table_last_sync:
+                statement = statement.where(
+                    CandidateTestProfile.created_date > table_last_sync
+                )
 
         profiles = session.exec(statement).all()
         return [self._serialize_candidate_test_profile(profile) for profile in profiles]
 
     def _extract_test_questions_data(
-        self, session: Session, organization_id: int, last_sync: datetime | None
+        self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
         # Filter test_questions by organization through test → created_by relationship
         statement = (
@@ -449,8 +561,12 @@ class DataSyncService:
             .where(User.organization_id == organization_id)
         )
 
-        if last_sync:
-            statement = statement.where(TestQuestion.created_date > last_sync)
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "test_questions"
+            )
+            if table_last_sync:
+                statement = statement.where(TestQuestion.created_date > table_last_sync)
 
         test_questions = session.exec(statement).all()
         return [self._serialize_test_question(tq) for tq in test_questions]

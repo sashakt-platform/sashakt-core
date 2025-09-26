@@ -97,6 +97,20 @@ def test_all_connections() -> None:
         sys.exit(1)
 
 
+def get_table_record_counts(org_id: int, incremental: bool = True) -> dict[str, int]:
+    """Get detailed record counts per table for an organization."""
+    try:
+        extracted_data = data_sync_service._extract_organization_data(
+            org_id, incremental
+        )
+        return {
+            table_name: len(records) for table_name, records in extracted_data.items()
+        }
+    except Exception as e:
+        logger.warning(f"Could not get detailed table counts: {e}")
+        return {}
+
+
 def export_organization_data(org_id: int, incremental: bool = True) -> None:
     """Export data for a specific organization."""
     logger.info(
@@ -104,6 +118,9 @@ def export_organization_data(org_id: int, incremental: bool = True) -> None:
     )
 
     try:
+        # Get detailed table record counts before sync
+        table_counts = get_table_record_counts(org_id, incremental)
+
         results = data_sync_service.sync_organization_data(org_id, incremental)
 
         if not results:
@@ -119,6 +136,50 @@ def export_organization_data(org_id: int, incremental: bool = True) -> None:
                     f"{len(result.tables_created)} tables created, "
                     f"{len(result.tables_updated)} tables updated"
                 )
+
+                # Log detailed table information
+                if table_counts:
+                    non_empty_tables = {
+                        name: count for name, count in table_counts.items() if count > 0
+                    }
+                    empty_tables = {
+                        name: count
+                        for name, count in table_counts.items()
+                        if count == 0
+                    }
+
+                    logger.info(f"  📊 Table-by-table breakdown for {provider_key}:")
+                    logger.info(
+                        f"    📈 Tables with data ({len(non_empty_tables)}/{len(table_counts)}):"
+                    )
+
+                    total_records = 0
+                    if non_empty_tables:
+                        for table_name, record_count in sorted(
+                            non_empty_tables.items()
+                        ):
+                            status = (
+                                "created"
+                                if table_name in result.tables_created
+                                else "updated"
+                            )
+                            logger.info(
+                                f"      • {table_name}: {record_count:,} records ({status})"
+                            )
+                            total_records += record_count
+                    else:
+                        logger.info("      (no tables with data)")
+
+                    if empty_tables:
+                        logger.info(f"    📭 Empty tables ({len(empty_tables)}):")
+                        empty_table_names = ", ".join(sorted(empty_tables.keys()))
+                        logger.info(f"      {empty_table_names}")
+
+                    if total_records != result.records_exported:
+                        logger.warning(
+                            f"    ⚠️  Record count mismatch: expected {total_records:,}, "
+                            f"actual {result.records_exported:,}"
+                        )
             else:
                 logger.error(
                     f"✗ Export failed for {provider_key}: {result.error_message}"
@@ -146,27 +207,66 @@ def export_all_organizations_data(incremental: bool = True) -> None:
 
         total_orgs = len(results)
         successful_orgs = 0
+        total_records_across_orgs = 0
 
         for org_id, org_results in results.items():
-            logger.info(f"Organization {org_id} results:")
+            logger.info(f"📋 Organization {org_id} results:")
+
+            # Get detailed table counts for this organization
+            table_counts = get_table_record_counts(org_id, incremental)
 
             org_success = True
+            org_total_records = 0
+
             for provider_key, result in org_results.items():
                 if result.success:
                     logger.info(
-                        f"  ✓ {provider_key}: {result.records_exported} records exported, "
+                        f"  ✓ {provider_key}: {result.records_exported:,} records exported, "
                         f"{len(result.tables_created)} tables created, "
                         f"{len(result.tables_updated)} tables updated"
                     )
+                    org_total_records += result.records_exported
+
+                    # Log detailed table breakdown for each org
+                    if table_counts:
+                        non_empty_tables = {
+                            name: count
+                            for name, count in table_counts.items()
+                            if count > 0
+                        }
+                        if non_empty_tables:
+                            logger.info(
+                                f"    📊 Tables with data: {len(non_empty_tables)}/{len(table_counts)}"
+                            )
+                            for table_name, record_count in sorted(
+                                non_empty_tables.items()
+                            ):
+                                status = (
+                                    "created"
+                                    if table_name in result.tables_created
+                                    else "updated"
+                                )
+                                logger.info(
+                                    f"      • {table_name}: {record_count:,} records ({status})"
+                                )
+                        else:
+                            logger.info(
+                                "    📊 No tables with data for this organization"
+                            )
                 else:
                     logger.error(f"  ✗ {provider_key}: {result.error_message}")
                     org_success = False
 
             if org_success:
                 successful_orgs += 1
+                total_records_across_orgs += org_total_records
 
+        logger.info("=" * 60)
         logger.info(
-            f"Export summary: {successful_orgs}/{total_orgs} organizations exported successfully"
+            f"🎯 Export summary: {successful_orgs}/{total_orgs} organizations exported successfully"
+        )
+        logger.info(
+            f"📊 Total records exported across all organizations: {total_records_across_orgs:,}"
         )
 
     except Exception as e:
