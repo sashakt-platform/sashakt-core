@@ -120,11 +120,12 @@ def logout(session: SessionDep, current_user: CurrentUser) -> Message:
 
 
 @router.post("/login/test-token", response_model=UserPublic)
-def test_token(current_user: CurrentUser) -> Any:
+def test_token(current_user: CurrentUser, session: SessionDep) -> Any:
     """
     Test access token
     """
-    return current_user
+    user_public = crud.get_user_public(db_user=current_user, session=session)
+    return user_public
 
 
 @router.post("/password-recovery/{email}")

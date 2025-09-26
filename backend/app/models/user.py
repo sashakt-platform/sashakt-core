@@ -125,6 +125,7 @@ class User(UserBase, table=True):
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: int
+    role_name: str
     created_date: datetime
     modified_date: datetime
     is_deleted: bool
