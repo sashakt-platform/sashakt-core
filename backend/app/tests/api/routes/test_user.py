@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app import crud
 from app.core.config import settings
@@ -934,7 +934,7 @@ def test_create_state_admin_with_state_id(
             "role_id": role.id,
             "full_name": full_name,
             "organization_id": org_id,
-            "state_ids": [state1.id, state2.id],
+            "state_ids": [state1.id],
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
@@ -951,10 +951,8 @@ def test_create_state_admin_with_state_id(
         post_state_names = {s["name"] for s in response_data["states"]}
         post_state_ids = {s["id"] for s in response_data["states"]}
         assert state1.name in post_state_names
-        assert state2.name in post_state_names
         assert state1.id in post_state_ids
-        assert state2.id in post_state_ids
-        assert len(response_data["states"]) == 2
+        assert len(response_data["states"]) == 1
         r = client.get(
             f"{settings.API_V1_STR}/users/{user_id}",
             headers=get_user_superadmin_token,
@@ -966,10 +964,8 @@ def test_create_state_admin_with_state_id(
         state_names = {s["name"] for s in data["states"]}
         state_ids = {s["id"] for s in data["states"]}
         assert state1.name in state_names
-        assert state2.name in state_names
         assert state1.id in state_ids
-        assert state2.id in state_ids
-        assert len(data["states"]) == 2
+        assert len(data["states"]) == 1
 
 
 def test_create_user_multiple_state_assignment_error(
@@ -1213,7 +1209,7 @@ def test_update_user_states(
     assert update_response.json()["detail"] == "Invalid role ID provided."
 
 
-def test_update_other_role_to_state_admin_and_remove_states(
+def test_update_other_role_to_state_admin_and_add_states(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
@@ -1259,7 +1255,7 @@ def test_update_other_role_to_state_admin_and_remove_states(
         "organization_id": org.id,
         "full_name": random_lower_string(),
         "phone": random_lower_string(),
-        "state_ids": [state1.id, state2.id],
+        "state_ids": [state1.id],
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
@@ -1269,7 +1265,61 @@ def test_update_other_role_to_state_admin_and_remove_states(
     assert patch_response.status_code == 200
     updated_data = patch_response.json()
     assert updated_data["role_id"] == state_admin_role.id
-    assert len(updated_data["states"]) == 2
+    assert len(updated_data["states"]) == 1
+
+
+def test_update_other_role_to_state_admin_without_state_ids_returns_400(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    org = create_random_organization(db)
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+    assert state_admin_role is not None
+    assert other_role is not None
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state1)
+    db.commit()
+    db.refresh(state1)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": other_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    user_data = response.json()
+    user_id = user_data["id"]
+    assert user_data["role_id"] == other_role.id
+    assert user_data["states"] is None
+
+    patch_data = {
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+    }
+    patch_response = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+        json=patch_data,
+    )
+    assert patch_response.status_code == 400
+    error = patch_response.json()
+    assert error["detail"] == "A state-admin must be assigned at least one state."
 
 
 def test_update_state_admin_to_other_role_and_remove_states(
@@ -1301,7 +1351,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
         "role_id": state_admin_role.id,
         "full_name": random_lower_string(),
         "organization_id": org.id,
-        "state_ids": [state1.id, state2.id],
+        "state_ids": [state1.id],
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
@@ -1313,10 +1363,9 @@ def test_update_state_admin_to_other_role_and_remove_states(
     user_id = user_data["id"]
 
     assert user_data["role_id"] == state_admin_role.id
-    assert len(user_data["states"]) == 2
+    assert len(user_data["states"]) == 1
     state_ids = {s["id"] for s in user_data["states"]}
     assert state1.id in state_ids
-    assert state2.id in state_ids
 
     data = {
         "role_id": other_role.id,
@@ -1458,3 +1507,210 @@ def test_create_test_admin_auto_inherits_state_admin_states(
     state_ids = [s["id"] for s in data["states"]]
     assert state.id in state_ids
     assert len(data["states"]) == 1
+
+
+def test_update_user_to_test_admin_inherits_state_admin_states(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    other_role = db.exec(
+        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
+    ).first()
+    assert state_admin_role and test_admin_role and other_role
+
+    org = create_random_organization(db)
+
+    state_admin_email = random_email()
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+    assert resp_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": other_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+    resp_user = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=payload,
+    )
+
+    assert resp_user.status_code == 200
+    user_id = resp_user.json()["id"]
+
+    initial_user = resp_user.json()
+    assert initial_user["states"] == [] or initial_user["states"] is None
+
+    patch_payload = {
+        "role_id": test_admin_role.id,
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "organization_id": org.id,
+    }
+    patch_resp = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+        json=patch_payload,
+    )
+    assert patch_resp.status_code == 200
+    updated_user = patch_resp.json()
+
+    assert updated_user["role_id"] == test_admin_role.id
+    assert "states" in updated_user
+    assert len(updated_user["states"]) == 1
+    assert updated_user["states"][0]["id"] == state.id
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+    )
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    state_ids = [s["id"] for s in data["states"]]
+    assert state.id in state_ids
+    assert len(data["states"]) == 1
+
+
+def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state1, state2])
+    db.commit()
+    db.refresh(state1)
+    db.refresh(state2)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    other_role = db.exec(
+        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
+    ).first()
+    assert test_admin_role and other_role
+
+    org = create_random_organization(db)
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": other_role.id,
+        "organization_id": org.id,
+    }
+    resp_user = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=payload,
+    )
+    assert resp_user.status_code == 200
+    user_id = resp_user.json()["id"]
+
+    patch_payload = {
+        "role_id": test_admin_role.id,
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "organization_id": org.id,
+        "state_ids": [state1.id, state2.id],
+    }
+    patch_resp = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+        json=patch_payload,
+    )
+
+    assert patch_resp.status_code == 400
+    assert (
+        patch_resp.json()["detail"]
+        == "A test-admin may be linked to at most one state."
+    )
+
+
+def test_update_normal_user_to_test_admin_without_states(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    other_role = db.exec(
+        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
+    ).first()
+    assert test_admin_role and other_role
+
+    org = create_random_organization(db)
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": other_role.id,
+        "organization_id": org.id,
+    }
+    resp_user = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=payload,
+    )
+    assert resp_user.status_code == 200
+    user_id = resp_user.json()["id"]
+
+    patch_payload = {
+        "role_id": test_admin_role.id,
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "organization_id": org.id,
+    }
+    patch_resp = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+        json=patch_payload,
+    )
+
+    assert patch_resp.status_code == 200
+    updated_user = patch_resp.json()
+    assert updated_user["role_id"] == test_admin_role.id
+    assert updated_user["states"] == []
