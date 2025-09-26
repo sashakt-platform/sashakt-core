@@ -600,7 +600,7 @@ class BigQueryService:
                     record_ids = [
                         record.get("id") for record in table_data if record.get("id")
                     ]
-                    max_id = max(record_ids) if record_ids else None  # type: ignore[type-var]
+                    max_id = max(record_ids) if record_ids else None
                     self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
                 else:
                     self.update_sync_metadata(table_name, datetime.utcnow(), None)

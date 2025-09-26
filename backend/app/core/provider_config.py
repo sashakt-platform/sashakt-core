@@ -72,7 +72,7 @@ class ProviderConfigService:
             fernet = Fernet(self._encryption_key)
             encrypted_data = base64.urlsafe_b64decode(encrypted_config.encode())
             decrypted_data = fernet.decrypt(encrypted_data)
-            return json.loads(decrypted_data.decode())
+            return json.loads(decrypted_data.decode())  # type: ignore[no-any-return]
         except Exception as e:
             raise ValueError(f"Failed to decrypt provider configuration: {e}")
 

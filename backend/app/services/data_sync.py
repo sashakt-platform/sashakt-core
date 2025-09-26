@@ -163,7 +163,8 @@ class DataSyncService:
         with Session(engine) as session:
             organizations = session.exec(
                 select(Organization).where(
-                    Organization.is_active.is_(True), Organization.is_deleted.is_(False)
+                    Organization.is_active,
+                    ~Organization.is_deleted,  # type: ignore[arg-type]
                 )
             ).all()
 
@@ -325,7 +326,7 @@ class DataSyncService:
                 organization_id, "users"
             )
             if table_last_sync is not None:
-                statement = statement.where(User.modified_date > table_last_sync)
+                statement = statement.where(User.modified_date > table_last_sync)  # type: ignore[operator]  # type: ignore[operator]
 
         users = session.exec(statement).all()
         return [self._serialize_user(user) for user in users]
@@ -336,7 +337,7 @@ class DataSyncService:
         # Filter tests by organization through created_by relationship
         statement = (
             select(Test)
-            .join(User, Test.created_by_id == User.id)
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
             .where(User.organization_id == organization_id)
         )
 
@@ -345,7 +346,7 @@ class DataSyncService:
                 organization_id, "tests"
             )
             if table_last_sync is not None:
-                statement = statement.where(Test.modified_date > table_last_sync)
+                statement = statement.where(Test.modified_date > table_last_sync)  # type: ignore[operator]  # type: ignore[operator]
 
         tests = session.exec(statement).all()
         return [self._serialize_test(test) for test in tests]
@@ -360,7 +361,7 @@ class DataSyncService:
                 organization_id, "questions"
             )
             if table_last_sync is not None:
-                statement = statement.where(Question.modified_date > table_last_sync)
+                statement = statement.where(Question.modified_date > table_last_sync)  # type: ignore[operator]  # type: ignore[operator]
 
         questions = session.exec(statement).all()
         return [self._serialize_question(question) for question in questions]
@@ -371,9 +372,9 @@ class DataSyncService:
         # Filter candidates by organization through test creator relationship
         statement = (
             select(Candidate)
-            .join(CandidateTest, Candidate.id == CandidateTest.candidate_id)
-            .join(Test, CandidateTest.test_id == Test.id)
-            .join(User, Test.created_by_id == User.id)
+            .join(CandidateTest, Candidate.id == CandidateTest.candidate_id)  # type: ignore[arg-type]
+            .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
             .where(User.organization_id == organization_id)
             .distinct()
         )
@@ -383,7 +384,7 @@ class DataSyncService:
                 organization_id, "candidates"
             )
             if table_last_sync is not None:
-                statement = statement.where(Candidate.modified_date > table_last_sync)
+                statement = statement.where(Candidate.modified_date > table_last_sync)  # type: ignore[operator]
 
         candidates = session.exec(statement).all()
         return [self._serialize_candidate(candidate) for candidate in candidates]
@@ -395,10 +396,11 @@ class DataSyncService:
         statement = (
             select(CandidateTestAnswer)
             .join(
-                CandidateTest, CandidateTestAnswer.candidate_test_id == CandidateTest.id
+                CandidateTest,
+                CandidateTestAnswer.candidate_test_id == CandidateTest.id,  # type: ignore[arg-type]
             )
-            .join(Test, CandidateTest.test_id == Test.id)
-            .join(User, Test.created_by_id == User.id)
+            .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
             .where(User.organization_id == organization_id)
         )
 
@@ -408,7 +410,7 @@ class DataSyncService:
             )
             if table_last_sync is not None:
                 statement = statement.where(
-                    CandidateTestAnswer.modified_date > table_last_sync
+                    CandidateTestAnswer.modified_date > table_last_sync  # type: ignore[operator]
                 )
 
         answers = session.exec(statement).all()
@@ -420,8 +422,8 @@ class DataSyncService:
         # Filter candidate tests by organization through test → created_by relationship
         statement = (
             select(CandidateTest)
-            .join(Test, CandidateTest.test_id == Test.id)
-            .join(User, Test.created_by_id == User.id)
+            .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
             .where(User.organization_id == organization_id)
         )
 
@@ -431,7 +433,7 @@ class DataSyncService:
             )
             if table_last_sync is not None:
                 statement = statement.where(
-                    CandidateTest.modified_date > table_last_sync
+                    CandidateTest.modified_date > table_last_sync  # type: ignore[operator]
                 )
 
         candidate_tests = session.exec(statement).all()
@@ -449,7 +451,7 @@ class DataSyncService:
                 organization_id, "states"
             )
             if table_last_sync is not None:
-                statement = statement.where(State.modified_date > table_last_sync)
+                statement = statement.where(State.modified_date > table_last_sync)  # type: ignore[operator]
 
         states = session.exec(statement).all()
         return [self._serialize_state(state) for state in states]
@@ -466,7 +468,7 @@ class DataSyncService:
                 organization_id, "districts"
             )
             if table_last_sync is not None:
-                statement = statement.where(District.modified_date > table_last_sync)
+                statement = statement.where(District.modified_date > table_last_sync)  # type: ignore[operator]
 
         districts = session.exec(statement).all()
         return [self._serialize_district(district) for district in districts]
@@ -483,7 +485,7 @@ class DataSyncService:
                 organization_id, "blocks"
             )
             if table_last_sync is not None:
-                statement = statement.where(Block.modified_date > table_last_sync)
+                statement = statement.where(Block.modified_date > table_last_sync)  # type: ignore[operator]
 
         blocks = session.exec(statement).all()
         return [self._serialize_block(block) for block in blocks]
@@ -494,7 +496,7 @@ class DataSyncService:
         # Filter entities by organization through entity_type relationship
         statement = (
             select(Entity)
-            .join(EntityType, Entity.entity_type_id == EntityType.id)
+            .join(EntityType, Entity.entity_type_id == EntityType.id)  # type: ignore[arg-type]
             .where(EntityType.organization_id == organization_id)
         )
 
@@ -503,7 +505,7 @@ class DataSyncService:
                 organization_id, "entities"
             )
             if table_last_sync is not None:
-                statement = statement.where(Entity.modified_date > table_last_sync)
+                statement = statement.where(Entity.modified_date > table_last_sync)  # type: ignore[operator]
 
         entities = session.exec(statement).all()
         return [self._serialize_entity(entity) for entity in entities]
@@ -520,7 +522,7 @@ class DataSyncService:
                 organization_id, "entity_types"
             )
             if table_last_sync is not None:
-                statement = statement.where(EntityType.modified_date > table_last_sync)
+                statement = statement.where(EntityType.modified_date > table_last_sync)  # type: ignore[operator]
 
         entity_types = session.exec(statement).all()
         return [self._serialize_entity_type(et) for et in entity_types]
@@ -535,7 +537,7 @@ class DataSyncService:
                 organization_id, "tags"
             )
             if table_last_sync is not None:
-                statement = statement.where(Tag.modified_date > table_last_sync)
+                statement = statement.where(Tag.modified_date > table_last_sync)  # type: ignore[operator]
 
         tags = session.exec(statement).all()
         return [self._serialize_tag(tag) for tag in tags]
@@ -546,7 +548,7 @@ class DataSyncService:
         # Filter question_tags by organization through question relationship
         statement = (
             select(QuestionTag)
-            .join(Question, QuestionTag.question_id == Question.id)
+            .join(Question, QuestionTag.question_id == Question.id)  # type: ignore[arg-type]
             .where(Question.organization_id == organization_id)
         )
 
@@ -555,7 +557,7 @@ class DataSyncService:
                 organization_id, "question_tags"
             )
             if table_last_sync is not None:
-                statement = statement.where(QuestionTag.created_date > table_last_sync)
+                statement = statement.where(QuestionTag.created_date > table_last_sync)  # type: ignore[operator]
 
         question_tags = session.exec(statement).all()
         return [self._serialize_question_tag(qt) for qt in question_tags]
@@ -566,7 +568,7 @@ class DataSyncService:
         # Filter question_revisions by organization through question relationship
         statement = (
             select(QuestionRevision)
-            .join(Question, QuestionRevision.question_id == Question.id)
+            .join(Question, QuestionRevision.question_id == Question.id)  # type: ignore[arg-type]
             .where(Question.organization_id == organization_id)
         )
 
@@ -576,7 +578,7 @@ class DataSyncService:
             )
             if table_last_sync is not None:
                 statement = statement.where(
-                    QuestionRevision.modified_date > table_last_sync
+                    QuestionRevision.modified_date > table_last_sync  # type: ignore[operator]
                 )
 
         question_revisions = session.exec(statement).all()
@@ -590,10 +592,10 @@ class DataSyncService:
             select(CandidateTestProfile)
             .join(
                 CandidateTest,
-                CandidateTestProfile.candidate_test_id == CandidateTest.id,
+                CandidateTestProfile.candidate_test_id == CandidateTest.id,  # type: ignore[arg-type]
             )
-            .join(Test, CandidateTest.test_id == Test.id)
-            .join(User, Test.created_by_id == User.id)
+            .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
             .where(User.organization_id == organization_id)
         )
 
@@ -603,7 +605,7 @@ class DataSyncService:
             )
             if table_last_sync is not None:
                 statement = statement.where(
-                    CandidateTestProfile.created_date > table_last_sync
+                    CandidateTestProfile.created_date > table_last_sync  # type: ignore[operator]
                 )
 
         profiles = session.exec(statement).all()
@@ -615,8 +617,8 @@ class DataSyncService:
         # Filter test_questions by organization through test → created_by relationship
         statement = (
             select(TestQuestion)
-            .join(Test, TestQuestion.test_id == Test.id)
-            .join(User, Test.created_by_id == User.id)
+            .join(Test, TestQuestion.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
             .where(User.organization_id == organization_id)
         )
 
@@ -625,7 +627,7 @@ class DataSyncService:
                 organization_id, "test_questions"
             )
             if table_last_sync is not None:
-                statement = statement.where(TestQuestion.created_date > table_last_sync)
+                statement = statement.where(TestQuestion.created_date > table_last_sync)  # type: ignore[operator]
 
         test_questions = session.exec(statement).all()
         return [self._serialize_test_question(tq) for tq in test_questions]
@@ -914,7 +916,7 @@ class DataSyncService:
                     OrganizationProvider.organization_id == organization_id,
                     OrganizationProvider.is_enabled,
                 )
-                .order_by(OrganizationProvider.last_sync_timestamp.desc())
+                .order_by(OrganizationProvider.last_sync_timestamp.desc())  # type: ignore[union-attr]
             ).first()
 
             return org_provider.last_sync_timestamp if org_provider else None

@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
 
@@ -58,9 +58,8 @@ class OrganizationProviderBase(SQLModel):
     provider_id: int = Field(
         foreign_key="provider.id", title="Provider ID", description="ID of the provider"
     )
-    config_json: dict[str, Any] | None = Field(
+    config_json: str | None = Field(
         default=None,
-        sa_column=Column(JSON),
         title="Configuration JSON",
         description="Encrypted provider-specific configuration",
     )
@@ -108,7 +107,7 @@ class ProviderUpdate(SQLModel):
 
 class OrganizationProviderCreate(SQLModel):
     provider_id: int
-    config_json: dict[str, Any] | None = None
+    config_json: str | None = None
     is_enabled: bool = True
 
 
@@ -128,7 +127,7 @@ class OrganizationProviderPublic(SQLModel):
 
 
 class OrganizationProviderUpdate(SQLModel):
-    config_json: dict[str, Any] | None = None
+    config_json: str | None = None
     is_enabled: bool | None = None
     last_sync_timestamp: datetime | None = None
 
