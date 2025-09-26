@@ -243,13 +243,18 @@ def create_test(
         session.add_all(question_links)
         session.commit()
 
-    if test_create.state_ids:
-        state_ids = test_create.state_ids
-        state_links = [
-            TestState(test_id=test.id, state_id=state_id) for state_id in state_ids
-        ]
-        session.add_all(state_links)
-        session.commit()
+    state_ids_to_assign = (
+        [state.id for state in current_user.states if state.id is not None]
+        if current_user.role.name == "state_admin" and current_user.states
+        else test_create.state_ids or []
+    )
+
+    if state_ids_to_assign:
+        session.add_all(
+            TestState(test_id=test.id, state_id=state_id)
+            for state_id in state_ids_to_assign
+        )
+    session.commit()
     if test_create.district_ids:
         district_ids = test_create.district_ids
         district_links = [
