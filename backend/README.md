@@ -186,11 +186,11 @@ Before continuing, ensure you have the [MJML extension](https://marketplace.visu
 
 Once you have the MJML extension installed, you can create a new email template in the `src` directory. After creating the new email template and with the `.mjml` file open in your editor, open the command palette with `Ctrl+Shift+P` and search for `MJML: Export to HTML`. This will convert the `.mjml` file to a `.html` file and now you can save it in the build directory.
 
-## Big Query Integration
+## BigQuery integration
 
-Pre-requisites: Big Query provider needs be configured for an organization.
+Pre-requisites: A BigQuery provider must be configured for the organization.
 
-Script can we run to sync Postgres data to Bigquery.
+You can run the following script to sync PostgreSQL data to BigQuery.
 
 ```console
 docker compose exec backend python scripts/export_bigquery.py
