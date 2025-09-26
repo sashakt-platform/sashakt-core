@@ -1,5 +1,6 @@
 import base64
 import json
+from typing import Any
 
 from cryptography.fernet import Fernet
 from pydantic import BaseModel, Field
@@ -32,14 +33,14 @@ class BigQueryConfig(BaseModel):
         description="BigQuery dataset ID (organization suffix will be auto-added)",
     )
     table_prefix: str = Field(default="", description="Prefix for table names")
-    sync_settings: dict = Field(
+    sync_settings: dict[str, Any] = Field(
         default_factory=lambda: {"batch_size": 1000, "incremental": True},
         description="Sync configuration settings",
     )
 
 
 class ProviderConfigService:
-    def __init__(self):
+    def __init__(self) -> None:
         self._encryption_key = self._get_or_generate_key()
 
     def _get_or_generate_key(self) -> bytes:
@@ -60,13 +61,13 @@ class ProviderConfigService:
                 )
             return key
 
-    def encrypt_config(self, config: dict) -> str:
+    def encrypt_config(self, config: dict[str, Any]) -> str:
         fernet = Fernet(self._encryption_key)
         config_json = json.dumps(config)
         encrypted_data = fernet.encrypt(config_json.encode())
         return base64.urlsafe_b64encode(encrypted_data).decode()
 
-    def decrypt_config(self, encrypted_config: str) -> dict:
+    def decrypt_config(self, encrypted_config: str) -> dict[str, Any]:
         try:
             fernet = Fernet(self._encryption_key)
             encrypted_data = base64.urlsafe_b64decode(encrypted_config.encode())
@@ -76,8 +77,8 @@ class ProviderConfigService:
             raise ValueError(f"Failed to decrypt provider configuration: {e}")
 
     def validate_provider_config(
-        self, provider_type: ProviderType, config: dict
-    ) -> dict:
+        self, provider_type: ProviderType, config: dict[str, Any]
+    ) -> dict[str, Any]:
         if provider_type == ProviderType.BIGQUERY:
             validated_config = BigQueryConfig(**config)
             return validated_config.model_dump()
@@ -85,12 +86,12 @@ class ProviderConfigService:
             raise ValueError(f"Unknown provider type: {provider_type}")
 
     def prepare_config_for_storage(
-        self, provider_type: ProviderType, config: dict
+        self, provider_type: ProviderType, config: dict[str, Any]
     ) -> str:
         validated_config = self.validate_provider_config(provider_type, config)
         return self.encrypt_config(validated_config)
 
-    def get_config_for_use(self, encrypted_config: str) -> dict:
+    def get_config_for_use(self, encrypted_config: str) -> dict[str, Any]:
         return self.decrypt_config(encrypted_config)
 
     @staticmethod

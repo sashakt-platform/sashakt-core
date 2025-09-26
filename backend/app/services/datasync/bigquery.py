@@ -14,7 +14,7 @@ class BigQueryService:
     def __init__(self, organization_id: int, config: dict[str, Any]):
         self.organization_id = organization_id
         self.config = config
-        self._client = None
+        self._client: bigquery.Client | None = None
 
     def initialize_client(self) -> bigquery.Client:
         if self._client is None:
@@ -33,7 +33,7 @@ class BigQueryService:
                 ],
                 "client_x509_cert_url": self.config["client_x509_cert_url"],
             }
-            credentials = service_account.Credentials.from_service_account_info(
+            credentials = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
                 credentials_info
             )
             self._client = bigquery.Client(
@@ -600,7 +600,7 @@ class BigQueryService:
                     record_ids = [
                         record.get("id") for record in table_data if record.get("id")
                     ]
-                    max_id = max(record_ids) if record_ids else None
+                    max_id = max(record_ids) if record_ids else None  # type: ignore[type-var]
                     self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
                 else:
                     self.update_sync_metadata(table_name, datetime.utcnow(), None)
@@ -680,7 +680,7 @@ class BigQueryService:
                             for record in filtered_data
                             if record.get("id") is not None
                         ]
-                        max_id = max(record_ids) if record_ids else None
+                        max_id = max(record_ids) if record_ids else None  # type: ignore[type-var]
                         self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
                     else:
                         # Update timestamp even if no new data (to track sync attempts)

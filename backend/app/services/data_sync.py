@@ -50,7 +50,7 @@ class DataSyncService:
                     OrganizationProvider.is_enabled,
                     Provider.is_active,
                 )
-                .options(selectinload(OrganizationProvider.provider))
+                .options(selectinload(OrganizationProvider.provider))  # type: ignore[arg-type]
             )
             return list(session.exec(statement))
 
@@ -76,6 +76,8 @@ class DataSyncService:
                 if org_provider.provider.provider_type == ProviderType.BIGQUERY:
                     from app.core.provider_config import provider_config_service
 
+                    if org_provider.config_json is None:
+                        continue
                     decrypted_config = provider_config_service.get_config_for_use(
                         org_provider.config_json
                     )
@@ -118,6 +120,8 @@ class DataSyncService:
                 continue
 
             try:
+                if org_provider.config_json is None:
+                    continue
                 decrypted_config = provider_config_service.get_config_for_use(
                     org_provider.config_json
                 )
@@ -131,7 +135,7 @@ class DataSyncService:
                 else:
                     result = bigquery_service.execute_full_sync(export_data)
 
-                if result.success:
+                if result.success and org_provider.id is not None:
                     self._update_organization_provider_sync_timestamp(
                         org_provider.id, result.sync_timestamp
                     )
@@ -159,11 +163,13 @@ class DataSyncService:
         with Session(engine) as session:
             organizations = session.exec(
                 select(Organization).where(
-                    Organization.is_active, ~Organization.is_deleted
+                    Organization.is_active.is_(True), Organization.is_deleted.is_(False)
                 )
             ).all()
 
             for org in organizations:
+                if org.id is None:
+                    continue
                 try:
                     org_results = self.sync_organization_data(org.id, incremental)
                     if org_results:
@@ -197,6 +203,8 @@ class DataSyncService:
                 if org_provider.provider.provider_type == ProviderType.BIGQUERY:
                     from app.core.provider_config import provider_config_service
 
+                    if org_provider.config_json is None:
+                        continue
                     decrypted_config = provider_config_service.get_config_for_use(
                         org_provider.config_json
                     )
@@ -225,7 +233,7 @@ class DataSyncService:
                     OrganizationProvider.organization_id == organization_id,
                     OrganizationProvider.provider_id == provider_id,
                 )
-                .options(selectinload(OrganizationProvider.provider))
+                .options(selectinload(OrganizationProvider.provider))  # type: ignore[arg-type]
             ).first()
 
             if not org_provider:
@@ -236,6 +244,8 @@ class DataSyncService:
                 return False
 
             try:
+                if org_provider.config_json is None:
+                    return False
                 decrypted_config = provider_config_service.get_config_for_use(
                     org_provider.config_json
                 )
@@ -314,7 +324,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "users"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(User.modified_date > table_last_sync)
 
         users = session.exec(statement).all()
@@ -334,7 +344,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "tests"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(Test.modified_date > table_last_sync)
 
         tests = session.exec(statement).all()
@@ -349,7 +359,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "questions"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(Question.modified_date > table_last_sync)
 
         questions = session.exec(statement).all()
@@ -372,7 +382,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "candidates"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(Candidate.modified_date > table_last_sync)
 
         candidates = session.exec(statement).all()
@@ -396,7 +406,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "candidate_test_answers"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(
                     CandidateTestAnswer.modified_date > table_last_sync
                 )
@@ -419,7 +429,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "candidate_tests"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(
                     CandidateTest.modified_date > table_last_sync
                 )
@@ -438,7 +448,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "states"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(State.modified_date > table_last_sync)
 
         states = session.exec(statement).all()
@@ -455,7 +465,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "districts"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(District.modified_date > table_last_sync)
 
         districts = session.exec(statement).all()
@@ -472,7 +482,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "blocks"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(Block.modified_date > table_last_sync)
 
         blocks = session.exec(statement).all()
@@ -492,7 +502,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "entities"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(Entity.modified_date > table_last_sync)
 
         entities = session.exec(statement).all()
@@ -509,7 +519,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "entity_types"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(EntityType.modified_date > table_last_sync)
 
         entity_types = session.exec(statement).all()
@@ -524,7 +534,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "tags"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(Tag.modified_date > table_last_sync)
 
         tags = session.exec(statement).all()
@@ -544,7 +554,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "question_tags"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(QuestionTag.created_date > table_last_sync)
 
         question_tags = session.exec(statement).all()
@@ -564,7 +574,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "question_revisions"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(
                     QuestionRevision.modified_date > table_last_sync
                 )
@@ -591,7 +601,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "candidate_test_profiles"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(
                     CandidateTestProfile.created_date > table_last_sync
                 )
@@ -614,7 +624,7 @@ class DataSyncService:
             table_last_sync = self._get_table_specific_last_sync(
                 organization_id, "test_questions"
             )
-            if table_last_sync:
+            if table_last_sync is not None:
                 statement = statement.where(TestQuestion.created_date > table_last_sync)
 
         test_questions = session.exec(statement).all()

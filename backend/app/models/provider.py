@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class ProviderType(str, Enum):
-    BIGQUERY = "bigquery"
+    BIGQUERY = "BIGQUERY"
 
 
 class ProviderBase(SQLModel):
@@ -58,7 +58,7 @@ class OrganizationProviderBase(SQLModel):
     provider_id: int = Field(
         foreign_key="provider.id", title="Provider ID", description="ID of the provider"
     )
-    config_json: dict | None = Field(
+    config_json: dict[str, Any] | None = Field(
         default=None,
         sa_column=Column(JSON),
         title="Configuration JSON",
@@ -108,7 +108,7 @@ class ProviderUpdate(SQLModel):
 
 class OrganizationProviderCreate(SQLModel):
     provider_id: int
-    config_json: dict | None = None
+    config_json: dict[str, Any] | None = None
     is_enabled: bool = True
 
 
@@ -128,7 +128,7 @@ class OrganizationProviderPublic(SQLModel):
 
 
 class OrganizationProviderUpdate(SQLModel):
-    config_json: dict | None = None
+    config_json: dict[str, Any] | None = None
     is_enabled: bool | None = None
     last_sync_timestamp: datetime | None = None
 
