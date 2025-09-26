@@ -22,7 +22,7 @@ from app.models.provider import (
     ProviderSyncStatus,
     ProviderUpdate,
 )
-from app.services.data_export import data_export_service
+from app.services.data_sync import data_sync_service
 
 router = APIRouter(prefix="/providers", tags=["providers"])
 
@@ -304,7 +304,7 @@ def test_provider_connection(
     Test provider connection for organization.
     """
 
-    success = data_export_service.test_provider_connection(organization_id, provider_id)
+    success = data_sync_service.test_provider_connection(organization_id, provider_id)
     return {"success": success}
 
 
@@ -322,9 +322,7 @@ def trigger_provider_sync(
     """
 
     try:
-        results = data_export_service.export_organization_data(
-            organization_id, incremental
-        )
+        results = data_sync_service.sync_organization_data(organization_id, incremental)
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
