@@ -650,7 +650,10 @@ def test_get_tests(
     assert any(item["created_by_id"] == test.created_by_id for item in data)
 
     assert any(
-        len(item["tags"]) == 1 and item["tags"][0]["id"] == tag_a.id for item in data
+        len(item["tags"]) == 1
+        and item["tags"][0]["id"] == tag_a.id
+        and item["tags"][0].get("tag_type", {}).get("name") == tag_type.name
+        for item in data
     )
     assert any(
         len(item["states"]) == 1 and item["states"][0]["id"] == state_a.id
