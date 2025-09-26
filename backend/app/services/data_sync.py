@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -31,6 +32,8 @@ from app.models.test import TestQuestion
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
 
+logger = logging.getLogger(__name__)
+
 
 class DataSyncService:
     """Direct BigQuery data synchronization service"""
@@ -61,7 +64,53 @@ class DataSyncService:
         if not org_providers:
             return results
 
-        export_data = self._extract_organization_data(organization_id, incremental)
+        # Determine actual sync mode
+        actual_incremental = incremental
+        logger.info(
+            f"Initial sync mode for org {organization_id}: incremental={incremental}"
+        )
+
+        if incremental:
+            # For incremental mode, check if dataset exists - if not, force full sync
+            for org_provider in org_providers:
+                if org_provider.provider.provider_type == ProviderType.BIGQUERY:
+                    from app.core.provider_config import provider_config_service
+
+                    decrypted_config = provider_config_service.get_config_for_use(
+                        org_provider.config_json
+                    )
+                    bigquery_service = BigQueryService(
+                        organization_id, decrypted_config
+                    )
+
+                    if not bigquery_service.dataset_exists():
+                        logger.info(
+                            f"Dataset doesn't exist for org {organization_id}, forcing full sync"
+                        )
+                        actual_incremental = False
+                    else:
+                        logger.info(
+                            f"Dataset exists for org {organization_id}, proceeding with incremental sync"
+                        )
+                    break
+        else:
+            # Full sync mode: always extract all data, ignore any existing sync metadata
+            logger.info(
+                f"Full sync mode for org {organization_id}, ignoring any existing sync metadata"
+            )
+            actual_incremental = False
+
+        logger.info(
+            f"Final sync mode for org {organization_id}: actual_incremental={actual_incremental}"
+        )
+        export_data = self._extract_organization_data(
+            organization_id, actual_incremental
+        )
+
+        total_records = sum(len(records) for records in export_data.values())
+        logger.info(
+            f"Extracted {total_records} total records for org {organization_id}"
+        )
 
         for org_provider in org_providers:
             # Only process BigQuery providers
@@ -75,7 +124,7 @@ class DataSyncService:
 
                 bigquery_service = BigQueryService(organization_id, decrypted_config)
 
-                if incremental:
+                if actual_incremental:
                     result = bigquery_service.execute_incremental_sync(
                         export_data, org_provider.last_sync_timestamp
                     )

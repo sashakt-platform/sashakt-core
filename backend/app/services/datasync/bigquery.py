@@ -41,6 +41,16 @@ class BigQueryService:
             )
         return self._client
 
+    def dataset_exists(self) -> bool:
+        """Check if the BigQuery dataset exists"""
+        try:
+            client = self.initialize_client()
+            dataset_ref = client.dataset(self.config["dataset_id"])
+            client.get_dataset(dataset_ref)
+            return True
+        except Exception:
+            return False
+
     def get_table_sync_metadata(
         self, table_name: str
     ) -> tuple[datetime | None, int | None]:
