@@ -19,6 +19,7 @@ from sqlalchemy import desc, func
 from sqlmodel import col, not_, or_, select
 from typing_extensions import TypedDict
 
+from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.core.sorting import (
     QuestionSortConfig,
@@ -852,6 +853,9 @@ def get_question_revisions(
         if rev.id is not None and rev.created_date is not None:
             user = None
             user = session.get(User, rev.created_by_id)
+            user_public = (
+                crud.get_user_public(db_user=user, session=session) if user else None
+            )
             result.append(
                 QuestionRevisionInfo(
                     id=rev.id,
@@ -859,7 +863,7 @@ def get_question_revisions(
                     text=rev.question_text,
                     type=rev.question_type,
                     is_current=(rev.id == question.last_revision_id),
-                    created_by_id=user,
+                    created_by_id=user_public,
                 )
             )
 
