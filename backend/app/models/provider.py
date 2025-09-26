@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -107,7 +107,7 @@ class ProviderUpdate(SQLModel):
 
 class OrganizationProviderCreate(SQLModel):
     provider_id: int
-    config_json: str | None = None
+    config_json: dict[str, Any] | None = None
     is_enabled: bool = True
 
 
@@ -127,7 +127,7 @@ class OrganizationProviderPublic(SQLModel):
 
 
 class OrganizationProviderUpdate(SQLModel):
-    config_json: str | None = None
+    config_json: dict[str, Any] | None = None
     is_enabled: bool | None = None
     last_sync_timestamp: datetime | None = None
 

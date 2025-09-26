@@ -41,7 +41,7 @@ def get_providers(
     """
     statement = select(Provider).where(Provider.is_active)
     providers = session.exec(statement).all()
-    return paginate(providers, params)
+    return paginate(providers, params)  # type: ignore[no-any-return]
 
 
 @router.post(
@@ -62,7 +62,7 @@ def create_provider(
     session.add(provider)
     session.commit()
     session.refresh(provider)
-    return provider
+    return ProviderPublic.model_validate(provider)
 
 
 @router.put(
@@ -89,7 +89,7 @@ def update_provider(
     session.add(provider)
     session.commit()
     session.refresh(provider)
-    return provider
+    return ProviderPublic.model_validate(provider)
 
 
 @router.delete(
@@ -138,7 +138,7 @@ def get_organization_providers(
         )
     )
     org_providers = session.exec(statement).all()
-    return org_providers
+    return [OrganizationProviderPublic.model_validate(op) for op in org_providers]
 
 
 @router.post(
@@ -201,7 +201,7 @@ def create_organization_provider(
     session.add(org_provider)
     session.commit()
     session.refresh(org_provider)
-    return org_provider
+    return OrganizationProviderPublic.model_validate(org_provider)
 
 
 @router.put(
@@ -258,7 +258,7 @@ def update_organization_provider(
     session.add(org_provider)
     session.commit()
     session.refresh(org_provider)
-    return org_provider
+    return OrganizationProviderPublic.model_validate(org_provider)
 
 
 @router.delete(
