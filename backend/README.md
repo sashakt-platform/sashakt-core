@@ -16,13 +16,13 @@ By default, the dependencies are managed with [uv](https://docs.astral.sh/uv/), 
 From `./backend/` you can install all the dependencies with:
 
 ```console
-$ uv sync
+uv sync
 ```
 
 Then you can activate the virtual environment with:
 
 ```console
-$ source .venv/bin/activate
+source .venv/bin/activate
 ```
 
 Make sure your editor is using the correct Python virtual environment, with the interpreter at `backend/.venv/bin/python`.
@@ -46,7 +46,7 @@ For example, the directory with the backend code is synchronized in the Docker c
 There is also a command override that runs `fastapi run --reload` instead of the default `fastapi run`. It starts a single server process (instead of multiple, as would be for production) and reloads the process whenever the code changes. Have in mind that if you have a syntax error and save the Python file, it will break and exit, and the container will stop. After that, you can restart the container by fixing the error and running again:
 
 ```console
-$ docker compose watch
+docker compose watch
 ```
 
 There is also a commented out `command` override, you can uncomment it and comment the default one. It makes the backend container run a process that does "nothing", but keeps the container alive. That allows you to get inside your running container and execute commands inside, for example a Python interpreter to test installed dependencies, or start the development server that reloads when it detects changes.
@@ -54,13 +54,13 @@ There is also a commented out `command` override, you can uncomment it and comme
 To get inside the container with a `bash` session you can start the stack with:
 
 ```console
-$ docker compose watch
+docker compose watch
 ```
 
 and then in another terminal, `exec` inside the running container:
 
 ```console
-$ docker compose exec backend bash
+docker compose exec backend bash
 ```
 
 You should see an output like:
@@ -74,7 +74,7 @@ that means that you are in a `bash` session inside your container, as a `root` u
 There you can use the `fastapi run --reload` command to run the debug live reloading server.
 
 ```console
-$ fastapi run --reload app/main.py
+fastapi run --reload app/main.py
 ```
 
 ...it will look like:
@@ -94,7 +94,7 @@ Nevertheless, if it doesn't detect a change but a syntax error, it will just sto
 To test the backend run:
 
 ```console
-$ bash ./scripts/test.sh
+bash ./scripts/test.sh
 ```
 
 The tests run with Pytest, modify and add tests to `./backend/app/tests/`.
@@ -127,10 +127,10 @@ As during local development your app directory is mounted as a volume inside the
 
 Make sure you create a "revision" of your models and that you "upgrade" your database with that revision every time you change them. As this is what will update the tables in your database. Otherwise, your application will have errors.
 
-### Start an interactive session in the backend container:
+### Start an interactive session in the backend container
 
 ```console
-$ docker compose exec backend bash
+docker compose exec backend bash
 ```
 
 - Alembic is already configured to import your SQLModel models from `./backend/app/models.py`.
@@ -138,13 +138,13 @@ $ docker compose exec backend bash
 - After changing a model (for example, adding a column), inside the container, create a revision, e.g.:
 
 ```console
-$ alembic revision --autogenerate -m "Add column last_name to User model"
+alembic revision --autogenerate -m "Add column last_name to User model"
 ```
 
 - After creating the revision, run the migration in the database (this is what will actually change the database):
 
 ```console
-$ alembic upgrade head
+alembic upgrade head
 ```
 
 ### Alternatively you can use below helper scripts which can be run from the host machine
@@ -152,19 +152,19 @@ $ alembic upgrade head
 If you want to create new migration revision
 
 ```console
-$ bash scripts/create-migrations.sh -m "your message"
+bash scripts/create-migrations.sh -m "your message"
 ```
 
 Run the migrations
 
 ```console
-$ bash scripts/run-migrations.sh
+bash scripts/run-migrations.sh
 ```
 
 As we using docker setup files generated inside the container are not sync to host machine. You can do so by running following script from root of host.
 
 ```console
-$ bash scripts/sync-migrations.sh
+bash scripts/sync-migrations.sh
 ```
 
 - Commit to the git repository the files generated in the alembic directory.
@@ -175,7 +175,7 @@ If you don't want to start with the default models and want to remove them / mod
 - Run below script that will delete all previous revisions and create initial revision.
 
 ```console
-$ bash scripts/reset-migrations.sh
+bash scripts/reset-migrations.sh
 ```
 
 ## Email Templates
@@ -185,3 +185,17 @@ The email templates are in `./backend/app/email-templates/`. Here, there are two
 Before continuing, ensure you have the [MJML extension](https://marketplace.visualstudio.com/items?itemName=attilabuti.vscode-mjml) installed in your VS Code.
 
 Once you have the MJML extension installed, you can create a new email template in the `src` directory. After creating the new email template and with the `.mjml` file open in your editor, open the command palette with `Ctrl+Shift+P` and search for `MJML: Export to HTML`. This will convert the `.mjml` file to a `.html` file and now you can save it in the build directory.
+
+## Big Query Integration
+
+Pre-requisites: Big Query provider needs be configured for an organization.
+
+Script can we run to sync Postgres data to Bigquery.
+
+```console
+docker compose exec backend python scripts/export_bigquery.py
+```
+
+It was full-sync mode and also incremental mode to sync changed data.
+
+You can also run the script for an organization or all organizations.
