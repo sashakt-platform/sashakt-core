@@ -94,17 +94,39 @@ def create_user(
     user = crud.create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
+    states_to_attach: list[State] = []
+    current_role = session.get(Role, current_user.role_id)
+    new_user_role = session.get(Role, user.role_id)
     states = None
-    role = session.exec(select(Role).where(Role.id == user.role_id)).first()
 
-    if role and role.name == "state_admin" and user_in.state_ids:
-        existing_states = session.exec(
-            select(State).where(col(State.id).in_(user_in.state_ids))
-        ).all()
-        user_states = [
-            UserState(user_id=user.id, state_id=state.id) for state in existing_states
-        ]
-        session.add_all(user_states)
+    if current_role and current_role.name == "state_admin":
+        if not new_user_role or new_user_role.name not in ("state_admin", "test_admin"):
+            raise HTTPException(
+                status_code=403,
+                detail="State-admin can only create state-admin or test-admin users.",
+            )
+        states_to_attach = list(
+            session.exec(
+                select(State)
+                .join(UserState)
+                .where(UserState.user_id == current_user.id)
+            ).all()
+        )
+
+    else:
+        if new_user_role and new_user_role.name == "state_admin" and user_in.state_ids:
+            states_to_attach = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+    if states_to_attach:
+        session.add_all(
+            [
+                UserState(user_id=user.id, state_id=state.id)
+                for state in states_to_attach
+            ]
+        )
         state_query = select(State).join(UserState).where(UserState.user_id == user.id)
         states = session.exec(state_query).all()
 

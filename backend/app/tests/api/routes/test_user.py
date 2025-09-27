@@ -9,11 +9,17 @@ from app.core.security import verify_password
 from app.models import Permission, Role, RolePermission, User, UserCreate
 from app.models.location import Country, State
 from app.models.question import Question, QuestionRevision, QuestionType
+from app.models.user import UserState
+from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
     create_random_organization,
 )
 from app.tests.utils.role import create_random_role
-from app.tests.utils.user import create_random_user, get_current_user_data
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
 from app.tests.utils.utils import (
     assert_paginated_response,
     random_email,
@@ -100,6 +106,122 @@ def test_create_user_new_email(
 
         current_user_data = get_current_user_data(client, superuser_token_headers)
         assert user.created_by_id == current_user_data["id"]
+
+
+def test_create_user_state_admin_auto_map(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert user_role is not None
+    new_user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": user_role.id,
+        "organization_id": org.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=new_user_payload,
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    new_user_data = response.json()
+    new_user = db.exec(select(User).where(User.id == new_user_data["id"])).first()
+    assert new_user
+    assert new_user.email == new_user_data["email"]
+
+    user_states = db.exec(
+        select(UserState).where(UserState.user_id == new_user.id)
+    ).all()
+    assert len(user_states) == 1
+    assert user_states[0].state_id == state.id
+
+
+def test_state_admin_cannot_create_invalid_role(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    superadmin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert state_admin_role and superadmin_role
+
+    org = create_random_organization(db)
+
+    state = create_random_state(db)
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    invalid_user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": superadmin_role.id,
+        "organization_id": org.id,
+    }
+
+    forbidden_resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=invalid_user_payload,
+        headers=token_headers,
+    )
+
+    assert forbidden_resp.status_code == 403
+    assert (
+        forbidden_resp.json()["detail"]
+        == "State-admin can only create state-admin or test-admin users."
+    )
 
 
 def test_get_existing_user(
