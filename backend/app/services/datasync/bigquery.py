@@ -483,6 +483,22 @@ class BigQueryService:
                 partition_field="created_date",
                 clustering_fields=["organization_id", "tag_type_id"],
             ),
+            "tag_types": TableSchema(
+                table_name=self.get_table_name("tag_types"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "name", "type": "STRING", "mode": "REQUIRED"},
+                    {"name": "description", "type": "STRING", "mode": "NULLABLE"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
+                    {"name": "is_deleted", "type": "BOOLEAN", "mode": "REQUIRED"},
+                    {"name": "created_by_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                    {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id"],
+            ),
             "question_tags": TableSchema(
                 table_name=self.get_table_name("question_tags"),
                 columns=[
@@ -551,6 +567,17 @@ class BigQueryService:
                 ],
                 partition_field="created_date",
                 clustering_fields=["test_id", "question_revision_id"],
+            ),
+            "test_tags": TableSchema(
+                table_name=self.get_table_name("test_tags"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "tag_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["test_id", "tag_id"],
             ),
         }
 

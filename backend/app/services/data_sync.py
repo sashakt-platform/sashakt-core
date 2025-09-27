@@ -23,6 +23,7 @@ from app.models import (
     QuestionTag,
     State,
     Tag,
+    TagType,
     Test,
     User,
 )
@@ -307,6 +308,9 @@ class DataSyncService:
             data["tags"] = self._extract_tags_data(
                 session, organization_id, incremental
             )
+            data["tag_types"] = self._extract_tag_types_data(
+                session, organization_id, incremental
+            )
             data["question_tags"] = self._extract_question_tags_data(
                 session, organization_id, incremental
             )
@@ -544,6 +548,21 @@ class DataSyncService:
 
         tags = session.exec(statement).all()
         return [self._serialize_tag(tag) for tag in tags]
+
+    def _extract_tag_types_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        statement = select(TagType).where(TagType.organization_id == organization_id)
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "tag_types"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(TagType.modified_date > table_last_sync)  # type: ignore[operator]
+
+        tag_types = session.exec(statement).all()
+        return [self._serialize_tag_type(tag_type) for tag_type in tag_types]
 
     def _extract_question_tags_data(
         self, session: Session, organization_id: int, incremental: bool
@@ -864,6 +883,23 @@ class DataSyncService:
             ),
             "modified_date": (
                 tag.modified_date.isoformat() if tag.modified_date else None
+            ),
+        }
+
+    def _serialize_tag_type(self, tag_type: TagType) -> dict[str, Any]:
+        return {
+            "id": tag_type.id,
+            "name": tag_type.name,
+            "description": tag_type.description,
+            "organization_id": tag_type.organization_id,
+            "is_active": tag_type.is_active,
+            "is_deleted": tag_type.is_deleted,
+            "created_by_id": tag_type.created_by_id,
+            "created_date": (
+                tag_type.created_date.isoformat() if tag_type.created_date else None
+            ),
+            "modified_date": (
+                tag_type.modified_date.isoformat() if tag_type.modified_date else None
             ),
         }
 
