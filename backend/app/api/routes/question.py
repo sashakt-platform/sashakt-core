@@ -290,14 +290,24 @@ def create_question(
     session.flush()
 
     question.last_revision_id = revision.id
+    state_ids_to_assign = (
+        [
+            state.id
+            for state in getattr(current_user, "states", [])
+            if state.id is not None
+        ]
+        if getattr(current_user, "role", None)
+        and current_user.role.name == "state_admin"
+        else question_create.state_ids or []
+    )
 
     # Create separate location rows for state, district, block
     # This allows each association to be uniquely identified and deleted if needed
     locations: list[QuestionLocation] = []
 
     # Handle state associations
-    if question_create.state_ids:
-        for state_id in question_create.state_ids:
+    if state_ids_to_assign:
+        for state_id in state_ids_to_assign:
             state_location = QuestionLocation(
                 question_id=question.id,
                 state_id=state_id,
