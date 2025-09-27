@@ -28,7 +28,7 @@ from app.models import (
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.provider import ProviderType
-from app.models.test import TestQuestion
+from app.models.test import TestQuestion, TestTag
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
 
@@ -311,6 +311,9 @@ class DataSyncService:
                 session, organization_id, incremental
             )
             data["test_questions"] = self._extract_test_questions_data(
+                session, organization_id, incremental
+            )
+            data["test_tags"] = self._extract_test_tags_data(
                 session, organization_id, incremental
             )
 
@@ -632,6 +635,27 @@ class DataSyncService:
         test_questions = session.exec(statement).all()
         return [self._serialize_test_question(tq) for tq in test_questions]
 
+    def _extract_test_tags_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter test_tags by organization through test → created_by relationship
+        statement = (
+            select(TestTag)
+            .join(Test, TestTag.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
+            .where(User.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "test_tags"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(TestTag.created_date > table_last_sync)  # type: ignore[operator]
+
+        test_tags = session.exec(statement).all()
+        return [self._serialize_test_tag(tt) for tt in test_tags]
+
     def _serialize_user(self, user: User) -> dict[str, Any]:
         return {
             "id": user.id,
@@ -905,6 +929,16 @@ class DataSyncService:
                 test_question.created_date.isoformat()
                 if test_question.created_date
                 else None
+            ),
+        }
+
+    def _serialize_test_tag(self, test_tag: TestTag) -> dict[str, Any]:
+        return {
+            "id": test_tag.id,
+            "test_id": test_tag.test_id,
+            "tag_id": test_tag.tag_id,
+            "created_date": (
+                test_tag.created_date.isoformat() if test_tag.created_date else None
             ),
         }
 
