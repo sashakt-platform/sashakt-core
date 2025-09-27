@@ -382,7 +382,7 @@
     "description": "Read Role Details",
     "super_admin": true,
     "system_admin": false,
-    "state_admin": false,
+    "state_admin": true,
     "test_admin": false,
     "candidate": false
   },
@@ -499,7 +499,7 @@
     "description": "Create New User",
     "super_admin": true,
     "system_admin": true,
-    "state_admin": false,
+    "state_admin": true,
     "test_admin": false,
     "candidate": false
   },
