@@ -1,8 +1,8 @@
-"""add provider tables and permissions
+"""add bigquery provider tables and permissions with correct types
 
-Revision ID: 168f67609694
+Revision ID: de518b7356af
 Revises: 449d29a9e71d
-Create Date: 2025-09-25 03:26:34.011995
+Create Date: 2025-09-27 07:25:00.000000
 
 """
 
@@ -15,7 +15,7 @@ from sqlmodel import Session, select
 from app.models import Permission, Role, RolePermission
 
 # revision identifiers, used by Alembic.
-revision = "168f67609694"
+revision = "de518b7356af"
 down_revision = "449d29a9e71d"
 branch_labels = None
 depends_on = None
@@ -43,12 +43,12 @@ def upgrade():
         op.f("ix_provider_provider_type"), "provider", ["provider_type"], unique=False
     )
 
-    # Create organization_provider table
+    # Create organization_provider table with TEXT config_json (not JSON)
     op.create_table(
         "organization_provider",
         sa.Column("organization_id", sa.Integer(), nullable=False),
         sa.Column("provider_id", sa.Integer(), nullable=False),
-        sa.Column("config_json", sa.JSON(), nullable=True),
+        sa.Column("config_json", sa.Text(), nullable=True),  # TEXT instead of JSON
         sa.Column("is_enabled", sa.Boolean(), nullable=False),
         sa.Column("last_sync_timestamp", sa.DateTime(), nullable=True),
         sa.Column("id", sa.Integer(), nullable=False),
@@ -95,7 +95,7 @@ def upgrade():
         },
     ]
 
-    # Insert permissions and role_permissions if they don't exist
+    # Insert permissions and role_permissions if they do not exist
     for perm_data in provider_permissions:
         # Check if permission already exists
         existing_perm = session.exec(
