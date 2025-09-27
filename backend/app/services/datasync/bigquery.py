@@ -681,7 +681,10 @@ class BigQueryService:
                 last_table_sync, last_synced_id = self.get_table_sync_metadata(
                     table_name
                 )
-                if last_sync and (not last_table_sync or last_sync < last_table_sync):
+                # Only use organization-level last_sync if table has been synced before
+                # For tables that have never been synced (last_table_sync is None),
+                # keep it as None so all data gets synced
+                if last_sync and last_table_sync and last_sync < last_table_sync:
                     last_table_sync = last_sync
 
                 created = self.create_table_if_not_exists(schema)

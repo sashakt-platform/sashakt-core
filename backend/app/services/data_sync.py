@@ -75,8 +75,6 @@ class DataSyncService:
             # For incremental mode, check if dataset exists - if not, force full sync
             for org_provider in org_providers:
                 if org_provider.provider.provider_type == ProviderType.BIGQUERY:
-                    from app.core.provider_config import provider_config_service
-
                     if org_provider.config_json is None:
                         continue
                     decrypted_config = provider_config_service.get_config_for_use(
@@ -203,8 +201,6 @@ class DataSyncService:
             # Use the first BigQuery provider (assuming one per org)
             for org_provider in org_providers:
                 if org_provider.provider.provider_type == ProviderType.BIGQUERY:
-                    from app.core.provider_config import provider_config_service
-
                     if org_provider.config_json is None:
                         continue
                     decrypted_config = provider_config_service.get_config_for_use(
