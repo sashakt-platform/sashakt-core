@@ -36,7 +36,13 @@ jobs:
             sleep 2
           done
       - name: Migrate DB
-        run: docker compose exec backend bash scripts/prestart.sh
+        timeout-minutes: 10
+        run: |
+          docker compose exec backend bash scripts/prestart.sh || {
+            echo "Migration failed, checking logs..."
+            docker compose logs backend
+            exit 1
+          }
       - name: Run tests
         run: docker compose exec backend bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         # the generated xml is pushed to codecov

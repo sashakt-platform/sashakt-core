@@ -8,6 +8,7 @@ from app.api.routes import (
     organization,
     permissions,
     private,
+    providers,
     question,
     roles,
     tag,
@@ -34,6 +35,7 @@ api_router.include_router(candidate.router_candidate_test)
 api_router.include_router(candidate.router_candidate_test_answer)
 api_router.include_router(entity.router_entitytype)
 api_router.include_router(entity.router_entity)
+api_router.include_router(providers.router)
 
 if settings.ENVIRONMENT == "local":
     api_router.include_router(private.router)

@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_FULLNAME: str = "First Super User"
     FIRST_SUPERUSER_MOBILE: str = "1234567890"
 
+    # Provider encryption settings
+    PROVIDER_ENCRYPTION_KEY: str | None = None
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
@@ -116,6 +119,10 @@ class Settings(BaseSettings):
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )
+        if self.PROVIDER_ENCRYPTION_KEY:
+            self._check_default_secret(
+                "PROVIDER_ENCRYPTION_KEY", self.PROVIDER_ENCRYPTION_KEY
+            )
 
         return self
 
