@@ -5,6 +5,7 @@ from typing import Any
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
+from app.core.timezone import get_timezone_aware_now
 from app.services.datasync.base import SyncResult, TableSchema
 
 
@@ -598,7 +599,7 @@ class BigQueryService:
                     tables_created=[],
                     tables_updated=[],
                     error_message="Connection test failed",
-                    sync_timestamp=datetime.utcnow(),
+                    sync_timestamp=get_timezone_aware_now(),
                 )
 
             self.create_dataset_if_not_exists()
@@ -628,16 +629,20 @@ class BigQueryService:
                         record.get("id") for record in table_data if record.get("id")
                     ]
                     max_id = max(record_ids) if record_ids else None
-                    self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), max_id
+                    )
                 else:
-                    self.update_sync_metadata(table_name, datetime.utcnow(), None)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), None
+                    )
 
             return SyncResult(
                 success=True,
                 records_exported=total_records,
                 tables_created=tables_created,
                 tables_updated=tables_updated,
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
         except Exception as e:
@@ -647,7 +652,7 @@ class BigQueryService:
                 tables_created=[],
                 tables_updated=[],
                 error_message=str(e),
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
     def execute_incremental_sync(
@@ -664,7 +669,7 @@ class BigQueryService:
                     tables_created=[],
                     tables_updated=[],
                     error_message="Connection test failed",
-                    sync_timestamp=datetime.utcnow(),
+                    sync_timestamp=get_timezone_aware_now(),
                 )
 
             self.create_dataset_if_not_exists()
@@ -711,16 +716,18 @@ class BigQueryService:
                             if record.get("id") is not None
                         ]
                         max_id = max(record_ids) if record_ids else None  # type: ignore[type-var]
-                        self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
+                        self.update_sync_metadata(
+                            table_name, get_timezone_aware_now(), max_id
+                        )
                     else:
                         # Update timestamp even if no new data (to track sync attempts)
                         self.update_sync_metadata(
-                            table_name, datetime.utcnow(), last_synced_id
+                            table_name, get_timezone_aware_now(), last_synced_id
                         )
                 else:
                     # Update timestamp even if no data (to track sync attempts)
                     self.update_sync_metadata(
-                        table_name, datetime.utcnow(), last_synced_id
+                        table_name, get_timezone_aware_now(), last_synced_id
                     )
 
             return SyncResult(
@@ -728,7 +735,7 @@ class BigQueryService:
                 records_exported=total_records,
                 tables_created=tables_created,
                 tables_updated=tables_updated,
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
         except Exception as e:
@@ -738,7 +745,7 @@ class BigQueryService:
                 tables_created=[],
                 tables_updated=[],
                 error_message=str(e),
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
     def _filter_incremental_data(
