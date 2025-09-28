@@ -344,7 +344,7 @@ class BigQueryService:
                 columns=[
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "identity", "type": "STRING", "mode": "NULLABLE"},
-                    {"name": "user_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "user_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
