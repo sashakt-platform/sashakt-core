@@ -25,6 +25,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GITHUB_REF,INPUT_TAG 
           
           script: |
             cd /home/ubuntu
