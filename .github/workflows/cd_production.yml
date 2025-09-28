@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy via SSH (tag-based)
-        uses: appleboy/ssh-action@v0.1.8
+        uses: appleboy/ssh-action@v1.2.2
         env:
           # Expose runner values to the action container
           GITHUB_REF: ${{ github.ref }}
