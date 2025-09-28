@@ -32,9 +32,10 @@ jobs:
             cd sashakt-core-test
 
             set -euxo pipefail
-            INPUT_TAG="${INPUT_TAG:-}"      # Populate this from actions input (see YAML) if provided
-            GITHUB_REF="${GITHUB_REF:-}"    # safe default to empty string if not set
-
+            GITHUB_REF: ${{ github.ref }}
+            # If you plan to support manual dispatch later, you can map inputs there too:
+            INPUT_TAG: ${{ github.event.inputs.tag || '' }}
+            
             echo "INPUT_TAG='${INPUT_TAG}'"
             echo "GITHUB_REF='${GITHUB_REF}'"
 
