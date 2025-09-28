@@ -26,15 +26,23 @@ jobs:
             cd sashakt-core-test
 
             set -euxo pipefail
+            INPUT_TAG="${INPUT_TAG:-}"      # Populate this from actions input (see YAML) if provided
+            GITHUB_REF="${GITHUB_REF:-}"    # safe default to empty string if not set
 
-            # The ref that triggered this workflow, e.g. refs/tags/v1.2.3
-            GITHUB_REF="${GITHUB_REF:-${GITHUB_REF}}"
-            echo "GITHUB_REF=${GITHUB_REF}"
+            echo "INPUT_TAG='${INPUT_TAG}'"
+            echo "GITHUB_REF='${GITHUB_REF}'"
 
-            # Extract tag name from ref
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
-            echo "Deploying tag: ${TAG_NAME}"
-
+            if [[ -n "$INPUT_TAG" ]]; then
+              TAG_NAME="$INPUT_TAG"
+              echo "Using tag from INPUT_TAG: $TAG_NAME"
+            elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              TAG_NAME="${GITHUB_REF#refs/tags/}"
+              echo "Detected tag from GITHUB_REF: $TAG_NAME"
+            else
+              echo "ERROR: No tag provided. Either run the workflow with a tag or provide INPUT_TAG." >&2
+              exit 1
+            fi
+            
             # Ensure git repo is clean and has tags
             git fetch --prune --tags origin
 
