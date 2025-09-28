@@ -34,8 +34,8 @@ jobs:
         
           script: |
             set -euxo pipefail
-            cd /home/ubuntu
-            cd sashakt-core-test
+            cd /home/ubuntu/sashakt-core-test/sashakt-core
+        
 
             git fetch --all --tags --prune
             # use exported DEPLOY_TAG (it will be like "v1.0.2")
