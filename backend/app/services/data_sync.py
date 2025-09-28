@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 
 from app.core.db import engine
 from app.core.provider_config import provider_config_service
+from app.core.timezone import get_timezone_aware_now
 from app.models import (
     Block,
     Candidate,
@@ -29,7 +30,8 @@ from app.models import (
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.provider import ProviderType
-from app.models.test import TestQuestion, TestTag
+from app.models.test import TestDistrict, TestQuestion, TestTag
+from app.models.user import UserState
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
 
@@ -148,7 +150,7 @@ class DataSyncService:
                     tables_created=[],
                     tables_updated=[],
                     error_message=str(e),
-                    sync_timestamp=datetime.utcnow(),
+                    sync_timestamp=get_timezone_aware_now(),
                 )
 
         return results
@@ -182,7 +184,7 @@ class DataSyncService:
                             tables_created=[],
                             tables_updated=[],
                             error_message=f"Organization sync failed: {str(e)}",
-                            sync_timestamp=datetime.utcnow(),
+                            sync_timestamp=get_timezone_aware_now(),
                         )
                     }
 
@@ -314,6 +316,12 @@ class DataSyncService:
                 session, organization_id, incremental
             )
             data["test_tags"] = self._extract_test_tags_data(
+                session, organization_id, incremental
+            )
+            data["test_districts"] = self._extract_test_districts_data(
+                session, organization_id, incremental
+            )
+            data["user_states"] = self._extract_user_states_data(
                 session, organization_id, incremental
             )
 
@@ -671,6 +679,47 @@ class DataSyncService:
         test_tags = session.exec(statement).all()
         return [self._serialize_test_tag(tt) for tt in test_tags]
 
+    def _extract_test_districts_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter test_districts through test -> user -> organization
+        statement = (
+            select(TestDistrict)
+            .join(Test, TestDistrict.test_id == Test.id)  # type: ignore[arg-type]
+            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
+            .where(User.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "test_districts"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(TestDistrict.created_date > table_last_sync)  # type: ignore[operator]
+
+        test_districts = session.exec(statement).all()
+        return [self._serialize_test_district(td) for td in test_districts]
+
+    def _extract_user_states_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter user_states through user -> organization
+        statement = (
+            select(UserState)
+            .join(User, UserState.user_id == User.id)  # type: ignore[arg-type]
+            .where(User.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "user_states"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(UserState.created_date > table_last_sync)  # type: ignore[operator]
+
+        user_states = session.exec(statement).all()
+        return [self._serialize_user_state(us) for us in user_states]
+
     def _serialize_user(self, user: User) -> dict[str, Any]:
         return {
             "id": user.id,
@@ -971,6 +1020,28 @@ class DataSyncService:
             "tag_id": test_tag.tag_id,
             "created_date": (
                 test_tag.created_date.isoformat() if test_tag.created_date else None
+            ),
+        }
+
+    def _serialize_test_district(self, test_district: TestDistrict) -> dict[str, Any]:
+        return {
+            "id": test_district.id,
+            "test_id": test_district.test_id,
+            "district_id": test_district.district_id,
+            "created_date": (
+                test_district.created_date.isoformat()
+                if test_district.created_date
+                else None
+            ),
+        }
+
+    def _serialize_user_state(self, user_state: UserState) -> dict[str, Any]:
+        return {
+            "id": user_state.id,
+            "user_id": user_state.user_id,
+            "state_id": user_state.state_id,
+            "created_date": (
+                user_state.created_date.isoformat() if user_state.created_date else None
             ),
         }
 

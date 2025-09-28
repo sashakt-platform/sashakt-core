@@ -580,6 +580,28 @@ class BigQueryService:
                 partition_field="created_date",
                 clustering_fields=["test_id", "tag_id"],
             ),
+            "test_districts": TableSchema(
+                table_name=self.get_table_name("test_districts"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "district_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["test_id", "district_id"],
+            ),
+            "user_states": TableSchema(
+                table_name=self.get_table_name("user_states"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "user_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "state_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["user_id", "state_id"],
+            ),
         }
 
         if table_name not in schemas:
