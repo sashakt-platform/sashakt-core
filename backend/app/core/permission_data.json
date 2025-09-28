@@ -538,5 +538,41 @@
     "state_admin": true,
     "test_admin": true,
     "candidate": false
+  },
+  {
+    "name": "create_provider",
+    "description": "Create New Provider",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "update_provider",
+    "description": "Update Existing Provider",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "delete_provider",
+    "description": "Delete Existing Provider",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "read_provider",
+    "description": "Read Provider Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
   }
 ]
