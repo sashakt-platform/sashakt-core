@@ -635,16 +635,18 @@ class BigQueryService:
                 schema = self._get_table_schema(table_base_name)
 
                 created = self.create_table_if_not_exists(schema)
-                if created:
-                    tables_created.append(table_name)
-                else:
-                    tables_updated.append(table_name)
 
                 if table_data:
                     records_exported = self.export_data(
                         table_name, table_data, schema, mode="replace"
                     )
                     total_records += records_exported
+
+                    # Only count tables with data as created/updated
+                    if created:
+                        tables_created.append(table_name)
+                    else:
+                        tables_updated.append(table_name)
 
                     # Calculate last synced ID for full sync
                     record_ids = [
@@ -654,7 +656,14 @@ class BigQueryService:
                     self.update_sync_metadata(
                         table_name, get_timezone_aware_now(), max_id
                     )
+                elif created:
+                    # Table was created but has no data
+                    tables_created.append(table_name)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), None
+                    )
                 else:
+                    # Table exists but has no data - don't count as created or updated
                     self.update_sync_metadata(
                         table_name, get_timezone_aware_now(), None
                     )
@@ -715,10 +724,6 @@ class BigQueryService:
                     last_table_sync = last_sync
 
                 created = self.create_table_if_not_exists(schema)
-                if created:
-                    tables_created.append(table_name)
-                else:
-                    tables_updated.append(table_name)
 
                 if table_data:
                     filtered_data = self._filter_incremental_data(
@@ -731,6 +736,12 @@ class BigQueryService:
                         )
                         total_records += records_exported
 
+                        # Only count tables with data as created/updated
+                        if created:
+                            tables_created.append(table_name)
+                        else:
+                            tables_updated.append(table_name)
+
                         # Calculate last synced ID from the data we just exported
                         record_ids = [
                             record.get("id")
@@ -741,11 +752,23 @@ class BigQueryService:
                         self.update_sync_metadata(
                             table_name, get_timezone_aware_now(), max_id
                         )
+                    elif created:
+                        # Table was created but has no data
+                        tables_created.append(table_name)
+                        self.update_sync_metadata(
+                            table_name, get_timezone_aware_now(), last_synced_id
+                        )
                     else:
                         # Update timestamp even if no new data (to track sync attempts)
                         self.update_sync_metadata(
                             table_name, get_timezone_aware_now(), last_synced_id
                         )
+                elif created:
+                    # Table was created but has no data at all
+                    tables_created.append(table_name)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), last_synced_id
+                    )
                 else:
                     # Update timestamp even if no data (to track sync attempts)
                     self.update_sync_metadata(
