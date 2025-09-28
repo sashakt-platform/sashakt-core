@@ -16,6 +16,11 @@ jobs:
 
       - name: Deploy via SSH (tag-based)
         uses: appleboy/ssh-action@v0.1.8
+        env:
+          # Expose runner values to the action container
+          GITHUB_REF: ${{ github.ref }}
+          # If you plan to support manual dispatch later, you can map inputs there too:
+          INPUT_TAG: ${{ github.event.inputs.tag || '' }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
