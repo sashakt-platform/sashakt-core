@@ -13,49 +13,32 @@ jobs:
     steps:
       - name: Checkout (for logs)
         uses: actions/checkout@v4
-
+        
+      - name: Set deployment tag
+        id: set_tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "DEPLOY_TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          else
+            # github.ref_name returns the short ref (e.g. v1.0.2) — safe to export
+          echo "DEPLOY_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+          echo "Will deploy tag: $DEPLOY_TAG"
+          
       - name: Deploy via SSH (tag-based)
         uses: appleboy/ssh-action@v1.2.2
-        env:
-          # Expose runner values to the action container
-          GITHUB_REF: ${{ github.ref }}
-          # If you plan to support manual dispatch later, you can map inputs there too:
-          INPUT_TAG: ${{ github.event.inputs.tag || '' }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GITHUB_REF,INPUT_TAG 
-          
+        
           script: |
+            set -euxo pipefail
             cd /home/ubuntu
             cd sashakt-core-test
 
-            set -euxo pipefail
-            GITHUB_REF: ${{ github.ref }}
-            # If you plan to support manual dispatch later, you can map inputs there too:
-            INPUT_TAG: ${{ github.event.inputs.tag || '' }}
-            
-            echo "INPUT_TAG='${INPUT_TAG}'"
-            echo "GITHUB_REF='${GITHUB_REF}'"
-
-            if [[ -n "$INPUT_TAG" ]]; then
-              TAG_NAME="$INPUT_TAG"
-              echo "Using tag from INPUT_TAG: $TAG_NAME"
-            elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-              TAG_NAME="${GITHUB_REF#refs/tags/}"
-              echo "Detected tag from GITHUB_REF: $TAG_NAME"
-            else
-              echo "ERROR: No tag provided. Either run the workflow with a tag or provide INPUT_TAG." >&2
-              exit 1
-            fi
-            
-            # Ensure git repo is clean and has tags
-            git fetch --prune --tags origin
-
-            # Checkout the exact tag (force to ensure clean working tree)
-            git checkout -f "tags/${TAG_NAME}"
-
-            # If you want to set to a detached branch (optional)
-            # git checkout -B "deploy-${TAG_NAME}" "tags/${TAG_NAME}"
+            git fetch --all --tags --prune
+            # use exported DEPLOY_TAG (it will be like "v1.0.2")
+            git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
+    
             echo "Deployment of tag ${TAG_NAME} completed."
