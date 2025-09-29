@@ -185,6 +185,7 @@ def create_test(
         exclude={"tag_ids", "question_revision_ids", "state_ids", "district_ids"}
     )
     test_data["created_by_id"] = current_user.id
+    test_data["organization_id"] = current_user.organization_id
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
         import uuid
@@ -912,6 +913,7 @@ def clone_test(
     test_data = original.model_dump(exclude={"id", "created_date", "modified_date"})
     test_data["name"] = f"Copy of {original.name}"
     test_data["created_by_id"] = current_user.id
+    test_data["organization_id"] = current_user.organization_id
     if not original.is_template:
         import uuid
 
