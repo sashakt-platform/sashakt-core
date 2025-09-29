@@ -623,11 +623,10 @@ def get_test_summary(
         .where(User.organization_id == current_user.organization_id)
     )
     if user_state_ids:
-        query = (
-            query.join(TestState)
-            .where(TestState.test_id == Test.id)
-            .where(col(TestState.state_id).in_(user_state_ids))
+        state_test_ids = select(TestState.test_id).where(
+            col(TestState.state_id).in_(user_state_ids)
         )
+        query = query.where(col(Test.id).in_(state_test_ids))
 
     if start_date and Test.start_time is not None:
         query = query.where(Test.start_time >= start_date)
