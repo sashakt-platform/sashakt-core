@@ -38,6 +38,7 @@ from app.models import (
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.entity import Entity
 from app.models.location import District
+from app.models.role import Role
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
@@ -47,7 +48,7 @@ from app.models.test import (
     TagRandomPublic,
     TestDistrict,
 )
-from app.models.user import User
+from app.models.user import User, UserState
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
@@ -55,6 +56,38 @@ router = APIRouter(prefix="/test", tags=["Test"])
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
+
+
+def check_test_permission(
+    session: SessionDep, current_user: CurrentUser, test: Test
+) -> None:
+    role = session.get(Role, current_user.role_id)
+    if not role or role.name not in ("state_admin", "test_admin"):
+        return
+
+    test_states = session.exec(
+        select(TestState).where(TestState.test_id == test.id)
+    ).all()
+
+    if not test_states:
+        raise HTTPException(403, "State/test-admin cannot modify/delete general tests.")
+
+    test_state_ids = [
+        test_state.state_id
+        for test_state in test_states
+        if test_state.state_id is not None
+    ]
+
+    user_state_records = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
+    user_state_ids = list(user_state_records)
+
+    if not any(state_id in user_state_ids for state_id in test_state_ids):
+        raise HTTPException(
+            403,
+            "State/test-admin cannot modify/delete tests outside their location.",
+        )
 
 
 def check_linked_question(session: SessionDep, test_id: int) -> bool:
@@ -573,11 +606,14 @@ def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    check_test_permission(session, current_user, test)
+
     if (
         test_update.start_time is not None
         or test_update.end_time is not None
@@ -828,10 +864,13 @@ def visibility_test(
     "/{test_id}",
     dependencies=[Depends(permission_dependency("delete_test"))],
 )
-def delete_test(test_id: int, session: SessionDep) -> Message:
+def delete_test(
+    test_id: int, session: SessionDep, current_user: CurrentUser
+) -> Message:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    check_test_permission(session, current_user, test)
 
     if check_linked_question(session, test_id):
         raise HTTPException(
