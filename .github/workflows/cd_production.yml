@@ -12,7 +12,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout (for logs)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         
       - name: Set deployment tag
         id: set_tag
