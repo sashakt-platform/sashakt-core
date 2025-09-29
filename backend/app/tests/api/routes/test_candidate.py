@@ -22,13 +22,18 @@ from app.models.candidate import CandidateTestProfile
 from app.models.entity import Entity, EntityType
 from app.models.location import Country, District, State
 from app.models.question import QuestionTag, QuestionType
+from app.models.role import Role
 from app.models.tag import Tag, TagType
 from app.models.test import TestDistrict, TestQuestion, TestState, TestTag
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
-from app.tests.utils.user import create_random_user, get_current_user_data
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import random_email, random_lower_string
 
 
 def test_create_candidate(
@@ -6146,6 +6151,233 @@ def test_candidate_active_inside_time_limit(
         )
         assert after["not_submitted_active"] - before["not_submitted_active"] == 1
         assert after["not_submitted_inactive"] - before["not_submitted_inactive"] == 0
+
+
+def test_summary_filtered_by_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    email = random_email()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+    user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
+    user_id = user_resp.json()["id"]
+
+    fake_now = datetime(2025, 9, 29, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        test_x = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        test_y = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        db.add_all([test_x, test_y])
+        db.commit()
+        db.refresh(test_x)
+        db.refresh(test_y)
+
+        candidate_x = Candidate(user_id=user_id)
+        candidate_y = Candidate(user_id=user_id)
+        db.add_all([candidate_x, candidate_y])
+        db.commit()
+        db.refresh(candidate_x)
+        db.refresh(candidate_y)
+
+        db.add_all(
+            [
+                CandidateTest(
+                    test_id=test_x.id,
+                    candidate_id=candidate_x.id,
+                    is_submitted=False,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=None,
+                    device="laptop",
+                    consent=True,
+                ),
+                CandidateTest(
+                    test_id=test_y.id,
+                    candidate_id=candidate_y.id,
+                    is_submitted=False,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=None,
+                    device="laptop",
+                    consent=True,
+                ),
+            ]
+        )
+        db.commit()
+
+        db.add_all(
+            [
+                TestState(test_id=test_x.id, state_id=state_x.id),
+                TestState(test_id=test_y.id, state_id=state_y.id),
+            ]
+        )
+        db.commit()
+
+        resp = client.get(
+            f"{settings.API_V1_STR}/candidate/summary", headers=token_headers
+        )
+        assert resp.status_code == 200
+        summary = resp.json()
+        assert summary["total_test_not_submitted"] == 1
+        assert summary["not_submitted_active"] == 1
+        assert summary["not_submitted_inactive"] == 0
+
+
+def test_summary_active_submitted_by_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    email = random_email()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+    user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
+    user_id = user_resp.json()["id"]
+
+    fake_now = datetime(2025, 9, 29, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        test_x = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        test_y = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        db.add_all([test_x, test_y])
+        db.commit()
+        db.refresh(test_x)
+        db.refresh(test_y)
+
+        candidate_x = Candidate(user_id=user_id)
+        candidate_y = Candidate(user_id=user_id)
+        db.add_all([candidate_x, candidate_y])
+        db.commit()
+        db.refresh(candidate_x)
+        db.refresh(candidate_y)
+
+        db.add_all(
+            [
+                CandidateTest(
+                    test_id=test_x.id,
+                    candidate_id=candidate_x.id,
+                    is_submitted=True,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=datetime(2025, 9, 29, 11, 30),
+                    device="laptop",
+                    consent=True,
+                ),
+                CandidateTest(
+                    test_id=test_y.id,
+                    candidate_id=candidate_y.id,
+                    is_submitted=True,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=datetime(2025, 9, 29, 11, 30),
+                    device="laptop",
+                    consent=True,
+                ),
+            ]
+        )
+        db.commit()
+
+        db.add_all(
+            [
+                TestState(test_id=test_x.id, state_id=state_x.id),
+                TestState(test_id=test_y.id, state_id=state_y.id),
+            ]
+        )
+        db.commit()
+
+        resp = client.get(
+            f"{settings.API_V1_STR}/candidate/summary", headers=token_headers
+        )
+        assert resp.status_code == 200
+        summary = resp.json()
+        assert summary["total_test_submitted"] == 1
+        assert summary["total_test_not_submitted"] == 0
+        assert summary["not_submitted_active"] == 0
+        assert summary["not_submitted_inactive"] == 0
 
 
 def test_candidate_active_no_start_end(
