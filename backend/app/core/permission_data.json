@@ -508,7 +508,7 @@
     "description": "Update Existing User",
     "super_admin": true,
     "system_admin": true,
-    "state_admin": false,
+    "state_admin": true,
     "test_admin": false,
     "candidate": false
   },
