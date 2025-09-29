@@ -28,6 +28,7 @@ from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.entity import Entity, EntityType
 from app.models.location import Block, District
 from app.models.question import QuestionType
+from app.models.role import Role
 from app.models.test import TestDistrict
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
@@ -35,8 +36,16 @@ from app.tests.utils.organization import (
 )
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
-from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import assert_paginated_response, random_lower_string
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
+from app.tests.utils.utils import (
+    assert_paginated_response,
+    random_email,
+    random_lower_string,
+)
 
 
 def setup_data(
@@ -5583,3 +5592,183 @@ def test_candidate_profile_higher_location_entity(
     expected_ids = {entity_A.id, entity_C.id, entity_D.id}
     assert expected_ids.issubset(returned_ids)
     assert entity_B.id not in returned_ids
+
+
+def test_state_admin_cannot_delete_general_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_can_delete_test_in_their_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
+
+
+def test_state_admin_cannot_delete_test_outside_their_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_x.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()

@@ -53,7 +53,9 @@ from app.models.question import (
     Option,
     QuestionRevisionInfo,
 )
+from app.models.role import Role
 from app.models.test import TestQuestion
+from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -61,6 +63,38 @@ router = APIRouter(prefix="/questions", tags=["Questions"])
 # create sorting dependency
 QuestionSorting = create_sorting_dependency(QuestionSortConfig)
 QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
+
+
+def check_question_permission(
+    session: SessionDep, current_user: CurrentUser, question: Question
+) -> None:
+    role = session.get(Role, current_user.role_id)
+    if not role or role.name not in ("state_admin", "test_admin"):
+        return
+
+    locations = session.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question.id)
+    ).all()
+
+    if not locations:
+        raise HTTPException(
+            403, "State/test-admin cannot modify/delete general questions."
+        )
+
+    question_location_ids = [
+        loc.state_id for loc in locations if loc.state_id is not None
+    ]
+
+    user_locations = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
+    user_locations = list(user_locations)
+
+    if not any(loc in user_locations for loc in question_location_ids):
+        raise HTTPException(
+            403,
+            "State/test-admin cannot modify/delete questions outside their location.",
+        )
 
 
 def check_linked_test(session: SessionDep, question_id: int) -> bool:
@@ -628,11 +662,16 @@ def get_question_candidate_tests(
 @router.delete(
     "/{question_id}", dependencies=[Depends(permission_dependency("delete_question"))]
 )
-def delete_question(question_id: int, session: SessionDep) -> Message:
+def delete_question(
+    question_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Message:
     """Soft delete a question."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    check_question_permission(session, current_user, question)
 
     if check_linked_test(session, question_id):
         raise HTTPException(
@@ -738,12 +777,14 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
 def update_question(
     question_id: int,
     session: SessionDep,
+    current_user: CurrentUser,
     updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
     if not question or question.is_deleted:
         raise HTTPException(status_code=404, detail="Question not found")
+    check_question_permission(session, current_user, question)
 
     # Update basic question attributes
     question_data = updated_data.model_dump(exclude_unset=True)
