@@ -458,6 +458,51 @@ def test_get_district(
 
     assert len(data["items"]) == 2
 
+
+def test_get_district_by_state_ids_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+
+    kerala = State(name=random_lower_string(), country_id=india.id)
+    karnataka = State(name=random_lower_string(), country_id=india.id)
+    tamil_nadu = State(name=random_lower_string(), country_id=india.id)
+    db.add_all([kerala, karnataka, tamil_nadu])
+    db.commit()
+    db.flush()
+
+    ernakulam = District(name=random_lower_string(), state_id=kerala.id)
+    thrissur = District(name=random_lower_string(), state_id=kerala.id)
+    bangalore = District(name=random_lower_string(), state_id=karnataka.id)
+    chennai = District(name=random_lower_string(), state_id=tamil_nadu.id)
+
+    db.add_all([ernakulam, thrissur, bangalore, chennai])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?state_ids={kerala.id}&state_ids={karnataka.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 3
+
+    district_names = [item["name"] for item in data["items"]]
+    assert ernakulam.name in district_names
+    assert thrissur.name in district_names
+    assert bangalore.name in district_names
+    assert chennai.name not in district_names
+
+    state_ids_in_response = [item["state"]["id"] for item in data["items"]]
+    assert kerala.id in state_ids_in_response
+    assert karnataka.id in state_ids_in_response
+    assert tamil_nadu.id not in state_ids_in_response
+
     district_a = District(
         name=random_lower_string(), state_id=kerala.id, is_active=False
     )
