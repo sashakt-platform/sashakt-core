@@ -721,3 +721,111 @@ def test_aggregated_data_for_state_admin(
     assert data["total_questions"] == 4
     assert data["total_tests"] == 3
     assert data["total_users"] == 2
+
+
+def test_aggregated_data_for_state_admin_distinct_check(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_x.id, state_y.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_state_x = create_random_user(db, org_id)
+    db.add(user_state_x)
+    db.commit()
+    db.refresh(user_state_x)
+    db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
+
+    user_state_y = create_random_user(db, org_id)
+    db.add(user_state_y)
+    db.commit()
+    db.refresh(user_state_y)
+    db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+    db.commit()
+
+    q1 = Question(
+        created_by_id=user_state_x.id, organization_id=org_id, is_deleted=False
+    )
+    db.add(q1)
+    db.flush()
+    db.refresh(q1)
+    db.add(QuestionLocation(question_id=q1.id, state_id=state_x.id))
+    db.add(QuestionLocation(question_id=q1.id, state_id=state_y.id))
+
+    q2 = Question(
+        created_by_id=user_state_y.id, organization_id=org_id, is_deleted=False
+    )
+    db.add(q2)
+    db.flush()
+    db.refresh(q2)
+    db.add(QuestionLocation(question_id=q2.id, state_id=state_y.id))
+    db.commit()
+
+    t1 = Test(
+        name=random_lower_string(),
+        created_by_id=user_state_x.id,
+        organization_id=org_id,
+        is_deleted=False,
+        is_template=False,
+    )
+    db.add(t1)
+    db.flush()
+    db.refresh(t1)
+    db.add(TestState(test_id=t1.id, state_id=state_x.id))
+    db.add(TestState(test_id=t1.id, state_id=state_y.id))
+
+    t2 = Test(
+        name=random_lower_string(),
+        created_by_id=user_state_y.id,
+        organization_id=org_id,
+        is_deleted=False,
+        is_template=False,
+    )
+    db.add(t2)
+    db.flush()
+    db.refresh(t2)
+    db.add(TestState(test_id=t2.id, state_id=state_y.id))
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/aggregated_data",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["total_questions"] == 2
+    assert data["total_tests"] == 2
+    assert data["total_users"] == 3

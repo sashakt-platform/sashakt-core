@@ -105,7 +105,7 @@ def get_organization_aggregated_stats_for_current_user(
     ).all()
 
     question_query = (
-        select(func.count())
+        select(func.count(func.distinct(Question.id)))
         .select_from(Question)
         .where(
             not_(Question.is_deleted),
@@ -120,7 +120,7 @@ def get_organization_aggregated_stats_for_current_user(
     total_questions = session.exec(question_query).one()
 
     user_query = (
-        select(func.count())
+        select(func.count(func.distinct(User.id)))
         .select_from(User)
         .where(
             User.organization_id == organization_id,
@@ -136,7 +136,7 @@ def get_organization_aggregated_stats_for_current_user(
     total_users = session.exec(user_query).one()
 
     test_query = (
-        select(func.count())
+        select(func.count(func.distinct(Test.id)))
         .select_from(Test)
         .join(User)
         .where(Test.created_by_id == User.id)
