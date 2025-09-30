@@ -5583,3 +5583,101 @@ def test_candidate_profile_higher_location_entity(
     expected_ids = {entity_A.id, entity_C.id, entity_D.id}
     assert expected_ids.issubset(returned_ids)
     assert entity_B.id not in returned_ids
+
+
+def test_create_test_with_organization_id(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        headers=get_user_superadmin_token,
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "time_limit": 30,
+            "marks": 100,
+            "start_instructions": random_lower_string(),
+            "link": random_lower_string(),
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created_by_id"] is not None
+    assert data["organization_id"] is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    assert data["organization_id"] == user_data["organization_id"]
+    assert data["created_by_id"] == user_data["id"]
+
+
+def test_clone_test_with_organization_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+        is_mandatory=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 100,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test_id}/clone",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created_by_id"] is not None
+    assert data["organization_id"] is not None
+    assert data["id"] != test_id
+    assert data["name"] == f"Copy of {test_payload['name']}"
+    assert data["description"] == test_payload["description"]
+    assert data["time_limit"] == test_payload["time_limit"]
+    assert data["marks"] == test_payload["marks"]
+    assert data["start_instructions"] == test_payload["start_instructions"]
+    assert data["link"] != test_payload["link"]
+    assert data["is_active"] == test_payload["is_active"]
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    assert data["organization_id"] == user_data["organization_id"]
+    assert data["created_by_id"] == user_data["id"]
