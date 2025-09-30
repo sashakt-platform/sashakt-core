@@ -16,6 +16,9 @@ from app.models import (
     Test,
     User,
 )
+from app.models.question import QuestionLocation
+from app.models.test import TestState
+from app.models.user import UserState
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
 
@@ -97,33 +100,59 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    total_questions = session.exec(
-        select(func.count()).where(
-            not_(Question.is_deleted), Question.organization_id == organization_id
-        )
-    ).one()
+    user_state_ids = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
 
-    total_users = session.exec(
-        select(func.count()).where(
-            User.organization_id == organization_id, not_(User.is_deleted)
-        )
-    ).one()
-
-    query = (
+    question_query = (
         select(func.count())
-        .select_from(Test)
-        .join(User)
+        .select_from(Question)
         .where(
-            Test.created_by_id == User.id,
-            not_(Test.is_deleted),
-            not_(Test.is_template),
-        )
-        .where(
-            User.organization_id == current_user.organization_id,
+            not_(Question.is_deleted),
+            Question.organization_id == organization_id,
         )
     )
 
-    total_tests = session.exec(query).one()
+    if user_state_ids:
+        question_query = question_query.join(QuestionLocation).where(
+            col(QuestionLocation.state_id).in_(user_state_ids)
+        )
+    total_questions = session.exec(question_query).one()
+
+    user_query = (
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.organization_id == organization_id,
+            not_(User.is_deleted),
+        )
+    )
+
+    if user_state_ids:
+        user_query = user_query.join(UserState).where(
+            col(UserState.state_id).in_(user_state_ids)
+        )
+
+    total_users = session.exec(user_query).one()
+
+    test_query = (
+        select(func.count())
+        .select_from(Test)
+        .join(User)
+        .where(Test.created_by_id == User.id)
+        .where(
+            User.organization_id == organization_id,
+            not_(Test.is_deleted),
+            not_(Test.is_template),
+        )
+    )
+
+    if user_state_ids:
+        test_query = test_query.join(TestState).where(
+            col(TestState.state_id).in_(user_state_ids)
+        )
+
+    total_tests = session.exec(test_query).one()
     return AggregatedData(
         total_questions=total_questions,
         total_users=total_users,
