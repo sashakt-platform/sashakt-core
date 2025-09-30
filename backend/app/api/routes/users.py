@@ -41,6 +41,37 @@ UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 
 
+def check_user_permission(
+    session: SessionDep, current_user: CurrentUser, target_user: User
+) -> None:
+    role = session.get(Role, current_user.role_id)
+    if not role or role.name not in ("state_admin", "test_admin"):
+        return
+
+    target_user_states = session.exec(
+        select(UserState).where(UserState.user_id == target_user.id)
+    ).all()
+
+    if not target_user_states:
+        raise HTTPException(403, "State/test-admin cannot modify/delete general users.")
+
+    target_user_state_ids = [
+        us.state_id for us in target_user_states if us.state_id is not None
+    ]
+
+    current_user_state_records = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
+    current_user_state_ids = list(current_user_state_records)
+
+    if not any(
+        state_id in current_user_state_ids for state_id in target_user_state_ids
+    ):
+        raise HTTPException(
+            403, "State/test-admin cannot modify/delete users outside their state."
+        )
+
+
 @router.get(
     "/",
     dependencies=[Depends(permission_dependency("read_user"))],
@@ -271,10 +302,7 @@ def read_user_by_id(
     response_model=UserPublic,
 )
 def update_user(
-    *,
-    session: SessionDep,
-    user_id: int,
-    user_in: UserUpdate,
+    *, session: SessionDep, user_id: int, user_in: UserUpdate, current_user: CurrentUser
 ) -> Any:
     """
     Update a user.
@@ -286,6 +314,7 @@ def update_user(
             status_code=404,
             detail="The user with this id does not exist in the system",
         )
+    check_user_permission(session, current_user, db_user)
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
@@ -328,6 +357,7 @@ def delete_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    check_user_permission(session, current_user, user)
     if user == current_user:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
