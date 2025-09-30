@@ -503,22 +503,16 @@ def test_get_district_by_state_ids_filter(
     assert karnataka.id in state_ids_in_response
     assert tamil_nadu.id not in state_ids_in_response
 
-    district_a = District(
-        name=random_lower_string(), state_id=kerala.id, is_active=False
-    )
-    district_b = District(
-        name=random_lower_string(), state_id=kerala.id, is_active=False
-    )
-    db.add_all([district_a, district_b])
-    db.commit()
-
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?is_active=False",
+        f"{settings.API_V1_STR}/location/district/?state={tamil_nadu.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
-    assert len(data["items"]) == 2
+    assert response.status_code == 200
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == chennai.name
+    assert data["items"][0]["state"]["id"] == tamil_nadu.id
 
 
 def test_get_district_by_name_filter(
