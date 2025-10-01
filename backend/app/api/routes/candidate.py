@@ -148,6 +148,19 @@ def get_overall_tests_analytics(
             User.organization_id == current_user.organization_id,
         )
     )
+    user_state_ids = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
+
+    if user_state_ids:
+        state_query = select(TestState.test_id).where(
+            col(TestState.state_id).in_(user_state_ids)
+        )
+        test_ids_for_user_state = session.exec(state_query).all()
+        if not test_ids_for_user_state:
+            return empty_result
+        query = query.where(col(CandidateTest.test_id).in_(test_ids_for_user_state))
+
     if tag_type_ids:
         tag_type_query = (
             select(TestTag.test_id)
