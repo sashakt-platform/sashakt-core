@@ -25,6 +25,7 @@ class TagTypeBase(SQLModel):
 
 
 class TagType(TagTypeBase, table=True):
+    __tablename__ = "tag_type"
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
@@ -77,7 +78,7 @@ class Tag(TagBase, table=True):
     )
     tag_type_id: int | None = Field(
         default=None,
-        foreign_key="tagtype.id",
+        foreign_key="tag_type.id",
         description="ID of the Tag Type to which the Tag should belong to",
     )
 
