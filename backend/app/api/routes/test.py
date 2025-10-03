@@ -344,7 +344,7 @@ def create_test(
     response_model=Page[TestPublic],
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-async def get_test(
+def get_test(
     session: SessionDep,
     current_user: CurrentUser,
     sorting: TestSortingDep,

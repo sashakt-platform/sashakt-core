@@ -112,14 +112,13 @@ def get_organization_aggregated_stats_for_current_user(
     query = (
         select(func.count())
         .select_from(Test)
-        .join(User)
         .where(
             Test.created_by_id == User.id,
             not_(Test.is_deleted),
             not_(Test.is_template),
         )
         .where(
-            User.organization_id == current_user.organization_id,
+            Test.organization_id == organization_id,
         )
     )
 
