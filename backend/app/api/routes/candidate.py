@@ -42,7 +42,7 @@ from app.models.candidate import (
 from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
-from app.models.user import User
+from app.models.user import User, UserState
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -148,6 +148,19 @@ def get_overall_tests_analytics(
             User.organization_id == current_user.organization_id,
         )
     )
+    user_state_ids = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
+
+    if user_state_ids:
+        state_query = select(TestState.test_id).where(
+            col(TestState.state_id).in_(user_state_ids)
+        )
+        test_ids_for_user_state = session.exec(state_query).all()
+        if not test_ids_for_user_state:
+            return empty_result
+        query = query.where(col(CandidateTest.test_id).in_(test_ids_for_user_state))
+
     if tag_type_ids:
         tag_type_query = (
             select(TestTag.test_id)
@@ -613,6 +626,10 @@ def get_test_summary(
         None, description="End date in YYYY-MM-DD format"
     ),
 ) -> TestStatusSummary:
+    user_state_ids = session.exec(
+        select(UserState.state_id).where(UserState.user_id == current_user.id)
+    ).all()
+
     query = (
         select(CandidateTest, Test)
         .join(Test)
@@ -621,6 +638,11 @@ def get_test_summary(
         .where(Test.created_by_id == User.id)
         .where(User.organization_id == current_user.organization_id)
     )
+    if user_state_ids:
+        state_test_ids = select(TestState.test_id).where(
+            col(TestState.state_id).in_(user_state_ids)
+        )
+        query = query.where(col(Test.id).in_(state_test_ids))
 
     if start_date and Test.start_time is not None:
         query = query.where(Test.start_time >= start_date)
