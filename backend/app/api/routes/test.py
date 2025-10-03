@@ -470,7 +470,6 @@ def get_test(
         query = query.where(col(Test.created_by_id).in_(created_by))
 
     if tag_ids:
-        # Use a subquery to get distinct test IDs that match the tag filter
         tag_subquery = (
             select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids)).distinct()
         )

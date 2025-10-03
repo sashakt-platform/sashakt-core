@@ -373,8 +373,36 @@ def test_read_questions_filter_by_tag_type_ids(
     db.add(q2_tag)
 
     db.commit()
+
+    q3 = Question(organization_id=org_id)
+    db.add(q3)
+    db.flush()
+
+    rev3 = QuestionRevision(
+        question_id=q3.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(rev3)
+    db.flush()
+
+    q3.last_revision_id = rev3.id
+    q3_tag = QuestionTag(question_id=q3.id, tag_id=tag2.id)
+    q3_tag_2 = QuestionTag(question_id=q3.id, tag_id=tag1.id)
+    db.add(q3_tag)
+    db.add(q3_tag_2)
+
+    db.commit()
     db.refresh(q1)
     db.refresh(q2)
+    db.refresh(q3)
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}",
@@ -383,8 +411,10 @@ def test_read_questions_filter_by_tag_type_ids(
     data = response.json()
     items = data["items"]
     assert response.status_code == 200
-    assert len(data["items"]) == 1
-    assert items[0]["id"] == q1.id
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
+    returned_ids = [item["id"] for item in items]
+    assert q1.id in returned_ids
     assert any(tag["tag_type"]["id"] == tag_type1.id for tag in items[0]["tags"])
     response = client.get(
         f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type2.id}",
@@ -393,8 +423,10 @@ def test_read_questions_filter_by_tag_type_ids(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) == 1
-    assert items[0]["id"] == q2.id
+    assert len(items) == 2
+    assert data["total"] == 2
+    returned_ids = [item["id"] for item in items]
+    assert q2.id in returned_ids
     assert any(tag["tag_type"]["id"] == tag_type2.id for tag in items[0]["tags"])
     response = client.get(
         f"{settings.API_V1_STR}/questions/",
@@ -414,7 +446,8 @@ def test_read_questions_filter_by_tag_type_ids(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) == 2
+    assert len(items) == 3
+    assert data["total"] == 3
     returned_tag_type_ids = {
         tag["tag_type"]["id"] for item in items for tag in item["tags"]
     }
@@ -428,6 +461,15 @@ def test_read_questions_filter_by_tag_type_ids(
 
     data = response.json()
     assert data["items"] == []
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 3
+    assert data["total"] == 3
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
