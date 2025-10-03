@@ -477,17 +477,23 @@ def get_questions(
         query = query.where(QuestionRevision.created_by_id == created_by_id)
 
     if tag_ids:
-        query = query.join(QuestionTag).where(col(QuestionTag.tag_id).in_(tag_ids))
+        tag_subquery = (
+            select(QuestionTag.question_id)
+            .where(QuestionTag.tag_id.in_(tag_ids))
+            .distinct()
+        )
+        query = query.where(col(Question.id).in_(tag_subquery))
 
     if tag_type_ids:
         if tag_ids:
             query = query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
         else:
-            query = (
-                query.join(QuestionTag)
+            tag_subquery = (
+                select(QuestionTag.question_id)
                 .join(Tag)
                 .where(col(Tag.tag_type_id).in_(tag_type_ids))
-            )
+            ).distinct()
+            query = query.where(col(Question.id).in_(tag_subquery))
 
     # handle location-based filtering
     if any([state_ids, district_ids, block_ids]):
@@ -796,9 +802,7 @@ def create_question_revision(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(
-        session, question, new_revision, list(locations), list(tags)
-    )
+    return build_question_response(question, new_revision, list(locations), list(tags))
 
 
 @router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])

@@ -470,25 +470,39 @@ def get_test(
         query = query.where(col(Test.created_by_id).in_(created_by))
 
     if tag_ids:
-        query = query.join(TestTag).where(col(TestTag.tag_id).in_(tag_ids))
+        # Use a subquery to get distinct test IDs that match the tag filter
+        tag_subquery = (
+            select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids)).distinct()
+        )
+        query = query.where(col(Test.id).in_(tag_subquery))
 
     if tag_type_ids:
         if tag_ids:
             query = query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
         else:
-            query = (
-                query.join(TestTag)
+            tag_subquery = (
+                select(TestTag.test_id)
                 .join(Tag)
                 .where(col(Tag.tag_type_id).in_(tag_type_ids))
+                .distinct()
             )
+            query = query.where(col(Test.id).in_(tag_subquery))
 
     if state_ids:
-        query = query.join(TestState).where(col(TestState.state_id).in_(state_ids))
+        state_subquery = (
+            select(TestState.test_id)
+            .where(col(TestState.state_id).in_(state_ids))
+            .distinct()
+        )
+        query = query.where(col(Test.id).in_(state_subquery))
 
     if district_ids:
-        query = query.join(TestDistrict).where(
-            col(TestDistrict.district_id).in_(district_ids)
+        district_subquery = (
+            select(TestDistrict.test_id)
+            .where(col(TestDistrict.district_id).in_(district_ids))
+            .distinct()
         )
+        query = query.where(col(Test.id).in_(district_subquery))
 
     # let's get the tests with custom transformer
     tests = paginate(
