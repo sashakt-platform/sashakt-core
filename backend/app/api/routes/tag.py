@@ -348,9 +348,18 @@ def get_tags(
         Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
     )
     if name:
-        query = query.where(
-            func.trim(func.lower(Tag.name)).like(f"%{name.strip().lower()}%")
+        # search in both tag name and tag type name
+        tag_name_condition = func.trim(func.lower(Tag.name)).like(
+            f"%{name.strip().lower()}%"
         )
+
+        # left join with TagType to search in tag type name
+        query = query.outerjoin(TagType)
+        tag_type_name_condition = func.trim(func.lower(TagType.name)).like(
+            f"%{name.strip().lower()}%"
+        )
+
+        query = query.where(or_(tag_name_condition, tag_type_name_condition))
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
