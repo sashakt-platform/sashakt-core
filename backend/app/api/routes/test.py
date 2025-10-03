@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
+from sqlalchemy.orm import selectinload
 from sqlmodel import col, exists, func, select
 
 from app.api.deps import (
@@ -79,6 +80,54 @@ def build_random_tag_public(
         count = max(int(tag_count.get("count") or 0), 0)
         out.append(TagRandomPublic(tag=TagPublic.model_validate(tag), count=count))
     return out
+
+
+def transform_tests_to_public(
+    session: SessionDep, tests: list[Test] | Any
+) -> list[TestPublic]:
+    """
+    Transform a list of Test objects to TestPublic objects with all nested relationships.
+    """
+    result: list[TestPublic] = []
+
+    # cast to proper type since fastapi-pagination might return Sequence[Any]
+    test_list: list[Test] = list(tests) if not isinstance(tests, list) else tests
+
+    for test in test_list:
+        tags = test.tags or []
+        question_revisions = test.question_revisions or []
+        states = test.states or []
+        districts = test.districts or []
+
+        random_tag_public: list[TagRandomPublic] | None = None
+        if test.random_tag_count:
+            random_tag_public = build_random_tag_public(session, test.random_tag_count)
+
+        # calculate total questions
+        total_questions = 0
+        if test.random_questions and test.no_of_random_questions:
+            total_questions = test.no_of_random_questions
+        else:
+            total_questions = len(question_revisions)
+
+        if test.random_tag_count:
+            total_questions += sum(
+                tag_rule.get("count", 0) for tag_rule in test.random_tag_count
+            )
+
+        # build TestPublic object
+        test_public = TestPublic(
+            **test.model_dump(),
+            tags=tags,
+            question_revisions=question_revisions,
+            states=states,
+            districts=districts,
+            total_questions=total_questions,
+            random_tag_counts=random_tag_public,
+        )
+        result.append(test_public)
+
+    return result
 
 
 def validate_test_time_config(
@@ -329,7 +378,16 @@ async def get_test(
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[TestPublic]:
-    query = select(Test).where(Test.organization_id == current_user.organization_id)
+    query = (
+        select(Test)
+        .options(
+            selectinload(Test.tags),  # type: ignore[arg-type]
+            selectinload(Test.question_revisions),  # type: ignore[arg-type]
+            selectinload(Test.states),  # type: ignore[arg-type]
+            selectinload(Test.districts),  # type: ignore[arg-type]
+        )
+        .where(Test.organization_id == current_user.organization_id)
+    )
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
@@ -337,9 +395,9 @@ async def get_test(
     )
     query = sorting_with_default.apply_to_query(query, TestSortConfig)
 
-    # Apply filters only if they're provided
     query = query.where(Test.is_deleted == is_deleted)
 
+    # apply filters only if they're provided
     if is_active is not None:
         query = query.where(Test.is_active == is_active)
 
@@ -432,8 +490,13 @@ async def get_test(
             col(TestDistrict.district_id).in_(district_ids)
         )
 
-    # let's get the tests
-    tests = paginate(session, query, params)
+    # let's get the tests with custom transformer
+    tests = paginate(
+        session,
+        query,
+        params,
+        transformer=lambda items: transform_tests_to_public(session, items),
+    )
 
     return tests
 
