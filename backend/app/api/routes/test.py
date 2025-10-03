@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, exists, func, select
 
 from app.api.deps import (
@@ -294,7 +295,7 @@ def create_test(
     response_model=Page[TestPublic],
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test(
+async def get_test(
     session: SessionDep,
     current_user: CurrentUser,
     sorting: TestSortingDep,
@@ -328,9 +329,7 @@ def get_test(
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[TestPublic]:
-    query = select(Test).join(User).where(Test.created_by_id == User.id)
-    query = query.where(User.organization_id == current_user.organization_id)
-    empty_result = cast(Page[TestPublic], paginate([], params))
+    query = select(Test).where(Test.organization_id == current_user.organization_id)
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
@@ -411,84 +410,32 @@ def get_test(
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))
+
     if tag_ids:
-        tag_query = select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids))
-        test_ids_with_tags = session.exec(tag_query).all()
-        if test_ids_with_tags:
-            query = query.where(col(Test.id).in_(test_ids_with_tags))
-        else:
-            return empty_result
+        query = query.join(TestTag).where(col(TestTag.tag_id).in_(tag_ids))
+
     if tag_type_ids:
-        tag_type_query = (
-            select(TestTag.test_id)
-            .join(Tag)
-            .where(Tag.id == TestTag.tag_id)
-            .where(col(Tag.tag_type_id).in_(tag_type_ids))
-        )
-        test_ids_with_tag_types = session.exec(tag_type_query).all()
-        if test_ids_with_tag_types:
-            query = query.where(col(Test.id).in_(test_ids_with_tag_types))
+        if tag_ids:
+            query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
         else:
-            return empty_result
+            query = (
+                query.join(TestTag)
+                .join(Tag)
+                .where(col(Tag.tag_type_id).in_(tag_type_ids))
+            )
 
     if state_ids:
-        state_subquery = select(TestState.test_id).where(
-            col(TestState.state_id).in_(state_ids)
-        )
-        test_ids_with_states = session.exec(state_subquery).all()
-        if test_ids_with_states:
-            query = query.where(col(Test.id).in_(test_ids_with_states))
-        else:
-            return empty_result
+        query = query.join(TestState).where(col(TestState.state_id).in_(state_ids))
 
     if district_ids:
-        district_subquery = select(TestDistrict.test_id).where(
+        query = query.join(TestDistrict).where(
             col(TestDistrict.district_id).in_(district_ids)
         )
-        test_ids_with_districts = session.exec(district_subquery).all()
-        if test_ids_with_districts:
-            query = query.where(col(Test.id).in_(test_ids_with_districts))
-        else:
-            return empty_result
 
-    # Execute query and get all questions
-    tests = session.exec(query).all()
+    # let's get the tests
+    tests = paginate(session, query, params)
 
-    test_public = []
-
-    for test in tests:
-        tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-        tags = session.exec(tags_query).all()
-
-        question_revision_query = (
-            select(QuestionRevision)
-            .join(TestQuestion)
-            .where(TestQuestion.test_id == test.id)
-        )
-        question_revisions = session.exec(question_revision_query).all()
-
-        state_query = select(State).join(TestState).where(TestState.test_id == test.id)
-        states = session.exec(state_query).all()
-        districts_query = (
-            select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
-        )
-        districts = session.exec(districts_query).all()
-        random_tag_public: list[TagRandomPublic] | None = None
-        if test.random_tag_count:
-            random_tag_public = build_random_tag_public(session, test.random_tag_count)
-
-        test_public.append(
-            TestPublic(
-                **test.model_dump(),
-                tags=tags,
-                question_revisions=question_revisions,
-                states=states,
-                districts=districts,
-                random_tag_counts=random_tag_public,
-            )
-        )
-
-    return cast(Page[TestPublic], paginate(test_public, params))
+    return tests
 
 
 @router.get(
