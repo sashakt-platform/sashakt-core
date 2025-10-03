@@ -474,7 +474,7 @@ async def get_test(
 
     if tag_type_ids:
         if tag_ids:
-            query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
+            query = query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
         else:
             query = (
                 query.join(TestTag)
