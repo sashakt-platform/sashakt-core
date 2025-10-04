@@ -605,6 +605,7 @@ def test_get_tests(
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
     db.add(test)
     db.commit()
@@ -701,6 +702,7 @@ def test_get_tests_with_tag_random_count(
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
+        organization_id=user.organization_id,
         random_tag_count=[
             {"tag_id": tag_a.id, "count": 3},
             {"tag_id": tag_b.id, "count": 2},
@@ -748,6 +750,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -755,6 +758,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -762,6 +766,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -808,6 +813,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -816,6 +822,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -824,6 +831,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -868,6 +876,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 25, 10, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -876,6 +885,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -884,6 +894,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -893,6 +904,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -968,6 +980,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 25, 10, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -976,6 +989,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -984,6 +998,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -993,6 +1008,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1064,6 +1080,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 24, 10, 30),
         end_time=datetime(2025, 4, 25, 11, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1073,6 +1090,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 26, 10, 30),
         end_time=datetime(2025, 4, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1082,6 +1100,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 14, 30),
         end_time=datetime(2025, 4, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -1092,6 +1111,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 19, 10),
         end_time=datetime(2025, 4, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1125,6 +1145,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=30,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1133,6 +1154,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=40,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1141,6 +1163,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=45,
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -1149,6 +1172,7 @@ def test_get_test_by_filter_time_limit(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1190,6 +1214,7 @@ def test_get_test_by_filter_completion_message(
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_lower_string() + random_text_1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -1200,6 +1225,7 @@ def test_get_test_by_filter_completion_message(
         completion_message=random_lower_string()
         + random_text_1
         + random_lower_string(),
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1208,6 +1234,7 @@ def test_get_test_by_filter_completion_message(
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_text_2,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1255,6 +1282,7 @@ def test_get_test_by_filter_start_instructions(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_lower_string() + random_text_1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -1265,6 +1293,7 @@ def test_get_test_by_filter_start_instructions(
         start_instructions=random_lower_string()
         + random_text_1
         + random_lower_string(),
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1273,6 +1302,7 @@ def test_get_test_by_filter_start_instructions(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_text_2,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1316,6 +1346,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1323,6 +1354,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=2,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1330,6 +1362,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=3,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -1378,6 +1411,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1385,6 +1419,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1393,6 +1428,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
@@ -1400,6 +1436,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3, test_4])
@@ -1433,6 +1470,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1440,6 +1478,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1448,6 +1487,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
@@ -1455,6 +1495,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3, test_4])
@@ -1489,18 +1530,21 @@ def test_get_test_by_filter_no_random_questions(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=20,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=10,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=45,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1542,6 +1586,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1549,6 +1594,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=2,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1556,6 +1602,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=0,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1591,6 +1638,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1598,6 +1646,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1606,6 +1655,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1640,18 +1690,21 @@ def test_get_test_by_filter_created_by(
         created_by_id=user_1.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user_1.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user_2.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1683,6 +1736,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1690,6 +1744,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1697,6 +1752,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1817,6 +1873,7 @@ def test_get_test_random_tag_count(
             {"tag_id": tag1.id, "count": 3},
             {"tag_id": tag2.id, "count": 2},
         ],
+        organization_id=org_id,
     )
     db.add(test)
     db.commit()
@@ -1878,6 +1935,7 @@ def test_get_test_by_id(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
 
     db.add(test)
@@ -1994,6 +2052,7 @@ def test_get_test_by_id(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
 
     db.add(test_2)
@@ -3032,6 +3091,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -3039,6 +3099,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -3046,6 +3107,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -3122,36 +3184,44 @@ def test_get_tests_by_tags_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_5 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4, test_5])
     db.commit()
     db.refresh(test_1)
     db.refresh(test_2)
     db.refresh(test_3)
+    db.refresh(test_4)
+    db.refresh(test_5)
+
     test_tag_link_1 = TestTag(test_id=test_1.id, tag_id=tag_1.id)
     test_tag_link_2 = TestTag(test_id=test_2.id, tag_id=tag_2.id)
     test_tag_link_3 = TestTag(test_id=test_3.id, tag_id=tag_3.id)
@@ -3197,6 +3267,15 @@ def test_get_tests_by_tags_filter(
     items = data["items"]
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_3.id, test_5.id}
+    assert_paginated_response(response, expected_total=2)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}&tag_ids={tag_2.id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert_paginated_response(response, expected_total=4)
+
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
@@ -3263,36 +3342,42 @@ def test_get_tests_by_tags_type_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_5 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_6 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4, test_5, test_6])
     db.commit()
@@ -3345,6 +3430,7 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 5
+    assert data["total"] == 5
     assert test_6.id not in (test["id"] for test in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
@@ -3353,6 +3439,24 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert data["items"] == []
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 0
+    assert data["total"] == 0
 
 
 def test_get_tests_by_state_filter(
@@ -3377,18 +3481,21 @@ def test_get_tests_by_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -3427,6 +3534,7 @@ def test_get_tests_by_state_filter(
     data = response.json()
     items = data["items"]
     assert len(items) == 3
+    assert data["total"] == 3
     assert {test["id"] for test in items} == {test_1.id, test_2.id, test_3.id}
 
 
@@ -3468,6 +3576,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add(test_1)
     db.commit()
@@ -3484,6 +3593,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add(test_2)
     db.commit()
@@ -3513,6 +3623,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -3520,6 +3631,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -3527,6 +3639,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -3614,6 +3727,7 @@ def test_get_all_tests_includes_active_and_inactive(
         is_active=True,
         is_deleted=False,
         created_by_id=user_id,
+        organization_id=user_data["organization_id"],
     )
     db.add(active_test)
     inactive_test = Test(
@@ -3621,6 +3735,7 @@ def test_get_all_tests_includes_active_and_inactive(
         is_active=False,
         is_deleted=False,
         created_by_id=user_id,
+        organization_id=user_data["organization_id"],
     )
     db.add(inactive_test)
     db.commit()
@@ -4603,6 +4718,7 @@ def test_get_tests_by_district_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 3
+    assert data["total"] == 3
     assert any(test_data_1["id"] == item["id"] for item in data["items"])
     assert any(test_data_2["id"] == item["id"] for item in data["items"])
     assert any(test_data_3["id"] == item["id"] for item in data["items"])
