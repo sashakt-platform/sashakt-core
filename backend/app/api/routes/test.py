@@ -476,16 +476,13 @@ def get_test(
         query = query.where(col(Test.id).in_(tag_subquery))
 
     if tag_type_ids:
-        if tag_ids:
-            query = query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
-        else:
-            tag_subquery = (
-                select(TestTag.test_id)
-                .join(Tag)
-                .where(col(Tag.tag_type_id).in_(tag_type_ids))
-                .distinct()
-            )
-            query = query.where(col(Test.id).in_(tag_subquery))
+        tag_subquery = (
+            select(TestTag.test_id)
+            .join(Tag)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+            .distinct()
+        )
+        query = query.where(col(Test.id).in_(tag_subquery))
 
     if state_ids:
         state_subquery = (

@@ -484,17 +484,14 @@ def get_questions(
             .distinct()
         )
         query = query.where(col(Question.id).in_(tag_subquery))
-
     if tag_type_ids:
-        if tag_ids:
-            query = query.join(Tag).where(col(Tag.tag_type_id).in_(tag_type_ids))
-        else:
-            tag_subquery = (
-                select(QuestionTag.question_id)
-                .join(Tag)
-                .where(col(Tag.tag_type_id).in_(tag_type_ids))
-            ).distinct()
-            query = query.where(col(Question.id).in_(tag_subquery))
+        tag_subquery = (
+            select(QuestionTag.question_id)
+            .join(Tag)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+            .distinct()
+        )
+        query = query.where(col(Question.id).in_(tag_subquery))
 
     # handle location-based filtering
     if any([state_ids, district_ids, block_ids]):
