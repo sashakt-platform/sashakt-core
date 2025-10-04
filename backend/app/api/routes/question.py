@@ -446,7 +446,8 @@ def get_questions(
     # fetch all related data including current revision
     query = (
         select(Question, QuestionRevision)
-        .join(QuestionRevision, Question.last_revision_id == QuestionRevision.id)
+        .join(QuestionRevision)
+        .where(Question.last_revision_id == QuestionRevision.id)
         .options(
             selectinload(Question.locations).selectinload(QuestionLocation.state),
             selectinload(Question.locations).selectinload(QuestionLocation.district),
@@ -479,7 +480,7 @@ def get_questions(
     if tag_ids:
         tag_subquery = (
             select(QuestionTag.question_id)
-            .where(QuestionTag.tag_id.in_(tag_ids))
+            .where(col(QuestionTag.tag_id).in_(tag_ids))
             .distinct()
         )
         query = query.where(col(Question.id).in_(tag_subquery))
@@ -510,7 +511,7 @@ def get_questions(
             query = query.join(QuestionLocation).where(or_(*location_filters))
 
     # get the questions with pagination and transform to QuestionPublic
-    questions = paginate(
+    questions: Page[QuestionPublic] = paginate(  # type: ignore[type-var]
         session,
         query,
         params,

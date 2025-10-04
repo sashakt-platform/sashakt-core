@@ -504,9 +504,9 @@ def get_test(
         query = query.where(col(Test.id).in_(district_subquery))
 
     # let's get the tests with custom transformer
-    tests = paginate(
+    tests: Page[TestPublic] = paginate(
         session,
-        query,
+        query,  # type: ignore[arg-type]
         params,
         transformer=lambda items: transform_tests_to_public(session, items),
     )
