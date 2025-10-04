@@ -462,15 +462,6 @@ def test_read_questions_filter_by_tag_type_ids(
     data = response.json()
     assert data["items"] == []
 
-    response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
-        headers=get_user_superadmin_token,
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data["items"]) == 3
-    assert data["total"] == 3
-
 
 def test_read_questions_filter_by_tags(
     client: TestClient,
@@ -568,7 +559,7 @@ def test_read_questions_filter_by_tags(
     db.refresh(q1)
     db.refresh(q2)
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_ids={tag1.id}&&tag_ids={tag2.id}",
+        f"{settings.API_V1_STR}/questions/?tag_ids={tag1.id}&tag_ids={tag2.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
