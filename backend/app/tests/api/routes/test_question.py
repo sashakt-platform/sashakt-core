@@ -305,6 +305,14 @@ def test_read_questions_filter_by_tag_type_ids(
     )
     db.add(tag_type2)
     db.flush()
+    tag_type3 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type3)
+    db.flush()
     tag1 = Tag(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -461,6 +469,36 @@ def test_read_questions_filter_by_tag_type_ids(
 
     data = response.json()
     assert data["items"] == []
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_ids={tag1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 2
+    assert data["total"] == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_ids={tag2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 1
+    assert data["total"] == 1
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type3.id}&tag_ids={tag2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 0
+    assert data["total"] == 0
 
 
 def test_read_questions_filter_by_tags(

@@ -3440,6 +3440,24 @@ def test_get_tests_by_tags_type_filter(
     data = response.json()
     assert data["items"] == []
 
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 0
+    assert data["total"] == 0
+
 
 def test_get_tests_by_state_filter(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
