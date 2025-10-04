@@ -508,7 +508,12 @@ def get_questions(
             location_filters.append(col(QuestionLocation.block_id).in_(block_ids))
 
         if location_filters:
-            query = query.join(QuestionLocation).where(or_(*location_filters))
+            location_subquery = (
+                select(QuestionLocation.question_id)
+                .where(or_(*location_filters))
+                .distinct()
+            )
+            query = query.where(col(Question.id).in_(location_subquery))
 
     # get the questions with pagination and transform to QuestionPublic
     questions: Page[QuestionPublic] = paginate(  # type: ignore[type-var]

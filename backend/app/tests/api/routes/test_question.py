@@ -560,8 +560,21 @@ def test_read_questions_filter_by_tags(
     db.add(rev2)
     db.flush()
     q2.last_revision_id = rev2.id
-    q2_tag = QuestionTag(question_id=q2.id, tag_id=tag2.id)
-    db.add(q2_tag)
+    q2_tag_1 = QuestionTag(question_id=q2.id, tag_id=tag1.id)
+    q2_tag_2 = QuestionTag(question_id=q2.id, tag_id=tag2.id)
+    db.add(q2_tag_1)
+    db.add(q2_tag_2)
+    db.commit()
+    db.refresh(q1)
+    db.refresh(q2)
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_ids={tag1.id}&&tag_ids={tag2.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
@@ -1448,6 +1461,77 @@ def test_question_location_operations(
     )
     assert response.status_code == 200
     assert len(response.json()) >= 1
+
+
+def test_question_filter_by_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    # Create user
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    # Set up location hierarchy similar to how it's done in test_location.py
+    # Create country
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+
+    # Create state
+    kerala = State(name=random_lower_string(), country_id=india.id)
+    tamilnadu = State(name=random_lower_string(), country_id=india.id)
+    db.add(kerala)
+    db.add(tamilnadu)
+    db.commit()
+    db.refresh(kerala)
+    db.refresh(tamilnadu)
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
+        # Add location data with real IDs
+        "state_ids": [kerala.id],  # remove district, block for now
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
+        # Add location data with real IDs
+        "state_ids": [kerala.id, tamilnadu.id],  # remove district, block for now
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}&state_ids={tamilnadu.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question_data = response.json()
+    assert len(question_data["items"]) == 2
+    assert question_data["total"] == 2
 
 
 def test_delete_single_question(
