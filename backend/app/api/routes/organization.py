@@ -117,10 +117,12 @@ def get_organization_aggregated_stats_for_current_user(
     )
 
     result = session.exec(query).one()
+
+    total_questions, total_users, total_tests = cast(tuple[int, int, int], result)
     return AggregatedData(
-        total_questions=result.total_questions,
-        total_users=result.total_users,
-        total_tests=result.total_tests,
+        total_questions=total_questions,
+        total_users=total_users,
+        total_tests=total_tests,
     )
 
 
