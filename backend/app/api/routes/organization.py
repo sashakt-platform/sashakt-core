@@ -97,31 +97,28 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    total_questions = session.exec(
-        select(func.count()).where(
-            not_(Question.is_deleted), Question.organization_id == organization_id
-        )
-    ).one()
-
-    total_users = session.exec(
-        select(func.count()).where(
-            User.organization_id == organization_id, not_(User.is_deleted)
-        )
-    ).one()
-
-    query = (
+    query = select(
         select(func.count())
-        .select_from(Test)
+        .where(not_(Question.is_deleted), Question.organization_id == organization_id)
+        .scalar_subquery()
+        .label("total_questions"),
+        select(func.count())
+        .where(User.organization_id == organization_id, not_(User.is_deleted))
+        .scalar_subquery()
+        .label("total_users"),
+        select(func.count())
         .where(
+            Test.organization_id == organization_id,
             not_(Test.is_deleted),
             not_(Test.is_template),
         )
-        .where(
-            Test.organization_id == organization_id,
-        )
+        .scalar_subquery()
+        .label("total_tests"),
     )
 
-    total_tests = session.exec(query).one()
+    result = session.exec(query).one()
+
+    total_questions, total_users, total_tests = cast(tuple[int, int, int], result)
     return AggregatedData(
         total_questions=total_questions,
         total_users=total_users,
