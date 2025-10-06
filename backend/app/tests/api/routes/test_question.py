@@ -305,6 +305,14 @@ def test_read_questions_filter_by_tag_type_ids(
     )
     db.add(tag_type2)
     db.flush()
+    tag_type3 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type3)
+    db.flush()
     tag1 = Tag(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -373,8 +381,36 @@ def test_read_questions_filter_by_tag_type_ids(
     db.add(q2_tag)
 
     db.commit()
+
+    q3 = Question(organization_id=org_id)
+    db.add(q3)
+    db.flush()
+
+    rev3 = QuestionRevision(
+        question_id=q3.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(rev3)
+    db.flush()
+
+    q3.last_revision_id = rev3.id
+    q3_tag = QuestionTag(question_id=q3.id, tag_id=tag2.id)
+    q3_tag_2 = QuestionTag(question_id=q3.id, tag_id=tag1.id)
+    db.add(q3_tag)
+    db.add(q3_tag_2)
+
+    db.commit()
     db.refresh(q1)
     db.refresh(q2)
+    db.refresh(q3)
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}",
@@ -383,8 +419,10 @@ def test_read_questions_filter_by_tag_type_ids(
     data = response.json()
     items = data["items"]
     assert response.status_code == 200
-    assert len(data["items"]) == 1
-    assert items[0]["id"] == q1.id
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
+    returned_ids = [item["id"] for item in items]
+    assert q1.id in returned_ids
     assert any(tag["tag_type"]["id"] == tag_type1.id for tag in items[0]["tags"])
     response = client.get(
         f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type2.id}",
@@ -393,8 +431,10 @@ def test_read_questions_filter_by_tag_type_ids(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) == 1
-    assert items[0]["id"] == q2.id
+    assert len(items) == 2
+    assert data["total"] == 2
+    returned_ids = [item["id"] for item in items]
+    assert q2.id in returned_ids
     assert any(tag["tag_type"]["id"] == tag_type2.id for tag in items[0]["tags"])
     response = client.get(
         f"{settings.API_V1_STR}/questions/",
@@ -414,7 +454,8 @@ def test_read_questions_filter_by_tag_type_ids(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) == 2
+    assert len(items) == 3
+    assert data["total"] == 3
     returned_tag_type_ids = {
         tag["tag_type"]["id"] for item in items for tag in item["tags"]
     }
@@ -428,6 +469,141 @@ def test_read_questions_filter_by_tag_type_ids(
 
     data = response.json()
     assert data["items"] == []
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_ids={tag1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 2
+    assert data["total"] == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_ids={tag2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 1
+    assert data["total"] == 1
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type3.id}&tag_ids={tag2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 0
+    assert data["total"] == 0
+
+
+def test_read_questions_filter_by_tags(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag_type1 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type1)
+    db.flush()
+    tag_type2 = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(tag_type2)
+    db.flush()
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type1.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tag_type2.id,
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+    q1 = Question(organization_id=org_id)
+    db.add(q1)
+    db.flush()
+
+    rev1 = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(rev1)
+    db.flush()
+
+    q1.last_revision_id = rev1.id
+    q1_tag = QuestionTag(
+        question_id=q1.id,
+        tag_id=tag1.id,
+    )
+    db.add(q1_tag)
+
+    q2 = Question(organization_id=org_id)
+    db.add(q2)
+    db.flush()
+
+    rev2 = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user_id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(rev2)
+    db.flush()
+    q2.last_revision_id = rev2.id
+    q2_tag_1 = QuestionTag(question_id=q2.id, tag_id=tag1.id)
+    q2_tag_2 = QuestionTag(question_id=q2.id, tag_id=tag2.id)
+    db.add(q2_tag_1)
+    db.add(q2_tag_2)
+    db.commit()
+    db.refresh(q1)
+    db.refresh(q2)
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?tag_ids={tag1.id}&tag_ids={tag2.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
 
 
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
@@ -1314,6 +1490,77 @@ def test_question_location_operations(
     )
     assert response.status_code == 200
     assert len(response.json()) >= 1
+
+
+def test_question_filter_by_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    # Create user
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    # Set up location hierarchy similar to how it's done in test_location.py
+    # Create country
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+
+    # Create state
+    kerala = State(name=random_lower_string(), country_id=india.id)
+    tamilnadu = State(name=random_lower_string(), country_id=india.id)
+    db.add(kerala)
+    db.add(tamilnadu)
+    db.commit()
+    db.refresh(kerala)
+    db.refresh(tamilnadu)
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
+        # Add location data with real IDs
+        "state_ids": [kerala.id],  # remove district, block for now
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [2],
+        # Add location data with real IDs
+        "state_ids": [kerala.id, tamilnadu.id],  # remove district, block for now
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}&state_ids={tamilnadu.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question_data = response.json()
+    assert len(question_data["items"]) == 2
+    assert question_data["total"] == 2
 
 
 def test_delete_single_question(

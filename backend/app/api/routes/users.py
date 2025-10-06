@@ -13,6 +13,7 @@ from app.api.deps import (
     permission_dependency,
 )
 from app.core.config import settings
+from app.core.roles import state_admin, test_admin
 from app.core.security import get_password_hash, verify_password
 from app.core.sorting import (
     SortingParams,
@@ -67,7 +68,12 @@ def read_users(
 
     users = session.exec(statement).all()
 
-    return cast(Page[UserPublic], paginate(users, params=param))
+    user_public_list = []
+
+    for user in users:
+        user_public_list.append(crud.get_user_public(db_user=user, session=session))
+
+    return cast(Page[UserPublic], paginate(user_public_list, params=param))
 
 
 @router.post(
@@ -94,7 +100,7 @@ def create_user(
     user = crud.create_user(
         session=session, user_create=user_in, created_by_id=current_user.id
     )
-    states = None
+
     role = session.get(Role, user.role_id)
     creator_role = session.get(Role, current_user.role_id)
 
@@ -111,8 +117,6 @@ def create_user(
             UserState(user_id=user.id, state_id=state.id) for state in existing_states
         ]
         session.add_all(user_states)
-        state_query = select(State).join(UserState).where(UserState.user_id == user.id)
-        states = session.exec(state_query).all()
     elif role and role.name == "test_admin":
         if creator_role and creator_role.name == "state_admin":
             creator_states = session.exec(
@@ -125,7 +129,6 @@ def create_user(
                 UserState(user_id=user.id, state_id=creator_state.id)
                 for creator_state in creator_states
             )
-            states = creator_states
         else:
             if user_in.state_ids:
                 if len(user_in.state_ids) != 1:
@@ -137,7 +140,6 @@ def create_user(
                     select(State).where(col(State.id).in_(user_in.state_ids))
                 ).all()
                 session.add(UserState(user_id=user.id, state_id=existing_states[0].id))
-                states = existing_states
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -149,8 +151,8 @@ def create_user(
             html_content=email_data.html_content,
         )
     session.commit()
-    user_data = UserPublic.model_validate(user)
-    return user_data.model_copy(update={"states": states})
+    user_public = crud.get_user_public(db_user=user, session=session)
+    return user_public
 
 
 @router.patch(
@@ -176,16 +178,11 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    permissions, states = crud.get_user_permission_states(
-        session=session, user=current_user
-    )
-    base = UserPublicMe.model_validate(current_user)
-    return base.model_copy(
-        update={
-            "permissions": permissions,
-            "states": states,
-        }
-    )
+
+    user_public = crud.get_user_public(db_user=current_user, session=session)
+    permissions = crud.get_user_permissions(session=session, user=current_user)
+    user_public_me = UserPublicMe(**user_public.model_dump(), permissions=permissions)
+    return user_public_me
 
 
 @router.patch(
@@ -224,16 +221,10 @@ def read_user_me(
     """
     Get current user.
     """
-    permissions, states = crud.get_user_permission_states(
-        session=session, user=current_user
-    )
-    base = UserPublicMe.model_validate(current_user)
-    return base.model_copy(
-        update={
-            "permissions": permissions,
-            "states": states,
-        }
-    )
+    user_public = crud.get_user_public(db_user=current_user, session=session)
+    permissions = crud.get_user_permissions(session=session, user=current_user)
+    user_public_me = UserPublicMe(**user_public.model_dump(), permissions=permissions)
+    return user_public_me
 
 
 @router.delete(
@@ -271,7 +262,8 @@ def register_user(session: SessionDep, user_in: UserCreate) -> Any:
         )
     user_create = UserCreate.model_validate(user_in)
     user = crud.create_user(session=session, user_create=user_create)
-    return user
+    user_public = crud.get_user_public(db_user=user, session=session)
+    return user_public
 
 
 @router.get(
@@ -293,7 +285,9 @@ def read_user_by_id(
     ):
         raise HTTPException(status_code=404, detail="User not found")
     _ = user.states
-    return user
+
+    user_public = crud.get_user_public(db_user=user, session=session)
+    return user_public
 
 
 @router.patch(
@@ -331,8 +325,8 @@ def update_user(
     if not final_role:
         raise HTTPException(status_code=400, detail="Invalid role ID provided.")
 
-    is_state_admin = final_role.name == "state_admin"
-    is_test_admin = final_role.name == "test_admin"
+    is_state_admin = final_role.name == state_admin.name
+    is_test_admin = final_role.name == test_admin.name
 
     if is_state_admin:
         if not user_in.state_ids or len(user_in.state_ids) < 1:
@@ -348,7 +342,7 @@ def update_user(
         )
     elif is_test_admin:
         creator_role = session.get(Role, current_user.role_id)
-        if creator_role and creator_role.name == "state_admin":
+        if creator_role and creator_role.name == state_admin.name:
             creator_states = list(
                 session.exec(
                     select(State)
@@ -373,9 +367,10 @@ def update_user(
                 )
 
     updated_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
-    states = db_user.states if is_state_admin or is_test_admin else None
 
-    return UserPublic(**updated_user.model_dump(), states=states)
+    user_public = crud.get_user_public(db_user=updated_user, session=session)
+
+    return user_public
 
 
 @router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])

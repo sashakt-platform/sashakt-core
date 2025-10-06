@@ -6650,3 +6650,64 @@ def test_candidate_summary_invalid_date_range(
     assert response.status_code == 400
     data = response.json()
     assert data["detail"] == "End date must be after start date"
+
+
+def test_create_candidate_with_organization(
+    client: TestClient,
+    get_user_candidate_token: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_candidate_token,
+        json={},
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "id" in data
+    assert "organization_id" in data
+    assert data["organization_id"] is not None
+
+
+def test_start_test_candidate_with_organization(
+    client: TestClient,
+    db: SessionDep,
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_testadmin_token,
+        json={
+            "name": "Org Test",
+            "is_active": True,
+            "link": random_lower_string(),
+        },
+    )
+    assert test_response.status_code == 200
+    test_data = test_response.json()
+    assert "id" in test_data
+    assert "name" in test_data
+    assert "is_active" in test_data
+    assert "link" in test_data
+    assert "organization_id" in test_data
+    assert test_data["organization_id"] is not None
+
+    candidate_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={
+            "test_id": test_data["id"],
+            "device_info": "Test Device Info",
+        },
+    )
+
+    assert candidate_response.status_code == 200
+    data = candidate_response.json()
+    assert "candidate_uuid" in data
+    assert "candidate_test_id" in data
+    candidate_test_id = data["candidate_test_id"]
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.candidate_id is not None
+    candidate = db.get(Candidate, candidate_test.candidate_id)
+    assert candidate is not None
+    assert candidate.organization_id is not None
+    assert candidate.organization_id == test_data["organization_id"]

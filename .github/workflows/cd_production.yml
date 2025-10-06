@@ -1,0 +1,45 @@
+name: Deploy to Production tag
+
+# Trigger only when a tag matching v* is pushed (eg v1.2.3)
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout (for logs)
+        uses: actions/checkout@v5
+        
+      - name: Set deployment tag
+        id: set_tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "DEPLOY_TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          else
+            # github.ref_name returns the short ref (e.g. v1.0.2) — safe to export
+          echo "DEPLOY_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+          echo "Will deploy tag: $DEPLOY_TAG"
+          
+      - name: Deploy via SSH (tag-based)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+        
+          script: |
+            DEPLOY_TAG="${{ env.DEPLOY_TAG }}"
+            set -euxo pipefail
+            cd /home/ubuntu/sashakt-core-test/sashakt-core
+        
+
+            git fetch --all --tags --prune
+            # use exported DEPLOY_TAG (it will be like "v1.0.2")
+            git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
+    
+            echo "Deployment of tag ${TAG_NAME} completed."

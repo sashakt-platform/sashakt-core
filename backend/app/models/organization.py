@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.candidate import Candidate
 
 if TYPE_CHECKING:
-    from app.models import EntityType, Question, Tag, TagType, User
+    from app.models import EntityType, Question, Tag, TagType, Test, User
+    from app.models.provider import OrganizationProvider
 
 
 class OrganizationBase(SQLModel):
@@ -35,6 +37,11 @@ class Organization(OrganizationBase, table=True):
     entity_types: list["EntityType"] = Relationship(back_populates="organization")
     users: list["User"] = Relationship(back_populates="organization")
     question: list["Question"] = Relationship(back_populates="organization")
+    organization_providers: list["OrganizationProvider"] = Relationship(
+        back_populates="organization"
+    )
+    tests: list["Test"] = Relationship(back_populates="organization")
+    candidates: list["Candidate"] = Relationship(back_populates="organization")
 
 
 class OrganizationCreate(OrganizationBase):

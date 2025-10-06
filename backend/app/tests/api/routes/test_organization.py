@@ -546,6 +546,7 @@ def test_get_aggregated_data_for_organization(
         is_active=True,
         is_deleted=False,
         random_questions=False,
+        organization_id=org_id,
     )
     db.add(test)
     db.commit()
@@ -561,6 +562,7 @@ def test_get_aggregated_data_for_organization(
         is_active=True,
         is_deleted=True,
         random_questions=False,
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
@@ -577,6 +579,7 @@ def test_get_aggregated_data_for_organization(
         is_deleted=False,
         random_questions=False,
         is_template=True,
+        organization_id=org_id,
     )
     db.add(test3)
     db.commit()

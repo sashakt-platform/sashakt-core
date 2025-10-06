@@ -5,6 +5,7 @@ from sqlmodel import Session, col, select
 
 from app import crud
 from app.core.config import settings
+from app.core.roles import super_admin
 from app.core.security import verify_password
 from app.models import Permission, Role, RolePermission, User, UserCreate
 from app.models.location import Country, State
@@ -1714,3 +1715,34 @@ def test_update_normal_user_to_test_admin_without_states(
     updated_user = patch_resp.json()
     assert updated_user["role_id"] == test_admin_role.id
     assert updated_user["states"] == []
+
+
+def test_user_public_me_returns_role_name(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/users/me",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    user_data = response.json()
+    assert "role_label" in user_data
+    assert user_data["role_label"] == super_admin.label
+
+
+def test_user_public_list_returns_role_name(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    users_data = response.json()
+    assert "items" in users_data
+    assert len(users_data["items"]) > 0
+    for user in users_data["items"]:
+        assert "role_label" in user
+        role = db.exec(select(Role).where(Role.id == user["role_id"])).first()
+        assert role is not None
+        assert user["role_label"] == role.label

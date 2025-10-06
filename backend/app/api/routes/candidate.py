@@ -286,6 +286,7 @@ def start_test_for_candidate(
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
         identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
+        organization_id=test.organization_id,
     )
     session.add(candidate)
     session.commit()
@@ -575,9 +576,11 @@ def get_test_questions(
     dependencies=[Depends(permission_dependency("create_candidate"))],
 )
 def create_candidate(
-    candidate_create: CandidateCreate, session: SessionDep
+    candidate_create: CandidateCreate, session: SessionDep, current_user: CurrentUser
 ) -> Candidate:
-    candidate = Candidate.model_validate(candidate_create)
+    candidate_dump = candidate_create.model_dump()
+    candidate_dump["organization_id"] = current_user.organization_id
+    candidate = Candidate.model_validate(candidate_dump)
     session.add(candidate)
     session.commit()
     session.refresh(candidate)
