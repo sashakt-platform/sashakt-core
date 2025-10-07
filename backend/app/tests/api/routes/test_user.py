@@ -1571,7 +1571,7 @@ def test_update_user_to_test_admin_inherits_state_admin_states(
     user_id = resp_user.json()["id"]
 
     initial_user = resp_user.json()
-    assert initial_user["states"] == [] or initial_user["states"] is None
+    assert initial_user["states"] is None
 
     patch_payload = {
         "role_id": test_admin_role.id,
@@ -1714,7 +1714,7 @@ def test_update_normal_user_to_test_admin_without_states(
     assert patch_resp.status_code == 200
     updated_user = patch_resp.json()
     assert updated_user["role_id"] == test_admin_role.id
-    assert updated_user["states"] == []
+    assert updated_user["states"] is None
 
 
 def test_user_public_me_returns_role_name(
