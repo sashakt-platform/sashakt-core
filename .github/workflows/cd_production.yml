@@ -42,4 +42,4 @@ jobs:
             # use exported DEPLOY_TAG (it will be like "v1.0.2")
             git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
     
-            echo "Deployment of tag ${TAG_NAME} completed."
+            echo "Deployment of tag $DEPLOY_TAG completed."
