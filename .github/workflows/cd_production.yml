@@ -35,11 +35,12 @@ jobs:
           script: |
             DEPLOY_TAG="${{ env.DEPLOY_TAG }}"
             set -euxo pipefail
-            cd /home/ubuntu/test/sashakt-core
+            cd /home/ubuntu/sashakt-core
         
 
             git fetch --all --tags --prune
             # use exported DEPLOY_TAG (it will be like "v1.0.2")
             git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
-    
+            docker compose down || true
+            docker compose up -d
             echo "Deployment of tag $DEPLOY_TAG completed."
