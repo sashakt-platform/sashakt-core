@@ -35,7 +35,7 @@ jobs:
           script: |
             DEPLOY_TAG="${{ env.DEPLOY_TAG }}"
             set -euxo pipefail
-            cd /home/ubuntu/sashakt-core-test/sashakt-core
+            cd /home/ubuntu/test/sashakt-core
         
 
             git fetch --all --tags --prune
