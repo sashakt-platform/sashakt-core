@@ -96,9 +96,13 @@ def create_user(
             status_code=400,
             detail="The user with this email already exists in the system.",
         )
+    org_id = user_in.organization_id or current_user.organization_id
 
     user = crud.create_user(
-        session=session, user_create=user_in, created_by_id=current_user.id
+        session=session,
+        user_create=user_in,
+        created_by_id=current_user.id,
+        organization_id=org_id,
     )
     role = session.exec(select(Role).where(Role.id == user.role_id)).first()
 

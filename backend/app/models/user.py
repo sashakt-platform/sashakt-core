@@ -47,7 +47,7 @@ class UserBase(SQLModel):
     )
     phone: str = Field(max_length=255)
     role_id: int = Field(foreign_key="role.id")
-    organization_id: int = Field(foreign_key="organization.id")
+    organization_id: int | None = Field(default=None, foreign_key="organization.id")
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
     is_active: bool = Field(default=True)
 
