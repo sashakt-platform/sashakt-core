@@ -18,8 +18,6 @@ def create_user(
     organization_id: int | None = None,
 ) -> User:
     org_id = organization_id or user_create.organization_id
-    if org_id is None:
-        raise ValueError("organization_id must be provided")
 
     db_obj = User.model_validate(
         user_create,

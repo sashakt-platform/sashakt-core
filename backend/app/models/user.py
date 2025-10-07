@@ -47,7 +47,7 @@ class UserBase(SQLModel):
     )
     phone: str = Field(max_length=255)
     role_id: int = Field(foreign_key="role.id")
-    organization_id: int | None = Field(default=None, foreign_key="organization.id")
+
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
     is_active: bool = Field(default=True)
 
@@ -61,6 +61,7 @@ class UserCreate(UserBase):
         title="Enter Password",
         description="Create password of minumum 8 charaters and maximum 40 characters",
     )
+    organization_id: int | None = None
     state_ids: list[int] | None = Field(
         default=None, description="IDs of states to associate with the user"
     )
@@ -100,6 +101,7 @@ class User(UserBase, table=True):
     token: str | None = Field(default=None)
     refresh_token: str | None = Field(default=None)
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
+    organization_id: int = Field(foreign_key="organization.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
@@ -125,6 +127,7 @@ class User(UserBase, table=True):
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: int
+    organization_id: int
     role_label: str
     created_date: datetime
     modified_date: datetime
