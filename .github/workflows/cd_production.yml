@@ -41,7 +41,7 @@ jobs:
             git fetch --all --tags --prune
             # use exported DEPLOY_TAG (it will be like "v1.0.2")
             git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
-            cp ./yaml-store/*.yaml ./sashakt-core/
+            cp ./yaml-store/*.yml ./sashakt-core/
             docker compose down || true
             docker compose up -d
             echo "Deployment of tag $DEPLOY_TAG completed."
