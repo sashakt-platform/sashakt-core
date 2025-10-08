@@ -935,7 +935,7 @@ def test_create_state_admin_without_state_id(
         )
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "A state-admin must be assigned at least one state."
+        assert data["detail"] == "A State Admin must be assigned exactly one state."
 
 
 def test_create_state_admin_with_state_id(
@@ -1058,10 +1058,7 @@ def test_create_user_multiple_state_assignment_error(
             json=data,
         )
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "A test-admin may be linked to at most one state."
-        )
+        assert response.json()["detail"] == "A user can be linked to only one state."
 
 
 def test_create_test_admin_single_state_success(
@@ -1249,8 +1246,8 @@ def test_update_user_states(
         headers=get_user_superadmin_token,
         json=invalid_role_patch,
     )
-    assert update_response.status_code == 400
-    assert update_response.json()["detail"] == "Invalid role ID provided."
+    assert update_response.status_code == 404
+    assert update_response.json()["detail"] == "Invalid Role"
 
 
 def test_update_other_role_to_state_admin_and_add_states(
@@ -1363,7 +1360,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     )
     assert patch_response.status_code == 400
     error = patch_response.json()
-    assert error["detail"] == "A state-admin must be assigned at least one state."
+    assert error["detail"] == "A State Admin must be assigned exactly one state."
 
 
 def test_update_state_admin_to_other_role_and_remove_states(
@@ -1699,10 +1696,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     )
 
     assert patch_resp.status_code == 400
-    assert (
-        patch_resp.json()["detail"]
-        == "A test-admin may be linked to at most one state."
-    )
+    assert patch_resp.json()["detail"] == "A user can be linked to only one state."
 
 
 def test_update_normal_user_to_test_admin_without_states(
