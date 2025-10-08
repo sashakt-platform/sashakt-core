@@ -76,6 +76,43 @@ def read_users(
     return cast(Page[UserPublic], paginate(user_public_list, params=param))
 
 
+def validate_user_return_role(
+    session: SessionDep, user_in: UserCreate | UserUpdate
+) -> Role:
+    role = session.get(Role, user_in.role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Invalid Role")
+
+    if role and (role.name == state_admin.name or role.name == test_admin.name):
+        if user_in.state_ids and len(user_in.state_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="A user can be linked to only one state.",
+            )
+
+        if role.name == state_admin.name and (
+            user_in.state_ids is None or len(user_in.state_ids) != 1
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="A State Admin must be assigned exactly one state.",
+            )
+
+        # Validate state exists
+        if user_in.state_ids is not None and len(user_in.state_ids) == 1:
+            state_id = user_in.state_ids[0]
+            state_exists = session.exec(
+                select(State.id).where(State.id == state_id)
+            ).first()
+
+            if not state_exists:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Invalid State Details",
+                )
+    return role
+
+
 @router.post(
     "/",
     dependencies=[Depends(permission_dependency("create_user"))],
@@ -99,51 +136,40 @@ def create_user(
     if not user_in.organization_id:
         user_in.organization_id = current_user.organization_id
 
+    role = validate_user_return_role(session=session, user_in=user_in)
+
     user = crud.create_user(
         session=session,
         user_create=user_in,
         created_by_id=current_user.id,
     )
 
-    role = session.get(Role, user.role_id)
-    creator_role = session.get(Role, current_user.role_id)
-
-    if role and role.name == "state_admin":
-        if user_in.state_ids is None or len(user_in.state_ids) != 1:
-            raise HTTPException(
-                status_code=400,
-                detail="A state-admin must be assigned at least one state.",
-            )
-        existing_states = session.exec(
-            select(State).where(col(State.id).in_(user_in.state_ids))
-        ).all()
+    if role and role.name == state_admin.name and user_in.state_ids:
         user_states = [
-            UserState(user_id=user.id, state_id=state.id) for state in existing_states
+            UserState(user_id=user.id, state_id=state_id)
+            for state_id in user_in.state_ids
         ]
         session.add_all(user_states)
-    elif role and role.name == "test_admin":
-        if creator_role and creator_role.name == "state_admin":
-            creator_states = session.exec(
-                select(State)
-                .join(UserState)
-                .where(UserState.user_id == current_user.id)
-            ).all()
 
+    elif role and role.name == test_admin.name:
+        current_role = session.get(Role, current_user.role_id)
+        if (
+            current_role
+            and current_role.name == state_admin.name
+            and current_user.states
+        ):
+            creator_states = current_user.states
             session.add_all(
                 UserState(user_id=user.id, state_id=creator_state.id)
                 for creator_state in creator_states
             )
-        else:
-            if user_in.state_ids:
-                if len(user_in.state_ids) != 1:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="A test-admin may be linked to at most one state.",
-                    )
-                existing_states = session.exec(
-                    select(State).where(col(State.id).in_(user_in.state_ids))
-                ).all()
-                session.add(UserState(user_id=user.id, state_id=existing_states[0].id))
+
+        elif user_in.state_ids:
+            user_states = [
+                UserState(user_id=user.id, state_id=state_id)
+                for state_id in user_in.state_ids
+            ]
+            session.add_all(user_states)
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -323,28 +349,15 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    final_role_id = user_in.role_id or db_user.role_id
-    final_role = session.get(Role, final_role_id)
+    role = validate_user_return_role(session=session, user_in=user_in)
 
-    if not final_role:
-        raise HTTPException(status_code=400, detail="Invalid role ID provided.")
-
-    is_state_admin = final_role.name == state_admin.name
-    is_test_admin = final_role.name == test_admin.name
-
-    if is_state_admin:
-        if not user_in.state_ids or len(user_in.state_ids) < 1:
-            raise HTTPException(
-                status_code=400,
-                detail="A state-admin must be assigned at least one state.",
-            )
-
+    if role.name == state_admin.name and user_in.state_ids:
         db_user.states = list(
             session.exec(
                 select(State).where(col(State.id).in_(user_in.state_ids))
             ).all()
         )
-    elif is_test_admin:
+    elif role.name == test_admin.name:
         creator_role = session.get(Role, current_user.role_id)
         if creator_role and creator_role.name == state_admin.name:
             creator_states = list(
