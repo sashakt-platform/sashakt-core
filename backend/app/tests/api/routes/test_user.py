@@ -98,8 +98,51 @@ def test_create_user_new_email(
         user = crud.get_user_by_email(session=db, email=username)
         assert user
         assert user.email == created_user["email"]
+        assert user.organization_id == organization.id
+        assert created_user["organization_id"] == organization.id
 
         current_user_data = get_current_user_data(client, superuser_token_headers)
+        assert user.created_by_id == current_user_data["id"]
+
+
+def test_create_user_new_email_without_org_id(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        username = random_email()
+        full_name = random_lower_string()
+        password = random_lower_string()
+        phone = random_lower_string()
+        role = create_random_role(db)
+
+        data = {
+            "email": username,
+            "password": password,
+            "phone": phone,
+            "role_id": role.id,
+            "full_name": full_name,
+        }
+
+        r = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=superuser_token_headers,
+            json=data,
+        )
+        assert r.status_code == 200
+
+        created_user = r.json()
+        user = crud.get_user_by_email(session=db, email=username)
+        assert user
+        assert user.email == created_user["email"]
+
+        current_user_data = get_current_user_data(client, superuser_token_headers)
+        expected_org_id = current_user_data["organization_id"]
+        assert user.organization_id == expected_org_id
+        assert created_user["organization_id"] == expected_org_id
         assert user.created_by_id == current_user_data["id"]
 
 
