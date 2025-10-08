@@ -15,16 +15,12 @@ def create_user(
     session: Session,
     user_create: UserCreate,
     created_by_id: int | None = None,
-    organization_id: int | None = None,
 ) -> User:
-    org_id = organization_id or user_create.organization_id
-
     db_obj = User.model_validate(
         user_create,
         update={
             "hashed_password": get_password_hash(user_create.password),
             "created_by_id": created_by_id,
-            "organization_id": org_id,
         },
     )
     session.add(db_obj)

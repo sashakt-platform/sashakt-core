@@ -287,7 +287,6 @@ def create_tag(
 ) -> TagPublic:
     tag_type = None
     tag_type_id = tag_create.tag_type_id
-    organization_id: int | None = None
     if tag_type_id is not None:
         tag_type = session.get(TagType, tag_type_id)
         if not tag_type or tag_type.is_deleted is True:

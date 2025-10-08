@@ -61,7 +61,11 @@ class UserCreate(UserBase):
         title="Enter Password",
         description="Create password of minumum 8 charaters and maximum 40 characters",
     )
-    organization_id: int | None = None
+    organization_id: int | None = Field(
+        default=None,
+        title="Organization ID",
+        description="ID of the organization the user belongs to. If not provided, it will be set to the organization of the current User.",
+    )
     state_ids: list[int] | None = Field(
         default=None, description="IDs of states to associate with the user"
     )
