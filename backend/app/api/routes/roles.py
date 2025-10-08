@@ -17,13 +17,13 @@ from app.models import (
 router = APIRouter(
     prefix="/roles",
     tags=["roles"],
-    dependencies=[Depends(permission_dependency("create_role"))],
 )
 
 
 @router.get(
     "/",
     response_model=RolesPublic,
+    dependencies=[Depends(permission_dependency("read_role"))],
 )
 def read_roles(session: SessionDep, skip: int = 0, limit: int = 150) -> Any:
     """
@@ -49,30 +49,14 @@ def read_roles(session: SessionDep, skip: int = 0, limit: int = 150) -> Any:
             )
         )
 
-    # if current_user.is_superuser:
-    #     count_statement = select(func.count()).select_from(Role)
-    #     count = session.exec(count_statement).one()
-    #     statement = select(Role).offset(skip).limit(limit)
-    #     roles = session.exec(statement).all()
-    # else:
-    #     count_statement = (
-    #         select(func.count())
-    #         .select_from(Role)
-    #         .where(Role.owner_id == current_user.id)
-    #     )
-    #     count = session.exec(count_statement).one()
-    #     statement = (
-    #         select(Role)
-    #         .where(Role.owner_id == current_user.id)
-    #         .offset(skip)
-    #         .limit(limit)
-    #     )
-    #     roles = session.exec(statement).all()
-
     return RolesPublic(data=role_public, count=count)
 
 
-@router.get("/{id}", response_model=RolePublic)
+@router.get(
+    "/{id}",
+    response_model=RolePublic,
+    dependencies=[Depends(permission_dependency("read_role"))],
+)
 def read_role(session: SessionDep, id: int) -> Any:
     """
     Get role by ID.
@@ -92,7 +76,11 @@ def read_role(session: SessionDep, id: int) -> Any:
     )
 
 
-@router.post("/", response_model=RolePublic)
+@router.post(
+    "/",
+    response_model=RolePublic,
+    dependencies=[Depends(permission_dependency("create_role"))],
+)
 def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
     """
     Create new role.
@@ -121,7 +109,11 @@ def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
     )
 
 
-@router.put("/{id}", response_model=RolePublic)
+@router.put(
+    "/{id}",
+    response_model=RolePublic,
+    dependencies=[Depends(permission_dependency("update_role"))],
+)
 def update_role(
     *,
     session: SessionDep,
@@ -181,7 +173,11 @@ def update_role(
     )
 
 
-@router.patch("/{id}")
+@router.patch(
+    "/{id}",
+    response_model=RolePublic,
+    dependencies=[Depends(permission_dependency("update_role"))],
+)
 def set_visibility_role(
     session: SessionDep,
     id: int,
@@ -207,7 +203,10 @@ def set_visibility_role(
     )
 
 
-@router.delete("/{id}")
+@router.delete(
+    "/{id}",
+    dependencies=[Depends(permission_dependency("delete_role"))],
+)
 def delete_role(session: SessionDep, id: int) -> Message:
     """
     Delete an role.

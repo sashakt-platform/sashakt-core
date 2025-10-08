@@ -76,6 +76,43 @@ def read_users(
     return cast(Page[UserPublic], paginate(user_public_list, params=param))
 
 
+def validate_user_return_role(
+    session: SessionDep, user_in: UserCreate | UserUpdate
+) -> Role:
+    role = session.get(Role, user_in.role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Invalid Role")
+
+    if role and (role.name == state_admin.name or role.name == test_admin.name):
+        if user_in.state_ids and len(user_in.state_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="A user can be linked to only one state.",
+            )
+
+        if role.name == state_admin.name and (
+            user_in.state_ids is None or len(user_in.state_ids) != 1
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="A State Admin must be assigned exactly one state.",
+            )
+
+        # Validate state exists
+        if user_in.state_ids is not None:
+            matched_states = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+            if len(matched_states) != len(set(user_in.state_ids or [])):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid State Details",
+                )
+    return role
+
+
 @router.post(
     "/",
     dependencies=[Depends(permission_dependency("create_user"))],
@@ -99,21 +136,40 @@ def create_user(
     if not user_in.organization_id:
         user_in.organization_id = current_user.organization_id
 
+    role = validate_user_return_role(session=session, user_in=user_in)
+
     user = crud.create_user(
         session=session,
         user_create=user_in,
         created_by_id=current_user.id,
     )
-    role = session.exec(select(Role).where(Role.id == user.role_id)).first()
 
-    if role and role.name == "state_admin" and user_in.state_ids:
-        existing_states = session.exec(
-            select(State).where(col(State.id).in_(user_in.state_ids))
-        ).all()
+    if role and role.name == state_admin.name and user_in.state_ids:
         user_states = [
-            UserState(user_id=user.id, state_id=state.id) for state in existing_states
+            UserState(user_id=user.id, state_id=state_id)
+            for state_id in user_in.state_ids
         ]
         session.add_all(user_states)
+
+    elif role and role.name == test_admin.name:
+        current_role = session.get(Role, current_user.role_id)
+        if (
+            current_role
+            and current_role.name == state_admin.name
+            and current_user.states
+        ):
+            creator_states = current_user.states
+            session.add_all(
+                UserState(user_id=user.id, state_id=creator_state.id)
+                for creator_state in creator_states
+            )
+
+        elif user_in.state_ids:
+            user_states = [
+                UserState(user_id=user.id, state_id=state_id)
+                for state_id in user_in.state_ids
+            ]
+            session.add_all(user_states)
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -274,6 +330,7 @@ def update_user(
     session: SessionDep,
     user_id: int,
     user_in: UserUpdate,
+    current_user: CurrentUser,
 ) -> Any:
     """
     Update a user.
@@ -292,28 +349,42 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    final_role_id = user_in.role_id or db_user.role_id
-    final_role = session.get(Role, final_role_id)
+    role = validate_user_return_role(session=session, user_in=user_in)
 
-    if not final_role:
-        raise HTTPException(status_code=400, detail="Invalid role ID provided.")
-
-    is_state_test_admin = (
-        final_role.name == state_admin.name or final_role.name == test_admin.name
-    )
-
-    if is_state_test_admin and user_in.state_ids is not None:
-        if user_in.state_ids == []:
-            db_user.states = []
-
-        else:
-            db_user.states = list(
+    if role.name == state_admin.name and user_in.state_ids:
+        db_user.states = list(
+            session.exec(
+                select(State).where(col(State.id).in_(user_in.state_ids))
+            ).all()
+        )
+    elif role.name == test_admin.name:
+        creator_role = session.get(Role, current_user.role_id)
+        if creator_role and creator_role.name == state_admin.name:
+            creator_states = list(
                 session.exec(
-                    select(State).where(col(State.id).in_(user_in.state_ids))
+                    select(State)
+                    .join(UserState)
+                    .where(UserState.user_id == current_user.id)
                 ).all()
             )
+            db_user.states = creator_states
+        else:
+            if not user_in.state_ids:
+                db_user.states = []
+            else:
+                if len(user_in.state_ids) != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A test-admin may be linked to at most one state.",
+                    )
+                db_user.states = list(
+                    session.exec(
+                        select(State).where(col(State.id).in_(user_in.state_ids))
+                    ).all()
+                )
 
     updated_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
+
     user_public = crud.get_user_public(db_user=updated_user, session=session)
 
     return user_public
