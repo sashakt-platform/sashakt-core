@@ -96,9 +96,13 @@ def create_user(
             status_code=400,
             detail="The user with this email already exists in the system.",
         )
+    if not user_in.organization_id:
+        user_in.organization_id = current_user.organization_id
 
     user = crud.create_user(
-        session=session, user_create=user_in, created_by_id=current_user.id
+        session=session,
+        user_create=user_in,
+        created_by_id=current_user.id,
     )
 
     role = session.get(Role, user.role_id)
