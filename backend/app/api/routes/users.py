@@ -99,15 +99,15 @@ def validate_user_return_role(
             )
 
         # Validate state exists
-        if user_in.state_ids is not None and len(user_in.state_ids) == 1:
-            state_id = user_in.state_ids[0]
-            state_exists = session.exec(
-                select(State.id).where(State.id == state_id)
-            ).first()
-
-            if not state_exists:
+        if user_in.state_ids is not None:
+            matched_states = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+            if len(matched_states) != len(set(user_in.state_ids or [])):
                 raise HTTPException(
-                    status_code=404,
+                    status_code=400,
                     detail="Invalid State Details",
                 )
     return role
