@@ -1,9 +1,9 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.models import (
     Message,
     Role,
@@ -18,6 +18,18 @@ router = APIRouter(
     prefix="/roles",
     tags=["roles"],
 )
+ROLE_HIERARCHY = {
+    "super_admin": 1,
+    "system_admin": 2,
+    "state_admin": 3,
+    "test_admin": 4,
+    "candidate": 5,
+}
+
+
+def get_role_hierarchy_level(role_name: str) -> int:
+    """Get hierarchy level for a role. Lower number = higher privilege."""
+    return ROLE_HIERARCHY.get(role_name.lower(), 999)
 
 
 @router.get(
@@ -25,14 +37,37 @@ router = APIRouter(
     response_model=RolesPublic,
     dependencies=[Depends(permission_dependency("read_role"))],
 )
-def read_roles(session: SessionDep, skip: int = 0, limit: int = 150) -> Any:
+def read_roles(
+    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 150
+) -> Any:
     """
     Retrieve roles.
     """
-
-    count_statement = select(func.count()).select_from(Role)
+    current_user_role = session.exec(
+        select(Role).where(Role.id == current_user.role_id)
+    ).first()
+    if not current_user_role:
+        raise HTTPException(status_code=404, detail="User role not found")
+    current_hierarchy_level = get_role_hierarchy_level(current_user_role.name)
+    all_roles = session.exec(select(Role)).all()
+    accessible_role_ids = [
+        role.id
+        for role in all_roles
+        if get_role_hierarchy_level(role.name) >= current_hierarchy_level
+    ]
+    count_statement = (
+        select(func.count())
+        .select_from(Role)
+        .where(col(Role.id).in_(accessible_role_ids))
+    )
     count = session.exec(count_statement).one()
-    statement = select(Role).offset(skip).limit(limit)
+
+    statement = (
+        select(Role)
+        .where(col(Role.id).in_(accessible_role_ids))
+        .offset(skip)
+        .limit(limit)
+    )
     roles = session.exec(statement).all()
 
     role_public = []

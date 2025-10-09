@@ -3,8 +3,12 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.models import Permission, RolePermission
+from app.models.role import Role
+from app.tests.utils.location import create_random_state
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.user import authentication_token_from_email
+from app.tests.utils.utils import random_email, random_lower_string
 
 
 def test_create_role(
@@ -270,6 +274,127 @@ def test_update_role_not_found(
     assert response.status_code == 404
     content = response.json()
     assert content["detail"] == "Role not found"
+
+
+def test_read_roles_super_admin_sees_all(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    """
+    Test that super_admin can see all roles in the hierarchy.
+    """
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    role_names = [role["name"] for role in content["data"]]
+
+    assert "super_admin" in role_names
+    assert "system_admin" in role_names
+    assert "state_admin" in role_names
+    assert "test_admin" in role_names
+    assert "candidate" in role_names
+
+
+def test_read_roles_system_admin_hierarchy_filtering(
+    client: TestClient, db: Session, superuser_token_headers: dict[str, str]
+) -> None:
+    """
+    Test that system_admin can see system-admin and below roles only.
+    Should NOT see super-admin.
+    """
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role is not None
+
+    org = create_random_organization(db)
+    system_admin_email = random_email()
+
+    system_admin_payload = {
+        "email": system_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "organization_id": org.id,
+    }
+
+    resp_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json=system_admin_payload,
+    )
+    assert resp_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=system_admin_email, db=db
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    role_names = [role["name"] for role in content["data"]]
+
+    assert "system_admin" in role_names
+    assert "state_admin" in role_names
+    assert "test_admin" in role_names
+    assert "candidate" in role_names
+    assert "super_admin" not in role_names
+
+
+def test_read_roles_state_admin_hierarchy_filtering(
+    client: TestClient, db: Session, superuser_token_headers: dict[str, str]
+) -> None:
+    """
+    Test that state_admin can see state-admin and below roles only.
+    Should NOT see super-admin or system-admin.
+    """
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    org = create_random_organization(db)
+    state = create_random_state(db)
+    state_admin_email = random_email()
+
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+
+    resp_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json=state_admin_payload,
+    )
+    assert resp_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=token_headers,
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    role_names = [role["name"] for role in content["data"]]
+
+    assert "state_admin" in role_names
+    assert "test_admin" in role_names
+    assert "candidate" in role_names
+    assert "super_admin" not in role_names
+    assert "system_admin" not in role_names
 
 
 def test_visibility_role(

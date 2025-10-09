@@ -10,6 +10,7 @@ from app.core.security import verify_password
 from app.models import Permission, Role, RolePermission, User, UserCreate
 from app.models.location import Country, State
 from app.models.question import Question, QuestionRevision, QuestionType
+from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
     create_random_organization,
 )
@@ -1565,9 +1566,8 @@ def test_update_user_to_test_admin_inherits_state_admin_states(
 
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
+    other_role = db.exec(select(Role).where(Role.name == "candidate")).first()
+
     assert state_admin_role and test_admin_role and other_role
 
     org = create_random_organization(db)
@@ -1783,3 +1783,448 @@ def test_user_public_list_returns_role_name(
         role = db.exec(select(Role).where(Role.id == user["role_id"])).first()
         assert role is not None
         assert user["role_label"] == role.label
+
+
+def test_state_admin_cannot_create_system_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    Test that state_admin cannot create a system_admin user.
+    Should return 403 Forbidden.
+    """
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert state_admin_role is not None
+    assert system_admin_role is not None
+
+    org = create_random_organization(db)
+    state = create_random_state(db)
+    state_admin_email = random_email()
+
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+
+    response_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+    assert response_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=payload,
+    )
+
+    assert response.status_code == 403
+    content = response.json()
+    assert "cannot create a user with a higher-level role" in content["detail"].lower()
+
+
+def test_state_admin_cannot_create_super_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    Test that state_admin cannot create a super_admin user.
+    Should return 403 Forbidden.
+    """
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert state_admin_role is not None
+    assert super_admin_role is not None
+
+    org = create_random_organization(db)
+    state = create_random_state(db)
+    state_admin_email = random_email()
+
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+
+    response_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+    assert response_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": super_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=payload,
+    )
+
+    assert response.status_code == 403
+    content = response.json()
+    assert "cannot create a user with a higher-level role" in content["detail"].lower()
+
+
+def test_system_admin_cannot_create_super_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    Test that system_admin cannot create a super_admin user.
+    Should return 403 Forbidden.
+    """
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert system_admin_role is not None
+    assert super_admin_role is not None
+
+    org = create_random_organization(db)
+    system_admin_email = random_email()
+
+    system_admin_payload = {
+        "email": system_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "organization_id": org.id,
+    }
+
+    response_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=system_admin_payload,
+    )
+    assert response_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=system_admin_email, db=db
+    )
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": super_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=payload,
+    )
+
+    assert response.status_code == 403
+    content = response.json()
+    assert "cannot create a user with a higher-level role" in content["detail"].lower()
+
+
+def test_super_admin_can_create_any_role(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    Test that super_admin can create users of any role including super_admin.
+    Should return 200 Success for all roles.
+    """
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert super_admin_role is not None
+    assert system_admin_role is not None
+
+    org = create_random_organization(db)
+
+    payload_super = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": super_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response_super = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=payload_super,
+    )
+    assert response_super.status_code == 200
+    assert response_super.json()["role_id"] == super_admin_role.id
+
+    payload_system = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response_system = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=payload_system,
+    )
+    assert response_system.status_code == 200
+    assert response_system.json()["role_id"] == system_admin_role.id
+
+
+def test_state_admin_cannot_update_system_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    Test that state_admin cannot update a system_admin user.
+    Should return 403 Forbidden.
+    """
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert state_admin_role is not None
+    assert system_admin_role is not None
+
+    org = create_random_organization(db)
+    state = create_random_state(db)
+
+    system_admin_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "organization_id": org.id,
+    }
+    response_system = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=system_admin_payload,
+    )
+    assert response_system.status_code == 200
+    system_admin_id = response_system.json()["id"]
+
+    state_admin_email = random_email()
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    response_state_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+    assert response_state_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+    patch_payload = {
+        "role_id": system_admin_role.id,
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "organization_id": org.id,
+    }
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{system_admin_id}",
+        headers=token_headers,
+        json=patch_payload,
+    )
+
+    assert response.status_code == 403
+    content = response.json()
+    assert "cannot update a user with a higher-level role" in content["detail"].lower()
+
+
+def test_system_admin_cannot_update_super_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert system_admin_role is not None
+    assert super_admin_role is not None
+
+    org = create_random_organization(db)
+
+    super_admin_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": super_admin_role.id,
+        "organization_id": org.id,
+    }
+    response_super = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=super_admin_payload,
+    )
+    assert response_super.status_code == 200
+    super_admin_id = response_super.json()["id"]
+
+    system_admin_email = random_email()
+    system_admin_payload = {
+        "email": system_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "organization_id": org.id,
+    }
+    response_system_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=system_admin_payload,
+    )
+    assert response_system_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=system_admin_email, db=db
+    )
+
+    patch_payload = {
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "email": random_email(),
+        "role_id": super_admin_role.id,
+    }
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{super_admin_id}",
+        headers=token_headers,
+        json=patch_payload,
+    )
+
+    assert response.status_code == 403
+    content = response.json()
+    assert "cannot update a user with a higher-level role" in content["detail"].lower()
+
+
+def test_state_admin_can_update_lower_role(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    candidate_role = db.exec(select(Role).where(Role.name == "candidate")).first()
+    assert state_admin_role is not None
+    assert test_admin_role is not None
+    assert candidate_role is not None
+
+    org = create_random_organization(db)
+    state = create_random_state(db)
+
+    state_admin_email = random_email()
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    response_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+    assert response_admin.status_code == 200
+
+    test_admin_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": test_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    response_test = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=test_admin_payload,
+    )
+    assert response_test.status_code == 200
+    test_admin_id = response_test.json()["id"]
+
+    candidate_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": candidate_role.id,
+        "organization_id": org.id,
+    }
+    response_candidate = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=candidate_payload,
+    )
+    assert response_candidate.status_code == 200
+    candidate_id = response_candidate.json()["id"]
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    patch_payload = {
+        "full_name": random_lower_string(),
+        "email": random_email(),
+        "phone": random_lower_string(),
+        "role_id": test_admin_role.id,
+        "organization_id": org.id,
+    }
+    response1 = client.patch(
+        f"{settings.API_V1_STR}/users/{test_admin_id}",
+        headers=token_headers,
+        json=patch_payload,
+    )
+    assert response1.status_code == 200
+
+    patch_payload = {
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "email": random_email(),
+        "role_id": candidate_role.id,
+    }
+    response2 = client.patch(
+        f"{settings.API_V1_STR}/users/{candidate_id}",
+        headers=token_headers,
+        json=patch_payload,
+    )
+    assert response2.status_code == 200

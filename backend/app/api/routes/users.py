@@ -41,6 +41,20 @@ router = APIRouter(prefix="/users", tags=["users"])
 UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 
+ROLE_HIERARCHY = {
+    "super_admin": 1,
+    "system_admin": 2,
+    "state_admin": 3,
+    "test_admin": 4,
+    "candidate": 5,
+}
+
+
+def is_higher_role(current_role_name: str, target_role_name: str) -> bool:
+    current_level = ROLE_HIERARCHY.get(current_role_name, 999)
+    target_level = ROLE_HIERARCHY.get(target_role_name, 999)
+    return target_level < current_level
+
 
 @router.get(
     "/",
@@ -137,6 +151,14 @@ def create_user(
         user_in.organization_id = current_user.organization_id
 
     role = validate_user_return_role(session=session, user_in=user_in)
+
+    current_role = session.get(Role, current_user.role_id)
+    if current_role and role:
+        if is_higher_role(current_role.name, role.name):
+            raise HTTPException(
+                status_code=403,
+                detail=("You cannot create a user with a higher-level role "),
+            )
 
     user = crud.create_user(
         session=session,
@@ -349,7 +371,21 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
+    current_role = session.get(Role, current_user.role_id)
+    db_user_role = session.get(Role, db_user.role_id)
+
     role = validate_user_return_role(session=session, user_in=user_in)
+    target_role = role or db_user_role
+
+    if current_role and target_role:
+        if is_higher_role(current_role.name, target_role.name):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"You cannot update a user with a higher-level role "
+                    f"({target_role.name}) than your own ({current_role.name})."
+                ),
+            )
 
     if role.name == state_admin.name and user_in.state_ids:
         db_user.states = list(
