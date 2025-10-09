@@ -28,6 +28,7 @@ from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.entity import Entity, EntityType
 from app.models.location import Block, District
 from app.models.question import QuestionType
+from app.models.role import Role
 from app.models.test import TestDistrict
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
@@ -35,8 +36,16 @@ from app.tests.utils.organization import (
 )
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
-from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import assert_paginated_response, random_lower_string
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
+from app.tests.utils.utils import (
+    assert_paginated_response,
+    random_email,
+    random_lower_string,
+)
 
 
 def setup_data(
@@ -5797,3 +5806,153 @@ def test_clone_test_with_organization_id(
     user_data = get_current_user_data(client, get_user_superadmin_token)
     assert data["organization_id"] == user_data["organization_id"]
     assert data["created_by_id"] == user_data["id"]
+
+
+def test_create_test_state_admin_auto_map(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 5,
+        "marks": 10,
+        "completion_message": "Congrats!",
+        "start_instructions": "Follow instructions",
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 2,
+        "question_pagination": 1,
+        "is_template": False,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert "states" in data
+    assert len(data["states"]) == 1
+    assert data["states"][0]["id"] == state.id
+
+
+def test_update_test_state_admin_no_state_change(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 5,
+        "marks": 10,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "no_of_random_questions": 2,
+        "question_pagination": 1,
+        "is_template": False,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert "states" in data
+    assert len(data["states"]) == 1
+    assert data["states"][0]["id"] == state.id
+
+    test_id = data["id"]
+    update_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 10,
+        "marks": 20,
+        "completion_message": random_lower_string(),
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "no_of_attempts": 2,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test_id
+    assert data["name"] == update_payload["name"]
+    assert "states" in data
+    assert len(data["states"]) == 1
+    assert data["states"][0]["id"] == state.id

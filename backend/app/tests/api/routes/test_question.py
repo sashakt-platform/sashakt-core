@@ -20,13 +20,19 @@ from app.models.question import (
     QuestionTag,
     QuestionType,
 )
+from app.models.role import Role
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 
 # from app.models.user import User
-from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
+from app.tests.utils.utils import random_email, random_lower_string
 
 
 def test_create_question(
@@ -1327,12 +1333,12 @@ def test_question_validation_valid_single_and_multi_choice(
 
 
 def test_question_location_operations(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     # Create organization
 
     # Create user
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
     # Set up location hierarchy similar to how it's done in test_location.py
@@ -1380,7 +1386,7 @@ def test_question_location_operations(
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1409,6 +1415,7 @@ def test_question_location_operations(
                 },  # Add district
             ]
         },
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1448,6 +1455,7 @@ def test_question_location_operations(
                 },  # Add block
             ]
         },
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1477,6 +1485,7 @@ def test_question_location_operations(
                 },  # Keep block, remove district
             ]
         },
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
 
@@ -1486,7 +1495,7 @@ def test_question_location_operations(
     # Verify we can still filter by location
     response = client.get(
         f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) >= 1
@@ -2607,17 +2616,15 @@ def test_add_and_delete_question_with_state_link(
 def test_bulk_location_operations(
     client: TestClient,
     db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
 ) -> None:
     """Test bulk adding and removing locations."""
     # Create organization
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
+    current_user = get_current_user_data(client, get_user_systemadmin_token)
+    organization_id = current_user["organization_id"]
 
     # Create user
-    user = create_random_user(db)
+    user = create_random_user(db, organization_id=organization_id)
     db.refresh(user)
 
     # Set up location hierarchy
@@ -2661,7 +2668,7 @@ def test_bulk_location_operations(
 
     # Create question
     question_data = {
-        "organization_id": org.id,
+        "organization_id": organization_id,
         "question_text": random_lower_string(),
         "question_type": QuestionType.single_choice,
         "options": [
@@ -2674,7 +2681,7 @@ def test_bulk_location_operations(
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_data,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     question_id = response.json()["id"]
@@ -2706,6 +2713,7 @@ def test_bulk_location_operations(
                 },
             ]
         },
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200
@@ -2749,6 +2757,7 @@ def test_bulk_location_operations(
                 # Remove district and block entirely
             ]
         },
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200
@@ -2765,6 +2774,7 @@ def test_bulk_location_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/locations",
         json={"locations": []},
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200
@@ -2968,11 +2978,13 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     assert len(response.json()) == 0
 
 
-def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
+def test_update_question_locations(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
     # Create organization and user
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    user = create_random_user(db)
+    current_user = get_current_user_data(client, get_user_systemadmin_token)
+
+    user = create_random_user(db, organization_id=current_user["organization_id"])
 
     # Create locations
     country = Country(name="Country")
@@ -2998,7 +3010,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     db.refresh(block1)
 
     # Create question with initial location (state1)
-    question = Question(organization_id=org.id)
+    question = Question(organization_id=current_user["organization_id"])
     db.add(question)
     db.flush()
     question.revisions.append(
@@ -3009,6 +3021,8 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
             question_type=QuestionType.single_choice,
         )
     )
+    db.flush()  # Flush to ensure revision is persisted
+    db.commit()
     db.add(QuestionLocation(question_id=question.id, state_id=state1.id))
     db.commit()
 
@@ -3023,6 +3037,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/locations",
         json=update_payload,
+        headers=get_user_systemadmin_token,
     )
 
     assert response.status_code == 200
@@ -3039,6 +3054,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/locations",
         json={"locations": []},
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 0
@@ -4631,3 +4647,184 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Pu
 
         with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
+
+
+def test_create_question_state_admin_auto_map_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert "locations" in data
+    assert len(data["locations"]) == 1
+    assert data["locations"][0]["state_id"] == state.id
+
+
+def test_update_question_location_state_admin_cannot_change_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state1)
+    db.commit()
+    db.refresh(state1)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state1.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert "locations" in data
+    assert len(data["locations"]) == 1
+    assert data["locations"][0]["state_id"] == state1.id
+
+    question_id = data["id"]
+
+    # Create another state that the state admin doesn't have access to
+    state2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state2)
+    db.commit()
+    db.refresh(state2)
+
+    # Try to update the question's location to state2 (which state admin doesn't have access to)
+    update_location_payload = {
+        "locations": [
+            {
+                "state_id": state2.id,
+                "district_id": None,
+                "block_id": None,
+            }
+        ]
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{question_id}/locations",
+        json=update_location_payload,
+        headers=token_headers,
+    )
+
+    # State admin should not be able to change to a state they don't have access to
+    assert response.status_code == 401
+
+    # Verify the location hasn't changed
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["locations"]) == 1
+    assert data["locations"][0]["state_id"] == state1.id
+
+    # Try to update to an empty location list (should also fail)
+    update_location_payload = {"locations": []}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{question_id}/locations",
+        json=update_location_payload,
+        headers=token_headers,
+    )
+
+    assert response.status_code == 401
+
+    # Verify location is still state1
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert len(data["locations"]) == 1
+    assert data["locations"][0]["state_id"] == state1.id

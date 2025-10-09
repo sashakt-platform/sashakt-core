@@ -23,6 +23,7 @@ from typing_extensions import TypedDict
 
 from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin
 from app.core.sorting import (
     QuestionSortConfig,
     SortingParams,
@@ -292,6 +293,11 @@ def create_question(
     # Create separate location rows for state, district, block
     # This allows each association to be uniquely identified and deleted if needed
     locations: list[QuestionLocation] = []
+
+    if current_user.role.name == state_admin.name and current_user.states is not None:
+        question_create.state_ids = [
+            state.id for state in current_user.states if state.id is not None
+        ]
 
     # Handle state associations
     if question_create.state_ids:
@@ -921,7 +927,11 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     )
 
 
-@router.put("/{question_id}/locations", response_model=list[QuestionLocationPublic])
+@router.put(
+    "/{question_id}/locations",
+    response_model=list[QuestionLocationPublic],
+    dependencies=[Depends(permission_dependency("update_question_location"))],
+)
 def update_question_locations(
     question_id: int,
     location_data: QuestionLocationsUpdate,
