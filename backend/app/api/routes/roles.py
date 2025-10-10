@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.core.roles import ROLE_HIERARCHY
 from app.models import (
     Message,
     Role,
@@ -18,13 +19,6 @@ router = APIRouter(
     prefix="/roles",
     tags=["roles"],
 )
-ROLE_HIERARCHY = {
-    "super_admin": 1,
-    "system_admin": 2,
-    "state_admin": 3,
-    "test_admin": 4,
-    "candidate": 5,
-}
 
 
 def get_role_hierarchy_level(role_name: str) -> int:

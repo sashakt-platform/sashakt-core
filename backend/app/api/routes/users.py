@@ -13,7 +13,7 @@ from app.api.deps import (
     permission_dependency,
 )
 from app.core.config import settings
-from app.core.roles import state_admin, test_admin
+from app.core.roles import ROLE_HIERARCHY, state_admin, test_admin
 from app.core.security import get_password_hash, verify_password
 from app.core.sorting import (
     SortingParams,
@@ -40,14 +40,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 # create sorting dependency
 UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
-
-ROLE_HIERARCHY = {
-    "super_admin": 1,
-    "system_admin": 2,
-    "state_admin": 3,
-    "test_admin": 4,
-    "candidate": 5,
-}
 
 
 def is_higher_role(current_role_name: str, target_role_name: str) -> bool:

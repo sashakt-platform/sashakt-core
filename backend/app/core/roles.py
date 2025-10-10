@@ -10,6 +10,14 @@ from app.models import (
     RolePublic,
 )
 
+ROLE_HIERARCHY = {
+    "super_admin": 1,
+    "system_admin": 2,
+    "state_admin": 3,
+    "test_admin": 4,
+    "candidate": 5,
+}
+
 super_admin = RoleCreate(
     name="super_admin",
     label="Super Admin",
@@ -42,6 +50,7 @@ candidate = RoleCreate(
     label="Candidate",
     description="Candidate who attempts Test",
 )
+
 
 with open("app/core/permission_data.json") as file:
     permission_data = json.load(file)
