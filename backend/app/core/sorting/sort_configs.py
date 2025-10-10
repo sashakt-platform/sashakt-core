@@ -27,7 +27,7 @@ UserSortConfig: Any = {
     "created_date": User.created_date,
     "modified_date": User.modified_date,
     "is_active": User.is_active,
-    "role_name": (User.role, Role.name),
+    "role_label": (User.role, Role.label),
 }
 
 
