@@ -1823,6 +1823,7 @@ def test_retrieve_users_with_search(
     assert r.status_code == 200
     search_results = r.json()
     found_names = [user["full_name"] for user in search_results["items"]]
+    assert len(found_names) == 1
     assert test_name in found_names
 
     # test search by email
@@ -1833,6 +1834,7 @@ def test_retrieve_users_with_search(
     assert r.status_code == 200
     search_results = r.json()
     found_emails = [user["email"] for user in search_results["items"]]
+    assert len(found_emails) == 1
     assert test_email in found_emails
 
     # test search by phone
@@ -1842,6 +1844,7 @@ def test_retrieve_users_with_search(
     assert r.status_code == 200
     search_results = r.json()
     found_phones = [user["phone"] for user in search_results["items"]]
+    assert len(found_phones) == 1
     assert test_phone in found_phones
 
     # test case insensitive search
@@ -1851,6 +1854,7 @@ def test_retrieve_users_with_search(
     assert r.status_code == 200
     search_results = r.json()
     found_names = [user["full_name"] for user in search_results["items"]]
+    assert len(found_names) == 1
     assert test_name in found_names
 
     # test search with no results
