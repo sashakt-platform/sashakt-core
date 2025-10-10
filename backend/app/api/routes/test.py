@@ -14,6 +14,7 @@ from app.api.deps import (
     permission_dependency,
 )
 from app.api.routes.utils import get_current_time
+from app.core.roles import state_admin
 from app.core.sorting import (
     SortingParams,
     SortOrder,
@@ -294,6 +295,11 @@ def create_test(
         session.add_all(question_links)
         session.commit()
 
+    if current_user.role.name == state_admin.name and current_user.states is not None:
+        test_create.state_ids = [
+            state.id for state in current_user.states if state.id is not None
+        ]
+
     if test_create.state_ids:
         state_ids = test_create.state_ids
         state_links = [
@@ -560,6 +566,7 @@ def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
@@ -672,33 +679,34 @@ def update_test(
             session.commit()
 
     # Updating States
-    states_remove = [
-        state.id
-        for state in (test.states or [])
-        if state.id not in (test_update.state_ids or [])
-    ]
-    states_add = [
-        state
-        for state in (test_update.state_ids or [])
-        if state not in [s.id for s in (test.states or [])]
-    ]
+    if current_user.role.name != state_admin.name:
+        states_remove = [
+            state.id
+            for state in (test.states or [])
+            if state.id not in (test_update.state_ids or [])
+        ]
+        states_add = [
+            state
+            for state in (test_update.state_ids or [])
+            if state not in [s.id for s in (test.states or [])]
+        ]
 
-    if states_remove:
-        for state in states_remove:
-            session.delete(
-                session.exec(
-                    select(TestState).where(
-                        TestState.test_id == test.id,
-                        TestState.state_id == state,
-                    )
-                ).one()
-            )
-            session.commit()
+        if states_remove:
+            for state in states_remove:
+                session.delete(
+                    session.exec(
+                        select(TestState).where(
+                            TestState.test_id == test.id,
+                            TestState.state_id == state,
+                        )
+                    ).one()
+                )
+                session.commit()
 
-    if states_add:
-        for state in states_add:
-            session.add(TestState(test_id=test.id, state_id=state))
-            session.commit()
+        if states_add:
+            for state in states_add:
+                session.add(TestState(test_id=test.id, state_id=state))
+                session.commit()
 
     districts_remove = [
         district.id
