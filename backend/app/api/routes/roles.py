@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.core.roles import get_valid_roles
 from app.models import (
     Message,
     Role,
@@ -20,32 +21,6 @@ router = APIRouter(
 )
 
 
-def get_available_role_names(current_user_role: str) -> list[str]:
-    """
-    Get list of role names that the current user can access based on role hierarchy.
-
-    Role hierarchy (top to bottom):
-    - super_admin: can see all roles
-    - system_admin: can see system_admin and below
-    - state_admin: can see state_admin and below
-    - test_admin: don't have access to roles
-    - candidate: don't have access to roles
-    """
-    role_hierarchy = {
-        "super_admin": [
-            "super_admin",
-            "system_admin",
-            "state_admin",
-            "test_admin",
-            "candidate",
-        ],
-        "system_admin": ["system_admin", "state_admin", "test_admin", "candidate"],
-        "state_admin": ["state_admin", "test_admin", "candidate"],
-    }
-
-    return role_hierarchy.get(current_user_role, [])
-
-
 @router.get(
     "/",
     response_model=RolesPublic,
@@ -58,7 +33,7 @@ def read_roles(
     Retrieve roles based on current user's role hierarchy.
     """
     # get available role names based on current user's role
-    available_roles = get_available_role_names(current_user.role.name)
+    available_roles = get_valid_roles(current_user.role.name)
 
     if not available_roles:
         # if user has no available roles, return empty result
