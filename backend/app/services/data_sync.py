@@ -787,7 +787,7 @@ class DataSyncService:
         }
 
     def _serialize_candidate_test_answer(
-        self, answer: CandidateTestAnswer, organization_id: int
+        self, answer: CandidateTestAnswer, organization_id: int | None
     ) -> dict[str, Any]:
         return {
             "id": answer.id,
@@ -806,7 +806,7 @@ class DataSyncService:
         }
 
     def _serialize_candidate_test(
-        self, candidate_test: CandidateTest, organization_id: int
+        self, candidate_test: CandidateTest, organization_id: int | None
     ) -> dict[str, Any]:
         return {
             "id": candidate_test.id,
@@ -994,7 +994,7 @@ class DataSyncService:
         }
 
     def _serialize_candidate_test_profile(
-        self, profile: CandidateTestProfile, organization_id: int
+        self, profile: CandidateTestProfile, organization_id: int | None
     ) -> dict[str, Any]:
         return {
             "id": profile.id,
@@ -1007,7 +1007,7 @@ class DataSyncService:
         }
 
     def _serialize_test_question(
-        self, test_question: TestQuestion, organization_id: int
+        self, test_question: TestQuestion, organization_id: int | None
     ) -> dict[str, Any]:
         return {
             "id": test_question.id,
@@ -1022,7 +1022,7 @@ class DataSyncService:
         }
 
     def _serialize_test_tag(
-        self, test_tag: TestTag, organization_id: int
+        self, test_tag: TestTag, organization_id: int | None
     ) -> dict[str, Any]:
         return {
             "id": test_tag.id,
@@ -1035,7 +1035,7 @@ class DataSyncService:
         }
 
     def _serialize_test_district(
-        self, test_district: TestDistrict, organization_id: int
+        self, test_district: TestDistrict, organization_id: int | None
     ) -> dict[str, Any]:
         return {
             "id": test_district.id,
