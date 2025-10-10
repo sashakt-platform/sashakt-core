@@ -345,12 +345,7 @@ class DataSyncService:
     def _extract_tests_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter tests by organization through created_by relationship
-        statement = (
-            select(Test)
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
-        )
+        statement = select(Test).where(Test.organization_id == organization_id)
 
         if incremental:
             table_last_sync = self._get_table_specific_last_sync(
@@ -380,14 +375,8 @@ class DataSyncService:
     def _extract_candidates_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter candidates by organization through test creator relationship
-        statement = (
-            select(Candidate)
-            .join(CandidateTest, Candidate.id == CandidateTest.candidate_id)  # type: ignore[arg-type]
-            .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
-            .distinct()
+        statement = select(Candidate).where(
+            Candidate.organization_id == organization_id
         )
 
         if incremental:
@@ -403,16 +392,15 @@ class DataSyncService:
     def _extract_candidate_test_answers_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter candidate test answers by organization through candidate_test → test → created_by relationship
+        # Filter candidate test answers by organization through candidate_test → test.organization_id
         statement = (
-            select(CandidateTestAnswer)
+            select(CandidateTestAnswer, Test.organization_id)
             .join(
                 CandidateTest,
                 CandidateTestAnswer.candidate_test_id == CandidateTest.id,  # type: ignore[arg-type]
             )
             .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
+            .where(Test.organization_id == organization_id)
         )
 
         if incremental:
@@ -424,18 +412,20 @@ class DataSyncService:
                     CandidateTestAnswer.modified_date > table_last_sync  # type: ignore[operator]
                 )
 
-        answers = session.exec(statement).all()
-        return [self._serialize_candidate_test_answer(answer) for answer in answers]
+        results = session.exec(statement).all()
+        return [
+            self._serialize_candidate_test_answer(answer, org_id)
+            for answer, org_id in results
+        ]
 
     def _extract_candidate_tests_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter candidate tests by organization through test → created_by relationship
+        # Filter candidate tests by organization through test.organization_id
         statement = (
-            select(CandidateTest)
+            select(CandidateTest, Test.organization_id)
             .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
+            .where(Test.organization_id == organization_id)
         )
 
         if incremental:
@@ -447,8 +437,11 @@ class DataSyncService:
                     CandidateTest.modified_date > table_last_sync  # type: ignore[operator]
                 )
 
-        candidate_tests = session.exec(statement).all()
-        return [self._serialize_candidate_test(ct) for ct in candidate_tests]
+        results = session.exec(statement).all()
+        return [
+            self._serialize_candidate_test(candidate_test, org_id)
+            for candidate_test, org_id in results
+        ]
 
     def _extract_states_data(
         self, session: Session, organization_id: int, incremental: bool
@@ -613,16 +606,15 @@ class DataSyncService:
     def _extract_candidate_test_profiles_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter candidate_test_profiles by organization through candidate_test → test → created_by relationship
+        # Filter candidate_test_profiles by organization through candidate_test → test.organization_id
         statement = (
-            select(CandidateTestProfile)
+            select(CandidateTestProfile, Test.organization_id)
             .join(
                 CandidateTest,
                 CandidateTestProfile.candidate_test_id == CandidateTest.id,  # type: ignore[arg-type]
             )
             .join(Test, CandidateTest.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
+            .where(Test.organization_id == organization_id)
         )
 
         if incremental:
@@ -634,18 +626,20 @@ class DataSyncService:
                     CandidateTestProfile.created_date > table_last_sync  # type: ignore[operator]
                 )
 
-        profiles = session.exec(statement).all()
-        return [self._serialize_candidate_test_profile(profile) for profile in profiles]
+        results = session.exec(statement).all()
+        return [
+            self._serialize_candidate_test_profile(profile, org_id)
+            for profile, org_id in results
+        ]
 
     def _extract_test_questions_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter test_questions by organization through test → created_by relationship
+        # Filter test_questions by organization through test.organization_id
         statement = (
-            select(TestQuestion)
+            select(TestQuestion, Test.organization_id)
             .join(Test, TestQuestion.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
+            .where(Test.organization_id == organization_id)
         )
 
         if incremental:
@@ -655,18 +649,20 @@ class DataSyncService:
             if table_last_sync is not None:
                 statement = statement.where(TestQuestion.created_date > table_last_sync)  # type: ignore[operator]
 
-        test_questions = session.exec(statement).all()
-        return [self._serialize_test_question(tq) for tq in test_questions]
+        results = session.exec(statement).all()
+        return [
+            self._serialize_test_question(test_question, org_id)
+            for test_question, org_id in results
+        ]
 
     def _extract_test_tags_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter test_tags by organization through test → created_by relationship
+        # Filter test_tags by organization through test.organization_id
         statement = (
-            select(TestTag)
+            select(TestTag, Test.organization_id)
             .join(Test, TestTag.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
+            .where(Test.organization_id == organization_id)
         )
 
         if incremental:
@@ -676,18 +672,19 @@ class DataSyncService:
             if table_last_sync is not None:
                 statement = statement.where(TestTag.created_date > table_last_sync)  # type: ignore[operator]
 
-        test_tags = session.exec(statement).all()
-        return [self._serialize_test_tag(tt) for tt in test_tags]
+        results = session.exec(statement).all()
+        return [
+            self._serialize_test_tag(test_tag, org_id) for test_tag, org_id in results
+        ]
 
     def _extract_test_districts_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
-        # Filter test_districts through test -> user -> organization
+        # Filter test_districts through test.organization_id
         statement = (
-            select(TestDistrict)
+            select(TestDistrict, Test.organization_id)
             .join(Test, TestDistrict.test_id == Test.id)  # type: ignore[arg-type]
-            .join(User, Test.created_by_id == User.id)  # type: ignore[arg-type]
-            .where(User.organization_id == organization_id)
+            .where(Test.organization_id == organization_id)
         )
 
         if incremental:
@@ -697,8 +694,11 @@ class DataSyncService:
             if table_last_sync is not None:
                 statement = statement.where(TestDistrict.created_date > table_last_sync)  # type: ignore[operator]
 
-        test_districts = session.exec(statement).all()
-        return [self._serialize_test_district(td) for td in test_districts]
+        results = session.exec(statement).all()
+        return [
+            self._serialize_test_district(test_district, org_id)
+            for test_district, org_id in results
+        ]
 
     def _extract_user_states_data(
         self, session: Session, organization_id: int, incremental: bool
@@ -748,6 +748,7 @@ class DataSyncService:
             "end_time": (test.end_time.isoformat() if test.end_time else None),
             "marks": test.marks,
             "created_by_id": test.created_by_id,
+            "organization_id": test.organization_id,
             "created_date": (
                 test.created_date.isoformat() if test.created_date else None
             ),
@@ -776,6 +777,7 @@ class DataSyncService:
             "identity": candidate.identity,
             "user_id": candidate.user_id,
             "is_active": candidate.is_active,
+            "organization_id": candidate.organization_id,
             "created_date": (
                 candidate.created_date.isoformat() if candidate.created_date else None
             ),
@@ -785,12 +787,13 @@ class DataSyncService:
         }
 
     def _serialize_candidate_test_answer(
-        self, answer: CandidateTestAnswer
+        self, answer: CandidateTestAnswer, organization_id: int
     ) -> dict[str, Any]:
         return {
             "id": answer.id,
             "candidate_test_id": answer.candidate_test_id,
             "question_revision_id": answer.question_revision_id,
+            "organization_id": organization_id,
             "response": answer.response,
             "time_spent": answer.time_spent,
             "visited": answer.visited,
@@ -803,12 +806,13 @@ class DataSyncService:
         }
 
     def _serialize_candidate_test(
-        self, candidate_test: CandidateTest
+        self, candidate_test: CandidateTest, organization_id: int
     ) -> dict[str, Any]:
         return {
             "id": candidate_test.id,
             "candidate_id": candidate_test.candidate_id,
             "test_id": candidate_test.test_id,
+            "organization_id": organization_id,
             "start_time": (
                 candidate_test.start_time.isoformat()
                 if candidate_test.start_time
@@ -990,22 +994,26 @@ class DataSyncService:
         }
 
     def _serialize_candidate_test_profile(
-        self, profile: CandidateTestProfile
+        self, profile: CandidateTestProfile, organization_id: int
     ) -> dict[str, Any]:
         return {
             "id": profile.id,
             "candidate_test_id": profile.candidate_test_id,
             "entity_id": profile.entity_id,
+            "organization_id": organization_id,
             "created_date": (
                 profile.created_date.isoformat() if profile.created_date else None
             ),
         }
 
-    def _serialize_test_question(self, test_question: TestQuestion) -> dict[str, Any]:
+    def _serialize_test_question(
+        self, test_question: TestQuestion, organization_id: int
+    ) -> dict[str, Any]:
         return {
             "id": test_question.id,
             "test_id": test_question.test_id,
             "question_revision_id": test_question.question_revision_id,
+            "organization_id": organization_id,
             "created_date": (
                 test_question.created_date.isoformat()
                 if test_question.created_date
@@ -1013,21 +1021,27 @@ class DataSyncService:
             ),
         }
 
-    def _serialize_test_tag(self, test_tag: TestTag) -> dict[str, Any]:
+    def _serialize_test_tag(
+        self, test_tag: TestTag, organization_id: int
+    ) -> dict[str, Any]:
         return {
             "id": test_tag.id,
             "test_id": test_tag.test_id,
             "tag_id": test_tag.tag_id,
+            "organization_id": organization_id,
             "created_date": (
                 test_tag.created_date.isoformat() if test_tag.created_date else None
             ),
         }
 
-    def _serialize_test_district(self, test_district: TestDistrict) -> dict[str, Any]:
+    def _serialize_test_district(
+        self, test_district: TestDistrict, organization_id: int
+    ) -> dict[str, Any]:
         return {
             "id": test_district.id,
             "test_id": test_district.test_id,
             "district_id": test_district.district_id,
+            "organization_id": organization_id,
             "created_date": (
                 test_district.created_date.isoformat()
                 if test_district.created_date
