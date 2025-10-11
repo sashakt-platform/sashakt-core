@@ -1873,7 +1873,8 @@ def test_create_user_role_hierarchy_validation_super_admin(
 ) -> None:
     """Test that super_admin can create users with any role."""
 
-    role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
     organization = create_random_organization(session=db)
 
     data = {
@@ -1905,7 +1906,11 @@ def test_create_user_role_hierarchy_validation_system_admin_can_create_state_adm
 
     # let's create state_admin user
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
     organization = create_random_organization(session=db)
+
+    goa_state = db.exec(select(State).where(State.name == "Goa")).first()
+    assert goa_state is not None
 
     data = {
         "email": random_email(),
@@ -1914,6 +1919,7 @@ def test_create_user_role_hierarchy_validation_system_admin_can_create_state_adm
         "phone": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": organization.id,
+        "state_ids": [goa_state.id],
     }
 
     response = client.post(
@@ -1936,6 +1942,7 @@ def test_create_user_role_hierarchy_validation_system_admin_cannot_create_super_
 
     # try to create super_admin user (should fail)
     super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert super_admin_role is not None
     organization = create_random_organization(session=db)
 
     data = {
