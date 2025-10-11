@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
@@ -1146,7 +1146,8 @@ def test_create_user_without_states(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
         assert role is not None
 
         data = {
@@ -1186,8 +1187,9 @@ def test_update_user_states(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
+
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -1273,7 +1275,8 @@ def test_update_other_role_to_state_admin_and_add_states(
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role is not None
     assert other_role is not None
 
@@ -1332,7 +1335,8 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role is not None
     assert other_role is not None
 
@@ -1389,7 +1393,8 @@ def test_update_state_admin_to_other_role_and_remove_states(
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role is not None
     assert other_role is not None
 
@@ -1452,7 +1457,6 @@ def test_cannot_delete_user_if_linked_to_question(
 ) -> None:
     org = create_random_organization(db)
 
-    # use a role from the hierarchy instead of random role
     role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
 
@@ -1592,9 +1596,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     db.refresh(state2)
 
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
+    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert test_admin_role and other_role
 
     org = create_random_organization(db)
@@ -1646,9 +1648,7 @@ def test_update_normal_user_to_test_admin_without_states(
     db.refresh(state)
 
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
+    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert test_admin_role and other_role
 
     org = create_random_organization(db)
@@ -1728,12 +1728,14 @@ def test_retrieve_users_with_search(
     test_email = "john.smith@example.com"
     test_phone = "123-456-7890"
 
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+
     user_in1 = UserCreate(
         email=test_email,
         password=random_lower_string(),
         full_name=test_name,
         phone=test_phone,
-        role_id=create_random_role(db).id,
+        role_id=role.id,
         organization_id=current_user["organization_id"],
     )
     crud.create_user(session=db, user_create=user_in1)
@@ -1744,7 +1746,7 @@ def test_retrieve_users_with_search(
         password=random_lower_string(),
         full_name="Jane Doe",
         phone="987-654-3210",
-        role_id=create_random_role(db).id,
+        role_id=role.id,
         organization_id=current_user["organization_id"],
     )
     crud.create_user(session=db, user_create=user_in2)
