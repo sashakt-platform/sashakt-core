@@ -2,8 +2,9 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Permission, RolePermission
+from app.models import Permission, Role, RolePermission
 from app.tests.utils.role import create_random_role
+from app.tests.utils.user import get_user_token
 from app.tests.utils.utils import random_lower_string
 
 
@@ -368,3 +369,136 @@ def test_delete_role_not_found(
 #     assert response.status_code == 400
 #     content = response.json()
 #     assert content["detail"] == "Not enough permissions"
+
+
+def test_read_roles_super_admin_sees_all_roles(client: TestClient, db: Session) -> None:
+    """Test that Super Admin can see all system roles."""
+
+    # get auth headers for super admin user
+    headers = get_user_token(db=db, role="super_admin")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    content = response.json()
+
+    # super admin should see all roles
+    role_names = [role["name"] for role in content["data"]]
+    expected_roles = {
+        "super_admin",
+        "system_admin",
+        "state_admin",
+        "test_admin",
+        "candidate",
+    }
+    assert expected_roles.issubset(set(role_names))
+
+
+def test_read_roles_system_admin_filtered(client: TestClient, db: Session) -> None:
+    """Test that System Admin sees only system_admin and below."""
+
+    # get auth headers for system admin user
+    headers = get_user_token(db=db, role="system_admin")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    content = response.json()
+
+    role_names = [role["name"] for role in content["data"]]
+
+    # System admin should see these roles
+    assert "system_admin" in role_names
+    assert "state_admin" in role_names
+    assert "test_admin" in role_names
+    assert "candidate" in role_names
+
+    # they should not have access to super_admin role
+    assert "super_admin" not in role_names
+
+
+def test_read_roles_state_admin_filtered(client: TestClient, db: Session) -> None:
+    """Test that state_admin sees only state_admin and below."""
+
+    # get auth headers for state admin user
+    headers = get_user_token(db=db, role="state_admin")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    content = response.json()
+
+    role_names = [role["name"] for role in content["data"]]
+
+    # State admin should see these roles
+    assert "state_admin" in role_names
+    assert "test_admin" in role_names
+    assert "candidate" in role_names
+
+    # they should not see higher level roles
+    assert "super_admin" not in role_names
+    assert "system_admin" not in role_names
+
+
+def test_read_roles_test_admin_no_access(client: TestClient, db: Session) -> None:
+    """Test that test_admin has no access to roles endpoint."""
+
+    # get auth headers for test admin user
+    headers = get_user_token(db=db, role="test_admin")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=headers,
+    )
+
+    # Test admin should not have read_role permission
+    # 401 due to token issue or 403 for permission error
+    assert response.status_code in [401, 403]
+
+
+def test_read_roles_candidate_no_access(client: TestClient, db: Session) -> None:
+    """Test that candidate has no access to roles endpoint."""
+    headers = get_user_token(db=db, role="candidate")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=headers,
+    )
+
+    # Candidate should not have read_role permission
+    # 401 due to token issue or 403 for permission error
+    assert response.status_code in [401, 403]
+
+
+def test_read_roles_invalid_role_empty_result(client: TestClient, db: Session) -> None:
+    """Test that users with invalid/unknown roles get empty results."""
+
+    # create a custom role not in hierarchy
+    custom_role = Role(name="custom_role", label="Custom Role")
+    db.add(custom_role)
+    db.commit()
+    db.refresh(custom_role)
+
+    headers = get_user_token(db=db, role="custom_role")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=headers,
+    )
+
+    # Custom role should have token issues or no read_role permission
+    assert response.status_code in [200, 401, 403]
+
+    # if we get a 200 response, the content should be empty
+    if response.status_code == 200:
+        content = response.json()
+
+        # Custom role not in hierarchy should see no roles
+        assert content["count"] == 0
+        assert len(content["data"]) == 0
