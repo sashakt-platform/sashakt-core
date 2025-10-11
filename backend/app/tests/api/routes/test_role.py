@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Permission, Role, RolePermission
+from app.models import Permission, RolePermission
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import get_user_token
 from app.tests.utils.utils import random_lower_string
@@ -480,12 +480,9 @@ def test_read_roles_invalid_role_empty_result(client: TestClient, db: Session) -
     """Test that users with invalid/unknown roles get empty results."""
 
     # create a custom role not in hierarchy
-    custom_role = Role(name="custom_role", label="Custom Role")
-    db.add(custom_role)
-    db.commit()
-    db.refresh(custom_role)
+    custom_role = create_random_role(db)
 
-    headers = get_user_token(db=db, role="custom_role")
+    headers = get_user_token(db=db, role=custom_role.name)
 
     response = client.get(
         f"{settings.API_V1_STR}/roles/",
