@@ -1729,6 +1729,7 @@ def test_retrieve_users_with_search(
     test_phone = "123-456-7890"
 
     role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
 
     user_in1 = UserCreate(
         email=test_email,
