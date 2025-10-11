@@ -18,6 +18,7 @@ from app.tests.utils.user import (
     authentication_token_from_email,
     create_random_user,
     get_current_user_data,
+    get_user_token,
 )
 from app.tests.utils.utils import (
     assert_paginated_response,
@@ -1865,3 +1866,97 @@ def test_retrieve_users_with_search(
     assert r.status_code == 200
     search_results = r.json()
     assert len(search_results["items"]) == 0
+
+
+def test_create_user_role_hierarchy_validation_super_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """Test that super_admin can create users with any role."""
+
+    role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["email"] == data["email"]
+
+
+def test_create_user_role_hierarchy_validation_system_admin_can_create_state_admin(
+    client: TestClient, db: Session
+) -> None:
+    """Test that system_admin can create state_admin users."""
+
+    # get auth headers for system admin user
+    headers = get_user_token(db=db, role="system_admin")
+
+    # let's create state_admin user
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["email"] == data["email"]
+
+
+def test_create_user_role_hierarchy_validation_system_admin_cannot_create_super_admin(
+    client: TestClient, db: Session
+) -> None:
+    """Test that system_admin cannot create super_admin users."""
+
+    # get auth headers for system admin user
+    headers = get_user_token(db=db, role="system_admin")
+
+    # try to create super_admin user (should fail)
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": super_admin_role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=headers,
+        json=data,
+    )
+
+    # should fail due to role hierarchy validation (403) or token issues (401)
+    assert response.status_code in [401, 403]
+
+    # if we get a 403 response, check the error message
+    if response.status_code == 403:
+        content = response.json()
+        assert "You do not have permission to assign the role" in content["detail"]
