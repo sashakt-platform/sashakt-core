@@ -125,7 +125,10 @@ def test_create_user_new_email_without_org_id(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = create_random_role(db)
+
+        # use a role from the hierarchy instead of random role
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
 
         data = {
             "email": username,
@@ -883,7 +886,11 @@ def test_create_inactive_user_not_listed(
     password = random_lower_string()
     full_name = random_lower_string()
     phone = random_lower_string()
-    role = create_random_role(db)
+
+    # use a role from the hierarchy instead of random role
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert role is not None
+
     organization = create_random_organization(db)
     data = {
         "email": username,
@@ -1444,7 +1451,11 @@ def test_cannot_delete_user_if_linked_to_question(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    role = create_random_role(db)
+
+    # use a role from the hierarchy instead of random role
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
     data = {
         "email": random_email(),
         "password": random_lower_string(),
@@ -1579,10 +1590,8 @@ def test_update_user_to_test_admin_inherits_state_admin_states(
 
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
-    assert state_admin_role and test_admin_role and other_role
+
+    assert state_admin_role and test_admin_role
 
     org = create_random_organization(db)
 
@@ -1611,7 +1620,7 @@ def test_update_user_to_test_admin_inherits_state_admin_states(
         "email": random_email(),
         "password": random_lower_string(),
         "phone": random_lower_string(),
-        "role_id": other_role.id,
+        "role_id": test_admin_role.id,
         "full_name": random_lower_string(),
         "organization_id": org.id,
     }
