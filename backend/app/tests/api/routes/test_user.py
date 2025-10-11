@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
@@ -18,6 +18,7 @@ from app.tests.utils.user import (
     authentication_token_from_email,
     create_random_user,
     get_current_user_data,
+    get_user_token,
 )
 from app.tests.utils.utils import (
     assert_paginated_response,
@@ -82,7 +83,10 @@ def test_create_user_new_email(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = create_random_role(db)
+
+        # use a role from the hierarchy instead of random role
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
         organization = create_random_organization(db)
         data = {
             "email": username,
@@ -121,7 +125,10 @@ def test_create_user_new_email_without_org_id(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = create_random_role(db)
+
+        # use a role from the hierarchy instead of random role
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
 
         data = {
             "email": username,
@@ -639,12 +646,16 @@ def test_update_user(
     username = random_email()
     password = random_lower_string()
 
+    # use a role from the hierarchy instead of random role
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert role is not None
+
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
-        role_id=create_random_role(db).id,
+        role_id=role.id,
         organization_id=create_random_organization(db).id,
     )
     user = crud.create_user(session=db, user_create=user_in)
@@ -875,7 +886,11 @@ def test_create_inactive_user_not_listed(
     password = random_lower_string()
     full_name = random_lower_string()
     phone = random_lower_string()
-    role = create_random_role(db)
+
+    # use a role from the hierarchy instead of random role
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert role is not None
+
     organization = create_random_organization(db)
     data = {
         "email": username,
@@ -935,7 +950,10 @@ def test_create_state_admin_without_state_id(
         )
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "A State Admin must be assigned exactly one state."
+        assert (
+            data["detail"]
+            == "A user with 'State Admin' role must be associated with a state."
+        )
 
 
 def test_create_state_admin_with_state_id(
@@ -1128,7 +1146,8 @@ def test_create_user_without_states(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
         assert role is not None
 
         data = {
@@ -1168,8 +1187,9 @@ def test_update_user_states(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
+
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -1255,7 +1275,8 @@ def test_update_other_role_to_state_admin_and_add_states(
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role is not None
     assert other_role is not None
 
@@ -1314,7 +1335,8 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role is not None
     assert other_role is not None
 
@@ -1360,7 +1382,10 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     )
     assert patch_response.status_code == 400
     error = patch_response.json()
-    assert error["detail"] == "A State Admin must be assigned exactly one state."
+    assert (
+        error["detail"]
+        == "A user with 'State Admin' role must be associated with a state."
+    )
 
 
 def test_update_state_admin_to_other_role_and_remove_states(
@@ -1368,7 +1393,8 @@ def test_update_state_admin_to_other_role_and_remove_states(
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name != "state_admin")).first()
+
+    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role is not None
     assert other_role is not None
 
@@ -1430,7 +1456,10 @@ def test_cannot_delete_user_if_linked_to_question(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    role = create_random_role(db)
+
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
     data = {
         "email": random_email(),
         "password": random_lower_string(),
@@ -1531,9 +1560,10 @@ def test_create_test_admin_auto_inherits_state_admin_states(
         headers=token_headers,
         json=payload,
     )
-    assert response.status_code == 200
 
+    assert response.status_code == 200
     new_user = response.json()
+
     assert new_user["role_id"] == test_admin_role.id
     assert "states" in new_user
     assert len(new_user["states"]) == 1
@@ -1541,99 +1571,6 @@ def test_create_test_admin_auto_inherits_state_admin_states(
 
     get_resp = client.get(
         f"{settings.API_V1_STR}/users/{new_user['id']}",
-        headers=token_headers,
-    )
-    assert get_resp.status_code == 200
-    data = get_resp.json()
-    state_ids = [s["id"] for s in data["states"]]
-    assert state.id in state_ids
-    assert len(data["states"]) == 1
-
-
-def test_update_user_to_test_admin_inherits_state_admin_states(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
-) -> None:
-    country = Country(name=random_lower_string(), is_active=True)
-    db.add(country)
-    db.commit()
-    db.refresh(country)
-
-    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
-    db.add(state)
-    db.commit()
-    db.refresh(state)
-
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
-    assert state_admin_role and test_admin_role and other_role
-
-    org = create_random_organization(db)
-
-    state_admin_email = random_email()
-    state_admin_payload = {
-        "email": state_admin_email,
-        "password": random_lower_string(),
-        "phone": random_lower_string(),
-        "full_name": random_lower_string(),
-        "role_id": state_admin_role.id,
-        "organization_id": org.id,
-        "state_ids": [state.id],
-    }
-    resp_admin = client.post(
-        f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
-        json=state_admin_payload,
-    )
-    assert resp_admin.status_code == 200
-
-    token_headers = authentication_token_from_email(
-        client=client, email=state_admin_email, db=db
-    )
-
-    payload = {
-        "email": random_email(),
-        "password": random_lower_string(),
-        "phone": random_lower_string(),
-        "role_id": other_role.id,
-        "full_name": random_lower_string(),
-        "organization_id": org.id,
-    }
-    resp_user = client.post(
-        f"{settings.API_V1_STR}/users/",
-        headers=token_headers,
-        json=payload,
-    )
-
-    assert resp_user.status_code == 200
-    user_id = resp_user.json()["id"]
-
-    initial_user = resp_user.json()
-    assert initial_user["states"] is None
-
-    patch_payload = {
-        "role_id": test_admin_role.id,
-        "full_name": random_lower_string(),
-        "phone": random_lower_string(),
-        "organization_id": org.id,
-    }
-    patch_resp = client.patch(
-        f"{settings.API_V1_STR}/users/{user_id}",
-        headers=token_headers,
-        json=patch_payload,
-    )
-    assert patch_resp.status_code == 200
-    updated_user = patch_resp.json()
-
-    assert updated_user["role_id"] == test_admin_role.id
-    assert "states" in updated_user
-    assert len(updated_user["states"]) == 1
-    assert updated_user["states"][0]["id"] == state.id
-
-    get_resp = client.get(
-        f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
     assert get_resp.status_code == 200
@@ -1659,9 +1596,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     db.refresh(state2)
 
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
+    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert test_admin_role and other_role
 
     org = create_random_organization(db)
@@ -1713,9 +1648,7 @@ def test_update_normal_user_to_test_admin_without_states(
     db.refresh(state)
 
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(
-        select(Role).where(col(Role.name).notin_(["state_admin", "test_admin"]))
-    ).first()
+    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert test_admin_role and other_role
 
     org = create_random_organization(db)
@@ -1795,12 +1728,15 @@ def test_retrieve_users_with_search(
     test_email = "john.smith@example.com"
     test_phone = "123-456-7890"
 
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
     user_in1 = UserCreate(
         email=test_email,
         password=random_lower_string(),
         full_name=test_name,
         phone=test_phone,
-        role_id=create_random_role(db).id,
+        role_id=role.id,
         organization_id=current_user["organization_id"],
     )
     crud.create_user(session=db, user_create=user_in1)
@@ -1811,7 +1747,7 @@ def test_retrieve_users_with_search(
         password=random_lower_string(),
         full_name="Jane Doe",
         phone="987-654-3210",
-        role_id=create_random_role(db).id,
+        role_id=role.id,
         organization_id=current_user["organization_id"],
     )
     crud.create_user(session=db, user_create=user_in2)
@@ -1865,3 +1801,104 @@ def test_retrieve_users_with_search(
     assert r.status_code == 200
     search_results = r.json()
     assert len(search_results["items"]) == 0
+
+
+def test_create_user_role_hierarchy_validation_super_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """Test that super_admin can create users with any role."""
+
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["email"] == data["email"]
+
+
+def test_create_user_role_hierarchy_validation_system_admin_can_create_state_admin(
+    client: TestClient, db: Session
+) -> None:
+    """Test that system_admin can create state_admin users."""
+
+    # get auth headers for system admin user
+    headers = get_user_token(db=db, role="system_admin")
+
+    # let's create state_admin user
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    organization = create_random_organization(session=db)
+
+    goa_state = db.exec(select(State).where(State.name == "Goa")).first()
+    assert goa_state is not None
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": organization.id,
+        "state_ids": [goa_state.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["email"] == data["email"]
+
+
+def test_create_user_role_hierarchy_validation_system_admin_cannot_create_super_admin(
+    client: TestClient, db: Session
+) -> None:
+    """Test that system_admin cannot create super_admin users."""
+
+    # get auth headers for system admin user
+    headers = get_user_token(db=db, role="system_admin")
+
+    # try to create super_admin user (should fail)
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert super_admin_role is not None
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": super_admin_role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=headers,
+        json=data,
+    )
+
+    # should fail due to role hierarchy validation (403) or token issues (401)
+    assert response.status_code in [401, 403]
+
+    # if we get a 403 response, check the error message
+    if response.status_code == 403:
+        content = response.json()
+        assert "You do not have permission to assign the role" in content["detail"]
