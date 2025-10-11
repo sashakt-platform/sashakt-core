@@ -138,8 +138,11 @@ class TestRoleHierarchy:
         assert can_assign_role("invalid_role", "super_admin") is False
         assert can_assign_role("invalid_role", "candidate") is False
 
-    def test_can_assign_role_invalid_target_role(self) -> None:
-        """Test can_assign_role with invalid target role."""
-        # Valid current role cannot assign invalid target role
-        assert can_assign_role("super_admin", "invalid_role") is False
-        assert can_assign_role("state_admin", "invalid_role") is False
+    def test_can_assign_role_invalid_role(self) -> None:
+        """Test can_assign_role with roles not in hierarchy."""
+        # No one can assign roles that are not in the hierarchy
+        assert can_assign_role("super_admin", "custom_role") is False
+        assert can_assign_role("system_admin", "custom_role") is False
+        assert can_assign_role("state_admin", "custom_role") is False
+        assert can_assign_role("test_admin", "custom_role") is False
+        assert can_assign_role("candidate", "custom_role") is False

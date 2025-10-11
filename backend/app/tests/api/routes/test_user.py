@@ -83,7 +83,10 @@ def test_create_user_new_email(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = create_random_role(db)
+
+        # use a role from the hierarchy instead of random role
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
         organization = create_random_organization(db)
         data = {
             "email": username,
@@ -640,12 +643,16 @@ def test_update_user(
     username = random_email()
     password = random_lower_string()
 
+    # use a role from the hierarchy instead of random role
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert role is not None
+
     user_in = UserCreate(
         email=username,
         password=password,
         full_name=random_lower_string(),
         phone=random_lower_string(),
-        role_id=create_random_role(db).id,
+        role_id=role.id,
         organization_id=create_random_organization(db).id,
     )
     user = crud.create_user(session=db, user_create=user_in)
@@ -936,7 +943,10 @@ def test_create_state_admin_without_state_id(
         )
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "A State Admin must be assigned exactly one state."
+        assert (
+            data["detail"]
+            == "A user with 'State Admin' role must be associated with a state."
+        )
 
 
 def test_create_state_admin_with_state_id(
@@ -1361,7 +1371,10 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     )
     assert patch_response.status_code == 400
     error = patch_response.json()
-    assert error["detail"] == "A State Admin must be assigned exactly one state."
+    assert (
+        error["detail"]
+        == "A user with 'State Admin' role must be associated with a state."
+    )
 
 
 def test_update_state_admin_to_other_role_and_remove_states(

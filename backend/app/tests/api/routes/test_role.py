@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Permission, RolePermission
+from app.models import Permission, Role, RolePermission
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import get_user_token
 from app.tests.utils.utils import random_lower_string
@@ -138,8 +138,10 @@ def test_read_roles(
 
     db.commit()
 
-    role_a = create_random_role(db)
-    role_b = create_random_role(db)
+    # get existing hierarchy roles instead of creating random ones
+    role_a = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    role_b = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert role_a is not None and role_b is not None
 
     role_permission_aa = RolePermission(
         role_id=role_a.id, permission_id=permission_a.id
