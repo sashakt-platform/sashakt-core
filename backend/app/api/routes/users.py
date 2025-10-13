@@ -136,6 +136,11 @@ def create_user(
     if not user_in.organization_id:
         user_in.organization_id = current_user.organization_id
 
+    if current_user.role.name == state_admin.name and current_user.states is not None:
+        user_in.state_ids = [
+            state.id for state in current_user.states if state.id is not None
+        ]
+
     role = validate_user_return_role(session=session, user_in=user_in)
 
     user = crud.create_user(
@@ -152,19 +157,7 @@ def create_user(
         session.add_all(user_states)
 
     elif role and role.name == test_admin.name:
-        current_role = session.get(Role, current_user.role_id)
-        if (
-            current_role
-            and current_role.name == state_admin.name
-            and current_user.states
-        ):
-            creator_states = current_user.states
-            session.add_all(
-                UserState(user_id=user.id, state_id=creator_state.id)
-                for creator_state in creator_states
-            )
-
-        elif user_in.state_ids:
+        if user_in.state_ids:
             user_states = [
                 UserState(user_id=user.id, state_id=state_id)
                 for state_id in user_in.state_ids
