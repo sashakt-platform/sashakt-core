@@ -18,7 +18,7 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, not_, or_, select
+from sqlmodel import col, or_, select
 from typing_extensions import TypedDict
 
 from app import crud
@@ -81,7 +81,7 @@ def check_linked_test(session: SessionDep, question_id: int) -> bool:
 def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
-    if not tag_type or tag_type.is_deleted:
+    if not tag_type:
         return None
     return tag_type
 
@@ -221,7 +221,6 @@ def is_duplicate_question(
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
-        .where(not_(Question.is_deleted))
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
@@ -527,7 +526,7 @@ def get_questions(
 def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
     """Get all tests that include this question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     test_info_dict_list: list[TestInfoDict] = []
@@ -564,7 +563,7 @@ def get_question_candidate_tests(
 ) -> list[CandidateTestInfoDict]:
     """Get all candidate tests that include this question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     candidate_test_info_list: list[CandidateTestInfoDict] = []
@@ -692,7 +691,7 @@ def bulk_delete_question(
 def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     """Get a question by its ID."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     latest_revision = session.get(QuestionRevision, question.last_revision_id)
@@ -722,7 +721,7 @@ def update_question(
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Update basic question attributes
@@ -763,7 +762,7 @@ def create_question_revision(
 ) -> QuestionPublic:
     """Create a new revision for an existing question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Prepare data for JSON serialization
@@ -814,7 +813,7 @@ def get_question_revisions(
 ) -> list[QuestionRevisionInfo]:
     """Get all revisions for a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     revisions_query = (
@@ -867,7 +866,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
 
     # Check if parent question exists and is not deleted
     question = session.get(Question, revision.question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(
             status_code=404, detail="Parent question not found or deleted"
         )
@@ -932,7 +931,7 @@ def update_question_locations(
     This will add new locations and remove any existing ones not in the list.
     """
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Get current locations
@@ -993,7 +992,7 @@ def update_question_locations(
 def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     """Get all tags associated with a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Query all tags associated with this question
@@ -1034,7 +1033,7 @@ def update_question_tags(
     This will add new tags and remove any existing ones not in the list.
     """
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Get current tags
