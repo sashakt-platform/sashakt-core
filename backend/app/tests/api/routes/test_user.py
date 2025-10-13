@@ -1783,3 +1783,64 @@ def test_user_public_list_returns_role_name(
         role = db.exec(select(Role).where(Role.id == user["role_id"])).first()
         assert role is not None
         assert user["role_label"] == role.label
+
+
+def test_state_admin_creates_state_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    org = create_random_organization(db)
+
+    state_admin_email = random_email()
+    state_admin_payload = {
+        "email": state_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp_admin = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=state_admin_payload,
+    )
+    assert resp_admin.status_code == 200
+
+    token_headers = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "full_name": random_lower_string(),
+        "organization_id": org.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    new_user = response.json()
+    assert new_user["role_id"] == state_admin_role.id
+    assert "states" in new_user
+    assert len(new_user["states"]) == 1
+    assert new_user["states"][0]["id"] == state.id
