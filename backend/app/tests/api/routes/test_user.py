@@ -1844,3 +1844,85 @@ def test_state_admin_creates_state_admin(
     assert "states" in new_user
     assert len(new_user["states"]) == 1
     assert new_user["states"][0]["id"] == state.id
+
+
+def test_retrieve_users_with_search(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    current_user = get_current_user_data(client, superuser_token_headers)
+
+    # create test users with specific data for searching
+    test_name = "John Smith"
+    test_email = "john.smith@example.com"
+    test_phone = "123-456-7890"
+
+    user_in1 = UserCreate(
+        email=test_email,
+        password=random_lower_string(),
+        full_name=test_name,
+        phone=test_phone,
+        role_id=create_random_role(db).id,
+        organization_id=current_user["organization_id"],
+    )
+    crud.create_user(session=db, user_create=user_in1)
+
+    # create another user that should not match the search
+    user_in2 = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name="Jane Doe",
+        phone="987-654-3210",
+        role_id=create_random_role(db).id,
+        organization_id=current_user["organization_id"],
+    )
+    crud.create_user(session=db, user_create=user_in2)
+
+    # test search by full name
+    r = client.get(
+        f"{settings.API_V1_STR}/users/?search=John", headers=superuser_token_headers
+    )
+    assert r.status_code == 200
+    search_results = r.json()
+    found_names = [user["full_name"] for user in search_results["items"]]
+    assert len(found_names) == 1
+    assert test_name in found_names
+
+    # test search by email
+    r = client.get(
+        f"{settings.API_V1_STR}/users/?search=john.smith",
+        headers=superuser_token_headers,
+    )
+    assert r.status_code == 200
+    search_results = r.json()
+    found_emails = [user["email"] for user in search_results["items"]]
+    assert len(found_emails) == 1
+    assert test_email in found_emails
+
+    # test search by phone
+    r = client.get(
+        f"{settings.API_V1_STR}/users/?search=123-456", headers=superuser_token_headers
+    )
+    assert r.status_code == 200
+    search_results = r.json()
+    found_phones = [user["phone"] for user in search_results["items"]]
+    assert len(found_phones) == 1
+    assert test_phone in found_phones
+
+    # test case insensitive search
+    r = client.get(
+        f"{settings.API_V1_STR}/users/?search=JOHN", headers=superuser_token_headers
+    )
+    assert r.status_code == 200
+    search_results = r.json()
+    found_names = [user["full_name"] for user in search_results["items"]]
+    assert len(found_names) == 1
+    assert test_name in found_names
+
+    # test search with no results
+    r = client.get(
+        f"{settings.API_V1_STR}/users/?search=nonexistent",
+        headers=superuser_token_headers,
+    )
+    assert r.status_code == 200
+    search_results = r.json()
+    assert len(search_results["items"]) == 0

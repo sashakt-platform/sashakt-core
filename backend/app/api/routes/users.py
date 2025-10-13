@@ -2,7 +2,7 @@ from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page, paginate
-from sqlmodel import col, select
+from sqlmodel import col, func, or_, select
 
 from app import crud
 from app.api.deps import (
@@ -52,6 +52,7 @@ def read_users(
     current_user: CurrentUser,
     sorting: UserSortingDep,
     param: Pagination = Depends(),
+    search: str | None = None,
 ) -> Page[UserPublic]:
     """
     Retrieve users.
@@ -59,6 +60,15 @@ def read_users(
     current_user_organization_id = current_user.organization_id
 
     statement = select(User).where(User.organization_id == current_user_organization_id)
+
+    # apply search filter if search parameter is provided
+    if search:
+        search_filter = or_(
+            func.lower(User.full_name).like(f"%{search.lower()}%"),
+            func.lower(User.email).like(f"%{search.lower()}%"),
+            func.lower(User.phone).like(f"%{search.lower()}%"),
+        )
+        statement = statement.where(search_filter)
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
