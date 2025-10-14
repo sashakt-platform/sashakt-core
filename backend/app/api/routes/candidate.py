@@ -155,9 +155,11 @@ def get_overall_tests_analytics(
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
 
     if user_state_ids:
         state_query = select(TestState.test_id).where(
@@ -638,9 +640,11 @@ def get_test_summary(
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
 
     query = (
         select(CandidateTest, Test)

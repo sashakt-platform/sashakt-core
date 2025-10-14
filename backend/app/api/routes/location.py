@@ -162,9 +162,11 @@ def get_state(
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
 
     if user_state_ids:
         query = query.where(col(State.id).in_(user_state_ids))
