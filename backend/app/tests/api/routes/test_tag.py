@@ -1776,33 +1776,6 @@ def test_update_tag_not_found(
     assert response.json()["detail"] == "Tag not found"
 
 
-def test_update_tag_soft_deleted(
-    client: TestClient,
-    db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
-) -> None:
-    user, organization = setup_user_organization(db)
-    tag = Tag(
-        name=random_lower_string(),
-        description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
-        is_deleted=True,
-    )
-    db.add(tag)
-    db.commit()
-    db.refresh(tag)
-    update_data = {"name": "Updated Name"}
-
-    response = client.put(
-        f"{settings.API_V1_STR}/tag/{tag.id}",
-        json=update_data,
-        headers=get_user_superadmin_token,
-    )
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Tag not found"
-
-
 def test_create_tag_with_deleted_tag_type(
     client: TestClient,
     db: SessionDep,
@@ -1814,11 +1787,13 @@ def test_create_tag_with_deleted_tag_type(
         description=random_lower_string(),
         organization_id=organization.id,
         created_by_id=user.id,
-        is_deleted=True,
     )
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
+    db.delete(tag_type)
+    db.commit()
+
     tag = Tag(
         name=random_lower_string(),
         description=random_lower_string(),
