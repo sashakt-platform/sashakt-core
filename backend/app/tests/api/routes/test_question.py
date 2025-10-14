@@ -4631,3 +4631,140 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Pu
 
         with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
+
+
+def test_update_question_not_found(
+    client: TestClient,
+) -> None:
+    non_existing_id = -9999
+    updated_data = {"is_active": True}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}",
+        json=updated_data,
+    )
+
+    assert response.status_code == 404
+    content = response.json()
+    assert content["detail"] == "Question not found"
+
+
+def test_get_question_revisions_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    non_existing_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/revisions",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_update_question_locations_not_found(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    non_existing_id = -9999
+
+    location_data = {
+        "locations": [
+            {
+                "state_id": state.id,
+                "district_id": district.id,
+                "block_id": None,
+            }
+        ]
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/locations",
+        json=location_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_get_question_tags_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existing_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/tags",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_update_question_tags_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existing_id = -9999
+
+    tag_data = {"tag_ids": [1, 2, 3]}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/tags",
+        json=tag_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_create_question_revision_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    non_existing_id = -9999
+    revision_data = {
+        "question_text": random_lower_string(),
+        "instructions": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "media": None,
+        "is_active": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/revisions",
+        json=revision_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
