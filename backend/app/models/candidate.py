@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
@@ -10,6 +10,7 @@ from app.core.timezone import get_timezone_aware_now
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
     from app.models.location import State
+    from app.models.organization import Organization
     from app.models.question import QuestionCandidatePublic
     from app.models.tag import Tag
 
@@ -175,11 +176,13 @@ class Candidate(CandidateBase, table=True):
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
+    organization_id: int | None = Field(foreign_key="organization.id")
     is_deleted: bool = Field(default=False, nullable=False)
     user: "User" = Relationship(back_populates="candidates")
     tests: list["Test"] | None = Relationship(
         back_populates="candidates", link_model=CandidateTest
     )
+    organization: Optional["Organization"] = Relationship(back_populates="candidates")
 
 
 class CandidatePublic(CandidateBase):
@@ -187,6 +190,7 @@ class CandidatePublic(CandidateBase):
     candidate_uuid: uuid.UUID | None = None  # Include uuid in public response
     created_date: datetime
     modified_date: datetime
+    organization_id: int | None
     is_deleted: bool
 
 

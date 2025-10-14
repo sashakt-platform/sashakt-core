@@ -3,6 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import model_validator
+from sqlalchemy.orm import Mapped
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import TypedDict
 
@@ -241,15 +242,15 @@ class Question(SQLModel, table=True):
 
     # Relationships
     # All revisions of this question
-    revisions: list["QuestionRevision"] = Relationship(
+    revisions: Mapped[list["QuestionRevision"]] = Relationship(
         back_populates="question", cascade_delete=True
     )
     # Geographic locations associated with this question
-    locations: list["QuestionLocation"] = Relationship(
+    locations: Mapped[list["QuestionLocation"]] = Relationship(
         back_populates="question", cascade_delete=True
     )
     # Tags associated with this question
-    tags: list["Tag"] = Relationship(
+    tags: Mapped[list["Tag"]] = Relationship(
         back_populates="questions",
         link_model=QuestionTag,
     )
@@ -364,13 +365,15 @@ class QuestionLocation(SQLModel, table=True):
 
     # Relationships
     # Question associated with this location
-    question: Question = Relationship(back_populates="locations")
+    question: Mapped[Question] = Relationship(back_populates="locations")
     # State associated with this location
-    state: Optional["State"] = Relationship(back_populates="question_locations")
+    state: Mapped[Optional["State"]] = Relationship(back_populates="question_locations")
     # District associated with this location
-    district: Optional["District"] = Relationship(back_populates="question_locations")
+    district: Mapped[Optional["District"]] = Relationship(
+        back_populates="question_locations"
+    )
     # Block associated with this location
-    block: Optional["Block"] = Relationship(back_populates="question_locations")
+    block: Mapped[Optional["Block"]] = Relationship(back_populates="question_locations")
 
 
 # Use inheritance to avoid field duplication

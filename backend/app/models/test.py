@@ -8,6 +8,7 @@ from typing_extensions import Self, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
+from app.models.organization import Organization
 from app.models.utils import MarkingScheme
 
 
@@ -201,6 +202,25 @@ class Test(TestBase, table=True):
     )
 
     is_deleted: bool = Field(default=False, nullable=False)
+    random_tag_count: list[TagRandomCreate] | None = Field(
+        sa_type=JSON,
+        default=None,
+        title="Tag-based Randomization Configuration",
+        description="Specifies how many random questions to select for each tag. Each item includes a tag ID and the count of random questions to select from that tag.",
+    )
+
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
+
+    organization_id: int | None = Field(
+        foreign_key="organization.id",
+        title="Organization ID",
+        description="ID of the organization to which the test belongs.",
+    )
+
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
     )
@@ -219,17 +239,8 @@ class Test(TestBase, table=True):
     candidates: list["Candidate"] | None = Relationship(
         back_populates="tests", link_model=CandidateTest
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        title="User ID",
-        description="ID of the user who created the test.",
-    )
-    random_tag_count: list[TagRandomCreate] | None = Field(
-        sa_type=JSON,
-        default=None,
-        title="Tag-based Randomization Configuration",
-        description="Specifies how many random questions to select for each tag. Each item includes a tag ID and the count of random questions to select from that tag.",
-    )
+
+    organization: Optional["Organization"] = Relationship(back_populates="tests")
 
 
 class TestCreate(TestBase):
@@ -258,9 +269,12 @@ class TestPublic(TestBase):
     total_questions: int | None = None
     random_tag_counts: list[TagRandomPublic] | None = None
     created_by_id: int = Field(
-        foreign_key="user.id",
         title="User ID",
         description="ID of the user who created the test.",
+    )
+    organization_id: int | None = Field(
+        title="ID of the organization",
+        description="ID of the organization to which the test belongs.",
     )
 
 

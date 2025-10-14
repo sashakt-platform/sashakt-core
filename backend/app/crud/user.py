@@ -4,9 +4,10 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.core.config import settings
+from app.core.roles import state_admin, test_admin
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models import Permission, Role, RolePermission, State
-from app.models.user import User, UserCreate, UserState, UserUpdate
+from app.models.user import User, UserCreate, UserPublic, UserState, UserUpdate
 
 
 def create_user(
@@ -49,6 +50,39 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
     return db_user
 
 
+def get_user_public(*, session: Session, db_user: User) -> UserPublic:
+    role = session.exec(select(Role).where(Role.id == db_user.role_id)).first()
+    role_name = role.name if role else "N/A"
+    role_label = role.label if role else "N/A"
+
+    states = None
+    if role_name == state_admin.name or role_name == test_admin.name:
+        state_query = (
+            select(State)
+            .join(UserState)
+            .where(State.id == UserState.state_id)
+            .where(UserState.user_id == db_user.id)
+        )
+        states = session.exec(state_query).all()
+
+    user_public = UserPublic(
+        id=db_user.id,
+        full_name=db_user.full_name,
+        created_date=db_user.created_date,
+        modified_date=db_user.modified_date,
+        email=db_user.email,
+        phone=db_user.phone,
+        role_id=db_user.role_id,
+        organization_id=db_user.organization_id,
+        created_by_id=db_user.created_by_id,
+        is_deleted=db_user.is_deleted,
+        is_active=db_user.is_active,
+        role_label=role_label,
+        states=states or None,
+    )
+    return user_public
+
+
 def get_user_by_email(*, session: Session, email: str) -> User | None:
     statement = select(User).where(User.email == email)
     session_user = session.exec(statement).first()
@@ -70,9 +104,7 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
     return db_user
 
 
-def get_user_permission_states(
-    *, session: Session, user: User
-) -> tuple[list[str], list[State]]:
+def get_user_permissions(*, session: Session, user: User) -> list[str]:
     role = session.get(Role, user.role_id)
 
     permissions = (
@@ -87,13 +119,4 @@ def get_user_permission_states(
         if role
         else []
     )
-    states = list(
-        session.exec(
-            select(State)
-            .join(UserState)
-            .where(State.id == UserState.state_id)
-            .where(UserState.user_id == user.id)
-        ).all()
-    )
-
-    return permissions, states
+    return permissions

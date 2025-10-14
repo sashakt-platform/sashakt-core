@@ -1,8 +1,8 @@
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
 from app.api.deps import Pagination, SessionDep, permission_dependency
 from app.models import (
@@ -231,6 +231,7 @@ def get_district(
     is_active: bool | None = None,
     params: Pagination = Depends(),
     state: int | None = None,
+    state_ids: list[int] | None = Query(None),
 ) -> Page[District]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
@@ -239,6 +240,9 @@ def get_district(
 
     if state is not None:
         query = query.where(District.state_id == state)
+
+    if state_ids is not None:
+        query = query.where(col(District.state_id).in_(state_ids))
 
     if name:
         query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))

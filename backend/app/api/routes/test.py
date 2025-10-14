@@ -1,8 +1,10 @@
 from datetime import datetime
-from typing import Annotated, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
+from sqlalchemy.orm import selectinload
 from sqlmodel import col, exists, func, select
 
 from app.api.deps import (
@@ -78,6 +80,54 @@ def build_random_tag_public(
         count = max(int(tag_count.get("count") or 0), 0)
         out.append(TagRandomPublic(tag=TagPublic.model_validate(tag), count=count))
     return out
+
+
+def transform_tests_to_public(
+    session: SessionDep, tests: list[Test] | Any
+) -> list[TestPublic]:
+    """
+    Transform a list of Test objects to TestPublic objects with all nested relationships.
+    """
+    result: list[TestPublic] = []
+
+    # cast to proper type since fastapi-pagination might return Sequence[Any]
+    test_list: list[Test] = list(tests) if not isinstance(tests, list) else tests
+
+    for test in test_list:
+        tags = test.tags or []
+        question_revisions = test.question_revisions or []
+        states = test.states or []
+        districts = test.districts or []
+
+        random_tag_public: list[TagRandomPublic] | None = None
+        if test.random_tag_count:
+            random_tag_public = build_random_tag_public(session, test.random_tag_count)
+
+        # calculate total questions
+        total_questions = 0
+        if test.random_questions and test.no_of_random_questions:
+            total_questions = test.no_of_random_questions
+        else:
+            total_questions = len(question_revisions)
+
+        if test.random_tag_count:
+            total_questions += sum(
+                tag_rule.get("count", 0) for tag_rule in test.random_tag_count
+            )
+
+        # build TestPublic object
+        test_public = TestPublic(
+            **test.model_dump(),
+            tags=tags,
+            question_revisions=question_revisions,
+            states=states,
+            districts=districts,
+            total_questions=total_questions,
+            random_tag_counts=random_tag_public,
+        )
+        result.append(test_public)
+
+    return result
 
 
 def validate_test_time_config(
@@ -185,6 +235,7 @@ def create_test(
         exclude={"tag_ids", "question_revision_ids", "state_ids", "district_ids"}
     )
     test_data["created_by_id"] = current_user.id
+    test_data["organization_id"] = current_user.organization_id
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
         import uuid
@@ -327,9 +378,16 @@ def get_test(
     is_active: bool | None = None,
     is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[TestPublic]:
-    query = select(Test).join(User).where(Test.created_by_id == User.id)
-    query = query.where(User.organization_id == current_user.organization_id)
-    empty_result = cast(Page[TestPublic], paginate([], params))
+    query = (
+        select(Test)
+        .options(
+            selectinload(Test.tags),  # type: ignore[arg-type]
+            selectinload(Test.question_revisions),  # type: ignore[arg-type]
+            selectinload(Test.states),  # type: ignore[arg-type]
+            selectinload(Test.districts),  # type: ignore[arg-type]
+        )
+        .where(Test.organization_id == current_user.organization_id)
+    )
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
@@ -337,9 +395,9 @@ def get_test(
     )
     query = sorting_with_default.apply_to_query(query, TestSortConfig)
 
-    # Apply filters only if they're provided
     query = query.where(Test.is_deleted == is_deleted)
 
+    # apply filters only if they're provided
     if is_active is not None:
         query = query.where(Test.is_active == is_active)
 
@@ -410,84 +468,47 @@ def get_test(
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))
+
     if tag_ids:
-        tag_query = select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids))
-        test_ids_with_tags = session.exec(tag_query).all()
-        if test_ids_with_tags:
-            query = query.where(col(Test.id).in_(test_ids_with_tags))
-        else:
-            return empty_result
+        tag_subquery = (
+            select(TestTag.test_id).where(col(TestTag.tag_id).in_(tag_ids)).distinct()
+        )
+        query = query.where(col(Test.id).in_(tag_subquery))
+
     if tag_type_ids:
-        tag_type_query = (
+        tag_subquery = (
             select(TestTag.test_id)
             .join(Tag)
-            .where(Tag.id == TestTag.tag_id)
             .where(col(Tag.tag_type_id).in_(tag_type_ids))
+            .distinct()
         )
-        test_ids_with_tag_types = session.exec(tag_type_query).all()
-        if test_ids_with_tag_types:
-            query = query.where(col(Test.id).in_(test_ids_with_tag_types))
-        else:
-            return empty_result
+        query = query.where(col(Test.id).in_(tag_subquery))
 
     if state_ids:
-        state_subquery = select(TestState.test_id).where(
-            col(TestState.state_id).in_(state_ids)
+        state_subquery = (
+            select(TestState.test_id)
+            .where(col(TestState.state_id).in_(state_ids))
+            .distinct()
         )
-        test_ids_with_states = session.exec(state_subquery).all()
-        if test_ids_with_states:
-            query = query.where(col(Test.id).in_(test_ids_with_states))
-        else:
-            return empty_result
+        query = query.where(col(Test.id).in_(state_subquery))
 
     if district_ids:
-        district_subquery = select(TestDistrict.test_id).where(
-            col(TestDistrict.district_id).in_(district_ids)
+        district_subquery = (
+            select(TestDistrict.test_id)
+            .where(col(TestDistrict.district_id).in_(district_ids))
+            .distinct()
         )
-        test_ids_with_districts = session.exec(district_subquery).all()
-        if test_ids_with_districts:
-            query = query.where(col(Test.id).in_(test_ids_with_districts))
-        else:
-            return empty_result
+        query = query.where(col(Test.id).in_(district_subquery))
 
-    # Execute query and get all questions
-    tests = session.exec(query).all()
+    # let's get the tests with custom transformer
+    tests: Page[TestPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_tests_to_public(session, items),
+    )
 
-    test_public = []
-
-    for test in tests:
-        tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-        tags = session.exec(tags_query).all()
-
-        question_revision_query = (
-            select(QuestionRevision)
-            .join(TestQuestion)
-            .where(TestQuestion.test_id == test.id)
-        )
-        question_revisions = session.exec(question_revision_query).all()
-
-        state_query = select(State).join(TestState).where(TestState.test_id == test.id)
-        states = session.exec(state_query).all()
-        districts_query = (
-            select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
-        )
-        districts = session.exec(districts_query).all()
-        random_tag_public: list[TagRandomPublic] | None = None
-        if test.random_tag_count:
-            random_tag_public = build_random_tag_public(session, test.random_tag_count)
-
-        test_public.append(
-            TestPublic(
-                **test.model_dump(),
-                tags=tags,
-                question_revisions=question_revisions,
-                states=states,
-                districts=districts,
-                random_tag_counts=random_tag_public,
-            )
-        )
-
-    return cast(Page[TestPublic], paginate(test_public, params))
+    return tests
 
 
 @router.get(
@@ -912,6 +933,7 @@ def clone_test(
     test_data = original.model_dump(exclude={"id", "created_date", "modified_date"})
     test_data["name"] = f"Copy of {original.name}"
     test_data["created_by_id"] = current_user.id
+    test_data["organization_id"] = current_user.organization_id
     if not original.is_template:
         import uuid
 

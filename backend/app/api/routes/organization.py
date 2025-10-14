@@ -5,6 +5,7 @@ from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, not_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
     Message,
@@ -100,59 +101,49 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    user_state_ids = session.exec(
-        select(UserState.state_id).where(UserState.user_id == current_user.id)
-    ).all()
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
 
-    question_query = (
-        select(func.count(func.distinct(Question.id)))
-        .select_from(Question)
-        .where(
-            not_(Question.is_deleted),
-            Question.organization_id == organization_id,
-        )
+    questions_subquery = select(func.count(func.distinct(Question.id))).where(
+        not_(Question.is_deleted), Question.organization_id == organization_id
     )
 
     if user_state_ids:
-        question_query = question_query.join(QuestionLocation).where(
+        questions_subquery = questions_subquery.join(QuestionLocation).where(
             col(QuestionLocation.state_id).in_(user_state_ids)
         )
-    total_questions = session.exec(question_query).one()
 
-    user_query = (
-        select(func.count(func.distinct(User.id)))
-        .select_from(User)
-        .where(
-            User.organization_id == organization_id,
-            not_(User.is_deleted),
-        )
+    users_subquery = select(func.count(func.distinct(User.id))).where(
+        User.organization_id == organization_id, not_(User.is_deleted)
     )
-
     if user_state_ids:
-        user_query = user_query.join(UserState).where(
+        users_subquery = users_subquery.join(UserState).where(
             col(UserState.state_id).in_(user_state_ids)
         )
 
-    total_users = session.exec(user_query).one()
-
-    test_query = (
-        select(func.count(func.distinct(Test.id)))
-        .select_from(Test)
-        .join(User)
-        .where(Test.created_by_id == User.id)
-        .where(
-            User.organization_id == organization_id,
-            not_(Test.is_deleted),
-            not_(Test.is_template),
-        )
+    tests_subquery = select(func.count(func.distinct(Test.id))).where(
+        Test.organization_id == organization_id,
+        not_(Test.is_deleted),
+        not_(Test.is_template),
     )
-
     if user_state_ids:
-        test_query = test_query.join(TestState).where(
+        tests_subquery = tests_subquery.join(TestState).where(
             col(TestState.state_id).in_(user_state_ids)
         )
 
-    total_tests = session.exec(test_query).one()
+    query = select(
+        questions_subquery.scalar_subquery().label("total_questions"),
+        users_subquery.scalar_subquery().label("total_users"),
+        tests_subquery.scalar_subquery().label("total_tests"),
+    )
+    result = session.exec(query).one()
+
+    total_questions, total_users, total_tests = cast(tuple[int, int, int], result)
     return AggregatedData(
         total_questions=total_questions,
         total_users=total_users,
