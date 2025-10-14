@@ -160,7 +160,6 @@ def build_question_response(
         created_date=question.created_date,
         modified_date=question.modified_date,
         is_active=question.is_active,
-        is_deleted=question.is_deleted,
         # Current revision data
         question_text=revision.question_text,
         instructions=revision.instructions,
@@ -356,7 +355,6 @@ class RevisionDetailDict(TypedDict):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool
     question_text: str
     instructions: str | None
     question_type: str
@@ -437,7 +435,6 @@ def get_questions(
     tag_type_ids: list[int] = Query(None),  # Support multiple tag types
     created_by_id: int | None = None,
     is_active: bool | None = None,
-    is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[QuestionPublic]:
     """
     Get all questions with optional filtering and sorting.
@@ -461,8 +458,6 @@ def get_questions(
         "modified_date", SortOrder.DESC
     )
     query = sorting_with_default.apply_to_query(query, QuestionSortConfig)
-
-    query = query.where(Question.is_deleted == is_deleted)
 
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
@@ -717,7 +712,7 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
 def update_question(
     question_id: int,
     session: SessionDep,
-    updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
+    updated_data: QuestionUpdate = Body(...),  # is_active
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
@@ -904,7 +899,6 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         created_date=revision.created_date,
         modified_date=revision.modified_date,
         is_active=revision.is_active,
-        is_deleted=revision.is_deleted,
         question_text=revision.question_text,
         instructions=revision.instructions,
         question_type=revision.question_type,

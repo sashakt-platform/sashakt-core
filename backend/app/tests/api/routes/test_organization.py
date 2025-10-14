@@ -513,7 +513,6 @@ def test_get_aggregated_data_for_organization(
             created_by_id=user_id,
             organization_id=org_id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -533,7 +532,7 @@ def test_get_aggregated_data_for_organization(
         q.last_revision_id = q_rev.id
         db.add(q)
         questions.append(q)
-    questions[0].is_deleted = True
+
     db.add(questions[0])
     test = Test(
         name="Sample Test",
@@ -591,6 +590,6 @@ def test_get_aggregated_data_for_organization(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["total_questions"] == 4
+    assert data["total_questions"] == 5
     assert data["total_users"] == 2
     assert data["total_tests"] == 1

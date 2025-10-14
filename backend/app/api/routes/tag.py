@@ -69,7 +69,6 @@ def check_linked_question_or_test(session: SessionDep, tag_id: int) -> bool:
                 and_(
                     QuestionTag.tag_id == tag_id,
                     QuestionTag.question_id == Question.id,
-                    not_(Question.is_deleted),
                 )
             )
         )

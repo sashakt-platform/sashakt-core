@@ -984,7 +984,6 @@ class DataSyncService:
             "marking_scheme": revision.marking_scheme,
             "solution": revision.solution,
             "media": revision.media,
-            "is_deleted": revision.is_deleted,
             "created_date": (
                 revision.created_date.isoformat() if revision.created_date else None
             ),
