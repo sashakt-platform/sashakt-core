@@ -1,9 +1,10 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.core.roles import get_valid_roles
 from app.models import (
     Message,
     Role,
@@ -25,14 +26,32 @@ router = APIRouter(
     response_model=RolesPublic,
     dependencies=[Depends(permission_dependency("read_role"))],
 )
-def read_roles(session: SessionDep, skip: int = 0, limit: int = 150) -> Any:
+def read_roles(
+    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 150
+) -> Any:
     """
-    Retrieve roles.
+    Retrieve roles based on current user's role hierarchy.
     """
+    # get available role names based on current user's role
+    available_roles = get_valid_roles(current_user.role.name)
 
-    count_statement = select(func.count()).select_from(Role)
+    if not available_roles:
+        # if user has no available roles, return empty result
+        return RolesPublic(data=[], count=0)
+
+    count_statement = (
+        select(func.count())
+        .select_from(Role)
+        .where(col(Role.name).in_(available_roles))
+    )
     count = session.exec(count_statement).one()
-    statement = select(Role).offset(skip).limit(limit)
+
+    statement = (
+        select(Role)
+        .where(col(Role.name).in_(available_roles))
+        .offset(skip)
+        .limit(limit)
+    )
     roles = session.exec(statement).all()
 
     role_public = []
