@@ -101,14 +101,16 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    user_state_ids = []
+    user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
 
     questions_subquery = select(func.count(func.distinct(Question.id))).where(
         not_(Question.is_deleted), Question.organization_id == organization_id

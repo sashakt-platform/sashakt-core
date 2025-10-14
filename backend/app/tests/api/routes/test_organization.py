@@ -613,6 +613,10 @@ def test_aggregated_data_for_state_admin(
     get_user_superadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -625,8 +629,6 @@ def test_aggregated_data_for_state_admin(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    user_data = get_current_user_data(client, get_user_superadmin_token)
-    org_id = user_data["organization_id"]
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role is not None
 
@@ -637,7 +639,7 @@ def test_aggregated_data_for_state_admin(
         "phone": random_lower_string(),
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
-        "organization_id": org_id,
+        "organization_id": new_organization.id,
         "state_ids": [state_x.id],
     }
     client.post(
@@ -647,13 +649,13 @@ def test_aggregated_data_for_state_admin(
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
-    user_state_x = create_random_user(db, org_id)
+    user_state_x = create_random_user(db, new_organization.id)
     db.add(user_state_x)
     db.commit()
     db.refresh(user_state_x)
     db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
 
-    user_state_y = create_random_user(db, org_id)
+    user_state_y = create_random_user(db, new_organization.id)
     db.add(user_state_y)
     db.commit()
     db.refresh(user_state_y)
@@ -664,7 +666,9 @@ def test_aggregated_data_for_state_admin(
     questions = []
     for _ in range(4):
         q = Question(
-            created_by_id=user_state_x.id, organization_id=org_id, is_deleted=False
+            created_by_id=user_state_x.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -674,7 +678,9 @@ def test_aggregated_data_for_state_admin(
 
     for _ in range(2):
         q = Question(
-            created_by_id=user_state_y.id, organization_id=org_id, is_deleted=False
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -689,7 +695,7 @@ def test_aggregated_data_for_state_admin(
         t = Test(
             name=f"Test X {i + 1}",
             created_by_id=user_state_x.id,
-            organization_id=org_id,
+            organization_id=new_organization.id,
             is_deleted=False,
             is_template=False,
         )
@@ -703,7 +709,7 @@ def test_aggregated_data_for_state_admin(
         t = Test(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
-            organization_id=org_id,
+            organization_id=new_organization.id,
             is_deleted=False,
             is_template=False,
         )
@@ -731,6 +737,10 @@ def test_aggregated_data_for_state_admin_distinct_check(
     get_user_superadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -743,8 +753,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    user_data = get_current_user_data(client, get_user_superadmin_token)
-    org_id = user_data["organization_id"]
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role is not None
 
@@ -755,8 +763,8 @@ def test_aggregated_data_for_state_admin_distinct_check(
         "phone": random_lower_string(),
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
-        "organization_id": org_id,
-        "state_ids": [state_x.id, state_y.id],
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
     }
     client.post(
         f"{settings.API_V1_STR}/users/",
@@ -765,61 +773,139 @@ def test_aggregated_data_for_state_admin_distinct_check(
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
-    user_state_x = create_random_user(db, org_id)
+    user_state_x = create_random_user(db, new_organization.id)
     db.add(user_state_x)
     db.commit()
     db.refresh(user_state_x)
     db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
 
-    user_state_y = create_random_user(db, org_id)
+    user_state_y = create_random_user(db, new_organization.id)
     db.add(user_state_y)
     db.commit()
     db.refresh(user_state_y)
     db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+
+    another_user = create_random_user(db, new_organization.id)
+    db.add(another_user)
+    db.commit()
+    db.refresh(another_user)
+
     db.commit()
 
-    q1 = Question(
-        created_by_id=user_state_x.id, organization_id=org_id, is_deleted=False
-    )
-    db.add(q1)
-    db.flush()
-    db.refresh(q1)
-    db.add(QuestionLocation(question_id=q1.id, state_id=state_x.id))
-    db.add(QuestionLocation(question_id=q1.id, state_id=state_y.id))
+    questions = []
+    for _ in range(4):
+        q = Question(
+            created_by_id=user_state_x.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        db.add(QuestionLocation(question_id=q.id, state_id=state_x.id))
+        questions.append(q)
 
-    q2 = Question(
-        created_by_id=user_state_y.id, organization_id=org_id, is_deleted=False
-    )
-    db.add(q2)
-    db.flush()
-    db.refresh(q2)
-    db.add(QuestionLocation(question_id=q2.id, state_id=state_y.id))
+    for _ in range(2):
+        q = Question(
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        db.add(QuestionLocation(question_id=q.id, state_id=state_y.id))
+        db.add(QuestionLocation(question_id=q.id, state_id=state_x.id))
+        questions.append(q)
+
     db.commit()
 
-    t1 = Test(
-        name=random_lower_string(),
-        created_by_id=user_state_x.id,
-        organization_id=org_id,
-        is_deleted=False,
-        is_template=False,
-    )
-    db.add(t1)
-    db.flush()
-    db.refresh(t1)
-    db.add(TestState(test_id=t1.id, state_id=state_x.id))
-    db.add(TestState(test_id=t1.id, state_id=state_y.id))
+    for _ in range(2):
+        q = Question(
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        db.add(QuestionLocation(question_id=q.id, state_id=state_y.id))
+        questions.append(q)
 
-    t2 = Test(
-        name=random_lower_string(),
-        created_by_id=user_state_y.id,
-        organization_id=org_id,
-        is_deleted=False,
-        is_template=False,
-    )
-    db.add(t2)
-    db.flush()
-    db.refresh(t2)
-    db.add(TestState(test_id=t2.id, state_id=state_y.id))
+    db.commit()
+
+    for _ in range(2):
+        q = Question(
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(q)
+        db.flush()
+        db.refresh(q)
+        questions.append(q)
+
+    db.commit()
+
+    tests = []
+    for i in range(3):
+        t = Test(
+            name=f"Test X {i + 1}",
+            created_by_id=user_state_x.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_x.id))
+        tests.append(t)
+
+    for i in range(2):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_y.id))
+        db.add(TestState(test_id=t.id, state_id=state_x.id))
+        tests.append(t)
+
+    for i in range(3):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_y.id))
+        tests.append(t)
+
+    db.commit()
+
+    for i in range(2):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        tests.append(t)
+
     db.commit()
 
     response = client.get(
@@ -828,7 +914,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
     )
     assert response.status_code == 200
     data = response.json()
-
-    assert data["total_questions"] == 2
-    assert data["total_tests"] == 2
+    assert data["total_questions"] == 8
+    assert data["total_tests"] == 7
     assert data["total_users"] == 3
