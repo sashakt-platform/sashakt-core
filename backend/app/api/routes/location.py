@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, select
 
-from app.api.deps import Pagination, SessionDep, permission_dependency
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
     BlockCreate,
@@ -23,6 +24,7 @@ from app.models import (
     StatePublic,
     StateUpdate,
 )
+from app.models.user import UserState
 
 router = APIRouter(prefix="/location", tags=["Location"])
 
@@ -136,6 +138,7 @@ def create_state(
 )
 def get_state(
     session: SessionDep,
+    current_user: CurrentUser,
     name: str | None = None,
     params: Pagination = Depends(),
     is_active: bool | None = None,
@@ -153,6 +156,18 @@ def get_state(
         query = query.where(
             func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
         )
+
+    user_state_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
+
+    if user_state_ids:
+        query = query.where(col(State.id).in_(user_state_ids))
 
     states = session.exec(query).all()
 

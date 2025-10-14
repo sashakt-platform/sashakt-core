@@ -1,12 +1,16 @@
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
+from app.models.role import Role
+from app.tests.utils.organization import create_random_organization
+from app.tests.utils.user import authentication_token_from_email
 from app.tests.utils.utils import assert_paginated_response
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import random_email, random_lower_string
 
 
 def test_create_country(
@@ -1070,3 +1074,71 @@ def test_get_is_active_country(
     data = response.json()
     assert len(data["items"]) >= 10
     assert all(item["is_active"] is True for item in data["items"])
+
+
+def test_get_state_admin_state_list(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_2)
+    db.commit()
+    db.refresh(state_2)
+
+    state_3 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_3)
+    db.commit()
+    db.refresh(state_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) > 1
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_3.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == state_3.name
+    assert data["items"][0]["id"] == state_3.id
