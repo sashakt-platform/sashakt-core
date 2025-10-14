@@ -942,7 +942,6 @@ class DataSyncService:
             "description": tag_type.description,
             "organization_id": tag_type.organization_id,
             "is_active": tag_type.is_active,
-            "is_deleted": tag_type.is_deleted,
             "created_by_id": tag_type.created_by_id,
             "created_date": (
                 tag_type.created_date.isoformat() if tag_type.created_date else None

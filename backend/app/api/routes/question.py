@@ -133,7 +133,6 @@ def build_question_response(
                 created_date=tag.created_date,
                 modified_date=tag.modified_date,
                 is_active=tag.is_active,
-                is_deleted=tag.is_deleted,
             )
             for tag in tags
         ]
@@ -1007,7 +1006,6 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
             created_date=tag.created_date,
             modified_date=tag.modified_date,
             is_active=tag.is_active,
-            is_deleted=tag.is_deleted,
         )
         for tag in tags
         if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
