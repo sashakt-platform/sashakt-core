@@ -8,6 +8,7 @@ from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
+from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
     BatchAnswerSubmitRequest,
@@ -148,9 +149,15 @@ def get_overall_tests_analytics(
             User.organization_id == current_user.organization_id,
         )
     )
-    user_state_ids = session.exec(
-        select(UserState.state_id).where(UserState.user_id == current_user.id)
-    ).all()
+
+    user_state_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
 
     if user_state_ids:
         state_query = select(TestState.test_id).where(
@@ -626,9 +633,14 @@ def get_test_summary(
         None, description="End date in YYYY-MM-DD format"
     ),
 ) -> TestStatusSummary:
-    user_state_ids = session.exec(
-        select(UserState.state_id).where(UserState.user_id == current_user.id)
-    ).all()
+    user_state_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
 
     query = (
         select(CandidateTest, Test)
