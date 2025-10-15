@@ -157,7 +157,6 @@ def get_state(
             func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
         )
 
-    user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
@@ -168,8 +167,8 @@ def get_state(
             ).all()
         )
 
-    if user_state_ids:
-        query = query.where(col(State.id).in_(user_state_ids))
+        if user_state_ids:
+            query = query.where(col(State.id).in_(user_state_ids))
 
     states = session.exec(query).all()
 
@@ -244,6 +243,7 @@ def create_district(
 )
 def get_district(
     session: SessionDep,
+    current_user: CurrentUser,
     name: str | None = None,
     is_active: bool | None = None,
     params: Pagination = Depends(),
@@ -263,6 +263,18 @@ def get_district(
 
     if name:
         query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
+
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
+        if user_state_ids:
+            query = query.where(col(District.state_id).in_(user_state_ids))
 
     # Apply apgination
     results = session.exec(query).all()
