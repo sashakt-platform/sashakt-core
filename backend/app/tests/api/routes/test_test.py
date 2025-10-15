@@ -2691,10 +2691,11 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=True,  # Deleted test
         link=random_lower_string(),
     )
     db.add(test)
+    db.commit()
+    db.delete(test)
     db.commit()
 
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
@@ -2774,10 +2775,11 @@ def test_public_timer_test_not_found_or_not_active(
             end_time=fake_current_time + timedelta(hours=2),
             time_limit=60,
             is_active=True,
-            is_deleted=True,  # Marked as deleted
             created_by_id=user.id,
         )
         db.add(deleted_test)
+        db.commit()
+        db.delete(deleted_test)
         db.commit()
         response = client.get(
             f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
@@ -3022,11 +3024,12 @@ def test_clone_soft_deleted_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
-        is_deleted=True,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
+    db.delete(test)
+    db.commit()
     response = client.post(
         f"{settings.API_V1_STR}/test/{test.id}/clone",
         headers=get_user_superadmin_token,

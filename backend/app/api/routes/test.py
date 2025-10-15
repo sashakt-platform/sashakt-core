@@ -157,7 +157,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     No authentication required.
     """
     test = session.exec(select(Test).where(Test.link == test_uuid)).first()
-    if not test or test.is_deleted or test.is_active is False:
+    if not test or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
@@ -376,7 +376,6 @@ def get_test(
     state_ids: list[int] | None = Query(None),
     district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
-    is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[TestPublic]:
     query = (
         select(Test)
@@ -394,8 +393,6 @@ def get_test(
         "modified_date", SortOrder.DESC
     )
     query = sorting_with_default.apply_to_query(query, TestSortConfig)
-
-    query = query.where(Test.is_deleted == is_deleted)
 
     # apply filters only if they're provided
     if is_active is not None:
@@ -518,7 +515,7 @@ def get_test(
 )
 def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
     test = session.get(Test, test_id)
-    if not test or test.is_deleted is True:
+    if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
@@ -563,7 +560,7 @@ def update_test(
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
-    if not test or test.is_deleted is True:
+    if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
     if (
         test_update.start_time is not None
@@ -773,7 +770,7 @@ def visibility_test(
     is_active: bool = Query(False, description="Set visibility of Test"),
 ) -> TestPublic:
     test = session.get(Test, test_id)
-    if not test or test.is_deleted is True:
+    if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
 
     test.is_active = is_active
@@ -903,7 +900,7 @@ def bulk_delete_question(
 @router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)
 def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> TimeLeft:
     test = session.exec(select(Test).where(Test.link == test_uuid)).first()
-    if not test or test.is_deleted or test.is_active is False:
+    if not test or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     if test.start_time is None:
         return TimeLeft(time_left=0)
@@ -927,7 +924,7 @@ def clone_test(
 ) -> TestPublic:
     # Fetch the original test
     original = session.get(Test, test_id)
-    if not original or original.is_deleted:
+    if not original:
         raise HTTPException(status_code=404, detail="Test not found")
 
     test_data = original.model_dump(exclude={"id", "created_date", "modified_date"})
