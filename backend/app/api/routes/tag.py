@@ -2,7 +2,7 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import and_, col, exists, func, not_, or_, select
+from sqlmodel import and_, col, exists, func, or_, select
 
 from app.api.deps import (
     CurrentUser,
@@ -79,7 +79,6 @@ def check_linked_question_or_test(session: SessionDep, tag_id: int) -> bool:
                 and_(
                     TestTag.tag_id == tag_id,
                     TestTag.test_id == Test.id,
-                    not_(Test.is_deleted),
                 )
             )
         )

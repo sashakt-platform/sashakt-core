@@ -109,7 +109,6 @@ def get_organization_aggregated_stats_for_current_user(
         select(func.count())
         .where(
             Test.organization_id == organization_id,
-            not_(Test.is_deleted),
             not_(Test.is_template),
         )
         .scalar_subquery()

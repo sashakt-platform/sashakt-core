@@ -592,4 +592,4 @@ def test_get_aggregated_data_for_organization(
     data = response.json()
     assert data["total_questions"] == 5
     assert data["total_users"] == 2
-    assert data["total_tests"] == 1
+    assert data["total_tests"] == 2

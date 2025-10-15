@@ -2311,13 +2311,8 @@ def test_delete_tag_after_associated_test_is_deleted(
 
     test = db.get(Test, test_id)
     assert test is not None
-    test.is_deleted = True
-    db.add(test)
+    db.delete(test)
     db.commit()
-    deleted_test = db.get(Test, test_id)
-    db.refresh(deleted_test)
-    assert deleted_test is not None
-    assert deleted_test.is_deleted is True
 
     del_tag_response = client.delete(
         f"{settings.API_V1_STR}/tag/{tag.id}",
