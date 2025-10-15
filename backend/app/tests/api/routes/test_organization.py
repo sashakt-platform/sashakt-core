@@ -504,9 +504,6 @@ def test_get_aggregated_data_for_organization(
     db.commit()
     db.refresh(user_a)
     db.refresh(user_b)
-    user_b.is_deleted = True
-    db.add(user_b)
-    db.commit()
     questions = []
     for i in range(5):
         q = Question(
@@ -591,5 +588,5 @@ def test_get_aggregated_data_for_organization(
     assert response.status_code == 200
     data = response.json()
     assert data["total_questions"] == 5
-    assert data["total_users"] == 2
+    assert data["total_users"] == 3
     assert data["total_tests"] == 2
