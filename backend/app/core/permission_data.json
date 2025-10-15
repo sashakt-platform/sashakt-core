@@ -328,7 +328,7 @@
     "description": "Update Existing Question Location",
     "super_admin": true,
     "system_admin": true,
-    "state_admin": true,
+    "state_admin": false,
     "test_admin": false,
     "candidate": false
   },
@@ -463,7 +463,7 @@
     "description": "Create New Test Template",
     "super_admin": true,
     "system_admin": true,
-    "state_admin": false,
+    "state_admin": true,
     "test_admin": false,
     "candidate": false
   },
@@ -472,7 +472,7 @@
     "description": "Update Existing Test Template",
     "super_admin": true,
     "system_admin": true,
-    "state_admin": false,
+    "state_admin": true,
     "test_admin": false,
     "candidate": false
   },
@@ -481,7 +481,7 @@
     "description": "Delete Existing Test Template",
     "super_admin": true,
     "system_admin": true,
-    "state_admin": false,
+    "state_admin": true,
     "test_admin": false,
     "candidate": false
   },
