@@ -220,7 +220,7 @@ def start_test_for_candidate(
     """
     # Find the test by ID
     test = session.get(Test, start_test_request.test_id)
-    if not test or test.is_deleted or (test.is_active is False):
+    if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
     question_revision_ids = [
         q.question_revision_id

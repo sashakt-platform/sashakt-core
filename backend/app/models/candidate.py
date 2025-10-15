@@ -224,7 +224,6 @@ class TestCandidatePublic(SQLModel):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool
 
     # Safe questions (no answers)
     question_revisions: list["QuestionCandidatePublic"]

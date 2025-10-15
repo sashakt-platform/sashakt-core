@@ -2342,6 +2342,23 @@ def test_visibility_test_with_random_tag_count(
     assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
 
 
+def test_visibility_test_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_test_id = -9999
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
 def test_delete_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2691,10 +2708,11 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=True,  # Deleted test
         link=random_lower_string(),
     )
     db.add(test)
+    db.commit()
+    db.delete(test)
     db.commit()
 
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
@@ -2774,10 +2792,11 @@ def test_public_timer_test_not_found_or_not_active(
             end_time=fake_current_time + timedelta(hours=2),
             time_limit=60,
             is_active=True,
-            is_deleted=True,  # Marked as deleted
             created_by_id=user.id,
         )
         db.add(deleted_test)
+        db.commit()
+        db.delete(deleted_test)
         db.commit()
         response = client.get(
             f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
@@ -3022,11 +3041,12 @@ def test_clone_soft_deleted_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
-        is_deleted=True,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
+    db.delete(test)
+    db.commit()
     response = client.post(
         f"{settings.API_V1_STR}/test/{test.id}/clone",
         headers=get_user_superadmin_token,
@@ -3852,6 +3872,48 @@ def test_update_test_time_limit_exceeds_duration(
     assert response.status_code == 400
     data = response.json()
     assert "Time limit cannot be more than the duration" in data["detail"]
+
+
+def test_update_test_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_test_id = -9999
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 5,
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
+def test_get_test_by_id_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test fetching a test that does not exist should return 404."""
+
+    non_existent_test_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
 
 
 def test_update_test_end_time_before_start_time(

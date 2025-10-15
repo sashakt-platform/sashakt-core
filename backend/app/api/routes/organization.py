@@ -99,17 +99,16 @@ def get_organization_aggregated_stats_for_current_user(
 
     query = select(
         select(func.count())
-        .where(not_(Question.is_deleted), Question.organization_id == organization_id)
+        .where(Question.organization_id == organization_id)
         .scalar_subquery()
         .label("total_questions"),
         select(func.count())
-        .where(User.organization_id == organization_id, not_(User.is_deleted))
+        .where(User.organization_id == organization_id)
         .scalar_subquery()
         .label("total_users"),
         select(func.count())
         .where(
             Test.organization_id == organization_id,
-            not_(Test.is_deleted),
             not_(Test.is_template),
         )
         .scalar_subquery()
