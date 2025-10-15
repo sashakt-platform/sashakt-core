@@ -128,11 +128,8 @@ def get_organization_aggregated_stats_for_current_user(
         User.organization_id == organization_id, not_(User.is_deleted)
     )
     if user_state_ids:
-        users_subquery = users_subquery.outerjoin(UserState).where(
-            or_(
-                col(UserState.state_id).is_(None),
-                col(UserState.state_id).in_(user_state_ids),
-            )
+        users_subquery = users_subquery.join(UserState).where(
+            col(UserState.state_id).in_(user_state_ids)
         )
 
     tests_subquery = select(func.count(func.distinct(Test.id))).where(

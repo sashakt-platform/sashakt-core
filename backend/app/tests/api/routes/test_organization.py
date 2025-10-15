@@ -916,4 +916,4 @@ def test_aggregated_data_for_state_admin_distinct_check(
     data = response.json()
     assert data["total_questions"] == 8
     assert data["total_tests"] == 7
-    assert data["total_users"] == 3
+    assert data["total_users"] == 2
