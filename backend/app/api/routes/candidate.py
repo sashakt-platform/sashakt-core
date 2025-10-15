@@ -8,6 +8,7 @@ from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
+from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
     BatchAnswerSubmitRequest,
@@ -42,7 +43,7 @@ from app.models.candidate import (
 from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
-from app.models.user import User
+from app.models.user import User, UserState
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -148,6 +149,27 @@ def get_overall_tests_analytics(
             User.organization_id == current_user.organization_id,
         )
     )
+
+    user_state_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
+
+    if user_state_ids:
+        state_query = select(TestState.test_id).where(
+            col(TestState.state_id).in_(user_state_ids)
+        )
+        test_ids_for_user_state = session.exec(state_query).all()
+        if not test_ids_for_user_state:
+            return empty_result
+        query = query.where(col(CandidateTest.test_id).in_(test_ids_for_user_state))
+
     if tag_type_ids:
         tag_type_query = (
             select(TestTag.test_id)
@@ -613,6 +635,17 @@ def get_test_summary(
         None, description="End date in YYYY-MM-DD format"
     ),
 ) -> TestStatusSummary:
+    user_state_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
+
     query = (
         select(CandidateTest, Test)
         .join(Test)
@@ -621,6 +654,11 @@ def get_test_summary(
         .where(Test.created_by_id == User.id)
         .where(User.organization_id == current_user.organization_id)
     )
+    if user_state_ids:
+        state_test_ids = select(TestState.test_id).where(
+            col(TestState.state_id).in_(user_state_ids)
+        )
+        query = query.where(col(Test.id).in_(state_test_ids))
 
     if start_date and Test.start_time is not None:
         query = query.where(Test.start_time >= start_date)
