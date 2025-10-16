@@ -635,15 +635,18 @@ def get_test_summary(
         None, description="End date in YYYY-MM-DD format"
     ),
 ) -> TestStatusSummary:
-    user_state_ids: list[int] = []
+    """
+    Get Summary of Tests: total submitted, not submitted (active/inactive)
+    """
+    current_user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = list(
-            session.exec(
-                select(UserState.state_id).where(UserState.user_id == current_user.id)
-            ).all()
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
 
     query = (
@@ -654,9 +657,9 @@ def get_test_summary(
         .where(Test.created_by_id == User.id)
         .where(User.organization_id == current_user.organization_id)
     )
-    if user_state_ids:
+    if current_user_state_ids:
         state_test_ids = select(TestState.test_id).where(
-            col(TestState.state_id).in_(user_state_ids)
+            col(TestState.state_id).in_(current_user_state_ids)
         )
         query = query.where(col(Test.id).in_(state_test_ids))
 
