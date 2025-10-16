@@ -43,7 +43,7 @@ from app.models.candidate import (
 from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
-from app.models.user import User, UserState
+from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -150,20 +150,20 @@ def get_overall_tests_analytics(
         )
     )
 
-    user_state_ids: list[int] = []
+    current_user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = list(
-            session.exec(
-                select(UserState.state_id).where(UserState.user_id == current_user.id)
-            ).all()
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
 
-    if user_state_ids:
+    if current_user_state_ids:
         state_query = select(TestState.test_id).where(
-            col(TestState.state_id).in_(user_state_ids)
+            col(TestState.state_id).in_(current_user_state_ids)
         )
         test_ids_for_user_state = session.exec(state_query).all()
         if not test_ids_for_user_state:
