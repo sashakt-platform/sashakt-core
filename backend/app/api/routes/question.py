@@ -23,6 +23,7 @@ from typing_extensions import TypedDict
 
 from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     QuestionSortConfig,
     SortingParams,
@@ -456,6 +457,21 @@ def get_questions(
         )
         .where(Question.organization_id == current_user.organization_id)
     )
+
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            query = query.outerjoin(QuestionLocation).where(
+                or_(
+                    col(QuestionLocation.state_id).is_(None),
+                    col(QuestionLocation.state_id).in_(current_user_state_ids),
+                )
+            )
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
