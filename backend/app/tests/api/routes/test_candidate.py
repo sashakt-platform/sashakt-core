@@ -2099,6 +2099,7 @@ def test_overall_avg_score_two_tests(
         tag_ids=[tag.id],
         state_ids=[state.id],
         district_ids=[district.id],
+        organization_id=org_id,
     )
     db.add(test)
     db.commit()
@@ -2242,6 +2243,7 @@ def test_overall_avg_score_two_tests(
         marking_scheme={"correct": 4, "wrong": -2, "skipped": 0},
         tag_ids=[tag.id],
         district_ids=[district.id],
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
@@ -2360,6 +2362,7 @@ def test_overall_avg_score_two_tests(
         marking_scheme={"correct": 3, "wrong": -1, "skipped": 0},
         state_ids=[state.id],
         district_ids=[district.id],
+        organization_id=org_id,
     )
     db.add(test3)
     db.commit()
@@ -2473,6 +2476,7 @@ def test_overall_avg_score_two_tests(
         is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 2, "wrong": 0, "skipped": 0},
+        organization_id=org_id,
     )
     db.add(test4)
     db.commit()
@@ -2580,6 +2584,7 @@ def test_overall_avg_time_two_tests(
         is_deleted=False,
         state_ids=[state.id],
         district_ids=[district.id],
+        organization_id=user_data["organization_id"],
     )
     db.add(test1)
     db.commit()
@@ -2603,6 +2608,7 @@ def test_overall_avg_time_two_tests(
         is_active=True,
         is_deleted=False,
         state_ids=[state.id],
+        organization_id=user_data["organization_id"],
     )
     db.add(test2)
     db.commit()
@@ -2731,6 +2737,7 @@ def test_overall_avg_score_state_admin_location_restricted(
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
         state_ids=[state_x.id],
+        organization_id=org_id,
     )
     db.add(test1)
     db.commit()
@@ -2749,6 +2756,7 @@ def test_overall_avg_score_state_admin_location_restricted(
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
         state_ids=[state_y.id],
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
@@ -2905,6 +2913,7 @@ def test_overall_avg_time_state_admin_location_restricted(
         is_active=True,
         is_deleted=False,
         state_ids=[state_x.id],
+        organization_id=org_id,
     )
     db.add(test1)
     db.commit()
@@ -2924,6 +2933,7 @@ def test_overall_avg_time_state_admin_location_restricted(
         is_active=True,
         is_deleted=False,
         state_ids=[state_y.id],
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
