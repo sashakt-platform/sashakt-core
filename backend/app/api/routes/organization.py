@@ -101,35 +101,35 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    user_state_ids: list[int] = []
+    current_user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = list(
-            session.exec(
-                select(UserState.state_id).where(UserState.user_id == current_user.id)
-            ).all()
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
 
     questions_subquery = select(func.count(func.distinct(Question.id))).where(
         not_(Question.is_deleted), Question.organization_id == organization_id
     )
 
-    if user_state_ids:
+    if current_user_state_ids:
         questions_subquery = questions_subquery.outerjoin(QuestionLocation).where(
             or_(
                 col(QuestionLocation.state_id).is_(None),
-                col(QuestionLocation.state_id).in_(user_state_ids),
+                col(QuestionLocation.state_id).in_(current_user_state_ids),
             )
         )
 
     users_subquery = select(func.count(func.distinct(User.id))).where(
         User.organization_id == organization_id, not_(User.is_deleted)
     )
-    if user_state_ids:
+    if current_user_state_ids:
         users_subquery = users_subquery.join(UserState).where(
-            col(UserState.state_id).in_(user_state_ids)
+            col(UserState.state_id).in_(current_user_state_ids)
         )
 
     tests_subquery = select(func.count(func.distinct(Test.id))).where(
@@ -137,11 +137,11 @@ def get_organization_aggregated_stats_for_current_user(
         not_(Test.is_deleted),
         not_(Test.is_template),
     )
-    if user_state_ids:
+    if current_user_state_ids:
         tests_subquery = tests_subquery.outerjoin(TestState).where(
             or_(
                 col(TestState.state_id).is_(None),
-                col(TestState.state_id).in_(user_state_ids),
+                col(TestState.state_id).in_(current_user_state_ids),
             )
         )
 

@@ -61,6 +61,19 @@ def read_users(
 
     statement = select(User).where(User.organization_id == current_user_organization_id)
 
+    # apply role-based filtering
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            statement = statement.join(UserState).where(
+                col(UserState.state_id).in_(current_user_state_ids),
+            )
+
     # apply search filter if search parameter is provided
     if search:
         search_filter = or_(
