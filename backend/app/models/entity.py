@@ -25,6 +25,7 @@ class EntityTypeBase(SQLModel):
 
 
 class EntityType(EntityTypeBase, table=True):
+    __tablename__ = "entity_type"
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
@@ -73,7 +74,7 @@ class Entity(EntityBase, table=True):
     )
     entity_type_id: int | None = Field(
         default=None,
-        foreign_key="entitytype.id",
+        foreign_key="entity_type.id",
         description="ID of the Entity Type to which the Entity should belong",
     )
     entity_type: "EntityType" = Relationship(back_populates="entities")
