@@ -169,6 +169,14 @@ class BlockUpdate(BlockBase):
     pass
 
 
+class BlockBulkUploadResponse(SQLModel):
+    message: str
+    uploaded_blocks: int
+    success_blocks: int
+    failed_blocks: int
+    error_log: str | None
+
+
 # -----Models for Block-----
 
 # -----Rebuild models to resolve circular imports-----
