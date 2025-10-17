@@ -1417,3 +1417,29 @@ def test_import_blocks_invalid_encoding(
     assert response.status_code == 400
     data = response.json()
     assert data["detail"] == "Invalid file encoding"
+
+
+def test_import_blocks_csv_missing_headers(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    csv_content = """block_name,district_name
+Block A,Anantapur
+Block B,Anantapur
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+        tmp_file.write(csv_content.encode("utf-8"))
+        tmp_file_path = tmp_file.name
+
+    with open(tmp_file_path, "rb") as file:
+        response = client.post(
+            f"{settings.API_V1_STR}/location/block/import",
+            files={"file": ("blocks_missing_headers.csv", file, "text/csv")},
+            headers=get_user_superadmin_token,
+        )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "CSV must contain headers" in data["detail"]
+    assert "state_name" in data["detail"]
