@@ -3769,7 +3769,6 @@ def test_create_same_question_different_organizations(
         ],
         "correct_answer": [2],
         "is_mandatory": True,
-        "tag_ids": [],
     }
 
     response_org2 = client.post(

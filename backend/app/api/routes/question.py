@@ -1299,7 +1299,7 @@ async def upload_questions_csv(
                     )
                     continue
                 if is_duplicate_question(
-                    session, question_text, tag_ids, current_user.organization_id
+                    session, question_text, tag_ids, organization_id
                 ):
                     raise ValueError("Questions Already Exist")
 
