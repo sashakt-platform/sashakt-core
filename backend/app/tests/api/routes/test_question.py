@@ -3725,6 +3725,67 @@ def test_create_question_same_text_different_tags_should_pass(
     assert data["tags"][0]["id"] == different_tag.id
 
 
+def test_create_same_question_different_organizations(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
+    user1 = create_random_user(db=db)
+    org1_id = user1.organization_id
+    headers_org1 = authentication_token_from_email(
+        client=client, email=user1.email, db=db
+    )
+
+    user2 = create_random_user(db=db)
+    org2_id = user2.organization_id
+    headers_org2 = authentication_token_from_email(
+        client=client, email=user2.email, db=db
+    )
+
+    question_data_org1 = {
+        "organization_id": org1_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "A snake"},
+            {"id": 2, "key": "B", "value": "A language"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+    }
+
+    response_org1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data_org1,
+        headers=headers_org1,
+    )
+    assert response_org1.status_code == 200
+    data_org1 = response_org1.json()
+    assert data_org1["question_text"] == "What is Python?"
+
+    question_data_org2 = {
+        "organization_id": org2_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "A snake"},
+            {"id": 2, "key": "B", "value": "A language"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+    }
+
+    response_org2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data_org2,
+        headers=headers_org2,
+    )
+    assert response_org2.status_code == 200
+    data_org2 = response_org2.json()
+    assert data_org2["question_text"] == "What is Python?"
+    assert data_org2["organization_id"] == org2_id
+    assert data_org1["id"] != data_org2["id"]
+
+
 def test_create_question_same_text_no_tags_vs_with_tags_should_pass(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
