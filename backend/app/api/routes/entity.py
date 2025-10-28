@@ -1,6 +1,9 @@
+import base64
+import csv
+from io import StringIO
 from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi_pagination import Page, paginate
 from sqlmodel import and_, func, select
 
@@ -21,9 +24,12 @@ from app.models import (
     EntityTypeUpdate,
     EntityUpdate,
     Message,
+    Organization,
 )
 from app.models.candidate import CandidateTestProfile
+from app.models.entity import EntityBulkUploadResponse
 from app.models.location import Block, District, State
+from app.models.user import User
 
 router_entitytype = APIRouter(
     prefix="/entitytype",
@@ -352,3 +358,173 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
     session.commit()
 
     return Message(message="Entity deleted successfully")
+
+
+@router_entity.post(
+    "/import",
+    response_model=EntityBulkUploadResponse,
+)
+async def import_entities_from_csv(
+    session: SessionDep,
+    current_user: CurrentUser,
+    file: UploadFile = File(
+        ...,
+        description="CSV file with entity_name, entity_type_name, block_name, district_name, state_name",
+    ),
+) -> EntityBulkUploadResponse:
+    user_id = current_user.id
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    organization_id = current_user.organization_id
+    organization = session.get(Organization, organization_id)
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are allowed")
+
+    try:
+        content = (await file.read()).decode("utf-8")
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="CSV file is empty")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file encoding")
+
+    csv_reader = csv.DictReader(StringIO(content))
+    required_headers = {
+        "entity_name",
+        "entity_type_name",
+        "block_name",
+        "district_name",
+        "state_name",
+    }
+    if not required_headers.issubset(csv_reader.fieldnames or []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV must contain headers: {', '.join(required_headers)}",
+        )
+
+    success_count = failed_count = 0
+    failed_entity_details = []
+    failed_references = set()
+    duplicate_entities = set()
+
+    for row_num, row in enumerate(csv_reader, start=1):
+        try:
+            entity_name = (row.get("entity_name") or "").strip()
+            entity_type_name = (row.get("entity_type_name") or "").strip()
+            block_name = (row.get("block_name") or "").strip()
+            district_name = (row.get("district_name") or "").strip()
+            state_name = (row.get("state_name") or "").strip()
+
+            if not all(
+                [entity_name, entity_type_name, block_name, district_name, state_name]
+            ):
+                raise ValueError("Missing required value(s)")
+
+            state = session.exec(select(State).where(State.name == state_name)).first()
+            if not state:
+                failed_references.add(state_name)
+                raise ValueError(f"State '{state_name}' not found")
+
+            district = session.exec(
+                select(District)
+                .where(func.lower(District.name) == district_name.lower())
+                .where(District.state_id == state.id)
+            ).first()
+            if not district:
+                failed_references.add(f"{district_name} in {state_name}")
+                raise ValueError(f"District '{district_name}' not found")
+
+            block = session.exec(
+                select(Block)
+                .where(func.lower(Block.name) == block_name.lower())
+                .where(Block.district_id == district.id)
+            ).first()
+
+            if not block:
+                failed_references.add(f"{block_name} in {district_name}")
+                raise ValueError(f"Block '{block_name}' not found")
+
+            entity_type = session.exec(
+                select(EntityType).where(EntityType.name == entity_type_name)
+            ).first()
+            if not entity_type:
+                failed_references.add(entity_type_name)
+                raise ValueError(f"Entity type '{entity_type_name}' not found")
+
+            existing = session.exec(
+                select(Entity)
+                .where(Entity.name == entity_name)
+                .where(Entity.block_id == block.id)
+            ).first()
+            if existing:
+                duplicate_entities.add(entity_name)
+                raise ValueError("Entity already exists")
+
+            new_entity = Entity(
+                name=entity_name,
+                created_by_id=user_id,
+                entity_type_id=entity_type.id,
+                organization_id=organization_id,
+                state_id=state.id,
+                district_id=district.id,
+                block_id=block.id,
+                is_active=True,
+            )
+            session.add(new_entity)
+            session.commit()
+            session.refresh(new_entity)
+            success_count += 1
+
+        except Exception as e:
+            failed_count += 1
+            failed_entity_details.append(
+                {
+                    "row_number": row_num,
+                    "entity_name": entity_name,
+                    "entity_type_name": entity_type_name,
+                    "block_name": block_name,
+                    "district_name": district_name,
+                    "state_name": state_name,
+                    "error": str(e),
+                }
+            )
+
+    error_log = None
+    if failed_entity_details:
+        csv_buffer = StringIO()
+        writer = csv.DictWriter(
+            csv_buffer,
+            fieldnames=[
+                "row_number",
+                "entity_name",
+                "entity_type_name",
+                "block_name",
+                "district_name",
+                "state_name",
+                "error",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(failed_entity_details)
+        csv_bytes = csv_buffer.getvalue().encode("utf-8")
+        error_log = (
+            f"data:text/csv;base64,{base64.b64encode(csv_bytes).decode('utf-8')}"
+        )
+
+    message = f"Bulk upload complete. Created {success_count} entities successfully. Failed to create {failed_count} entities."
+    if failed_references:
+        message += f" Missing references: {', '.join(failed_references)}."
+    if duplicate_entities:
+        message += f" Duplicates skipped: {', '.join(duplicate_entities)}."
+
+    return EntityBulkUploadResponse(
+        message=message,
+        uploaded_entities=success_count + failed_count,
+        success_entities=success_count,
+        failed_entities=failed_count,
+        error_log=error_log,
+    )
