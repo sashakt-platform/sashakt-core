@@ -2,9 +2,10 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import col, func, not_, select
+from sqlmodel import col, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
     Message,
@@ -16,6 +17,9 @@ from app.models import (
     Test,
     User,
 )
+from app.models.question import QuestionLocation
+from app.models.test import TestState
+from app.models.user import UserState
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
 
@@ -97,24 +101,54 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    query = select(
-        select(func.count())
-        .where(Question.organization_id == organization_id)
-        .scalar_subquery()
-        .label("total_questions"),
-        select(func.count())
-        .where(User.organization_id == organization_id)
-        .scalar_subquery()
-        .label("total_users"),
-        select(func.count())
-        .where(
-            Test.organization_id == organization_id,
-            not_(Test.is_template),
+    current_user_state_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
-        .scalar_subquery()
-        .label("total_tests"),
+
+    questions_subquery = select(func.count(func.distinct(Question.id))).where(
+        Question.organization_id == organization_id
     )
 
+    if current_user_state_ids:
+        questions_subquery = questions_subquery.outerjoin(QuestionLocation).where(
+            or_(
+                col(QuestionLocation.state_id).is_(None),
+                col(QuestionLocation.state_id).in_(current_user_state_ids),
+            )
+        )
+
+    users_subquery = select(func.count(func.distinct(User.id))).where(
+        User.organization_id == organization_id
+    )
+    if current_user_state_ids:
+        users_subquery = users_subquery.join(UserState).where(
+            col(UserState.state_id).in_(current_user_state_ids)
+        )
+
+    tests_subquery = select(func.count(func.distinct(Test.id))).where(
+        Test.organization_id == organization_id,
+        not_(Test.is_template),
+    )
+    if current_user_state_ids:
+        tests_subquery = tests_subquery.outerjoin(TestState).where(
+            or_(
+                col(TestState.state_id).is_(None),
+                col(TestState.state_id).in_(current_user_state_ids),
+            )
+        )
+
+    query = select(
+        questions_subquery.scalar_subquery().label("total_questions"),
+        users_subquery.scalar_subquery().label("total_users"),
+        tests_subquery.scalar_subquery().label("total_tests"),
+    )
     result = session.exec(query).one()
 
     total_questions, total_users, total_tests = cast(tuple[int, int, int], result)

@@ -20,13 +20,20 @@ from app.models.question import (
     QuestionTag,
     QuestionType,
 )
+from app.models.role import Role
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
+from app.models.user import UserState
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 
 # from app.models.user import User
-from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
+from app.tests.utils.utils import random_email, random_lower_string
 
 
 def test_create_question(
@@ -3716,6 +3723,67 @@ def test_create_question_same_text_different_tags_should_pass(
     assert data["tags"][0]["id"] == different_tag.id
 
 
+def test_create_same_question_different_organizations(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
+    user1 = create_random_user(db=db)
+    org1_id = user1.organization_id
+    headers_org1 = authentication_token_from_email(
+        client=client, email=user1.email, db=db
+    )
+
+    user2 = create_random_user(db=db)
+    org2_id = user2.organization_id
+    headers_org2 = authentication_token_from_email(
+        client=client, email=user2.email, db=db
+    )
+
+    question_data_org1 = {
+        "organization_id": org1_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "A snake"},
+            {"id": 2, "key": "B", "value": "A language"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+    }
+
+    response_org1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data_org1,
+        headers=headers_org1,
+    )
+    assert response_org1.status_code == 200
+    data_org1 = response_org1.json()
+    assert data_org1["question_text"] == "What is Python?"
+
+    question_data_org2 = {
+        "organization_id": org2_id,
+        "question_text": "What is Python?",
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "A snake"},
+            {"id": 2, "key": "B", "value": "A language"},
+        ],
+        "correct_answer": [2],
+        "is_mandatory": True,
+    }
+
+    response_org2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data_org2,
+        headers=headers_org2,
+    )
+    assert response_org2.status_code == 200
+    data_org2 = response_org2.json()
+    assert data_org2["question_text"] == "What is Python?"
+    assert data_org2["organization_id"] == org2_id
+    assert data_org1["id"] != data_org2["id"]
+
+
 def test_create_question_same_text_no_tags_vs_with_tags_should_pass(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
@@ -4602,6 +4670,213 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Pu
 
         with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
+
+
+def test_question_list_state_user(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_state_x = create_random_user(db, new_organization.id)
+    db.add(user_state_x)
+    db.commit()
+    db.refresh(user_state_x)
+    db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
+
+    user_state_y = create_random_user(db, new_organization.id)
+    db.add(user_state_y)
+    db.commit()
+    db.refresh(user_state_y)
+    db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+
+    another_user = create_random_user(db, new_organization.id)
+    db.add(another_user)
+    db.commit()
+    db.refresh(another_user)
+
+    db.commit()
+
+    for _ in range(4):
+        question = Question(
+            created_by_id=user_state_x.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user_state_x.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            is_mandatory=True,
+            correct_answer=[1],
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+        )
+        db.add(revision)
+        db.flush()
+        question.last_revision_id = revision.id
+        db.add(QuestionLocation(question_id=question.id, state_id=state_x.id))
+
+    for _ in range(2):
+        question = Question(
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user_state_y.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            is_mandatory=True,
+            correct_answer=[1],
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+        )
+        db.add(revision)
+        db.flush()
+        question.last_revision_id = revision.id
+        db.add(QuestionLocation(question_id=question.id, state_id=state_y.id))
+        db.add(QuestionLocation(question_id=question.id, state_id=state_x.id))
+
+    db.commit()
+
+    for _ in range(2):
+        question = Question(
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user_state_y.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            is_mandatory=True,
+            correct_answer=[1],
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+        )
+        db.add(revision)
+        db.flush()
+        question.last_revision_id = revision.id
+        db.add(QuestionLocation(question_id=question.id, state_id=state_y.id))
+
+    db.commit()
+
+    for _ in range(2):
+        question = Question(
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+        )
+        db.add(question)
+        db.flush()
+        db.refresh(question)
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user_state_x.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            is_mandatory=True,
+            correct_answer=[1],
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+        )
+        db.add(revision)
+        db.flush()
+        question.last_revision_id = revision.id
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["total"] == 8
+    assert len(data["items"]) == 8
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert test_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": test_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["total"] == 8
+    assert len(data["items"]) == 8
 
 
 def test_update_question_not_found(

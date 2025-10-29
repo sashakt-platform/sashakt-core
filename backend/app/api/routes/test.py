@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, exists, func, select
+from sqlmodel import col, exists, func, or_, select
 
 from app.api.deps import (
     CurrentUser,
@@ -14,6 +14,7 @@ from app.api.deps import (
     permission_dependency,
 )
 from app.api.routes.utils import get_current_time
+from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     SortingParams,
     SortOrder,
@@ -387,6 +388,21 @@ def get_test(
         )
         .where(Test.organization_id == current_user.organization_id)
     )
+
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            query = query.outerjoin(TestState).where(
+                or_(
+                    col(TestState.state_id).is_(None),
+                    col(TestState.state_id).in_(current_user_state_ids),
+                )
+            )
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(

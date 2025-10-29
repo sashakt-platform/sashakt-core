@@ -13,7 +13,7 @@ from app.api.deps import (
     permission_dependency,
 )
 from app.core.config import settings
-from app.core.roles import state_admin, test_admin
+from app.core.roles import can_assign_role, state_admin, test_admin
 from app.core.security import get_password_hash, verify_password
 from app.core.sorting import (
     SortingParams,
@@ -61,6 +61,19 @@ def read_users(
 
     statement = select(User).where(User.organization_id == current_user_organization_id)
 
+    # apply role-based filtering
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            statement = statement.join(UserState).where(
+                col(UserState.state_id).in_(current_user_state_ids),
+            )
+
     # apply search filter if search parameter is provided
     if search:
         search_filter = or_(
@@ -87,11 +100,19 @@ def read_users(
 
 
 def validate_user_return_role(
-    session: SessionDep, user_in: UserCreate | UserUpdate
+    session: SessionDep, user_in: UserCreate | UserUpdate, current_user: User
 ) -> Role:
     role = session.get(Role, user_in.role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Invalid Role")
+
+    # validate role hierarchy - check if current user can assign this role
+    if not can_assign_role(current_user.role.name, role.name):
+        raise HTTPException(
+            status_code=403,
+            detail=f"You do not have permission to assign the role '{role.label}'. "
+            f"Your role '{current_user.role.label}' can only assign roles at or below your level.",
+        )
 
     if role and (role.name == state_admin.name or role.name == test_admin.name):
         if user_in.state_ids and len(user_in.state_ids) > 1:
@@ -105,7 +126,7 @@ def validate_user_return_role(
         ):
             raise HTTPException(
                 status_code=400,
-                detail="A State Admin must be assigned exactly one state.",
+                detail="A user with 'State Admin' role must be associated with a state.",
             )
 
         # Validate state exists
@@ -146,7 +167,9 @@ def create_user(
     if not user_in.organization_id:
         user_in.organization_id = current_user.organization_id
 
-    role = validate_user_return_role(session=session, user_in=user_in)
+    role = validate_user_return_role(
+        session=session, user_in=user_in, current_user=current_user
+    )
 
     user = crud.create_user(
         session=session,
@@ -355,7 +378,9 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    role = validate_user_return_role(session=session, user_in=user_in)
+    role = validate_user_return_role(
+        session=session, user_in=user_in, current_user=current_user
+    )
 
     if role.name == state_admin.name and user_in.state_ids:
         db_user.states = list(
