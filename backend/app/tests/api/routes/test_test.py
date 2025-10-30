@@ -2969,6 +2969,269 @@ def test_clone_test(
     assert district.id in district_ids
 
 
+def test_bulk_delete_state_admin_cannot_delete_general_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create 2 general tests (no states)
+    test_payload_1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [],
+    }
+    test_payload_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [],
+    }
+
+    create_response_one = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_one.status_code == 200
+    created_test_id_one = create_response_one.json()["id"]
+
+    create_response_two = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_two.status_code == 200
+    created_test_id_two = create_response_two.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[created_test_id_one, created_test_id_two],
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_y.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create 2 tests in state_x
+    test_payload_1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_x.id],
+    }
+    test_payload_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_x.id],
+    }
+
+    create_response_one = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_one.status_code == 200
+    created_test_id_one = create_response_one.json()["id"]
+
+    create_response_two = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_two.status_code == 200
+    created_test_id_two = create_response_two.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[created_test_id_one, created_test_id_two],
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_delete_tests_same_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create 2 tests in same state
+    test_payload_1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state.id],
+    }
+    test_payload_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state.id],
+    }
+
+    create_response_one = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_one.status_code == 200
+    created_test_id_one = create_response_one.json()["id"]
+
+    create_response_two = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_two.status_code == 200
+    created_test_id_two = create_response_two.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[created_test_id_one, created_test_id_two],
+        headers=token_headers,
+    )
+    data = delete_resp.json()
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
+
+
 def test_clone_test_with_random_tag(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
