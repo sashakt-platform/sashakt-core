@@ -30,6 +30,7 @@ from app.models.location import Block, District
 from app.models.question import QuestionType
 from app.models.role import Role
 from app.models.test import TestDistrict
+from app.models.user import UserState
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
     create_random_organization,
@@ -614,6 +615,7 @@ def test_get_tests(
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
     db.add(test)
     db.commit()
@@ -710,6 +712,7 @@ def test_get_tests_with_tag_random_count(
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
+        organization_id=user.organization_id,
         random_tag_count=[
             {"tag_id": tag_a.id, "count": 3},
             {"tag_id": tag_b.id, "count": 2},
@@ -757,6 +760,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -764,6 +768,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -771,6 +776,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -817,6 +823,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -825,6 +832,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -833,6 +841,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -877,6 +886,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 25, 10, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -885,6 +895,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -893,6 +904,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -902,6 +914,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -977,6 +990,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 25, 10, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -985,6 +999,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -993,6 +1008,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -1002,6 +1018,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1073,6 +1090,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 24, 10, 30),
         end_time=datetime(2025, 4, 25, 11, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1082,6 +1100,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 26, 10, 30),
         end_time=datetime(2025, 4, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1091,6 +1110,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 14, 30),
         end_time=datetime(2025, 4, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -1101,6 +1121,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 19, 10),
         end_time=datetime(2025, 4, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1134,6 +1155,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=30,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1142,6 +1164,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=40,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1150,6 +1173,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=45,
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -1158,6 +1182,7 @@ def test_get_test_by_filter_time_limit(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1199,6 +1224,7 @@ def test_get_test_by_filter_completion_message(
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_lower_string() + random_text_1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -1209,6 +1235,7 @@ def test_get_test_by_filter_completion_message(
         completion_message=random_lower_string()
         + random_text_1
         + random_lower_string(),
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1217,6 +1244,7 @@ def test_get_test_by_filter_completion_message(
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_text_2,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1264,6 +1292,7 @@ def test_get_test_by_filter_start_instructions(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_lower_string() + random_text_1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -1274,6 +1303,7 @@ def test_get_test_by_filter_start_instructions(
         start_instructions=random_lower_string()
         + random_text_1
         + random_lower_string(),
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1282,6 +1312,7 @@ def test_get_test_by_filter_start_instructions(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_text_2,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1325,6 +1356,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1332,6 +1364,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=2,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1339,6 +1372,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=3,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -1387,6 +1421,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1394,6 +1429,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1402,6 +1438,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
@@ -1409,6 +1446,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3, test_4])
@@ -1442,6 +1480,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1449,6 +1488,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1457,6 +1497,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
@@ -1464,6 +1505,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3, test_4])
@@ -1498,18 +1540,21 @@ def test_get_test_by_filter_no_random_questions(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=20,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=10,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=45,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1551,6 +1596,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1558,6 +1604,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=2,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1565,6 +1612,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=0,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1600,6 +1648,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1607,6 +1656,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1615,6 +1665,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1649,18 +1700,21 @@ def test_get_test_by_filter_created_by(
         created_by_id=user_1.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user_1.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user_2.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1692,6 +1746,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1699,6 +1754,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1706,6 +1762,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1826,6 +1883,7 @@ def test_get_test_random_tag_count(
             {"tag_id": tag1.id, "count": 3},
             {"tag_id": tag2.id, "count": 2},
         ],
+        organization_id=org_id,
     )
     db.add(test)
     db.commit()
@@ -1887,6 +1945,7 @@ def test_get_test_by_id(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
 
     db.add(test)
@@ -2003,6 +2062,7 @@ def test_get_test_by_id(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
 
     db.add(test_2)
@@ -3041,6 +3101,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -3048,6 +3109,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -3055,6 +3117,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -3131,36 +3194,44 @@ def test_get_tests_by_tags_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_5 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4, test_5])
     db.commit()
     db.refresh(test_1)
     db.refresh(test_2)
     db.refresh(test_3)
+    db.refresh(test_4)
+    db.refresh(test_5)
+
     test_tag_link_1 = TestTag(test_id=test_1.id, tag_id=tag_1.id)
     test_tag_link_2 = TestTag(test_id=test_2.id, tag_id=tag_2.id)
     test_tag_link_3 = TestTag(test_id=test_3.id, tag_id=tag_3.id)
@@ -3206,6 +3277,15 @@ def test_get_tests_by_tags_filter(
     items = data["items"]
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_3.id, test_5.id}
+    assert_paginated_response(response, expected_total=2)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}&tag_ids={tag_2.id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert_paginated_response(response, expected_total=4)
+
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
@@ -3272,36 +3352,42 @@ def test_get_tests_by_tags_type_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_5 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_6 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4, test_5, test_6])
     db.commit()
@@ -3354,6 +3440,7 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 5
+    assert data["total"] == 5
     assert test_6.id not in (test["id"] for test in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
@@ -3362,6 +3449,24 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert data["items"] == []
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 0
+    assert data["total"] == 0
 
 
 def test_get_tests_by_state_filter(
@@ -3386,18 +3491,21 @@ def test_get_tests_by_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -3436,6 +3544,7 @@ def test_get_tests_by_state_filter(
     data = response.json()
     items = data["items"]
     assert len(items) == 3
+    assert data["total"] == 3
     assert {test["id"] for test in items} == {test_1.id, test_2.id, test_3.id}
 
 
@@ -3477,6 +3586,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add(test_1)
     db.commit()
@@ -3493,6 +3603,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add(test_2)
     db.commit()
@@ -3522,6 +3633,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -3529,6 +3641,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -3536,6 +3649,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -3623,6 +3737,7 @@ def test_get_all_tests_includes_active_and_inactive(
         is_active=True,
         is_deleted=False,
         created_by_id=user_id,
+        organization_id=user_data["organization_id"],
     )
     db.add(active_test)
     inactive_test = Test(
@@ -3630,6 +3745,7 @@ def test_get_all_tests_includes_active_and_inactive(
         is_active=False,
         is_deleted=False,
         created_by_id=user_id,
+        organization_id=user_data["organization_id"],
     )
     db.add(inactive_test)
     db.commit()
@@ -4612,6 +4728,7 @@ def test_get_tests_by_district_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 3
+    assert data["total"] == 3
     assert any(test_data_1["id"] == item["id"] for item in data["items"])
     assert any(test_data_2["id"] == item["id"] for item in data["items"])
     assert any(test_data_3["id"] == item["id"] for item in data["items"])
@@ -5592,6 +5709,228 @@ def test_candidate_profile_higher_location_entity(
     expected_ids = {entity_A.id, entity_C.id, entity_D.id}
     assert expected_ids.issubset(returned_ids)
     assert entity_B.id not in returned_ids
+
+
+def test_create_test_with_organization_id(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        headers=get_user_superadmin_token,
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "time_limit": 30,
+            "marks": 100,
+            "start_instructions": random_lower_string(),
+            "link": random_lower_string(),
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created_by_id"] is not None
+    assert data["organization_id"] is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    assert data["organization_id"] == user_data["organization_id"]
+    assert data["created_by_id"] == user_data["id"]
+
+
+def test_clone_test_with_organization_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+        is_mandatory=True,
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 100,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test_id}/clone",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created_by_id"] is not None
+    assert data["organization_id"] is not None
+    assert data["id"] != test_id
+    assert data["name"] == f"Copy of {test_payload['name']}"
+    assert data["description"] == test_payload["description"]
+    assert data["time_limit"] == test_payload["time_limit"]
+    assert data["marks"] == test_payload["marks"]
+    assert data["start_instructions"] == test_payload["start_instructions"]
+    assert data["link"] != test_payload["link"]
+    assert data["is_active"] == test_payload["is_active"]
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    assert data["organization_id"] == user_data["organization_id"]
+    assert data["created_by_id"] == user_data["id"]
+
+
+def test_test_list_state_user(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_state_x = create_random_user(db, new_organization.id)
+    db.add(user_state_x)
+    db.commit()
+    db.refresh(user_state_x)
+    db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
+
+    user_state_y = create_random_user(db, new_organization.id)
+    db.add(user_state_y)
+    db.commit()
+    db.refresh(user_state_y)
+    db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+
+    another_user = create_random_user(db, new_organization.id)
+    db.add(another_user)
+    db.commit()
+    db.refresh(another_user)
+
+    db.commit()
+
+    for i in range(3):
+        t = Test(
+            name=f"Test X {i + 1}",
+            created_by_id=user_state_x.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_x.id))
+
+    for i in range(2):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_y.id))
+        db.add(TestState(test_id=t.id, state_id=state_x.id))
+
+    for i in range(3):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_y.id))
+
+    db.commit()
+
+    for i in range(2):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_deleted=False,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["total"] == 7
+    assert len(data["items"]) == 7
 
 
 def test_state_admin_cannot_delete_general_test(

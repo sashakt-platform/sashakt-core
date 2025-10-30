@@ -3,7 +3,7 @@ import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -14,12 +14,16 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
-from sqlmodel import col, not_, or_, select
+from sqlalchemy.orm import selectinload
+from sqlmodel import and_, col, not_, or_, select
 from typing_extensions import TypedDict
 
+from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     QuestionSortConfig,
     SortingParams,
@@ -118,7 +122,6 @@ def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType 
 
 
 def build_question_response(
-    session: SessionDep,
     question: Question,
     revision: QuestionRevision,
     locations: list[QuestionLocation],
@@ -158,11 +161,7 @@ def build_question_response(
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type=(
-                    get_tag_type_by_id(session, tag_type_id=tag.tag_type_id)
-                    if tag.tag_type_id
-                    else None
-                ),
+                tag_type=tag.tag_type,
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
@@ -252,12 +251,17 @@ def prepare_for_db(
 
 
 def is_duplicate_question(
-    session: SessionDep, question_text: str, tag_ids: list[int] | None
+    session: SessionDep,
+    question_text: str,
+    tag_ids: list[int] | None,
+    organization_id: int,
 ) -> bool:
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
-        .where(not_(Question.is_deleted))
+        .where(
+            and_(not_(Question.is_deleted), Question.organization_id == organization_id)
+        )
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
@@ -288,7 +292,10 @@ def create_question(
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
     if is_duplicate_question(
-        session, question_create.question_text, question_create.tag_ids
+        session,
+        question_create.question_text,
+        question_create.tag_ids,
+        current_user.organization_id,
     ):
         raise HTTPException(
             status_code=400,
@@ -381,7 +388,7 @@ def create_question(
     session.commit()
     # No need to set modified_date manually, as SQLModel will handle it via onupdate
 
-    return build_question_response(session, question, revision, locations, tags)
+    return build_question_response(question, revision, locations, tags)
 
 
 # TypedDict classes with all required fields
@@ -430,6 +437,36 @@ class CandidateTestInfoDict(TypedDict):
     is_submitted: bool
 
 
+def transform_questions_to_public(
+    items: list[tuple[Question, QuestionRevision]] | Any,
+) -> list[QuestionPublic]:
+    """
+    Transform a list of (Question, QuestionRevision) tuples to QuestionPublic objects.
+    """
+    result: list[QuestionPublic] = []
+
+    # cast to proper type since fastapi-pagination might return Sequence[Any]
+    item_list = list(items) if not isinstance(items, list) else items
+
+    for item in item_list:
+        question, revision = item
+
+        # skip questions without a valid last_revision_id
+        if question.last_revision_id is None:
+            continue
+
+        locations = question.locations  # includes state/district/block
+        tags = question.tags  # includes tag_type too
+
+        # build the response using existing helper
+        question_data = build_question_response(
+            question, revision, list(locations), list(tags)
+        )
+        result.append(question_data)
+
+    return result
+
+
 @router.get("/", response_model=Page[QuestionPublic])
 def get_questions(
     session: SessionDep,
@@ -449,95 +486,34 @@ def get_questions(
     """
     Get all questions with optional filtering and sorting.
     """
-    # Start with a basic query
-    empty_result = cast(Page[QuestionPublic], paginate([], params))
-    query = select(Question).where(
-        Question.organization_id == current_user.organization_id
+    # fetch all related data including current revision
+    query = (
+        select(Question, QuestionRevision)
+        .join(QuestionRevision)
+        .where(Question.last_revision_id == QuestionRevision.id)
+        .options(
+            selectinload(Question.locations).selectinload(QuestionLocation.state),
+            selectinload(Question.locations).selectinload(QuestionLocation.district),
+            selectinload(Question.locations).selectinload(QuestionLocation.block),
+            selectinload(Question.tags).selectinload(Tag.tag_type),
+        )
+        .where(Question.organization_id == current_user.organization_id)
     )
 
-    # Join QuestionRevision table if needed for search or sorting by question_text
-    if question_text is not None or sorting.sort_by == "question_text":
-        query = query.join(
-            QuestionRevision,
-            Question.last_revision_id == QuestionRevision.id,  # type: ignore
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
         )
-
-        # apply search filter only if provided
-        if question_text:
-            query = query.where(
-                func.lower(QuestionRevision.question_text).contains(
-                    question_text.lower()
+        if current_user_state_ids:
+            query = query.outerjoin(QuestionLocation).where(
+                or_(
+                    col(QuestionLocation.state_id).is_(None),
+                    col(QuestionLocation.state_id).in_(current_user_state_ids),
                 )
             )
-
-    # Apply filters only if they're provided
-    if is_deleted is not None:
-        query = query.where(Question.is_deleted == is_deleted)
-
-    if is_active is not None:
-        query = query.where(Question.is_active == is_active)
-
-    # Handle tag-based filtering with multiple tags
-    if tag_ids:
-        tag_query = select(QuestionTag.question_id).where(
-            col(QuestionTag.tag_id).in_(tag_ids)
-        )
-        question_ids_with_tags = session.exec(tag_query).all()
-        if question_ids_with_tags:
-            query = query.where(col(Question.id).in_(question_ids_with_tags))
-        else:
-            return empty_result
-
-    if tag_type_ids:
-        tag_type_query = (
-            select(QuestionTag.question_id)
-            .join(Tag)
-            .where(Tag.id == QuestionTag.tag_id)
-            .where(col(Tag.tag_type_id).in_(tag_type_ids))
-        )
-        question_ids_with_tag_types = session.exec(tag_type_query).all()
-        if question_ids_with_tag_types:
-            query = query.where(col(Question.id).in_(question_ids_with_tag_types))
-        else:
-            return empty_result
-
-    # Handle creator-based filtering
-    if created_by_id is not None:
-        questions_by_creator: list[int] = []
-        all_questions = session.exec(query).all()
-
-        for q in all_questions:
-            if q.last_revision_id is not None:
-                revision = session.get(QuestionRevision, q.last_revision_id)
-                if revision is not None and revision.created_by_id == created_by_id:
-                    if q.id is not None:
-                        questions_by_creator.append(q.id)
-
-        if questions_by_creator:
-            query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
-        else:
-            return empty_result
-
-    # Handle location-based filtering with multiple locations
-    if any([state_ids, district_ids, block_ids]):
-        location_query = select(QuestionLocation.question_id)
-        location_filters = []
-
-        if state_ids:
-            location_filters.append(QuestionLocation.state_id.in_(state_ids))  # type: ignore
-        if district_ids:
-            location_filters.append(QuestionLocation.district_id.in_(district_ids))  # type: ignore
-        if block_ids:
-            location_filters.append(QuestionLocation.block_id.in_(block_ids))  # type: ignore
-
-        if location_filters:
-            # Use OR between different location types (any match is valid)
-            location_query = location_query.where(or_(*location_filters))
-            question_ids = session.exec(location_query).all()
-            if question_ids:  # Only apply filter if we found matching locations
-                query = query.where(Question.id.in_(question_ids))  # type: ignore
-            else:
-                return empty_result
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
@@ -545,36 +521,64 @@ def get_questions(
     )
     query = sorting_with_default.apply_to_query(query, QuestionSortConfig)
 
-    # Execute query and get all questions
-    questions = session.exec(query).all()
+    query = query.where(Question.is_deleted == is_deleted)
 
-    result: list[QuestionPublic] = []
-    for question in questions:
-        # Skip questions without a valid last_revision_id
-        if question.last_revision_id is None:
-            continue
+    if is_active is not None:
+        query = query.where(Question.is_active == is_active)
 
-        latest_revision = session.get(QuestionRevision, question.last_revision_id)
-        if latest_revision is None:
-            raise HTTPException(status_code=404, detail="Question revision not found")
-            continue
-
-        locations_query = select(QuestionLocation).where(
-            QuestionLocation.question_id == question.id
+    # used for search
+    if question_text is not None:
+        query = query.where(
+            func.lower(QuestionRevision.question_text).contains(question_text.lower())
         )
-        locations = session.exec(locations_query).all()
 
-        tags_query = (
-            select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
+    if created_by_id is not None:
+        query = query.where(QuestionRevision.created_by_id == created_by_id)
+
+    if tag_ids:
+        tag_subquery = (
+            select(QuestionTag.question_id)
+            .where(col(QuestionTag.tag_id).in_(tag_ids))
+            .distinct()
         )
-        tags = session.exec(tags_query).all()
-
-        question_data = build_question_response(
-            session, question, latest_revision, list(locations), list(tags)
+        query = query.where(col(Question.id).in_(tag_subquery))
+    if tag_type_ids:
+        tag_subquery = (
+            select(QuestionTag.question_id)
+            .join(Tag)
+            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+            .distinct()
         )
-        result.append(question_data)
+        query = query.where(col(Question.id).in_(tag_subquery))
 
-    return cast(Page[QuestionPublic], paginate(result, params))
+    # handle location-based filtering
+    if any([state_ids, district_ids, block_ids]):
+        location_filters = []
+
+        if state_ids:
+            location_filters.append(col(QuestionLocation.state_id).in_(state_ids))
+        if district_ids:
+            location_filters.append(col(QuestionLocation.district_id).in_(district_ids))
+        if block_ids:
+            location_filters.append(col(QuestionLocation.block_id).in_(block_ids))
+
+        if location_filters:
+            location_subquery = (
+                select(QuestionLocation.question_id)
+                .where(or_(*location_filters))
+                .distinct()
+            )
+            query = query.where(col(Question.id).in_(location_subquery))
+
+    # get the questions with pagination and transform to QuestionPublic
+    questions: Page[QuestionPublic] = paginate(  # type: ignore[type-var]
+        session,
+        query,
+        params,
+        transformer=lambda items: transform_questions_to_public(items),
+    )
+
+    return questions
 
 
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])
@@ -732,7 +736,7 @@ def bulk_delete_question(
             if revision:
                 failure_list.append(
                     build_question_response(
-                        session, question, revision, list(locations), tags_list
+                        question, revision, list(locations), tags_list
                     )
                 )
         else:
@@ -769,7 +773,7 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     tags = session.exec(tags_query).all()
 
     return build_question_response(
-        session, question, latest_revision, list(locations), list(tags)
+        question, latest_revision, list(locations), list(tags)
     )
 
 
@@ -811,7 +815,7 @@ def update_question(
     tags = session.exec(tags_query).all()
 
     return build_question_response(
-        session, question, latest_revision, list(locations), list(tags)
+        question, latest_revision, list(locations), list(tags)
     )
 
 
@@ -866,9 +870,7 @@ def create_question_revision(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(
-        session, question, new_revision, list(locations), list(tags)
-    )
+    return build_question_response(question, new_revision, list(locations), list(tags))
 
 
 @router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])
@@ -893,6 +895,9 @@ def get_question_revisions(
         if rev.id is not None and rev.created_date is not None:
             user = None
             user = session.get(User, rev.created_by_id)
+            user_public = (
+                crud.get_user_public(db_user=user, session=session) if user else None
+            )
             result.append(
                 QuestionRevisionInfo(
                     id=rev.id,
@@ -900,7 +905,7 @@ def get_question_revisions(
                     text=rev.question_text,
                     type=rev.question_type,
                     is_current=(rev.id == question.last_revision_id),
-                    created_by_id=user,
+                    created_by_id=user_public,
                 )
             )
 
@@ -1350,7 +1355,9 @@ async def upload_questions_csv(
                         }
                     )
                     continue
-                if is_duplicate_question(session, question_text, tag_ids):
+                if is_duplicate_question(
+                    session, question_text, tag_ids, organization_id
+                ):
                     raise ValueError("Questions Already Exist")
 
                 # Create QuestionCreate object

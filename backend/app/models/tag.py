@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
@@ -82,7 +83,7 @@ class Tag(TagBase, table=True):
     )
 
     is_deleted: bool = Field(default=False, nullable=False)
-    tag_type: "TagType" = Relationship(back_populates="tags")
+    tag_type: Mapped["TagType"] = Relationship(back_populates="tags")
     tests: list["Test"] = Relationship(back_populates="tags", link_model=TestTag)
     questions: list["Question"] = Relationship(
         back_populates="tags", link_model=QuestionTag

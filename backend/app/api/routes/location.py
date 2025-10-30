@@ -1,10 +1,11 @@
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, paginate
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
-from app.api.deps import Pagination, SessionDep, permission_dependency
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
     BlockCreate,
@@ -23,6 +24,7 @@ from app.models import (
     StatePublic,
     StateUpdate,
 )
+from app.models.user import UserState
 
 router = APIRouter(prefix="/location", tags=["Location"])
 
@@ -136,6 +138,7 @@ def create_state(
 )
 def get_state(
     session: SessionDep,
+    current_user: CurrentUser,
     name: str | None = None,
     params: Pagination = Depends(),
     is_active: bool | None = None,
@@ -153,6 +156,19 @@ def get_state(
         query = query.where(
             func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
         )
+
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
+
+        if user_state_ids:
+            query = query.where(col(State.id).in_(user_state_ids))
 
     states = session.exec(query).all()
 
@@ -227,10 +243,12 @@ def create_district(
 )
 def get_district(
     session: SessionDep,
+    current_user: CurrentUser,
     name: str | None = None,
     is_active: bool | None = None,
     params: Pagination = Depends(),
     state: int | None = None,
+    state_ids: list[int] | None = Query(None),
 ) -> Page[District]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
@@ -240,8 +258,23 @@ def get_district(
     if state is not None:
         query = query.where(District.state_id == state)
 
+    if state_ids is not None:
+        query = query.where(col(District.state_id).in_(state_ids))
+
     if name:
         query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
+
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        user_state_ids = list(
+            session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+        )
+        if user_state_ids:
+            query = query.where(col(District.state_id).in_(user_state_ids))
 
     # Apply apgination
     results = session.exec(query).all()

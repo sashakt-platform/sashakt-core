@@ -111,8 +111,14 @@ def get_table_record_counts(org_id: int, incremental: bool = True) -> dict[str, 
         return {}
 
 
-def export_organization_data(org_id: int, incremental: bool = True) -> None:
-    """Export data for a specific organization."""
+def export_organization_data(
+    org_id: int, incremental: bool = True
+) -> tuple[dict, dict]:
+    """Export data for a specific organization.
+
+    Returns:
+        tuple: (results, table_counts) where results is the sync results and table_counts is pre-sync data counts
+    """
     logger.info(
         f"Starting data export for organization {org_id} (incremental={incremental})"
     )
@@ -125,7 +131,7 @@ def export_organization_data(org_id: int, incremental: bool = True) -> None:
 
         if not results:
             logger.warning(f"No active providers found for organization {org_id}")
-            return
+            return {}, {}
 
         # Log results for each provider
         for provider_key, result in results.items():
@@ -186,6 +192,7 @@ def export_organization_data(org_id: int, incremental: bool = True) -> None:
                 )
 
         logger.info(f"Data export completed for organization {org_id}")
+        return results, table_counts
 
     except Exception as e:
         logger.error(f"Error during data export for organization {org_id}: {e}")
@@ -199,6 +206,22 @@ def export_all_organizations_data(incremental: bool = True) -> None:
     )
 
     try:
+        # First, get all organizations with providers
+        from sqlmodel import Session, select
+
+        from app.core.db import engine
+        from app.models.provider import OrganizationProvider
+
+        with Session(engine) as session:
+            org_providers = session.exec(
+                select(OrganizationProvider.organization_id).distinct()
+            ).all()
+
+        # Collect table counts for all organizations BEFORE sync
+        all_table_counts = {}
+        for org_id in org_providers:
+            all_table_counts[org_id] = get_table_record_counts(org_id, incremental)
+
         results = data_sync_service.sync_all_organizations_data(incremental)
 
         if not results:
@@ -212,8 +235,8 @@ def export_all_organizations_data(incremental: bool = True) -> None:
         for org_id, org_results in results.items():
             logger.info(f"📋 Organization {org_id} results:")
 
-            # Get detailed table counts for this organization
-            table_counts = get_table_record_counts(org_id, incremental)
+            # Use pre-collected table counts
+            table_counts = all_table_counts.get(org_id, {})
 
             org_success = True
             org_total_records = 0
@@ -348,7 +371,7 @@ Examples:
         test_all_connections()
     elif args.org_id:
         incremental = not args.full_sync
-        export_organization_data(args.org_id, incremental)
+        results, table_counts = export_organization_data(args.org_id, incremental)
     elif args.all_orgs:
         incremental = not args.full_sync
         export_all_organizations_data(incremental)

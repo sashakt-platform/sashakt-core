@@ -119,3 +119,43 @@ def init_roles(session: Session) -> None:
     create_role(session, test_admin, test_admin_permissions)
 
     create_role(session, candidate, candidate_permissions)
+
+
+def get_role_hierarchy() -> dict[str, list[str]]:
+    """
+    Get the role hierarchy mapping.
+
+    Role hierarchy (top to bottom):
+    - super_admin: can access all roles
+    - system_admin: can access system_admin and below
+    - state_admin: can access state_admin and below
+    - test_admin: limited access
+    - candidate: limited access
+    """
+    return {
+        "super_admin": [
+            "super_admin",
+            "system_admin",
+            "state_admin",
+            "test_admin",
+            "candidate",
+        ],
+        "system_admin": ["system_admin", "state_admin", "test_admin", "candidate"],
+        "state_admin": ["state_admin", "test_admin", "candidate"],
+    }
+
+
+def get_valid_roles(current_user_role: str) -> list[str]:
+    """
+    Get list of role names that the current user can access based on role hierarchy.
+    """
+    hierarchy = get_role_hierarchy()
+    return hierarchy.get(current_user_role, [])
+
+
+def can_assign_role(current_user_role: str, target_role: str) -> bool:
+    """
+    Check if the current user can assign the target role based on role hierarchy.
+    """
+    valid_roles = get_valid_roles(current_user_role)
+    return target_role in valid_roles

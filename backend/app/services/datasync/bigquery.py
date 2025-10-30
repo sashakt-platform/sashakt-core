@@ -5,6 +5,7 @@ from typing import Any
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
+from app.core.timezone import get_timezone_aware_now
 from app.services.datasync.base import SyncResult, TableSchema
 
 
@@ -322,10 +323,12 @@ class BigQueryService:
                     {"name": "end_time", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "marks", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_by_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
+                clustering_fields=["organization_id"],
             ),
             "questions": TableSchema(
                 table_name=self.get_table_name("questions"),
@@ -344,12 +347,14 @@ class BigQueryService:
                 columns=[
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "identity", "type": "STRING", "mode": "NULLABLE"},
-                    {"name": "user_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "user_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
+                clustering_fields=["organization_id"],
             ),
             "candidate_test_answers": TableSchema(
                 table_name=self.get_table_name("candidate_test_answers"),
@@ -365,6 +370,7 @@ class BigQueryService:
                         "type": "INTEGER",
                         "mode": "REQUIRED",
                     },
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "response", "type": "JSON", "mode": "NULLABLE"},
                     {"name": "time_spent", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "visited", "type": "BOOLEAN", "mode": "NULLABLE"},
@@ -372,7 +378,11 @@ class BigQueryService:
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
-                clustering_fields=["candidate_test_id", "question_revision_id"],
+                clustering_fields=[
+                    "organization_id",
+                    "candidate_test_id",
+                    "question_revision_id",
+                ],
             ),
             "candidate_tests": TableSchema(
                 table_name=self.get_table_name("candidate_tests"),
@@ -380,6 +390,7 @@ class BigQueryService:
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "candidate_id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "start_time", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "end_time", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "is_submitted", "type": "BOOLEAN", "mode": "NULLABLE"},
@@ -394,7 +405,7 @@ class BigQueryService:
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
-                clustering_fields=["candidate_id", "test_id"],
+                clustering_fields=["organization_id", "candidate_id", "test_id"],
             ),
             "states": TableSchema(
                 table_name=self.get_table_name("states"),
@@ -548,10 +559,11 @@ class BigQueryService:
                         "mode": "REQUIRED",
                     },
                     {"name": "entity_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
-                clustering_fields=["candidate_test_id", "entity_id"],
+                clustering_fields=["organization_id", "candidate_test_id", "entity_id"],
             ),
             "test_questions": TableSchema(
                 table_name=self.get_table_name("test_questions"),
@@ -563,10 +575,15 @@ class BigQueryService:
                         "type": "INTEGER",
                         "mode": "REQUIRED",
                     },
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
-                clustering_fields=["test_id", "question_revision_id"],
+                clustering_fields=[
+                    "organization_id",
+                    "test_id",
+                    "question_revision_id",
+                ],
             ),
             "test_tags": TableSchema(
                 table_name=self.get_table_name("test_tags"),
@@ -574,10 +591,34 @@ class BigQueryService:
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "tag_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
                 partition_field="created_date",
-                clustering_fields=["test_id", "tag_id"],
+                clustering_fields=["organization_id", "test_id", "tag_id"],
+            ),
+            "test_districts": TableSchema(
+                table_name=self.get_table_name("test_districts"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "district_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id", "test_id", "district_id"],
+            ),
+            "user_states": TableSchema(
+                table_name=self.get_table_name("user_states"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "user_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "state_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["user_id", "state_id"],
             ),
         }
 
@@ -598,7 +639,7 @@ class BigQueryService:
                     tables_created=[],
                     tables_updated=[],
                     error_message="Connection test failed",
-                    sync_timestamp=datetime.utcnow(),
+                    sync_timestamp=get_timezone_aware_now(),
                 )
 
             self.create_dataset_if_not_exists()
@@ -612,10 +653,6 @@ class BigQueryService:
                 schema = self._get_table_schema(table_base_name)
 
                 created = self.create_table_if_not_exists(schema)
-                if created:
-                    tables_created.append(table_name)
-                else:
-                    tables_updated.append(table_name)
 
                 if table_data:
                     records_exported = self.export_data(
@@ -623,21 +660,38 @@ class BigQueryService:
                     )
                     total_records += records_exported
 
+                    # Only count tables with data as created/updated
+                    if created:
+                        tables_created.append(table_name)
+                    else:
+                        tables_updated.append(table_name)
+
                     # Calculate last synced ID for full sync
                     record_ids = [
                         record.get("id") for record in table_data if record.get("id")
                     ]
                     max_id = max(record_ids) if record_ids else None
-                    self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), max_id
+                    )
+                elif created:
+                    # Table was created but has no data
+                    tables_created.append(table_name)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), None
+                    )
                 else:
-                    self.update_sync_metadata(table_name, datetime.utcnow(), None)
+                    # Table exists but has no data - don't count as created or updated
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), None
+                    )
 
             return SyncResult(
                 success=True,
                 records_exported=total_records,
                 tables_created=tables_created,
                 tables_updated=tables_updated,
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
         except Exception as e:
@@ -647,7 +701,7 @@ class BigQueryService:
                 tables_created=[],
                 tables_updated=[],
                 error_message=str(e),
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
     def execute_incremental_sync(
@@ -664,7 +718,7 @@ class BigQueryService:
                     tables_created=[],
                     tables_updated=[],
                     error_message="Connection test failed",
-                    sync_timestamp=datetime.utcnow(),
+                    sync_timestamp=get_timezone_aware_now(),
                 )
 
             self.create_dataset_if_not_exists()
@@ -688,10 +742,6 @@ class BigQueryService:
                     last_table_sync = last_sync
 
                 created = self.create_table_if_not_exists(schema)
-                if created:
-                    tables_created.append(table_name)
-                else:
-                    tables_updated.append(table_name)
 
                 if table_data:
                     filtered_data = self._filter_incremental_data(
@@ -704,6 +754,12 @@ class BigQueryService:
                         )
                         total_records += records_exported
 
+                        # Only count tables with data as created/updated
+                        if created:
+                            tables_created.append(table_name)
+                        else:
+                            tables_updated.append(table_name)
+
                         # Calculate last synced ID from the data we just exported
                         record_ids = [
                             record.get("id")
@@ -711,16 +767,30 @@ class BigQueryService:
                             if record.get("id") is not None
                         ]
                         max_id = max(record_ids) if record_ids else None  # type: ignore[type-var]
-                        self.update_sync_metadata(table_name, datetime.utcnow(), max_id)
+                        self.update_sync_metadata(
+                            table_name, get_timezone_aware_now(), max_id
+                        )
+                    elif created:
+                        # Table was created but has no data
+                        tables_created.append(table_name)
+                        self.update_sync_metadata(
+                            table_name, get_timezone_aware_now(), last_synced_id
+                        )
                     else:
                         # Update timestamp even if no new data (to track sync attempts)
                         self.update_sync_metadata(
-                            table_name, datetime.utcnow(), last_synced_id
+                            table_name, get_timezone_aware_now(), last_synced_id
                         )
+                elif created:
+                    # Table was created but has no data at all
+                    tables_created.append(table_name)
+                    self.update_sync_metadata(
+                        table_name, get_timezone_aware_now(), last_synced_id
+                    )
                 else:
                     # Update timestamp even if no data (to track sync attempts)
                     self.update_sync_metadata(
-                        table_name, datetime.utcnow(), last_synced_id
+                        table_name, get_timezone_aware_now(), last_synced_id
                     )
 
             return SyncResult(
@@ -728,7 +798,7 @@ class BigQueryService:
                 records_exported=total_records,
                 tables_created=tables_created,
                 tables_updated=tables_updated,
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
         except Exception as e:
@@ -738,7 +808,7 @@ class BigQueryService:
                 tables_created=[],
                 tables_updated=[],
                 error_message=str(e),
-                sync_timestamp=datetime.utcnow(),
+                sync_timestamp=get_timezone_aware_now(),
             )
 
     def _filter_incremental_data(
