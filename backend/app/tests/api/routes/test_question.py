@@ -5291,3 +5291,281 @@ def test_state_admin_cannot_update_question_outside_their_state(
     )
     assert update_resp.status_code == 403
     assert "cannot modify" in update_resp.json()["detail"].lower()
+
+
+def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload_1 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_x.id],
+    }
+
+    question_payload_2 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_x.id],
+    }
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert response_1.status_code == 200
+    question_id_1 = response_1.json()["id"]
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert response_2.status_code == 200
+    question_id_2 = response_2.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id_1, question_id_2],
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_cannot_delete_general_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload_1 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [],
+    }
+
+    question_payload_2 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [],
+    }
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_1,
+        headers=token_headers,
+    )
+    assert response_1.status_code == 200
+    question_id_1 = response_1.json()["id"]
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_2,
+        headers=token_headers,
+    )
+    assert response_2.status_code == 200
+    question_id_2 = response_2.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id_1, question_id_2],
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_delete_questions_same_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload_1 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state.id],
+    }
+
+    question_payload_2 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state.id],
+    }
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_1,
+        headers=token_headers,
+    )
+    assert response_1.status_code == 200
+    question_id_1 = response_1.json()["id"]
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_2,
+        headers=token_headers,
+    )
+    assert response_2.status_code == 200
+    question_id_2 = response_2.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id_1, question_id_2],
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
