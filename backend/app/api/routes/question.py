@@ -101,6 +101,31 @@ def check_question_permission(
         )
 
 
+def add_question_to_failure_list(
+    session: SessionDep, question: Question, failure_list: list[QuestionPublic]
+) -> None:
+    revision = session.exec(
+        select(QuestionRevision).where(QuestionRevision.id == question.last_revision_id)
+    ).first()
+
+    locations = session.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question.id)
+    ).all()
+
+    tags = session.exec(
+        select(Tag)
+        .join(QuestionTag)
+        .where(QuestionTag.tag_id == Tag.id)
+        .where(QuestionTag.question_id == question.id)
+    ).all()
+    tags_list: list[Tag] | None = list(tags) if tags else None
+
+    if revision:
+        failure_list.append(
+            build_question_response(question, revision, list(locations), tags_list)
+        )
+
+
 def check_linked_test(session: SessionDep, question_id: int) -> bool:
     query = (
         select(TestQuestion)
@@ -698,7 +723,7 @@ def bulk_delete_question(
 ) -> DeleteQuestion:
     """Soft delete a question."""
     success_count = 0
-    failure_list = []
+    failure_list: list[QuestionPublic] = []
     db_questions = session.exec(
         select(Question)
         .where(col(Question.id).in_(question_ids))
@@ -713,36 +738,18 @@ def bulk_delete_question(
         )
 
     for question in db_questions:
-        if question.id is not None and check_linked_test(session, question.id):
-            revision = session.exec(
-                select(QuestionRevision).where(
-                    QuestionRevision.id == question.last_revision_id
-                )
-            ).first()
+        try:
+            check_question_permission(session, current_user, question)
 
-            locations = session.exec(
-                select(QuestionLocation).where(
-                    QuestionLocation.question_id == question.id
-                )
-            ).all()
+            if question.id is not None and check_linked_test(session, question.id):
+                add_question_to_failure_list(session, question, failure_list)
+            else:
+                session.delete(question)
+                session.commit()
+                success_count += 1
 
-            tags = session.exec(
-                select(Tag)
-                .join(QuestionTag)
-                .where(QuestionTag.tag_id == Tag.id)
-                .where(QuestionTag.question_id == question.id)
-            ).all()
-            tags_list: list[Tag] | None = list(tags) if tags else None
-            if revision:
-                failure_list.append(
-                    build_question_response(
-                        question, revision, list(locations), tags_list
-                    )
-                )
-        else:
-            session.delete(question)
-            session.commit()
-            success_count += 1
+        except HTTPException:
+            add_question_to_failure_list(session, question, failure_list)
 
     session.commit()
 
