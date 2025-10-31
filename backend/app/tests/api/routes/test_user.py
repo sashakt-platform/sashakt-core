@@ -1979,6 +1979,8 @@ def test_state_admin_cannot_delete_general_user(
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role
     org = create_random_organization(db)
 
     country = Country(name=random_lower_string(), is_active=True)
@@ -2012,7 +2014,7 @@ def test_state_admin_cannot_delete_general_user(
         "password": random_lower_string(),
         "phone": random_lower_string(),
         "full_name": random_lower_string(),
-        "role_id": state_admin_role.id,
+        "role_id": system_admin_role.id,
         "organization_id": org.id,
     }
     resp = client.post(
@@ -2154,6 +2156,8 @@ def test_state_admin_cannot_update_general_user(
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role
     org = create_random_organization(db)
 
     country = Country(name=random_lower_string(), is_active=True)
@@ -2187,7 +2191,7 @@ def test_state_admin_cannot_update_general_user(
         "password": random_lower_string(),
         "phone": random_lower_string(),
         "full_name": random_lower_string(),
-        "role_id": state_admin_role.id,
+        "role_id": system_admin_role.id,
         "organization_id": org.id,
     }
     resp = client.post(
@@ -2332,6 +2336,7 @@ def test_state_admin_can_update_user_in_same_state(
         "phone": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org.id,
+        "state_ids": [state.id],
     }
     update_resp = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
