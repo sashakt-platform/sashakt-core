@@ -1,7 +1,8 @@
-from typing import cast
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
@@ -22,6 +23,20 @@ from app.models.test import TestState
 from app.models.user import UserState
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
+
+
+def transform_organizations_to_public(
+    items: list[Organization] | Any,
+) -> list[OrganizationPublic]:
+    result: list[OrganizationPublic] = []
+    organization_list: list[Organization] = (
+        list(items) if not isinstance(items, list) else items
+    )
+
+    for organization in organization_list:
+        result.append(OrganizationPublic(**organization.model_dump()))
+
+    return result
 
 
 # Create a Organization
@@ -64,7 +79,7 @@ def get_organization(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Page[Organization]:
+) -> Page[OrganizationPublic]:
     query = select(Organization).where(not_(Organization.is_deleted))
 
     if name:
@@ -84,10 +99,14 @@ def get_organization(
             )
         query = query.order_by(column.desc() if is_desc else column)
 
-    # Execute query and get all organization
-    organization = session.exec(query).all()
+    organizations: Page[OrganizationPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_organizations_to_public(items),
+    )
 
-    return cast(Page[Organization], paginate(organization, params))
+    return organizations
 
 
 @router.get(
