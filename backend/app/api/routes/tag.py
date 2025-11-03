@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
+from sqlalchemy.orm import selectinload
 from sqlmodel import and_, col, exists, func, not_, or_, select
 
 from app.api.deps import (
@@ -63,25 +64,22 @@ def transform_tag_types_to_public(items: list[TagType] | Any) -> list[TagTypePub
 
 def transform_tags_to_public(
     tags: list[Tag] | Any,
-    session: SessionDep | None = None,
     current_user: CurrentUser | None = None,
 ) -> list[TagPublic]:
     result: list[TagPublic] = []
     tag_list: list[Tag] = list(tags) if not isinstance(tags, list) else tags
 
     for tag in tag_list:
-        tag_type = None
-        if session and current_user and tag.tag_type_id:
-            tag_type = session.get(TagType, tag.tag_type_id)
-            if (
-                not tag_type
-                or tag_type.is_deleted
+        tag_type = getattr(tag, "tag_type", None)
+        if (
+            current_user
+            and tag_type
+            and (
+                tag_type.is_deleted
                 or tag_type.organization_id != current_user.organization_id
-            ):
-                tag_type = None
-        elif hasattr(tag, "tag_type"):
-            tag_type = tag.tag_type
-
+            )
+        ):
+            tag_type = None
         result.append(
             TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
         )
@@ -389,8 +387,12 @@ def get_tags(
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[TagPublic]:
-    query = select(Tag).where(
-        Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
+    query = (
+        select(Tag)
+        .options(selectinload(Tag.tag_type))
+        .where(
+            Tag.organization_id == current_user.organization_id, not_(Tag.is_deleted)
+        )
     )
     if name:
         # search in both tag name and tag type name
@@ -416,9 +418,7 @@ def get_tags(
         session,
         query,  # type: ignore[arg-type]
         params,
-        transformer=lambda tags_list: transform_tags_to_public(
-            tags_list, session, current_user
-        ),
+        transformer=lambda tags_list: transform_tags_to_public(tags_list, current_user),
     )
 
     return tags

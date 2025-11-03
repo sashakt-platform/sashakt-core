@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
+from sqlalchemy.orm import selectinload
 from sqlmodel import and_, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
@@ -62,14 +63,9 @@ def transform_entities_to_public(
     )
 
     for entity in entity_list:
-        entity_type = None
-        if entity.entity_type_id:
-            entity_type = session.get(EntityType, entity.entity_type_id)
-            if (
-                not entity_type
-                or entity_type.organization_id != current_user.organization_id
-            ):
-                entity_type = None
+        entity_type: EntityType | None = entity.entity_type
+        if entity_type and entity_type.organization_id != current_user.organization_id:
+            entity_type = None
         state = session.get(State, entity.state_id) if entity.state_id else None
         district = (
             session.get(District, entity.district_id) if entity.district_id else None
@@ -267,7 +263,9 @@ def get_entities(
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[EntityPublic]:
-    query = select(Entity)
+    query = select(Entity).options(
+        selectinload(Entity.entity_type),  # type: ignore[arg-type]
+    )
 
     if name:
         query = query.where(
