@@ -322,6 +322,8 @@ class BigQueryService:
                     {"name": "start_time", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "end_time", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "marks", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "marks_level", "type": "STRING", "mode": "NULLABLE"},
+                    {"name": "marking_scheme", "type": "JSON", "mode": "NULLABLE"},
                     {"name": "created_by_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},

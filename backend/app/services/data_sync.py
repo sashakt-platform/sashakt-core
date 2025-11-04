@@ -747,6 +747,8 @@ class DataSyncService:
             "start_time": (test.start_time.isoformat() if test.start_time else None),
             "end_time": (test.end_time.isoformat() if test.end_time else None),
             "marks": test.marks,
+            "marks_level": test.marks_level,
+            "marking_scheme": test.marking_scheme,
             "created_by_id": test.created_by_id,
             "organization_id": test.organization_id,
             "created_date": (
