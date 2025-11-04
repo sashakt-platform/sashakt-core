@@ -30,7 +30,7 @@ from app.models import (
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.provider import ProviderType
-from app.models.test import TestDistrict, TestQuestion, TestTag
+from app.models.test import MarksLevelEnum, TestDistrict, TestQuestion, TestTag
 from app.models.user import UserState
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
@@ -747,7 +747,11 @@ class DataSyncService:
             "start_time": (test.start_time.isoformat() if test.start_time else None),
             "end_time": (test.end_time.isoformat() if test.end_time else None),
             "marks": test.marks,
-            "marks_level": test.marks_level,
+            "marks_level": "QUESTION"
+            if test.marks_level == MarksLevelEnum.QUESTION
+            else "TEST"
+            if test.marks_level == MarksLevelEnum.TEST
+            else None,
             "marking_scheme": test.marking_scheme,
             "created_by_id": test.created_by_id,
             "organization_id": test.organization_id,
