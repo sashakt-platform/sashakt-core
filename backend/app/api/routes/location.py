@@ -1,6 +1,9 @@
+import base64
+import csv
+from io import StringIO
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi_pagination import Page, paginate
 from sqlmodel import col, func, select
 
@@ -24,6 +27,7 @@ from app.models import (
     StatePublic,
     StateUpdate,
 )
+from app.models.location import BlockBulkUploadResponse
 from app.models.user import UserState
 
 router = APIRouter(prefix="/location", tags=["Location"])
@@ -409,6 +413,126 @@ def update_block(
     session.commit()
     session.refresh(block_db)
     return block_db
+
+
+@block_router.post(
+    "/import",
+    response_model=BlockBulkUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(permission_dependency("create_location"))],
+)
+async def import_blocks_from_csv(
+    session: SessionDep,
+    file: UploadFile = File(
+        ..., description="CSV file with block_name, district_name, state_name"
+    ),
+) -> BlockBulkUploadResponse:
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are allowed")
+
+    try:
+        content = (await file.read()).decode("utf-8")
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="CSV file is empty")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file encoding")
+
+    csv_reader = csv.DictReader(StringIO(content))
+    required_headers = {"block_name", "district_name", "state_name"}
+    if not required_headers.issubset(csv_reader.fieldnames or []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV must contain headers: {', '.join(required_headers)}",
+        )
+
+    success_count = failed_count = 0
+    failed_block_details = []
+    failed_districts = set()
+    duplicate_blocks = set()
+
+    for row_num, row in enumerate(csv_reader, start=2):
+        try:
+            block_name = (row.get("block_name") or "").strip()
+            district_name = (row.get("district_name") or "").strip()
+            state_name = (row.get("state_name") or "").strip()
+
+            if not all([block_name, district_name, state_name]):
+                raise ValueError("Missing required value(s)")
+
+            district = session.exec(
+                select(District)
+                .join(State)
+                .where(District.name == district_name)
+                .where(State.name == state_name)
+            ).first()
+
+            if not district:
+                failed_districts.add(f"{district_name} in {state_name}")
+                raise ValueError(
+                    f"District '{district_name}' in state '{state_name}' not found"
+                )
+
+            existing = session.exec(
+                select(Block)
+                .where(Block.name == block_name)
+                .where(Block.district_id == district.id)
+            ).first()
+
+            if existing:
+                duplicate_blocks.add(block_name)
+                raise ValueError("Block already exists")
+
+            new_block = Block(name=block_name, district_id=district.id, is_active=True)
+            session.add(new_block)
+            success_count += 1
+
+        except Exception as e:
+            failed_count += 1
+            failed_block_details.append(
+                {
+                    "row_number": row_num,
+                    "block_name": row.get("block_name", "").strip(),
+                    "district_name": row.get("district_name", "").strip(),
+                    "state_name": row.get("state_name", "").strip(),
+                    "error": str(e),
+                }
+            )
+
+    session.commit()
+
+    error_log = None
+    if failed_block_details:
+        csv_buffer = StringIO()
+        writer = csv.DictWriter(
+            csv_buffer,
+            fieldnames=[
+                "row_number",
+                "block_name",
+                "district_name",
+                "state_name",
+                "error",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(failed_block_details)
+        csv_bytes = csv_buffer.getvalue().encode("utf-8")
+        error_log = (
+            f"data:text/csv;base64,{base64.b64encode(csv_bytes).decode('utf-8')}"
+        )
+
+    message = f"Bulk upload complete. Created {success_count} blocks successfully. Failed to create {failed_count} blocks."
+    if failed_districts:
+        message += f" Missing districts: {', '.join(failed_districts)}."
+    if duplicate_blocks:
+        message += f" Duplicates skipped: {', '.join(duplicate_blocks)}."
+
+    return BlockBulkUploadResponse(
+        message=message,
+        uploaded_blocks=success_count + failed_count,
+        success_blocks=success_count,
+        failed_blocks=failed_count,
+        error_log=error_log,
+    )
 
 
 # Include all routers
