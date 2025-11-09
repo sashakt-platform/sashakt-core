@@ -4,7 +4,14 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
-from app.models.location import BlockPublic, DistrictPublic, StatePublic
+from app.models.location import (
+    Block,
+    BlockPublic,
+    District,
+    DistrictPublic,
+    State,
+    StatePublic,
+)
 from app.models.organization import Organization
 
 if TYPE_CHECKING:
@@ -77,6 +84,9 @@ class Entity(EntityBase, table=True):
         description="ID of the Entity Type to which the Entity should belong",
     )
     entity_type: "EntityType" = Relationship(back_populates="entities")
+    state: "State" = Relationship(back_populates="entities")
+    district: "District" = Relationship(back_populates="entities")
+    block: "Block" = Relationship(back_populates="entities")
 
     created_by: "User" = Relationship(back_populates="entities")
     created_by_id: int = Field(

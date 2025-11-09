@@ -55,22 +55,24 @@ def transform_entity_types_to_public(
 
 
 def transform_entities_to_public(
-    entities: list[Entity] | Any, session: SessionDep, current_user: CurrentUser
+    entities: list[Entity] | Any, current_user: CurrentUser
 ) -> list[EntityPublic]:
     result: list[EntityPublic] = []
     entity_list: list[Entity] = (
-        list(entities) if not isinstance(entities, list) else entities
+        entities if isinstance(entities, list) else list(entities)
     )
 
     for entity in entity_list:
-        entity_type: EntityType | None = entity.entity_type
-        if entity_type and entity_type.organization_id != current_user.organization_id:
-            entity_type = None
-        state = session.get(State, entity.state_id) if entity.state_id else None
-        district = (
-            session.get(District, entity.district_id) if entity.district_id else None
+        entity_type: EntityType | None = (
+            entity.entity_type
+            if entity.entity_type
+            and entity.entity_type.organization_id == current_user.organization_id
+            else None
         )
-        block = session.get(Block, entity.block_id) if entity.block_id else None
+
+        state = entity.state
+        district = entity.district
+        block = entity.block
 
         result.append(
             EntityPublic(
@@ -265,6 +267,9 @@ def get_entities(
 ) -> Page[EntityPublic]:
     query = select(Entity).options(
         selectinload(Entity.entity_type),  # type: ignore[arg-type]
+        selectinload(Entity.state),  # type: ignore[arg-type]
+        selectinload(Entity.district),  # type: ignore[arg-type]
+        selectinload(Entity.block),  # type: ignore[arg-type]
     )
 
     if name:
@@ -280,9 +285,7 @@ def get_entities(
         session,
         query,  # type: ignore[arg-type]
         params,
-        transformer=lambda items: transform_entities_to_public(
-            items, session, current_user
-        ),
+        transformer=lambda items: transform_entities_to_public(items, current_user),
     )
 
     return entities
