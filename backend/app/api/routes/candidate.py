@@ -394,7 +394,7 @@ def submit_answer_for_qr_candidate(
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
 
     if is_candidate_test_expired(session, candidate_test_id):
-        raise HTTPException(status_code=400, detail="Candidate test has expired")
+        raise HTTPException(status_code=410, detail="Candidate test has expired")
 
     # Check if answer already exists for this question
     existing_answer = session.exec(
@@ -450,7 +450,7 @@ def submit_batch_answers_for_qr_candidate(
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
 
     if is_candidate_test_expired(session, candidate_test_id):
-        raise HTTPException(status_code=400, detail="Candidate test has expired")
+        raise HTTPException(status_code=410, detail="Candidate test has expired")
 
     results = []
     for answer in batch_request.answers:
@@ -513,7 +513,29 @@ def submit_test_for_qr_candidate(
 
     # Mark test as submitted and set end time
     candidate_test.is_submitted = True
-    candidate_test.end_time = get_timezone_aware_now()
+
+    if candidate_test.id and is_candidate_test_expired(session, candidate_test.id):
+        test_details = session.get(Test, candidate_test.test_id)
+        if test_details:
+            # Calculate the earliest possible end time
+            time_constraints = []
+
+            if test_details.end_time:
+                time_constraints.append(
+                    (test_details.end_time - candidate_test.start_time).total_seconds()
+                    / 60
+                )
+
+            if test_details.time_limit:
+                time_constraints.append(test_details.time_limit)
+
+            # Use the minimum constraint to calculate end time
+            if time_constraints:
+                candidate_test.end_time = candidate_test.start_time + timedelta(
+                    minutes=min(time_constraints)
+                )
+    else:
+        candidate_test.end_time = get_timezone_aware_now()
 
     session.add(candidate_test)
     session.commit()
@@ -553,7 +575,7 @@ def get_test_questions(
         raise HTTPException(status_code=404, detail="Test not found")
 
     if is_candidate_test_expired(session, candidate_test_id):
-        raise HTTPException(status_code=400, detail="Candidate test has expired")
+        raise HTTPException(status_code=410, detail="Candidate test has expired")
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()

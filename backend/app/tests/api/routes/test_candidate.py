@@ -7319,7 +7319,7 @@ def test_candidate_cross_time_limit_submission(
             json=answer_payload,
             params={"candidate_uuid": candidate_uuid},
         )
-        assert submit_response.status_code == 400
+        assert submit_response.status_code == 410
         data = submit_response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7341,7 +7341,7 @@ def test_candidate_cross_time_limit_submission(
             json=batch_request,
             params={"candidate_uuid": candidate_uuid},
         )
-        assert response.status_code == 400
+        assert response.status_code == 410
         data = response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7351,7 +7351,7 @@ def test_candidate_cross_time_limit_submission(
         )
         data = response.json()
 
-        assert response.status_code == 400
+        assert response.status_code == 410
         data = response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7433,7 +7433,7 @@ def test_candidate_cross_end_time_submission(
             json=answer_payload,
             params={"candidate_uuid": candidate_uuid},
         )
-        assert submit_response.status_code == 400
+        assert submit_response.status_code == 410
         data = submit_response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7455,7 +7455,7 @@ def test_candidate_cross_end_time_submission(
             json=batch_request,
             params={"candidate_uuid": candidate_uuid},
         )
-        assert response.status_code == 400
+        assert response.status_code == 410
         data = response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7465,7 +7465,7 @@ def test_candidate_cross_end_time_submission(
         )
         data = response.json()
 
-        assert response.status_code == 400
+        assert response.status_code == 410
         data = response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7547,7 +7547,7 @@ def test_candidate_cross_end_time_time_limit_submission(
             json=answer_payload,
             params={"candidate_uuid": candidate_uuid},
         )
-        assert submit_response.status_code == 400
+        assert submit_response.status_code == 410
         data = submit_response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7569,7 +7569,7 @@ def test_candidate_cross_end_time_time_limit_submission(
             json=batch_request,
             params={"candidate_uuid": candidate_uuid},
         )
-        assert response.status_code == 400
+        assert response.status_code == 410
         data = response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7579,7 +7579,7 @@ def test_candidate_cross_end_time_time_limit_submission(
         )
         data = response.json()
 
-        assert response.status_code == 400
+        assert response.status_code == 410
         data = response.json()
         assert "expired" in data["detail"].lower()
 
@@ -7663,8 +7663,6 @@ def test_candidate_active_inside_time_limit_no_end_time(
         )
         assert submit_response.status_code == 200
         data = submit_response.json()
-
-        print("Submitted answer response data:", data)
 
         # Prepare batch request to update the answer
         batch_request: dict[str, list[dict[str, Any]]] = {
@@ -7775,8 +7773,6 @@ def test_candidate_active_inside_no_time_limit_no_end_time(
         assert submit_response.status_code == 200
         data = submit_response.json()
 
-        print("Submitted answer response data:", data)
-
         # Prepare batch request to update the answer
         batch_request: dict[str, list[dict[str, Any]]] = {
             "answers": [
@@ -7806,3 +7802,237 @@ def test_candidate_active_inside_no_time_limit_no_end_time(
 
         assert response.status_code == 200
         data = response.json()
+
+
+def test_candidate_submit_test_outside_time_limit(
+    client: TestClient,
+    get_user_testadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    org_id = user_data["organization_id"]
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],  # First option is correct
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_systemadmin_token,
+    )
+    data = response.json()
+    latest_question_revision_id = data["latest_question_revision_id"]
+    test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_testadmin_token,
+        json={
+            "name": random_lower_string(),
+            "is_active": True,
+            "link": random_lower_string(),
+            "time_limit": 10,  # 10 minutes time limit
+            "question_revision_ids": [latest_question_revision_id],
+            "start_time": datetime(2025, 7, 5, 10, 0, 0).isoformat(),
+            "end_time": datetime(2025, 7, 6, 15, 0, 0).isoformat(),
+        },
+    )
+    assert test_response.status_code == 200
+    test_data = test_response.json()
+    fake_date = datetime(2025, 7, 5, 12, 0, 0)
+    candidate_start_time = fake_date
+    with patch(
+        "app.api.routes.candidate.get_timezone_aware_now",
+        return_value=candidate_start_time,
+    ):
+        candidate_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={
+                "test_id": test_data["id"],
+                "device_info": "Test Device Info",
+            },
+        )
+        assert candidate_response.status_code == 200
+        candidate_data = candidate_response.json()
+        candidate_test_id = candidate_data["candidate_test_id"]
+        assert candidate_test_id is not None
+        candidate_uuid = candidate_data["candidate_uuid"]
+        assert candidate_uuid is not None
+    # Simulate time passage beyond the time limit
+    fake_now = fake_date + timedelta(minutes=15)
+    with patch(
+        "app.api.routes.candidate.get_timezone_aware_now", return_value=fake_now
+    ):
+        submit_response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert submit_response.status_code == 200
+        data = submit_response.json()
+        assert data["start_time"] == candidate_start_time.isoformat()
+        assert (
+            data["end_time"]
+            == (
+                candidate_start_time + timedelta(minutes=test_data["time_limit"])
+            ).isoformat()
+        )
+
+
+def test_candidate_submit_test_outside_end_time(
+    client: TestClient,
+    get_user_testadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    org_id = user_data["organization_id"]
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],  # First option is correct
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_systemadmin_token,
+    )
+    data = response.json()
+    latest_question_revision_id = data["latest_question_revision_id"]
+    test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_testadmin_token,
+        json={
+            "name": random_lower_string(),
+            "is_active": True,
+            "time_limit": 70,  # 70 minutes time limit
+            "link": random_lower_string(),
+            "question_revision_ids": [latest_question_revision_id],
+            "start_time": datetime(2025, 7, 5, 10, 0, 0).isoformat(),
+            "end_time": datetime(2025, 7, 5, 12, 0, 0).isoformat(),
+        },
+    )
+    assert test_response.status_code == 200
+    test_data = test_response.json()
+    fake_date = datetime(2025, 7, 5, 11, 0, 0)
+    candidate_start_time = fake_date
+    with patch(
+        "app.api.routes.candidate.get_timezone_aware_now",
+        return_value=candidate_start_time,
+    ):
+        candidate_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={
+                "test_id": test_data["id"],
+                "device_info": "Test Device Info",
+            },
+        )
+        assert candidate_response.status_code == 200
+        candidate_data = candidate_response.json()
+        candidate_test_id = candidate_data["candidate_test_id"]
+        assert candidate_test_id is not None
+        candidate_uuid = candidate_data["candidate_uuid"]
+        assert candidate_uuid is not None
+    # Simulate time passage beyond the time limit
+    fake_now = fake_date + timedelta(minutes=120)
+    with patch(
+        "app.api.routes.candidate.get_timezone_aware_now", return_value=fake_now
+    ):
+        submit_response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert submit_response.status_code == 200
+        data = submit_response.json()
+        assert data["start_time"] == candidate_start_time.isoformat()
+        assert data["end_time"] == test_data["end_time"]
+
+
+def test_candidate_submit_test_within_time_limit(
+    client: TestClient,
+    get_user_testadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    org_id = user_data["organization_id"]
+    question_data = {
+        "organization_id": org_id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],  # First option is correct
+        "is_mandatory": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_systemadmin_token,
+    )
+    data = response.json()
+    latest_question_revision_id = data["latest_question_revision_id"]
+    test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_testadmin_token,
+        json={
+            "name": random_lower_string(),
+            "is_active": True,
+            "time_limit": 70,  # 70 minutes time limit
+            "link": random_lower_string(),
+            "question_revision_ids": [latest_question_revision_id],
+            "start_time": datetime(2025, 7, 5, 10, 0, 0).isoformat(),
+            "end_time": datetime(2025, 7, 5, 12, 0, 0).isoformat(),
+        },
+    )
+    assert test_response.status_code == 200
+    test_data = test_response.json()
+    fake_date = datetime(2025, 7, 5, 11, 0, 0)
+    candidate_start_time = fake_date
+    with patch(
+        "app.api.routes.candidate.get_timezone_aware_now",
+        return_value=candidate_start_time,
+    ):
+        candidate_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={
+                "test_id": test_data["id"],
+                "device_info": "Test Device Info",
+            },
+        )
+        assert candidate_response.status_code == 200
+        candidate_data = candidate_response.json()
+        candidate_test_id = candidate_data["candidate_test_id"]
+        assert candidate_test_id is not None
+        candidate_uuid = candidate_data["candidate_uuid"]
+        assert candidate_uuid is not None
+    # Simulate time passage beyond the time limit
+    candidate_end_time = fake_date + timedelta(minutes=55)
+    with patch(
+        "app.api.routes.candidate.get_timezone_aware_now",
+        return_value=candidate_end_time,
+    ):
+        submit_response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert submit_response.status_code == 200
+        data = submit_response.json()
+        assert data["start_time"] == candidate_start_time.isoformat()
+        assert data["end_time"] == candidate_end_time.isoformat()
