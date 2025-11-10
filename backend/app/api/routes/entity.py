@@ -1,7 +1,9 @@
-from typing import Annotated, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
+from sqlalchemy.orm import selectinload
 from sqlmodel import and_, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
@@ -39,6 +41,53 @@ EntitySorting = create_sorting_dependency(EntitySortConfig)
 EntitySortingDep = Annotated[SortingParams, Depends(EntitySorting)]
 
 
+def transform_entity_types_to_public(
+    items: list[EntityType] | Any,
+) -> list[EntityTypePublic]:
+    result: list[EntityTypePublic] = []
+    entity_type_list: list[EntityType] = (
+        list(items) if not isinstance(items, list) else items
+    )
+
+    for entity_type in entity_type_list:
+        result.append(EntityTypePublic(**entity_type.model_dump()))
+    return result
+
+
+def transform_entities_to_public(
+    entities: list[Entity] | Any, current_user: CurrentUser
+) -> list[EntityPublic]:
+    result: list[EntityPublic] = []
+    entity_list: list[Entity] = (
+        entities if isinstance(entities, list) else list(entities)
+    )
+
+    for entity in entity_list:
+        entity_type: EntityType | None = (
+            entity.entity_type
+            if entity.entity_type
+            and entity.entity_type.organization_id == current_user.organization_id
+            else None
+        )
+
+        state = entity.state if entity.state_id else None
+        district = entity.district if entity.district_id else None
+        block = entity.block if entity.block_id else None
+
+        result.append(
+            EntityPublic(
+                **entity.model_dump(
+                    exclude={"entity_type_id", "state_id", "district_id", "block_id"}
+                ),
+                entity_type=entity_type,
+                state=state,
+                district=district,
+                block=block,
+            )
+        )
+    return result
+
+
 # Routers for EntityType
 @router_entitytype.post("/", response_model=EntityTypePublic)
 def create_entitytype(
@@ -74,7 +123,7 @@ def get_entitytype(
     current_user: CurrentUser,
     params: Pagination = Depends(),
     name: str | None = None,
-) -> Page[EntityType]:
+) -> Page[EntityTypePublic]:
     query = select(EntityType).where(
         EntityType.organization_id == current_user.organization_id,
     )
@@ -83,8 +132,14 @@ def get_entitytype(
             func.trim(func.lower(EntityType.name)).like(f"%{name.strip().lower()}%")
         )
 
-    entitytypes = session.exec(query).all()
-    return cast(Page[EntityType], paginate(entitytypes, params=params))
+    entity_types: Page[EntityTypePublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_entity_types_to_public(items),
+    )
+
+    return entity_types
 
 
 @router_entitytype.get("/{entitytype_id}", response_model=EntityTypePublic)
@@ -210,7 +265,12 @@ def get_entities(
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[EntityPublic]:
-    query = select(Entity)
+    query = select(Entity).options(
+        selectinload(Entity.entity_type),  # type: ignore[arg-type]
+        selectinload(Entity.state),  # type: ignore[arg-type]
+        selectinload(Entity.district),  # type: ignore[arg-type]
+        selectinload(Entity.block),  # type: ignore[arg-type]
+    )
 
     if name:
         query = query.where(
@@ -221,37 +281,14 @@ def get_entities(
     sorting_with_default = sorting.apply_default_if_none("name", SortOrder.ASC)
     query = sorting_with_default.apply_to_query(query, EntitySortConfig)
 
-    entities = session.exec(query).all()
-    entity_public_list = []
-    for entity in entities:
-        entity_type = None
-        if entity.entity_type_id:
-            entity_type = session.get(EntityType, entity.entity_type_id)
+    entities: Page[EntityPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_entities_to_public(items, current_user),
+    )
 
-            if (
-                not entity_type
-                or entity_type.organization_id != current_user.organization_id
-            ):
-                entity_type = None
-        state = session.get(State, entity.state_id) if entity.state_id else None
-        district = (
-            session.get(District, entity.district_id) if entity.district_id else None
-        )
-        block = session.get(Block, entity.block_id) if entity.block_id else None
-
-        entity_public_list.append(
-            EntityPublic(
-                **entity.model_dump(
-                    exclude={"entity_type_id", "state_id", "district_id", "block_id"}
-                ),
-                entity_type=entity_type,
-                state=state,
-                district=district,
-                block=block,
-            )
-        )
-
-    return cast(Page[EntityPublic], paginate(entity_public_list, params=params))
+    return entities
 
 
 # Get Entity by ID

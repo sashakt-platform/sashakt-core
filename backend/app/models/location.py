@@ -8,6 +8,7 @@ from app.models.test import Test, TestDistrict, TestPublicLimited, TestState
 from app.models.user import User, UserState
 
 if TYPE_CHECKING:
+    from app.models.entity import Entity
     from app.models.question import QuestionLocation
 
 
@@ -69,6 +70,7 @@ class State(StateBase, table=True):
     users: list["User"] | None = Relationship(
         back_populates="states", link_model=UserState
     )
+    entities: list["Entity"] | None = Relationship(back_populates="state")
 
 
 class StatePublic(StateBase):
@@ -113,6 +115,7 @@ class District(DistrictBase, table=True):
     tests: list["Test"] | None = Relationship(
         back_populates="districts", link_model=TestDistrict
     )
+    entities: list["Entity"] | None = Relationship(back_populates="district")
 
 
 class DistrictPublic(DistrictBase):
@@ -153,6 +156,7 @@ class Block(BlockBase, table=True):
     )
     district: District | None = Relationship(back_populates="blocks")
     question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
+    entities: list["Entity"] | None = Relationship(back_populates="block")
 
 
 class BlockPublic(BlockBase):

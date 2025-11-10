@@ -1,7 +1,8 @@
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, or_, select
 
 from app import crud
@@ -89,14 +90,17 @@ def read_users(
     )
     statement = sorting_with_default.apply_to_query(statement, UserSortConfig)
 
-    users = session.exec(statement).all()
+    users: Page[UserPublic] = paginate(
+        session,
+        statement,  # type: ignore[arg-type]
+        param,
+        transformer=lambda items: [
+            crud.get_user_public(db_user=user, session=session)
+            for user in (list(items) if not isinstance(items, list) else items)
+        ],
+    )
 
-    user_public_list = []
-
-    for user in users:
-        user_public_list.append(crud.get_user_public(db_user=user, session=session))
-
-    return cast(Page[UserPublic], paginate(user_public_list, params=param))
+    return users
 
 
 def validate_user_return_role(
