@@ -26,7 +26,7 @@ jobs:
           echo "Will deploy tag: $DEPLOY_TAG"
           
       - name: Deploy via SSH (tag-based)
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
