@@ -70,9 +70,9 @@ def transform_entities_to_public(
             else None
         )
 
-        state = entity.state
-        district = entity.district
-        block = entity.block
+        state = entity.state if entity.state_id else None
+        district = entity.district if entity.district_id else None
+        block = entity.block if entity.block_id else None
 
         result.append(
             EntityPublic(

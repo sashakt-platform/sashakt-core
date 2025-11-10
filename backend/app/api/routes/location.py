@@ -42,7 +42,7 @@ def transform_countries_to_public(
     country_list: list[Country] = list(items) if not isinstance(items, list) else items
 
     for country in country_list:
-        result.append(CountryPublic(**country.model_dump()))
+        result.append(CountryPublic.model_validate(country))
 
     return result
 
@@ -54,7 +54,7 @@ def transform_states_to_public(
     state_list: list[State] = list(items) if not isinstance(items, list) else items
 
     for state in state_list:
-        result.append(StatePublic(**state.model_dump()))
+        result.append(StatePublic.model_validate(state))
 
     return result
 
@@ -68,8 +68,9 @@ def transform_districts_to_public(
 
     for district, state in district_list:
         district.state = state
-
-        result.append(DistrictPublic(**district.__dict__))
+        district_data = district.model_dump()
+        district_data["state"] = state
+        result.append(DistrictPublic(**district_data))
 
     return result
 
@@ -81,7 +82,7 @@ def transform_blocks_to_public(
     block_list: list[Block] = list(items) if not isinstance(items, list) else items
 
     for block in block_list:
-        result.append(BlockPublic(**block.model_dump()))
+        result.append(BlockPublic.model_validate(block))
 
     return result
 
