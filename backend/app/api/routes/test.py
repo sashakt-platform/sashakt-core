@@ -61,32 +61,26 @@ TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
 def check_test_permission(
     session: SessionDep, current_user: CurrentUser, test: Test
 ) -> None:
-    role = session.get(Role, current_user.role_id)
-    if not role or role.name not in ("state_admin", "test_admin"):
-        return
+    test_state_ids = {
+        state_id
+        for state_id in session.exec(
+            select(TestState.state_id).where(TestState.test_id == test.id)
+        ).all()
+        if state_id is not None
+    }
 
-    test_states = session.exec(
-        select(TestState).where(TestState.test_id == test.id)
-    ).all()
+    user_state_ids = {
+        state_id
+        for state_id in session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
+        if state_id is not None
+    }
 
-    if not test_states:
-        raise HTTPException(403, "State/test-admin cannot modify/delete general tests.")
-
-    test_state_ids = [
-        test_state.state_id
-        for test_state in test_states
-        if test_state.state_id is not None
-    ]
-
-    user_state_records = session.exec(
-        select(UserState.state_id).where(UserState.user_id == current_user.id)
-    ).all()
-    user_state_ids = list(user_state_records)
-
-    if not any(state_id in user_state_ids for state_id in test_state_ids):
+    if not test_state_ids or not test_state_ids.issubset(user_state_ids):
         raise HTTPException(
             403,
-            "State/test-admin cannot modify/delete tests outside their location.",
+            "State/test-admin cannot modify/delete  general tests or tests outside their location.",
         )
 
 
@@ -641,7 +635,9 @@ def update_test(
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    check_test_permission(session, current_user, test)
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_test_permission(session, current_user, test)
 
     if (
         test_update.start_time is not None
@@ -899,7 +895,9 @@ def delete_test(
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    check_test_permission(session, current_user, test)
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_test_permission(session, current_user, test)
 
     if check_linked_question(session, test_id):
         raise HTTPException(
@@ -943,7 +941,9 @@ def bulk_delete_question(
 
     for test in db_test:
         try:
-            check_test_permission(session, current_user, test)
+            role = session.get(Role, current_user.role_id)
+            if role and role.name in ("state_admin", "test_admin"):
+                check_test_permission(session, current_user, test)
 
             if test.id is not None and check_linked_question(session, test.id):
                 add_test_to_failure_list(session, test, failure_list)

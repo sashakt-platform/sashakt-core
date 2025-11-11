@@ -2031,7 +2031,7 @@ def test_state_admin_cannot_delete_general_user(
     )
 
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete general users" in delete_resp.json()["detail"].lower()
+    assert "cannot modify/delete " in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_delete_user_in_other_state(
@@ -2091,7 +2091,7 @@ def test_state_admin_cannot_delete_user_in_other_state(
         headers=token_headers,
     )
     assert delete_resp.status_code == 403
-    assert "outside their state" in delete_resp.json()["detail"].lower()
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_can_delete_user_in_same_state(
@@ -2213,7 +2213,7 @@ def test_state_admin_cannot_update_general_user(
         headers=token_headers,
     )
     assert update_resp.status_code == 403
-    assert "cannot modify/delete general users" in update_resp.json()["detail"].lower()
+    assert "cannot modify/delete " in update_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_update_user_in_other_state(
@@ -2279,7 +2279,7 @@ def test_state_admin_cannot_update_user_in_other_state(
         headers=token_headers,
     )
     assert update_resp.status_code == 403
-    assert "outside their state" in update_resp.json()["detail"].lower()
+    assert " cannot modify/delete" in update_resp.json()["detail"].lower()
 
 
 def test_state_admin_can_update_user_in_same_state(

@@ -72,32 +72,22 @@ QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
 def check_question_permission(
     session: SessionDep, current_user: CurrentUser, question: Question
 ) -> None:
-    role = session.get(Role, current_user.role_id)
-    if not role or role.name not in ("state_admin", "test_admin"):
-        return
-
     locations = session.exec(
         select(QuestionLocation).where(QuestionLocation.question_id == question.id)
     ).all()
+    question_state_ids = {loc.state_id for loc in locations if loc.state_id is not None}
 
-    if not locations:
-        raise HTTPException(
-            403, "State/test-admin cannot modify/delete general questions."
-        )
-
-    question_location_ids = [
-        loc.state_id for loc in locations if loc.state_id is not None
-    ]
-
-    user_locations = session.exec(
-        select(UserState.state_id).where(UserState.user_id == current_user.id)
-    ).all()
-    user_locations = list(user_locations)
-
-    if not any(loc in user_locations for loc in question_location_ids):
+    user_state_ids = {
+        state_id
+        for state_id in session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
+        if state_id is not None
+    }
+    if not question_state_ids or not question_state_ids.issubset(user_state_ids):
         raise HTTPException(
             403,
-            "State/test-admin cannot modify/delete questions outside their location.",
+            "State/test-admin cannot modify/delete general questions or questions outside their location.",
         )
 
 
@@ -692,7 +682,9 @@ def delete_question(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    check_question_permission(session, current_user, question)
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_question_permission(session, current_user, question)
 
     if check_linked_test(session, question_id):
         raise HTTPException(
@@ -731,7 +723,9 @@ def bulk_delete_question(
 
     for question in db_questions:
         try:
-            check_question_permission(session, current_user, question)
+            role = session.get(Role, current_user.role_id)
+            if role and role.name in ("state_admin", "test_admin"):
+                check_question_permission(session, current_user, question)
 
             if question.id is not None and check_linked_test(session, question.id):
                 add_question_to_failure_list(session, question, failure_list)
@@ -787,7 +781,9 @@ def update_question(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    check_question_permission(session, current_user, question)
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_question_permission(session, current_user, question)
 
     # Update basic question attributes
     question_data = updated_data.model_dump(exclude_unset=True)

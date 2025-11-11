@@ -4740,6 +4740,74 @@ def test_state_admin_cannot_delete_question_outside_location(
     assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
 
 
+def test_state_admin_cannot_delete_multi_state_question_without_full_access(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_b = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_a.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_a.id, state_b.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
 def test_state_admin_cannot_delete_general_question(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
