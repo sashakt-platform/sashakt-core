@@ -1972,3 +1972,376 @@ def test_user_list_state_user(
     assert "items" in content
     items = content["items"]
     assert len(items) == 2
+
+
+def test_state_admin_cannot_delete_general_user(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "organization_id": org.id,
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    user_id = resp.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete " in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_delete_user_in_other_state(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_x.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    user_id = resp.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_can_delete_user_in_same_state(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    user_id = resp.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+
+
+def test_state_admin_cannot_update_general_user(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": system_admin_role.id,
+        "organization_id": org.id,
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    user_id = resp.json()["id"]
+
+    update_payload = {
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+    }
+    update_resp = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        json=update_payload,
+        headers=token_headers,
+    )
+    assert update_resp.status_code == 403
+    assert "cannot modify/delete " in update_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_update_user_in_other_state(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_x.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    user_id = resp.json()["id"]
+
+    update_payload = {
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+    }
+    update_resp = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        json=update_payload,
+        headers=token_headers,
+    )
+    assert update_resp.status_code == 403
+    assert " cannot modify/delete" in update_resp.json()["detail"].lower()
+
+
+def test_state_admin_can_update_user_in_same_state(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    user_id = resp.json()["id"]
+
+    update_payload = {
+        "full_name": "Updated Name",
+        "phone": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    update_resp = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        json=update_payload,
+        headers=token_headers,
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["full_name"] == "Updated Name"
