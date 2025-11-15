@@ -492,40 +492,38 @@ def submit_test_for_qr_candidate(
 
     if candidate_test.is_submitted:
         raise HTTPException(status_code=400, detail="Test already submitted")
-    if is_candidate_test_expired(session, candidate_test_id):
-        raise HTTPException(
-            status_code=400, detail="Test time expired. You cannot submit the test."
-        )
-    if candidate_test.question_revision_ids:
-        question_revision_ids = candidate_test.question_revision_ids
+    test_expired = is_candidate_test_expired(session, candidate_test_id)
+    if not test_expired:
+        if candidate_test.question_revision_ids:
+            question_revision_ids = candidate_test.question_revision_ids
 
-        mandatory_question_revision_ids = set(
-            session.exec(
-                select(QuestionRevision.id)
-                .where(col(QuestionRevision.id).in_(question_revision_ids))
-                .where(QuestionRevision.is_mandatory)
+            mandatory_question_revision_ids = set(
+                session.exec(
+                    select(QuestionRevision.id)
+                    .where(col(QuestionRevision.id).in_(question_revision_ids))
+                    .where(QuestionRevision.is_mandatory)
+                )
             )
-        )
 
-        if mandatory_question_revision_ids:
-            answered_question_revision_ids = {
-                question_revision_id
-                for question_revision_id in session.exec(
-                    select(CandidateTestAnswer.question_revision_id).where(
-                        CandidateTestAnswer.candidate_test_id == candidate_test_id
+            if mandatory_question_revision_ids:
+                answered_question_revision_ids = {
+                    question_revision_id
+                    for question_revision_id in session.exec(
+                        select(CandidateTestAnswer.question_revision_id).where(
+                            CandidateTestAnswer.candidate_test_id == candidate_test_id
+                        )
                     )
-                )
-                if question_revision_id is not None
-            }
+                    if question_revision_id is not None
+                }
 
-            missing_mandatory_questions = (
-                mandatory_question_revision_ids - answered_question_revision_ids
-            )
-            if missing_mandatory_questions:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Mandatory questions not answered ",
+                missing_mandatory_questions = (
+                    mandatory_question_revision_ids - answered_question_revision_ids
                 )
+                if missing_mandatory_questions:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Mandatory questions not answered ",
+                    )
 
     # Mark test as submitted and set end time
     candidate_test.is_submitted = True
