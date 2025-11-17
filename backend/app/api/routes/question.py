@@ -18,11 +18,12 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, not_, or_, select
+from sqlmodel import and_, col, not_, or_, select
 from typing_extensions import TypedDict
 
 from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     QuestionSortConfig,
     SortingParams,
@@ -216,12 +217,17 @@ def prepare_for_db(
 
 
 def is_duplicate_question(
-    session: SessionDep, question_text: str, tag_ids: list[int] | None
+    session: SessionDep,
+    question_text: str,
+    tag_ids: list[int] | None,
+    organization_id: int,
 ) -> bool:
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
-        .where(not_(Question.is_deleted))
+        .where(
+            and_(not_(Question.is_deleted), Question.organization_id == organization_id)
+        )
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
@@ -252,7 +258,10 @@ def create_question(
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
     if is_duplicate_question(
-        session, question_create.question_text, question_create.tag_ids
+        session,
+        question_create.question_text,
+        question_create.tag_ids,
+        current_user.organization_id,
     ):
         raise HTTPException(
             status_code=400,
@@ -456,6 +465,21 @@ def get_questions(
         )
         .where(Question.organization_id == current_user.organization_id)
     )
+
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            query = query.outerjoin(QuestionLocation).where(
+                or_(
+                    col(QuestionLocation.state_id).is_(None),
+                    col(QuestionLocation.state_id).in_(current_user_state_ids),
+                )
+            )
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
@@ -1290,7 +1314,9 @@ async def upload_questions_csv(
                         }
                     )
                     continue
-                if is_duplicate_question(session, question_text, tag_ids):
+                if is_duplicate_question(
+                    session, question_text, tag_ids, organization_id
+                ):
                     raise ValueError("Questions Already Exist")
 
                 # Create QuestionCreate object

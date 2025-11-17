@@ -1841,9 +1841,9 @@ def test_get_test_result(
         description=random_lower_string(),
         time_limit=60,
         marks=100,
-        start_instructions="Test instructions",
+        start_instructions=random_lower_string(),
         link=random_lower_string(),
-        created_by_id=user.id,  # Assuming user ID 1 exists
+        created_by_id=user.id,
         is_active=True,
         is_deleted=False,
     )
@@ -1930,7 +1930,7 @@ def test_get_test_result(
     db.refresh(candidate_test_answer)
     candidate_test_answer = CandidateTestAnswer(
         candidate_test_id=candidate_test_id,
-        question_revision_id=questions[1].id,  # Assuming question revision ID 1 exists
+        question_revision_id=questions[1].id,
         response=2,
         visited=True,
         time_spent=30,
@@ -1974,6 +1974,7 @@ def test_get_test_result(
     assert data["incorrect_answer"] == 2
     assert data["mandatory_not_attempted"] == 0
     assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 4
     assert data["marks_obtained"] == 2
     assert data["marks_maximum"] == 4
 
@@ -2099,6 +2100,7 @@ def test_overall_avg_score_two_tests(
         tag_ids=[tag.id],
         state_ids=[state.id],
         district_ids=[district.id],
+        organization_id=org_id,
     )
     db.add(test)
     db.commit()
@@ -2242,6 +2244,7 @@ def test_overall_avg_score_two_tests(
         marking_scheme={"correct": 4, "wrong": -2, "skipped": 0},
         tag_ids=[tag.id],
         district_ids=[district.id],
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
@@ -2360,6 +2363,7 @@ def test_overall_avg_score_two_tests(
         marking_scheme={"correct": 3, "wrong": -1, "skipped": 0},
         state_ids=[state.id],
         district_ids=[district.id],
+        organization_id=org_id,
     )
     db.add(test3)
     db.commit()
@@ -2473,6 +2477,7 @@ def test_overall_avg_score_two_tests(
         is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 2, "wrong": 0, "skipped": 0},
+        organization_id=org_id,
     )
     db.add(test4)
     db.commit()
@@ -2580,6 +2585,7 @@ def test_overall_avg_time_two_tests(
         is_deleted=False,
         state_ids=[state.id],
         district_ids=[district.id],
+        organization_id=user_data["organization_id"],
     )
     db.add(test1)
     db.commit()
@@ -2603,6 +2609,7 @@ def test_overall_avg_time_two_tests(
         is_active=True,
         is_deleted=False,
         state_ids=[state.id],
+        organization_id=user_data["organization_id"],
     )
     db.add(test2)
     db.commit()
@@ -2731,6 +2738,7 @@ def test_overall_avg_score_state_admin_location_restricted(
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
         state_ids=[state_x.id],
+        organization_id=org_id,
     )
     db.add(test1)
     db.commit()
@@ -2749,6 +2757,7 @@ def test_overall_avg_score_state_admin_location_restricted(
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
         state_ids=[state_y.id],
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
@@ -2905,6 +2914,7 @@ def test_overall_avg_time_state_admin_location_restricted(
         is_active=True,
         is_deleted=False,
         state_ids=[state_x.id],
+        organization_id=org_id,
     )
     db.add(test1)
     db.commit()
@@ -2924,6 +2934,7 @@ def test_overall_avg_time_state_admin_location_restricted(
         is_active=True,
         is_deleted=False,
         state_ids=[state_y.id],
+        organization_id=org_id,
     )
     db.add(test2)
     db.commit()
@@ -3089,6 +3100,7 @@ def test_result_with_no_answers(
     assert data["incorrect_answer"] == 0
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 2
     assert data["marks_obtained"] == 1
     assert data["marks_maximum"] == 2
 
@@ -3200,6 +3212,7 @@ def test_result_with_mixed_answers_test_level_marking(
     assert data["incorrect_answer"] == 1
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 3
     assert data["marks_obtained"] == 3  # 5 - 2 + 0
     assert data["marks_maximum"] == 15  # 3 questions × 5 each
 
@@ -5908,31 +5921,15 @@ def test_random_questions_by_tag_skipping_selected_questions(
 
 
 def test_candidate_test_question_ids_in_order(
-    client: TestClient, db: SessionDep
+    client: TestClient, db: SessionDep, get_user_stateadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-    test = Test(
-        name=random_lower_string(),
-        description="Should return questions in the same order",
-        time_limit=60,
-        marks=100,
-        start_instructions=random_lower_string(),
-        link=random_lower_string(),
-        created_by_id=user.id,
-        shuffle=False,
-        random_questions=False,
-        is_active=True,
-        is_deleted=False,
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
+    user = get_current_user_data(client, get_user_stateadmin_token)
 
     inserted_question_ids = []
     for i in range(5):
         question = Question(
-            created_by_id=user.id,
-            organization_id=user.organization_id,
+            created_by_id=user["id"],
+            organization_id=user["organization_id"],
             is_active=True,
             is_deleted=False,
         )
@@ -5942,7 +5939,7 @@ def test_candidate_test_question_ids_in_order(
 
         revision = QuestionRevision(
             question_text=f"Q{i}",
-            created_by_id=user.id,
+            created_by_id=user["id"],
             question_id=question.id,
             question_type="single_choice",
             options=[{"id": 1, "key": "A", "value": "Option A"}],
@@ -5954,11 +5951,30 @@ def test_candidate_test_question_ids_in_order(
 
         inserted_question_ids.append(revision.id)
 
-        test_question = TestQuestion(test_id=test.id, question_revision_id=revision.id)
-        db.add(test_question)
-        db.commit()
+    test_payload = {
+        "name": random_lower_string(),
+        "description": "Should return questions in the same order",
+        "time_limit": 60,
+        "marks": 100,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "shuffle": False,
+        "random_questions": False,
+        "is_active": True,
+        "is_deleted": False,
+        "question_revision_ids": inserted_question_ids,
+    }
 
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_stateadmin_token,
+    )
+    assert test_response.status_code == 200
+    test_data = test_response.json()
+    assert test_data["id"] is not None
+
+    payload = {"test_id": test_data["id"], "device_info": "Test Device"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -5966,11 +5982,6 @@ def test_candidate_test_question_ids_in_order(
     candidate_test_id = data["candidate_test_id"]
     candidate_uuid = data["candidate_uuid"]
 
-    candidate_test = db.exec(
-        select(CandidateTest).where(CandidateTest.id == candidate_test_id)
-    ).first()
-    assert candidate_test is not None
-    stored_ids = candidate_test.question_revision_ids
     get_response = client.get(
         f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
         params={"candidate_uuid": candidate_uuid},
@@ -5979,7 +5990,6 @@ def test_candidate_test_question_ids_in_order(
     returned_data = get_response.json()
     returned_questions = returned_data["question_revisions"]
     returned_ids = [q["id"] for q in returned_questions]
-    assert stored_ids == inserted_question_ids
     assert returned_ids == inserted_question_ids
     response2 = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response2.status_code == 200
@@ -5987,19 +5997,12 @@ def test_candidate_test_question_ids_in_order(
     candidate_test_id_2 = data2["candidate_test_id"]
     candidate_uuid_2 = data2["candidate_uuid"]
 
-    candidate_test_2 = db.exec(
-        select(CandidateTest).where(CandidateTest.id == candidate_test_id_2)
-    ).first()
-    assert candidate_test_2 is not None
-    stored_ids_2 = candidate_test_2.question_revision_ids
-
     get_response_2 = client.get(
         f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id_2}",
         params={"candidate_uuid": candidate_uuid_2},
     )
     assert get_response_2.status_code == 200
     returned_ids_2 = [q["id"] for q in get_response_2.json()["question_revisions"]]
-    assert stored_ids_2 == inserted_question_ids
     assert returned_ids_2 == inserted_question_ids
     assert returned_ids == returned_ids_2
 

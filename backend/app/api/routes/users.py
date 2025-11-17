@@ -1,7 +1,8 @@
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, or_, select
 
 from app import crud
@@ -61,6 +62,19 @@ def read_users(
 
     statement = select(User).where(User.organization_id == current_user_organization_id)
 
+    # apply role-based filtering
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            statement = statement.join(UserState).where(
+                col(UserState.state_id).in_(current_user_state_ids),
+            )
+
     # apply search filter if search parameter is provided
     if search:
         search_filter = or_(
@@ -76,14 +90,17 @@ def read_users(
     )
     statement = sorting_with_default.apply_to_query(statement, UserSortConfig)
 
-    users = session.exec(statement).all()
+    users: Page[UserPublic] = paginate(
+        session,
+        statement,  # type: ignore[arg-type]
+        param,
+        transformer=lambda items: [
+            crud.get_user_public(db_user=user, session=session)
+            for user in (list(items) if not isinstance(items, list) else items)
+        ],
+    )
 
-    user_public_list = []
-
-    for user in users:
-        user_public_list.append(crud.get_user_public(db_user=user, session=session))
-
-    return cast(Page[UserPublic], paginate(user_public_list, params=param))
+    return users
 
 
 def validate_user_return_role(

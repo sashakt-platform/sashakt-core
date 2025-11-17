@@ -43,7 +43,7 @@ from app.models.candidate import (
 from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
-from app.models.user import User, UserState
+from app.models.user import User
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -135,71 +135,50 @@ def get_overall_tests_analytics(
     """
     Calculate overall average score and average test duration across all tests.
     """
-    empty_result = OverallTestAnalyticsResponse(
-        total_candidates=0,
-        overall_score_percent=0.0,
-        overall_avg_time_minutes=0.0,
-    )
+
     query = (
         select(CandidateTest)
         .join(Test)
-        .join(User)
         .where(
+            Test.organization_id == current_user.organization_id,
             col(CandidateTest.end_time).is_not(None),
-            User.organization_id == current_user.organization_id,
         )
     )
 
-    user_state_ids: list[int] = []
+    current_user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = list(
-            session.exec(
-                select(UserState.state_id).where(UserState.user_id == current_user.id)
-            ).all()
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
 
-    if user_state_ids:
-        state_query = select(TestState.test_id).where(
-            col(TestState.state_id).in_(user_state_ids)
+    if current_user_state_ids:
+        query = query.join(TestState).where(
+            CandidateTest.test_id == TestState.test_id,
+            col(TestState.state_id).in_(current_user_state_ids),
         )
-        test_ids_for_user_state = session.exec(state_query).all()
-        if not test_ids_for_user_state:
-            return empty_result
-        query = query.where(col(CandidateTest.test_id).in_(test_ids_for_user_state))
 
     if tag_type_ids:
-        tag_type_query = (
-            select(TestTag.test_id)
-            .join(Tag)
-            .where(col(Tag.tag_type_id).in_(tag_type_ids))
+        query = query.join(TestTag).where(
+            CandidateTest.test_id == TestTag.test_id,
+            col(Tag.tag_type_id).in_(tag_type_ids),
         )
-        test_ids_with_tag_types = session.exec(tag_type_query).all()
-        if test_ids_with_tag_types:
-            query = query.where(col(CandidateTest.test_id).in_(test_ids_with_tag_types))
-        else:
-            return empty_result
+
     if state_ids:
-        state_query = select(TestState.test_id).where(
-            col(TestState.state_id).in_(state_ids)
+        query = query.join(TestState).where(
+            CandidateTest.test_id == TestState.test_id,
+            col(TestState.state_id).in_(state_ids),
         )
-        test_ids_with_states = session.exec(state_query).all()
-        if test_ids_with_states:
-            query = query.where(col(CandidateTest.test_id).in_(test_ids_with_states))
-        else:
-            return empty_result
 
     if district_ids:
-        district_query = select(TestDistrict.test_id).where(
-            col(TestDistrict.district_id).in_(district_ids)
+        query = query.join(TestDistrict).where(
+            CandidateTest.test_id == TestDistrict.test_id,
+            col(TestDistrict.district_id).in_(district_ids),
         )
-        test_ids_with_districts = session.exec(district_query).all()
-        if test_ids_with_districts:
-            query = query.where(col(CandidateTest.test_id).in_(test_ids_with_districts))
-        else:
-            return empty_result
 
     candidate_tests = session.exec(query).all()
 
@@ -635,15 +614,18 @@ def get_test_summary(
         None, description="End date in YYYY-MM-DD format"
     ),
 ) -> TestStatusSummary:
-    user_state_ids: list[int] = []
+    """
+    Get Summary of Tests: total submitted, not submitted (active/inactive)
+    """
+    current_user_state_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        user_state_ids = list(
-            session.exec(
-                select(UserState.state_id).where(UserState.user_id == current_user.id)
-            ).all()
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
 
     query = (
@@ -654,9 +636,9 @@ def get_test_summary(
         .where(Test.created_by_id == User.id)
         .where(User.organization_id == current_user.organization_id)
     )
-    if user_state_ids:
+    if current_user_state_ids:
         state_test_ids = select(TestState.test_id).where(
-            col(TestState.state_id).in_(user_state_ids)
+            col(TestState.state_id).in_(current_user_state_ids)
         )
         query = query.where(col(Test.id).in_(state_test_ids))
 
@@ -1022,11 +1004,13 @@ def get_test_result(
                     incorrect += 1
                     if marking_scheme:
                         marks_obtained += marking_scheme["wrong"]
+    total_questions = len(candidate_test.question_revision_ids)
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
+        total_questions=total_questions,
         marks_obtained=marks_obtained if marking_scheme else None,
         marks_maximum=marks_maximum if marking_scheme else None,
     )
