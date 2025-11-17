@@ -1724,6 +1724,48 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     assert "Test already submitted" in response.json()["detail"]
 
 
+def test_submit_test_after_expiry(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+
+    with patch("app.api.routes.candidate.get_timezone_aware_now") as mocked_now:
+        mocked_now.return_value = fake_current_time
+
+        user = create_random_user(db)
+        test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_instructions=random_lower_string(),
+            link=random_lower_string(),
+            created_by_id=user.id,
+            is_active=True,
+            is_deleted=False,
+            time_limit=60,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+
+        payload = {"test_id": test.id, "device_info": random_lower_string()}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+        candidate_uuid = start_data["candidate_uuid"]
+        candidate_test_id = start_data["candidate_test_id"]
+
+        mocked_now.return_value = fake_current_time + timedelta(hours=2)
+
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+            headers=get_user_superadmin_token,
+        )
+
+        assert response.status_code == 200
+
+
 def test_submit_test_with_unanswered_mandatory_questions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
