@@ -511,7 +511,6 @@ async def import_entities_from_csv(
                 name=entity_name,
                 created_by_id=user_id,
                 entity_type_id=entity_type.id,
-                organization_id=organization_id,
                 state_id=state.id,
                 district_id=district.id,
                 block_id=block.id,

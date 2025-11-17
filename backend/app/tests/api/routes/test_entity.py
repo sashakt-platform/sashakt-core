@@ -1537,6 +1537,7 @@ Missing Field Entity,,Kasauli,Solan,Himachal Pradesh
         assert data["success_entities"] == 0
         assert data["failed_entities"] == 3
         assert "Missing references" in data["message"]
+        assert "Existing Entity" in data["message"]
         assert "error_log" in data
 
     finally:
