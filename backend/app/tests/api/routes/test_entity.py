@@ -1,3 +1,6 @@
+import base64
+import csv
+import io
 import os
 import tempfile
 
@@ -1514,6 +1517,7 @@ def test_bulk_upload_entities_unsuccessful_scenarios(
 Existing Entity,CLF,Kasauli,Solan,Himachal Pradesh
 Invalid Reference Entity,CLF,Kasauli,UnknownDistrict,Himachal Pradesh
 Missing Field Entity,,Kasauli,Solan,Himachal Pradesh
+MissingEntityTypeEntity,UnknownType,Kasauli,Solan,Himachal Pradesh
 """
 
     import os
@@ -1533,11 +1537,39 @@ Missing Field Entity,,Kasauli,Solan,Himachal Pradesh
 
         assert response.status_code == 200
         data = response.json()
-        assert data["uploaded_entities"] == 3
+        assert data["uploaded_entities"] == 4
         assert data["success_entities"] == 0
-        assert data["failed_entities"] == 3
+        assert data["failed_entities"] == 4
         assert "Missing references" in data["message"]
         assert "error_log" in data
+        expected_errors = {
+            1: "Entity already exists",
+            2: "District 'UnknownDistrict' not found",
+            3: "Missing required value(s)",
+            4: "Entity type 'UnknownType' not found",
+        }
+
+        assert "data:text/csv;base64," in data["error_log"]
+        base64_csv = data["error_log"].split("base64,")[-1]
+
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        rows = list(csv_reader)
+
+        assert len(rows) == 4
+
+        for row in rows:
+            assert "row_number" in row
+            assert "entity_name" in row
+            assert "error" in row
+            assert row["error"]
+
+            row_number = int(row["row_number"])
+            expected_error = expected_errors.get(row_number)
+            assert expected_error is not None
+            assert expected_error.lower() in row["error"].lower()
 
     finally:
         if os.path.exists(temp_file_path):
