@@ -443,10 +443,32 @@ async def import_entities_from_csv(
             detail=f"CSV must contain headers: {', '.join(required_headers)}",
         )
 
+    states = session.exec(select(State)).all()
+    state_map = {state.name.lower(): state for state in states}
+
+    districts = session.exec(select(District)).all()
+    district_map = {
+        (district.name.lower(), district.state_id): district for district in districts
+    }
+
+    blocks = session.exec(select(Block)).all()
+    block_map = {(block.name.lower(), block.district_id): block for block in blocks}
+
+    entity_types = session.exec(select(EntityType)).all()
+    entity_type_map = {
+        entity_type.name.lower(): entity_type for entity_type in entity_types
+    }
+
+    existing_entities = session.exec(select(Entity)).all()
+    existing_entity_map = {
+        (entity.name.lower(), entity.block_id): entity for entity in existing_entities
+    }
+
     success_count = failed_count = 0
     failed_entity_details = []
     failed_references = set()
     duplicate_entities = set()
+    new_entities_to_add = []
 
     for row_num, row in enumerate(csv_reader, start=1):
         try:
@@ -461,43 +483,27 @@ async def import_entities_from_csv(
             ):
                 raise ValueError("Missing required value(s)")
 
-            state = session.exec(select(State).where(State.name == state_name)).first()
+            state = state_map.get(state_name.lower())
             if not state:
                 failed_references.add(state_name)
                 raise ValueError(f"State '{state_name}' not found")
 
-            district = session.exec(
-                select(District)
-                .where(func.lower(District.name) == district_name.lower())
-                .where(District.state_id == state.id)
-            ).first()
+            district = district_map.get((district_name.lower(), state.id or 0))
             if not district:
                 failed_references.add(f"{district_name} in {state_name}")
                 raise ValueError(f"District '{district_name}' not found")
 
-            block = session.exec(
-                select(Block)
-                .where(func.lower(Block.name) == block_name.lower())
-                .where(Block.district_id == district.id)
-            ).first()
-
+            block = block_map.get((block_name.lower(), district.id or 0))
             if not block:
                 failed_references.add(f"{block_name} in {district_name}")
                 raise ValueError(f"Block '{block_name}' not found")
 
-            entity_type = session.exec(
-                select(EntityType).where(EntityType.name == entity_type_name)
-            ).first()
+            entity_type = entity_type_map.get(entity_type_name.lower())
             if not entity_type:
                 failed_references.add(entity_type_name)
                 raise ValueError(f"Entity type '{entity_type_name}' not found")
 
-            existing = session.exec(
-                select(Entity)
-                .where(Entity.name == entity_name)
-                .where(Entity.block_id == block.id)
-            ).first()
-            if existing:
+            if (entity_name.lower(), block.id) in existing_entity_map:
                 duplicate_entities.add(entity_name)
                 raise ValueError("Entity already exists")
 
@@ -511,9 +517,8 @@ async def import_entities_from_csv(
                 block_id=block.id,
                 is_active=True,
             )
-            session.add(new_entity)
-            session.commit()
-            session.refresh(new_entity)
+
+            new_entities_to_add.append(new_entity)
             success_count += 1
 
         except Exception as e:
@@ -529,6 +534,10 @@ async def import_entities_from_csv(
                     "error": str(e),
                 }
             )
+
+    if new_entities_to_add:
+        session.add_all(new_entities_to_add)
+        session.commit()
 
     error_log = None
     if failed_entity_details:
