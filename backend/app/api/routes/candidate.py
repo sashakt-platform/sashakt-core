@@ -1004,11 +1004,13 @@ def get_test_result(
                     incorrect += 1
                     if marking_scheme:
                         marks_obtained += marking_scheme["wrong"]
+    total_questions = len(candidate_test.question_revision_ids)
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
+        total_questions=total_questions,
         marks_obtained=marks_obtained if marking_scheme else None,
         marks_maximum=marks_maximum if marking_scheme else None,
     )

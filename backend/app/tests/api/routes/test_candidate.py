@@ -1841,9 +1841,9 @@ def test_get_test_result(
         description=random_lower_string(),
         time_limit=60,
         marks=100,
-        start_instructions="Test instructions",
+        start_instructions=random_lower_string(),
         link=random_lower_string(),
-        created_by_id=user.id,  # Assuming user ID 1 exists
+        created_by_id=user.id,
         is_active=True,
         is_deleted=False,
     )
@@ -1930,7 +1930,7 @@ def test_get_test_result(
     db.refresh(candidate_test_answer)
     candidate_test_answer = CandidateTestAnswer(
         candidate_test_id=candidate_test_id,
-        question_revision_id=questions[1].id,  # Assuming question revision ID 1 exists
+        question_revision_id=questions[1].id,
         response=2,
         visited=True,
         time_spent=30,
@@ -1974,6 +1974,7 @@ def test_get_test_result(
     assert data["incorrect_answer"] == 2
     assert data["mandatory_not_attempted"] == 0
     assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 4
     assert data["marks_obtained"] == 2
     assert data["marks_maximum"] == 4
 
@@ -3099,6 +3100,7 @@ def test_result_with_no_answers(
     assert data["incorrect_answer"] == 0
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 2
     assert data["marks_obtained"] == 1
     assert data["marks_maximum"] == 2
 
@@ -3210,6 +3212,7 @@ def test_result_with_mixed_answers_test_level_marking(
     assert data["incorrect_answer"] == 1
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 3
     assert data["marks_obtained"] == 3  # 5 - 2 + 0
     assert data["marks_maximum"] == 15  # 3 questions × 5 each
 
