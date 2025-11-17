@@ -1484,7 +1484,7 @@ def test_bulk_upload_entities_unsuccessful_scenarios(
     db.commit()
     db.refresh(district)
 
-    block = Block(name="Kasauli", district_id=district.id)
+    block = Block(name="kasauli", district_id=district.id)
     db.add(block)
     db.commit()
     db.refresh(block)
@@ -1514,10 +1514,10 @@ def test_bulk_upload_entities_unsuccessful_scenarios(
     db.commit()
 
     csv_content = """entity_name,entity_type_name,block_name,district_name,state_name
-Existing Entity,CLF,Kasauli,Solan,Himachal Pradesh
-Invalid Reference Entity,CLF,Kasauli,UnknownDistrict,Himachal Pradesh
-Missing Field Entity,,Kasauli,Solan,Himachal Pradesh
-MissingEntityTypeEntity,UnknownType,Kasauli,Solan,Himachal Pradesh
+Existing Entity,CLF,kasauli,Solan,Himachal Pradesh
+Invalid Reference Entity,CLF,kasauli,UnknownDistrict,Himachal Pradesh
+Missing Field Entity,,kasauli,Solan,Himachal Pradesh
+MissingEntityTypeEntity,UnknownType,kasauli,Solan,Himachal Pradesh
 """
 
     import os
