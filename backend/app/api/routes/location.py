@@ -482,6 +482,11 @@ def update_block(
     return block_db
 
 
+def clean_value(value: str | None) -> str:
+    """Safely strip string values."""
+    return (value or "").strip()
+
+
 @block_router.post(
     "/import",
     response_model=BlockBulkUploadResponse,
@@ -512,45 +517,51 @@ async def import_blocks_from_csv(
             detail=f"CSV must contain headers: {', '.join(required_headers)}",
         )
 
+    district_rows = session.exec(
+        select(District.id, District.name, State.name).join(State)
+    ).all()
+
+    district_map = {
+        (district_name.lower(), state_name.lower()): district_id
+        for district_id, district_name, state_name in district_rows
+    }
+
+    existing_block_rows = session.exec(select(Block)).all()
+
+    existing_block_map = {
+        (block.name.lower(), block.district_id): True for block in existing_block_rows
+    }
+
     success_count = failed_count = 0
     failed_block_details = []
     failed_districts = set()
     duplicate_blocks = set()
 
     for row_num, row in enumerate(csv_reader, start=2):
-        try:
-            block_name = (row.get("block_name") or "").strip()
-            district_name = (row.get("district_name") or "").strip()
-            state_name = (row.get("state_name") or "").strip()
+        block_name = clean_value(row.get("block_name"))
+        district_name = clean_value(row.get("district_name"))
+        state_name = clean_value(row.get("state_name"))
 
+        try:
             if not all([block_name, district_name, state_name]):
                 raise ValueError("Missing required value(s)")
 
-            district = session.exec(
-                select(District)
-                .join(State)
-                .where(District.name == district_name)
-                .where(State.name == state_name)
-            ).first()
+            district_key = (district_name.lower(), state_name.lower())
+            district_id = district_map.get(district_key)
 
-            if not district:
-                failed_districts.add(f"{district_name} in {state_name}")
+            if not district_id:
+                failed_districts.add(f"{district_name} ({state_name})")
                 raise ValueError(
                     f"District '{district_name}' in state '{state_name}' not found"
                 )
 
-            existing = session.exec(
-                select(Block)
-                .where(Block.name == block_name)
-                .where(Block.district_id == district.id)
-            ).first()
-
-            if existing:
+            if (block_name.lower(), district_id) in existing_block_map:
                 duplicate_blocks.add(block_name)
                 raise ValueError("Block already exists")
 
-            new_block = Block(name=block_name, district_id=district.id, is_active=True)
+            new_block = Block(name=block_name, district_id=district_id, is_active=True)
             session.add(new_block)
+            existing_block_map[(block_name.lower(), district_id)] = True
             success_count += 1
 
         except Exception as e:
@@ -558,9 +569,9 @@ async def import_blocks_from_csv(
             failed_block_details.append(
                 {
                     "row_number": row_num,
-                    "block_name": row.get("block_name", "").strip(),
-                    "district_name": row.get("district_name", "").strip(),
-                    "state_name": row.get("state_name", "").strip(),
+                    "block_name": block_name,
+                    "district_name": district_name,
+                    "state_name": state_name,
                     "error": str(e),
                 }
             )
@@ -591,7 +602,7 @@ async def import_blocks_from_csv(
     if failed_districts:
         message += f" Missing districts: {', '.join(failed_districts)}."
     if duplicate_blocks:
-        message += f" Duplicates skipped: {', '.join(duplicate_blocks)}."
+        message += f" Duplicate blocks skipped: {', '.join(duplicate_blocks)}."
 
     return BlockBulkUploadResponse(
         message=message,
