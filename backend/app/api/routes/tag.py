@@ -1,7 +1,9 @@
-from typing import Annotated, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
+from sqlalchemy.orm import selectinload
 from sqlmodel import and_, col, exists, func, or_, select
 
 from app.api.deps import (
@@ -47,6 +49,38 @@ TagSortingDep = Annotated[SortingParams, Depends(TagSorting)]
 
 TagTypeSorting = create_sorting_dependency(TagTypeSortConfig)
 TagTypeSortingDep = Annotated[SortingParams, Depends(TagTypeSorting)]
+
+
+def transform_tag_types_to_public(items: list[TagType] | Any) -> list[TagTypePublic]:
+    result: list[TagTypePublic] = []
+
+    tagtype_list: list[TagType] = list(items) if not isinstance(items, list) else items
+
+    for tagtype in tagtype_list:
+        result.append(TagTypePublic(**tagtype.model_dump()))
+
+    return result
+
+
+def transform_tags_to_public(
+    tags: list[Tag] | Any,
+    current_user: CurrentUser | None = None,
+) -> list[TagPublic]:
+    result: list[TagPublic] = []
+    tag_list: list[Tag] = list(tags) if not isinstance(tags, list) else tags
+
+    for tag in tag_list:
+        tag_type = getattr(tag, "tag_type", None)
+        if (
+            current_user
+            and tag_type
+            and (tag_type.organization_id != current_user.organization_id)
+        ):
+            tag_type = None
+        result.append(
+            TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
+        )
+    return result
 
 
 # Routers for Tag-Types
@@ -129,7 +163,7 @@ def get_tagtype(
     sorting: TagTypeSortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
-) -> Page[TagType]:
+) -> Page[TagTypePublic]:
     query = select(TagType).where(
         TagType.organization_id == current_user.organization_id,
     )
@@ -144,8 +178,14 @@ def get_tagtype(
     )
     query = sorting_with_default.apply_to_query(query, TagTypeSortConfig)
 
-    tagtype = session.exec(query).all()
-    return cast(Page[TagType], paginate(tagtype, params=params))
+    tagtypes: Page[TagTypePublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_tag_types_to_public(items),
+    )
+
+    return tagtypes
 
 
 @router_tagtype.get(
@@ -335,7 +375,11 @@ def get_tags(
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[TagPublic]:
-    query = select(Tag).where(Tag.organization_id == current_user.organization_id)
+    query = (
+        select(Tag)
+        .options(selectinload(Tag.tag_type))
+        .where(Tag.organization_id == current_user.organization_id)
+    )
     if name:
         # search in both tag name and tag type name
         tag_name_condition = func.trim(func.lower(Tag.name)).like(
@@ -356,21 +400,14 @@ def get_tags(
     )
     query = sorting_with_default.apply_to_query(query, TagSortConfig)
 
-    tags = session.exec(query).all()
-    tag_public = []
-    for tag in tags:
-        tag_type = None
-        if tag.tag_type_id:
-            tag_type = session.get(TagType, tag.tag_type_id)
+    tags: Page[TagPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda tags_list: transform_tags_to_public(tags_list, current_user),
+    )
 
-            if not tag_type or tag_type.organization_id != current_user.organization_id:
-                tag_type = None
-
-        tag_public.append(
-            TagPublic(**tag.model_dump(exclude={"tag_type_id"}), tag_type=tag_type)
-        )
-
-    return cast(Page[TagPublic], paginate(tag_public, params=params))
+    return tags
 
 
 # Get Tag by ID
