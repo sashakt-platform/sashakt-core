@@ -69,6 +69,18 @@ def check_test_permission(
         if state_id is not None
     }
 
+    district_state_rows = session.exec(
+        select(District.state_id)
+        .join(TestDistrict)
+        .where(TestDistrict.district_id == District.id)
+        .where(TestDistrict.test_id == test.id)
+    ).all()
+
+    for row in district_state_rows:
+        district_state_id = row[0] if isinstance(row, tuple) else row
+        if district_state_id is not None:
+            test_state_ids.add(district_state_id)
+
     user_state_ids = {
         state_id
         for state_id in session.exec(
@@ -80,7 +92,7 @@ def check_test_permission(
     if not test_state_ids or not test_state_ids.issubset(user_state_ids):
         raise HTTPException(
             403,
-            "State/test-admin cannot modify/delete  general tests or tests outside their location.",
+            "State/test-admin cannot modify/delete general tests or tests outside their location.",
         )
 
 
@@ -636,7 +648,7 @@ def update_test(
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
     role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
+    if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
 
     if (
@@ -896,7 +908,7 @@ def delete_test(
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
     role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
+    if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
 
     if check_linked_question(session, test_id):
@@ -942,7 +954,7 @@ def bulk_delete_question(
     for test in db_test:
         try:
             role = session.get(Role, current_user.role_id)
-            if role and role.name in ("state_admin", "test_admin"):
+            if role and role.name in (state_admin.name, test_admin.name):
                 check_test_permission(session, current_user, test)
 
             if test.id is not None and check_linked_question(session, test.id):
