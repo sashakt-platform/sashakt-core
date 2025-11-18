@@ -4881,6 +4881,7 @@ def test_question_list_state_user(
 
 def test_update_question_not_found(
     client: TestClient,
+    get_user_superadmin_token: dict[str, str],
 ) -> None:
     non_existing_id = -9999
     updated_data = {"is_active": True}
@@ -4888,6 +4889,7 @@ def test_update_question_not_found(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{non_existing_id}",
         json=updated_data,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 404

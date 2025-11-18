@@ -1775,8 +1775,15 @@ def test_create_tag_with_deleted_tag_type(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    db.delete(tag_type)
     db.commit()
+    tag_type_id = tag_type.id
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/tagtype/{tag_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    delete_data = delete_resp.json()
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_data["message"].lower()
 
     tag = Tag(
         name=random_lower_string(),
@@ -1791,7 +1798,7 @@ def test_create_tag_with_deleted_tag_type(
         f"{settings.API_V1_STR}/tag/{tag.id}",
         json={
             "name": random_lower_string(),
-            "tag_type_id": tag_type.id,
+            "tag_type_id": tag_type_id,
         },
         headers=get_user_superadmin_token,
     )
