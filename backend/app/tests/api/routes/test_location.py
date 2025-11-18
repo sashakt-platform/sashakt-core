@@ -1325,22 +1325,22 @@ def test_import_blocks_csv_all_scenarios(
     india = Country(name=random_lower_string())
     db.add(india)
     db.commit()
-    state = State(name="Andhra Pradesh", country_id=india.id)
+    state = State(name="state_a", country_id=india.id)
     db.add(state)
     db.commit()
     db.refresh(state)
-    district = District(name="Anantapur", state_id=state.id)
+    district = District(name="district_a", state_id=state.id)
     db.add(district)
     db.commit()
     db.refresh(district)
 
     csv_content = """block_name,district_name,state_name
-Block A,Anantapur,Andhra Pradesh
-Block B,Anantapur,Andhra Pradesh
-,Anantapur,Andhra Pradesh
-Block D,NonExistentDistrict,Andhra Pradesh
-Block A,Anantapur,Andhra Pradesh
-Block E,Anantapur,Andhra Pradesh
+Block A,district_a,state_a
+Block B,district_a,state_a
+,district_a,state_a
+Block D,NonExistentDistrict,state_a
+Block A,district_a,state_a
+Block E,district_a,state_a
 """
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
@@ -1371,7 +1371,7 @@ Block E,Anantapur,Andhra Pradesh
         assert len(error_rows) == 3
         expected_errors = {
             4: "Missing required value(s)",
-            5: "District 'NonExistentDistrict' in state 'Andhra Pradesh' not found",
+            5: "District 'NonExistentDistrict' in state 'state_a' not found",
             6: "Block already exists",
         }
         for row in error_rows:
@@ -1466,9 +1466,9 @@ def test_import_blocks_csv_multiple_state_combinations(
     db.refresh(state_andhra)
     db.refresh(state_telangana)
 
-    district_anantapur = District(name="Anantapur", state_id=state_andhra.id)
-    district_kurnool = District(name="Kurnool", state_id=state_andhra.id)
-    district_hyderabad = District(name="Hyderabad", state_id=state_telangana.id)
+    district_anantapur = District(name="district_aa", state_id=state_andhra.id)
+    district_kurnool = District(name="district_bb", state_id=state_andhra.id)
+    district_hyderabad = District(name="district_cc", state_id=state_telangana.id)
 
     db.add_all([district_anantapur, district_kurnool, district_hyderabad])
     db.commit()
@@ -1477,13 +1477,13 @@ def test_import_blocks_csv_multiple_state_combinations(
     db.refresh(district_hyderabad)
 
     csv_content = """block_name,district_name,state_name
-Block A,Anantapur,Andhra Pradesh
-Block B,Kurnool,Andhra Pradesh
-Block C,Hyderabad,Telangana
+Block A,district_aa,Andhra Pradesh
+Block B,district_bb,Andhra Pradesh
+Block C,district_cc,Telangana
 Block D,NonExistentDistrict,Telangana
-,Hyderabad,Telangana
-Block A,Anantapur,Andhra Pradesh
-Block X,Hyderabad,Andhra Pradesh
+,district_cc,Telangana
+Block A,district_aa,Andhra Pradesh
+Block X,district_cc,Andhra Pradesh
 """
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary_file:
@@ -1522,7 +1522,7 @@ Block X,Hyderabad,Andhra Pradesh
             5: "District 'NonExistentDistrict' in state 'Telangana' not found",
             6: "Missing required value(s)",
             7: "Block already exists",
-            8: "District 'Hyderabad' in state 'Andhra Pradesh' not found",
+            8: "District 'district_cc' in state 'Andhra Pradesh' not found",
         }
 
         for row in error_rows:
