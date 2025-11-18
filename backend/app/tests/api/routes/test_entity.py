@@ -5,7 +5,6 @@ import os
 import tempfile
 
 from fastapi.testclient import TestClient
-from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
@@ -1474,20 +1473,20 @@ def test_bulk_upload_entities_unsuccessful_scenarios(
     db.commit()
     db.refresh(india)
 
-    himachal = State(name="Himachal Pradesh", country_id=india.id)
-    db.add(himachal)
+    random_state = State(name="Zerovia", country_id=india.id)
+    db.add(random_state)
     db.commit()
-    db.refresh(himachal)
+    db.refresh(random_state)
 
-    district = District(name="Solan", state_id=himachal.id)
-    db.add(district)
+    random_district = District(name="Lumora", state_id=random_state.id)
+    db.add(random_district)
     db.commit()
-    db.refresh(district)
+    db.refresh(random_district)
 
-    block = Block(name="kasauli", district_id=district.id)
-    db.add(block)
+    random_block = Block(name="Nimvath", district_id=random_district.id)
+    db.add(random_block)
     db.commit()
-    db.refresh(block)
+    db.refresh(random_block)
 
     entity_type = EntityType(
         name="CLF",
@@ -1505,23 +1504,20 @@ def test_bulk_upload_entities_unsuccessful_scenarios(
         created_by_id=user_data["id"],
         entity_type_id=entity_type.id,
         organization_id=org_id,
-        state_id=himachal.id,
-        district_id=district.id,
-        block_id=block.id,
+        state_id=random_state.id,
+        district_id=random_district.id,
+        block_id=random_block.id,
         is_active=True,
     )
     db.add(existing_entity)
     db.commit()
 
     csv_content = """entity_name,entity_type_name,block_name,district_name,state_name
-Existing Entity,CLF,kasauli,Solan,Himachal Pradesh
-Invalid Reference Entity,CLF,kasauli,UnknownDistrict,Himachal Pradesh
-Missing Field Entity,,kasauli,Solan,Himachal Pradesh
-MissingEntityTypeEntity,UnknownType,kasauli,Solan,Himachal Pradesh
+Existing Entity,CLF,Nimvath,Lumora,Zerovia
+Invalid Reference Entity,CLF,Nimvath,UnknownDistrict,Zerovia
+Missing Field Entity,,Nimvath,Lumora,Zerovia
+MissingEntityTypeEntity,UnknownType,Nimvath,Lumora,Zerovia
 """
-
-    import os
-    import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
         temp_file.write(csv_content.encode("utf-8"))
@@ -1622,9 +1618,6 @@ MissingBlockEntity,CLF,UnknownBlock,Pune,Maharashtra
 MissingEntityTypeEntity,UnknownType,Haveli,Pune,Maharashtra
 """
 
-    import os
-    import tempfile
-
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
         temp_file.write(csv_content.encode("utf-8"))
         temp_file_path = temp_file.name
@@ -1660,13 +1653,22 @@ def test_bulk_upload_entities_successful_scenarios(
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
 
-    existing_district = db.exec(select(District)).first()
-    assert existing_district is not None
+    country = Country(name="TestCountry")
+    db.add(country)
+    db.commit()
+    db.refresh(country)
 
-    state = db.exec(select(State).where(State.id == existing_district.state_id)).first()
-    assert state is not None
+    state = State(name="TestState", country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
 
-    block = Block(name="Kasauli", district_id=existing_district.id)
+    existing_district = District(name="TestDistrict", state_id=state.id)
+    db.add(existing_district)
+    db.commit()
+    db.refresh(existing_district)
+
+    block = Block(name="Testblock", district_id=existing_district.id)
     db.add(block)
     db.commit()
     db.refresh(block)
@@ -1683,13 +1685,10 @@ def test_bulk_upload_entities_successful_scenarios(
     db.refresh(entity_type)
 
     csv_content = f"""entity_name,entity_type_name,block_name,district_name,state_name
-Clf Kasauli 1,CLF,Kasauli,{existing_district.name},{state.name}
-Clf Kasauli 2,CLF,Kasauli,{existing_district.name},{state.name}
-Clf Kasauli 3,CLF,Kasauli,{existing_district.name},{state.name}
+Clf Kasauli 1,CLF,Testblock,{existing_district.name},{state.name}
+Clf Kasauli 2,CLF,Testblock,{existing_district.name},{state.name}
+Clf Kasauli 3,CLF,Testblock,{existing_district.name},{state.name}
 """
-
-    import os
-    import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
         temp_file.write(csv_content.encode("utf-8"))
