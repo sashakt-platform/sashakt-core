@@ -526,11 +526,21 @@ async def import_blocks_from_csv(
         for district_id, district_name, state_name in district_rows
     }
 
-    existing_block_rows = session.exec(select(Block)).all()
+    # Only load blocks for districts that exist in the CSV
+    district_ids_in_csv = set(district_map.values())
 
-    existing_block_map = {
-        (block.name.lower(), block.district_id): True for block in existing_block_rows
-    }
+    if district_ids_in_csv:
+        existing_block_rows = session.exec(
+            select(Block.name, Block.district_id).where(
+                col(Block.district_id).in_(district_ids_in_csv)
+            )
+        ).all()
+        existing_block_map = {
+            (block_name.lower(), district_id): True
+            for block_name, district_id in existing_block_rows
+        }
+    else:
+        existing_block_map = {}
 
     success_count = failed_count = 0
     failed_block_details = []
