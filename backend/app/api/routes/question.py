@@ -18,7 +18,7 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import and_, col, not_, or_, select
+from sqlmodel import col, or_, select
 from typing_extensions import TypedDict
 
 from app import crud
@@ -82,7 +82,7 @@ def check_linked_test(session: SessionDep, question_id: int) -> bool:
 def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
-    if not tag_type or tag_type.is_deleted:
+    if not tag_type:
         return None
     return tag_type
 
@@ -134,7 +134,6 @@ def build_question_response(
                 created_date=tag.created_date,
                 modified_date=tag.modified_date,
                 is_active=tag.is_active,
-                is_deleted=tag.is_deleted,
             )
             for tag in tags
         ]
@@ -161,7 +160,6 @@ def build_question_response(
         created_date=question.created_date,
         modified_date=question.modified_date,
         is_active=question.is_active,
-        is_deleted=question.is_deleted,
         # Current revision data
         question_text=revision.question_text,
         instructions=revision.instructions,
@@ -225,9 +223,7 @@ def is_duplicate_question(
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
-        .where(
-            and_(not_(Question.is_deleted), Question.organization_id == organization_id)
-        )
+        .where(Question.organization_id == organization_id)
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
@@ -366,7 +362,6 @@ class RevisionDetailDict(TypedDict):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool
     question_text: str
     instructions: str | None
     question_type: str
@@ -447,7 +442,6 @@ def get_questions(
     tag_type_ids: list[int] = Query(None),  # Support multiple tag types
     created_by_id: int | None = None,
     is_active: bool | None = None,
-    is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[QuestionPublic]:
     """
     Get all questions with optional filtering and sorting.
@@ -486,8 +480,6 @@ def get_questions(
         "modified_date", SortOrder.DESC
     )
     query = sorting_with_default.apply_to_query(query, QuestionSortConfig)
-
-    query = query.where(Question.is_deleted == is_deleted)
 
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
@@ -551,7 +543,7 @@ def get_questions(
 def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
     """Get all tests that include this question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     test_info_dict_list: list[TestInfoDict] = []
@@ -588,7 +580,7 @@ def get_question_candidate_tests(
 ) -> list[CandidateTestInfoDict]:
     """Get all candidate tests that include this question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     candidate_test_info_list: list[CandidateTestInfoDict] = []
@@ -716,7 +708,7 @@ def bulk_delete_question(
 def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     """Get a question by its ID."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     latest_revision = session.get(QuestionRevision, question.last_revision_id)
@@ -742,11 +734,11 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
 def update_question(
     question_id: int,
     session: SessionDep,
-    updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
+    updated_data: QuestionUpdate = Body(...),  # is_active
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Update basic question attributes
@@ -787,7 +779,7 @@ def create_question_revision(
 ) -> QuestionPublic:
     """Create a new revision for an existing question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Prepare data for JSON serialization
@@ -838,7 +830,7 @@ def get_question_revisions(
 ) -> list[QuestionRevisionInfo]:
     """Get all revisions for a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     revisions_query = (
@@ -891,7 +883,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
 
     # Check if parent question exists and is not deleted
     question = session.get(Question, revision.question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(
             status_code=404, detail="Parent question not found or deleted"
         )
@@ -929,7 +921,6 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         created_date=revision.created_date,
         modified_date=revision.modified_date,
         is_active=revision.is_active,
-        is_deleted=revision.is_deleted,
         question_text=revision.question_text,
         instructions=revision.instructions,
         question_type=revision.question_type,
@@ -956,7 +947,7 @@ def update_question_locations(
     This will add new locations and remove any existing ones not in the list.
     """
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Get current locations
@@ -1017,7 +1008,7 @@ def update_question_locations(
 def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     """Get all tags associated with a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Query all tags associated with this question
@@ -1038,7 +1029,6 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
             created_date=tag.created_date,
             modified_date=tag.modified_date,
             is_active=tag.is_active,
-            is_deleted=tag.is_deleted,
         )
         for tag in tags
         if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
@@ -1058,7 +1048,7 @@ def update_question_tags(
     This will add new tags and remove any existing ones not in the list.
     """
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Get current tags

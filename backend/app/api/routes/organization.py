@@ -132,7 +132,7 @@ def get_organization_aggregated_stats_for_current_user(
         )
 
     questions_subquery = select(func.count(func.distinct(Question.id))).where(
-        not_(Question.is_deleted), Question.organization_id == organization_id
+        Question.organization_id == organization_id
     )
 
     if current_user_state_ids:
@@ -144,7 +144,7 @@ def get_organization_aggregated_stats_for_current_user(
         )
 
     users_subquery = select(func.count(func.distinct(User.id))).where(
-        User.organization_id == organization_id, not_(User.is_deleted)
+        User.organization_id == organization_id
     )
     if current_user_state_ids:
         users_subquery = users_subquery.join(UserState).where(
@@ -153,7 +153,6 @@ def get_organization_aggregated_stats_for_current_user(
 
     tests_subquery = select(func.count(func.distinct(Test.id))).where(
         Test.organization_id == organization_id,
-        not_(Test.is_deleted),
         not_(Test.is_template),
     )
     if current_user_state_ids:
