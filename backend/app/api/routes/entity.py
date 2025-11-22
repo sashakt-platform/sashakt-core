@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import and_, col, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
-from app.api.routes.location import clean_value
+from app.api.routes.utils import clean_value
 from app.core.sorting import (
     EntitySortConfig,
     SortingParams,
@@ -465,10 +465,10 @@ async def import_entities_from_csv(
     }
 
     # First pass: collect all filters from CSV
-    csv_state_ids = set()
-    csv_district_ids = set()
-    csv_block_ids = set()
-    csv_entity_type_ids = set()
+    csv_state_ids: set[int] = set()
+    csv_district_ids: set[int] = set()
+    csv_block_ids: set[int] = set()
+    csv_entity_type_ids: set[int] = set()
 
     for rows in csv_reader:
         district_name = clean_value(rows.get("district_name"))
@@ -500,7 +500,9 @@ async def import_entities_from_csv(
             (block_name.lower(), district_id): block_id
             for block_id, block_name, district_id in existing_block_rows
         }
-        csv_block_ids.update(block_map.values())
+        csv_block_ids.update(
+            block_id for block_id in block_map.values() if block_id is not None
+        )
 
     existing_entity_map = {}
 
