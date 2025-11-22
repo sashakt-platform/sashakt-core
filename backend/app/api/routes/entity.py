@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import and_, func, select
+from sqlmodel import and_, col, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep
+from app.api.routes.location import clean_value
 from app.core.sorting import (
     EntitySortConfig,
     SortingParams,
@@ -443,26 +444,90 @@ async def import_entities_from_csv(
             detail=f"CSV must contain headers: {', '.join(required_headers)}",
         )
 
-    states = session.exec(select(State)).all()
-    state_map = {state.name.lower(): state for state in states}
+    states = session.exec(select(State.id, State.name)).all()
+    state_map = {state_name.lower(): state_id for state_id, state_name in states}
 
-    districts = session.exec(select(District)).all()
+    districts = session.exec(
+        select(District.id, District.name, State.id).join(State)
+    ).all()
+
     district_map = {
-        (district.name.lower(), district.state_id): district for district in districts
+        (district_name.lower(), state_id): district_id
+        for district_id, district_name, state_id in districts
     }
 
-    blocks = session.exec(select(Block)).all()
-    block_map = {(block.name.lower(), block.district_id): block for block in blocks}
+    entity_types = session.exec(
+        select(EntityType).where(EntityType.organization_id == organization_id)
+    ).all()
 
-    entity_types = session.exec(select(EntityType)).all()
     entity_type_map = {
         entity_type.name.lower(): entity_type for entity_type in entity_types
     }
 
-    existing_entities = session.exec(select(Entity)).all()
+    # First pass: collect all filters from CSV
+    csv_state_ids = set()
+    csv_district_ids = set()
+    csv_block_ids = set()
+    csv_entity_type_ids = set()
+
+    for rows in csv_reader:
+        district_name = clean_value(rows.get("district_name"))
+        state_name = clean_value(rows.get("state_name"))
+        block_name = clean_value(rows.get("block_name"))
+        entity_type_name = clean_value(rows.get("entity_type_name"))
+
+        state_id = state_map.get(state_name.lower())
+        if state_id:
+            csv_state_ids.add(state_id)
+
+            district_id = district_map.get((district_name.lower(), state_id))
+            if district_id:
+                csv_district_ids.add(district_id)
+
+        entity_type = entity_type_map.get(entity_type_name.lower())
+        if entity_type and entity_type.id:
+            csv_entity_type_ids.add(entity_type.id)
+
+    block_map = {}
+
+    if csv_district_ids:
+        existing_block_rows = session.exec(
+            select(Block.id, Block.name, Block.district_id).where(
+                col(Block.district_id).in_(csv_district_ids)
+            )
+        ).all()
+        block_map = {
+            (block_name.lower(), district_id): block_id
+            for block_id, block_name, district_id in existing_block_rows
+        }
+        csv_block_ids.update(block_map.values())
+
+    existing_entity_map = {}
+
+    filters = []
+    if csv_entity_type_ids:
+        filters = [
+            col(Entity.entity_type_id).in_(csv_entity_type_ids),
+        ]
+        if csv_block_ids:
+            filters.append(col(Entity.block_id).in_(csv_block_ids))
+        if csv_district_ids:
+            filters.append(col(Entity.district_id).in_(csv_district_ids))
+        if csv_state_ids:
+            filters.append(col(Entity.state_id).in_(csv_state_ids))
+    existing_entities = session.exec(select(Entity).where(*filters)).all()
     existing_entity_map = {
-        (entity.name.lower(), entity.block_id): entity for entity in existing_entities
+        (
+            entity.name.lower(),
+            entity.block_id,
+            entity.district_id,
+            entity.state_id,
+            entity.entity_type_id,
+        ): entity
+        for entity in existing_entities
     }
+
+    csv_reader = csv.DictReader(StringIO(content))
 
     success_count = failed_count = 0
     failed_entity_details = []
@@ -472,29 +537,29 @@ async def import_entities_from_csv(
 
     for row_num, row in enumerate(csv_reader, start=1):
         try:
-            entity_name = (row.get("entity_name") or "").strip()
-            entity_type_name = (row.get("entity_type_name") or "").strip()
-            block_name = (row.get("block_name") or "").strip()
-            district_name = (row.get("district_name") or "").strip()
-            state_name = (row.get("state_name") or "").strip()
+            entity_name = clean_value(row.get("entity_name"))
+            entity_type_name = clean_value(row.get("entity_type_name"))
+            block_name = clean_value(row.get("block_name"))
+            district_name = clean_value(row.get("district_name"))
+            state_name = clean_value(row.get("state_name"))
 
             if not all(
                 [entity_name, entity_type_name, block_name, district_name, state_name]
             ):
                 raise ValueError("Missing required value(s)")
 
-            state = state_map.get(state_name.lower())
-            if not state:
+            state_id = state_map.get(state_name.lower())
+            if not state_id:
                 failed_references.add(state_name)
                 raise ValueError(f"State '{state_name}' not found")
 
-            district = district_map.get((district_name.lower(), state.id or 0))
-            if not district:
+            district_id = district_map.get((district_name.lower(), state_id or 0))
+            if not district_id:
                 failed_references.add(f"{district_name} in {state_name}")
                 raise ValueError(f"District '{district_name}' not found")
 
-            block = block_map.get((block_name.lower(), district.id or 0))
-            if not block:
+            block_id = block_map.get((block_name.lower(), district_id or 0))
+            if not block_id:
                 failed_references.add(f"{block_name} in {district_name}")
                 raise ValueError(f"Block '{block_name}' not found")
 
@@ -503,21 +568,27 @@ async def import_entities_from_csv(
                 failed_references.add(entity_type_name)
                 raise ValueError(f"Entity type '{entity_type_name}' not found")
 
-            if (entity_name.lower(), block.id) in existing_entity_map:
+            if (
+                entity_name.lower(),
+                block_id,
+                district_id,
+                state_id,
+                entity_type.id,
+            ) in existing_entity_map:
                 duplicate_entities.add(entity_name)
                 raise ValueError("Entity already exists")
-
             new_entity = Entity(
                 name=entity_name,
                 created_by_id=user_id,
                 entity_type_id=entity_type.id,
-                state_id=state.id,
-                district_id=district.id,
-                block_id=block.id,
+                state_id=state_id,
+                district_id=district_id,
+                block_id=block_id,
                 is_active=True,
             )
 
             new_entities_to_add.append(new_entity)
+
             success_count += 1
 
         except Exception as e:
