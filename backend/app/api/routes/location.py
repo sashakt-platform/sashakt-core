@@ -9,6 +9,7 @@ from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.routes.utils import clean_value
 from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
@@ -482,11 +483,6 @@ def update_block(
     return block_db
 
 
-def clean_value(value: str | None) -> str:
-    """Safely strip string values."""
-    return (value or "").strip()
-
-
 @block_router.post(
     "/import",
     response_model=BlockBulkUploadResponse,
@@ -527,7 +523,15 @@ async def import_blocks_from_csv(
     }
 
     # Only load blocks for districts that exist in the CSV
-    district_ids_in_csv = set(district_map.values())
+    district_ids_in_csv = set()
+
+    for rows in csv_reader:
+        district_name = clean_value(rows.get("district_name"))
+        state_name = clean_value(rows.get("state_name"))
+        district_key = (district_name.lower(), state_name.lower())
+        district_id = district_map.get(district_key)
+        if district_id:
+            district_ids_in_csv.add(district_id)
 
     if district_ids_in_csv:
         existing_block_rows = session.exec(
@@ -546,6 +550,9 @@ async def import_blocks_from_csv(
     failed_block_details = []
     failed_districts = set()
     duplicate_blocks = set()
+
+    # Reset CSV reader for actual processing
+    csv_reader = csv.DictReader(StringIO(content))
 
     for row_num, row in enumerate(csv_reader, start=2):
         block_name = clean_value(row.get("block_name"))
