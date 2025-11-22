@@ -37,3 +37,8 @@ async def health_check() -> bool:
 def get_current_time() -> datetime:
     """Returns the current datetime in the configured timezone."""
     return get_timezone_aware_now()
+
+
+def clean_value(value: str | None) -> str:
+    """Safely strip string values."""
+    return (value or "").strip()

@@ -137,3 +137,11 @@ class EntityUpdate(EntityBase):
     state_id: int | None = None
     district_id: int | None = None
     block_id: int | None = None
+
+
+class EntityBulkUploadResponse(SQLModel):
+    message: str
+    uploaded_entities: int
+    success_entities: int
+    failed_entities: int
+    error_log: str | None

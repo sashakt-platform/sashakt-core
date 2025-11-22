@@ -1,3 +1,9 @@
+import base64
+import csv
+import io
+import os
+import tempfile
+
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
@@ -1366,3 +1372,343 @@ def test_delete_entity_not_found(
 
     assert response.status_code == 404
     assert response_data["detail"] == "Entity not found"
+
+
+def test_import_entities_reject_non_csv_file(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that non-CSV files are rejected"""
+    file_content = b"This is not a CSV file"
+    non_csv_file = ("not_a_csv.txt", file_content, "text/plain")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/entity/import",
+        files={"file": non_csv_file},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Only .csv files are allowed"
+
+
+def test_import_entities_invalid_encoding(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that invalid file encoding is rejected"""
+    invalid_bytes = b"\xff\xfe\xfd\xfc"
+    invalid_file = ("invalid.csv", invalid_bytes, "text/csv")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/entity/import",
+        files={"file": invalid_file},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Invalid file encoding"
+
+
+def test_import_entities_empty_csv(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that empty CSV file is rejected"""
+    empty_csv = ("empty.csv", b"", "text/csv")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/entity/import",
+        files={"file": empty_csv},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Invalid file encoding"
+
+
+def test_import_entities_missing_headers(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that CSV with missing required headers is rejected"""
+    csv_content = """entity_name,block_name
+Test Entity,Pa
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+        tmp_file.write(csv_content.encode("utf-8"))
+        tmp_file_path = tmp_file.name
+
+    try:
+        with open(tmp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/entity/import",
+                files={"file": ("missing_headers.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "CSV must contain headers" in data["detail"]
+
+    finally:
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+
+
+def test_bulk_upload_entities_unsuccessful_scenarios(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    random_state = State(name="Zerovia", country_id=india.id)
+    db.add(random_state)
+    db.commit()
+    db.refresh(random_state)
+
+    random_district = District(name="Lumora", state_id=random_state.id)
+    db.add(random_district)
+    db.commit()
+    db.refresh(random_district)
+
+    random_block = Block(name="Nimvath", district_id=random_district.id)
+    db.add(random_block)
+    db.commit()
+    db.refresh(random_block)
+
+    entity_type = EntityType(
+        name="CLF",
+        description="Cluster Level Federation",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+        is_active=True,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    existing_entity = Entity(
+        name="Existing Entity",
+        created_by_id=user_data["id"],
+        entity_type_id=entity_type.id,
+        organization_id=org_id,
+        state_id=random_state.id,
+        district_id=random_district.id,
+        block_id=random_block.id,
+        is_active=True,
+    )
+    db.add(existing_entity)
+    db.commit()
+
+    csv_content = """entity_name,entity_type_name,block_name,district_name,state_name
+Existing Entity,CLF,Nimvath,Lumora,Zerovia
+Invalid Reference Entity,CLF,Nimvath,UnknownDistrict,Zerovia
+Missing Field Entity,,Nimvath,Lumora,Zerovia
+MissingEntityTypeEntity,UnknownType,Nimvath,Lumora,Zerovia
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/entity/import",
+                files={"file": ("unsuccessful_entities.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uploaded_entities"] == 4
+        assert data["success_entities"] == 0
+        assert data["failed_entities"] == 4
+        assert "Missing references" in data["message"]
+        assert "error_log" in data
+        expected_errors = {
+            1: "Entity already exists",
+            2: "District 'UnknownDistrict' not found",
+            3: "Missing required value(s)",
+            4: "Entity type 'UnknownType' not found",
+        }
+
+        assert "data:text/csv;base64," in data["error_log"]
+        base64_csv = data["error_log"].split("base64,")[-1]
+
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        rows = list(csv_reader)
+
+        assert len(rows) == 4
+
+        for row in rows:
+            assert "row_number" in row
+            assert "entity_name" in row
+            assert "error" in row
+            assert row["error"]
+
+            row_number = int(row["row_number"])
+            expected_error = expected_errors.get(row_number)
+            assert expected_error is not None
+            assert expected_error.lower() in row["error"].lower()
+
+    finally:
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_entities_reference_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    country = Country(name="India")
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    valid_state = State(name="Maharashtra", country_id=country.id)
+    db.add(valid_state)
+    db.commit()
+    db.refresh(valid_state)
+
+    valid_district = District(name="Pune", state_id=valid_state.id)
+    db.add(valid_district)
+    db.commit()
+    db.refresh(valid_district)
+
+    valid_block = Block(name="Haveli", district_id=valid_district.id)
+    db.add(valid_block)
+    db.commit()
+    db.refresh(valid_block)
+
+    valid_entity_type = EntityType(
+        name="CLF",
+        description="Cluster Level Federation",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+        is_active=True,
+    )
+    db.add(valid_entity_type)
+    db.commit()
+    db.refresh(valid_entity_type)
+
+    csv_content = """entity_name,entity_type_name,block_name,district_name,state_name
+MissingStateEntity,CLF,Haveli,Pune,UnknownState
+MissingDistrictEntity,CLF,Haveli,UnknownDistrict,Maharashtra
+MissingBlockEntity,CLF,UnknownBlock,Pune,Maharashtra
+MissingEntityTypeEntity,UnknownType,Haveli,Pune,Maharashtra
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/entity/import",
+                files={"file": ("missing_refs.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uploaded_entities"] == 4
+        assert data["success_entities"] == 0
+        assert data["failed_entities"] == 4
+        assert "Missing references" in data["message"]
+        assert "UnknownState" in data["message"]
+        assert "UnknownDistrict" in data["message"]
+        assert "UnknownBlock" in data["message"]
+
+    finally:
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_entities_successful_scenarios(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    country = Country(name="TestCountry")
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name="TestState", country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    existing_district = District(name="TestDistrict", state_id=state.id)
+    db.add(existing_district)
+    db.commit()
+    db.refresh(existing_district)
+
+    block = Block(name="Testblock", district_id=existing_district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_type = EntityType(
+        name="CLF",
+        description="Cluster Level Federation",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+        is_active=True,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    csv_content = f"""entity_name,entity_type_name,block_name,district_name,state_name
+Clf Kasauli 1,CLF,Testblock,{existing_district.name},{state.name}
+Clf Kasauli 2,CLF,Testblock,{existing_district.name},{state.name}
+Clf Kasauli 3,CLF,Testblock,{existing_district.name},{state.name}
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/entity/import",
+                files={"file": ("successful_entities.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uploaded_entities"] == 3
+        assert data["success_entities"] == 3
+        assert data["failed_entities"] == 0
+        assert "Created 3 entities successfully" in data["message"]
+
+    finally:
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
