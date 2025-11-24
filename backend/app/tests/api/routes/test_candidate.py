@@ -1182,7 +1182,6 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -1251,7 +1250,6 @@ def test_start_test_for_candidate_with_entity(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -1845,7 +1843,6 @@ def test_get_test_result(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -1877,7 +1874,6 @@ def test_get_test_result(
         "correct_answer": [2],
         "is_mandatory": True,
         "is_active": True,
-        "is_deleted": False,
     }
     revision = QuestionRevision(**new_revision_data)
     db.add(revision)
@@ -1896,7 +1892,6 @@ def test_get_test_result(
         "correct_answer": [3],
         "is_mandatory": False,
         "is_active": True,
-        "is_deleted": False,
     }
     revision2 = QuestionRevision(**new_revision_data)
     db.add(revision2)
@@ -2095,7 +2090,6 @@ def test_overall_avg_score_two_tests(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         marks_level="question",
         tag_ids=[tag.id],
         state_ids=[state.id],
@@ -2135,7 +2129,6 @@ def test_overall_avg_score_two_tests(
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
             "marking_scheme": {"correct": 2, "wrong": -1, "skipped": 0},
         }
         revision = QuestionRevision(**revision_data)
@@ -2239,7 +2232,6 @@ def test_overall_avg_score_two_tests(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -2, "skipped": 0},
         tag_ids=[tag.id],
@@ -2276,7 +2268,6 @@ def test_overall_avg_score_two_tests(
             correct_answer=[2],
             is_mandatory=True,
             is_active=True,
-            is_deleted=False,
         )
         db.add(revision)
         db.commit()
@@ -2358,7 +2349,6 @@ def test_overall_avg_score_two_tests(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 3, "wrong": -1, "skipped": 0},
         state_ids=[state.id],
@@ -2392,7 +2382,6 @@ def test_overall_avg_score_two_tests(
             correct_answer=[2],
             is_mandatory=True,
             is_active=True,
-            is_deleted=False,
         )
         db.add(revision)
         db.commit()
@@ -2474,7 +2463,6 @@ def test_overall_avg_score_two_tests(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 2, "wrong": 0, "skipped": 0},
         organization_id=org_id,
@@ -2501,7 +2489,6 @@ def test_overall_avg_score_two_tests(
             correct_answer=[2],
             is_mandatory=True,
             is_active=True,
-            is_deleted=False,
         )
         db.add(revision)
         db.commit()
@@ -2582,7 +2569,6 @@ def test_overall_avg_time_two_tests(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         state_ids=[state.id],
         district_ids=[district.id],
         organization_id=user_data["organization_id"],
@@ -2607,7 +2593,6 @@ def test_overall_avg_time_two_tests(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         state_ids=[state.id],
         organization_id=user_data["organization_id"],
     )
@@ -2734,7 +2719,6 @@ def test_overall_avg_score_state_admin_location_restricted(
         marks=100,
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
         state_ids=[state_x.id],
@@ -2753,7 +2737,6 @@ def test_overall_avg_score_state_admin_location_restricted(
         marks=100,
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         marks_level="test",
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
         state_ids=[state_y.id],
@@ -2783,7 +2766,6 @@ def test_overall_avg_score_state_admin_location_restricted(
             correct_answer=[2],
             is_mandatory=True,
             is_active=True,
-            is_deleted=False,
         )
         db.add(rev)
         db.commit()
@@ -2912,7 +2894,6 @@ def test_overall_avg_time_state_admin_location_restricted(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         state_ids=[state_x.id],
         organization_id=org_id,
     )
@@ -2932,7 +2913,6 @@ def test_overall_avg_time_state_admin_location_restricted(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         state_ids=[state_y.id],
         organization_id=org_id,
     )
@@ -3004,7 +2984,6 @@ def test_result_with_no_answers(
         link=random_lower_string(),
         created_by_id=user.id,  # Assuming user ID 1 exists
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -3032,7 +3011,6 @@ def test_result_with_no_answers(
         "correct_answer": [3],
         "is_mandatory": True,
         "is_active": True,
-        "is_deleted": False,
     }
     revision = QuestionRevision(**new_revision_data)
     db.add(revision)
@@ -3057,7 +3035,6 @@ def test_result_with_no_answers(
         "correct_answer": [2, 3],
         "is_mandatory": True,
         "is_active": True,
-        "is_deleted": False,
     }
     revision2 = QuestionRevision(**new_revision_data)
     db.add(revision2)
@@ -3123,7 +3100,6 @@ def test_result_with_mixed_answers_test_level_marking(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         marks_level="test",
         marking_scheme={
             "correct": 5,
@@ -3155,7 +3131,6 @@ def test_result_with_mixed_answers_test_level_marking(
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
         }
         revision = QuestionRevision(**revision_data)
         db.add(revision)
@@ -3235,7 +3210,6 @@ def test_result_with_mixed_answers_question_level_marking(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         marks_level="question",
     )
     db.add(test)
@@ -3275,7 +3249,6 @@ def test_result_with_mixed_answers_question_level_marking(
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
             "marking_scheme": marking_schemes[i],
         }
         revision = QuestionRevision(**revision_data)
@@ -3353,7 +3326,6 @@ def test_result_with_default_question_level_when_test_marks_level_not_set(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -3386,7 +3358,6 @@ def test_result_with_default_question_level_when_test_marks_level_not_set(
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
         }
 
         revision = QuestionRevision(**revision_data)
@@ -3472,7 +3443,6 @@ def test_result_with_Marks_level_None(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         marks_level=None,
     )
     db.add(test)
@@ -3505,7 +3475,6 @@ def test_result_with_Marks_level_None(
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
             "marking_scheme": None,
         }
 
@@ -3590,7 +3559,6 @@ def test_result_with_some_questions_marks_scheme_None(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         marks_level="question",
     )
     db.add(test)
@@ -3623,7 +3591,6 @@ def test_result_with_some_questions_marks_scheme_None(
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
             "marking_scheme": None
             if i < 1
             else {"correct": 2, "wrong": 0, "skipped": 0},
@@ -3730,7 +3697,6 @@ def test_randomized_question_selection_and_result_calculation_with_mixed_answers
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         marks_level="question",
         random_questions=True,
         no_of_random_questions=6,
@@ -3757,7 +3723,6 @@ def test_randomized_question_selection_and_result_calculation_with_mixed_answers
             "correct_answer": [2],
             "is_mandatory": True,
             "is_active": True,
-            "is_deleted": False,
             "marking_scheme": marking_scheme,
         }
         revision = QuestionRevision(**revision_data)
@@ -3837,7 +3802,6 @@ def test_convert_to_list_with_int_response(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -3865,7 +3829,6 @@ def test_convert_to_list_with_int_response(
         correct_answer=[1, 2],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -3882,7 +3845,6 @@ def test_convert_to_list_with_int_response(
         correct_answer=[2],
         is_mandatory=False,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision2)
     db.commit()
@@ -4362,7 +4324,6 @@ def test_candidate_timer_timelimit_and_end_time_not_set(
             link=random_lower_string(),
             created_by_id=user.id,
             is_active=True,
-            is_deleted=False,
             time_limit=None,
         )
         db.add(test)
@@ -4603,7 +4564,6 @@ def test_result_not_visible(
         link=random_lower_string(),
         created_by_id=user.id,  # Assuming user ID 1 exists
         is_active=True,
-        is_deleted=False,
         show_result=False,  # Result not visible
     )
     db.add(test)
@@ -4646,7 +4606,6 @@ def test_result_not_visible(
         "correct_answer": [2],
         "is_mandatory": True,
         "is_active": True,
-        "is_deleted": False,
     }
     revision = QuestionRevision(**new_revision_data)
     db.add(revision)
@@ -4665,7 +4624,6 @@ def test_result_not_visible(
         "correct_answer": [3],
         "is_mandatory": False,
         "is_active": True,
-        "is_deleted": False,
     }
     revision2 = QuestionRevision(**new_revision_data)
     db.add(revision2)
@@ -4733,7 +4691,6 @@ def test_start_test_before_start_time(client: TestClient, db: SessionDep) -> Non
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -4766,7 +4723,6 @@ def test_candidate_test_question_ids_are_shuffled(
         created_by_id=user.id,
         shuffle=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -4777,7 +4733,6 @@ def test_candidate_test_question_ids_are_shuffled(
             created_by_id=user.id,
             organization_id=user.organization_id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -4865,7 +4820,6 @@ def test_candidate_test_question_ids_are_random(
         random_questions=True,
         no_of_random_questions=3,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -4876,7 +4830,6 @@ def test_candidate_test_question_ids_are_random(
             created_by_id=user.id,
             organization_id=user.organization_id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -4983,7 +4936,6 @@ def test_candidate_test_question_ids_tag_randomize(
             {"tag_id": tag2.id, "count": 2},
         ],
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -4997,7 +4949,6 @@ def test_candidate_test_question_ids_tag_randomize(
                 created_by_id=user.id,
                 organization_id=user.organization_id,
                 is_active=True,
-                is_deleted=False,
             )
             db.add(question)
             db.commit()
@@ -5064,7 +5015,6 @@ def test_start_test_skips_inactive_questions(
         shuffle=True,
         random_tag_count=[{"tag_id": tag.id, "count": 2}],
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -5075,7 +5025,6 @@ def test_start_test_skips_inactive_questions(
             created_by_id=user.id,
             organization_id=user.organization_id,
             is_active=False,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5149,7 +5098,6 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
             {"tag_id": tag_b.id, "count": 3},
         ],
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -5161,7 +5109,6 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5188,7 +5135,6 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5271,7 +5217,6 @@ def test_candidate_tag_random_count_update(
         shuffle=True,
         random_tag_count=[{"tag_id": tag.id, "count": 2}],
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -5283,7 +5228,6 @@ def test_candidate_tag_random_count_update(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5381,7 +5325,6 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
         no_of_random_questions=2,
         random_questions=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -5394,7 +5337,6 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5422,7 +5364,6 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5450,7 +5391,6 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5543,7 +5483,6 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
             {"tag_id": tag_b.id, "count": 3},
         ],
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -5556,7 +5495,6 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5584,7 +5522,6 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5612,7 +5549,6 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5706,7 +5642,6 @@ def test_candidate_test_question_ids_tag_randomize_with_dual_tag(
             {"tag_id": tag2.id, "count": 2},
         ],
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -5718,7 +5653,6 @@ def test_candidate_test_question_ids_tag_randomize_with_dual_tag(
         created_by_id=user.id,
         organization_id=organization.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(question_a)
     db.commit()
@@ -5744,7 +5678,6 @@ def test_candidate_test_question_ids_tag_randomize_with_dual_tag(
         created_by_id=user.id,
         organization_id=organization.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(question_dual)
     db.commit()
@@ -5824,7 +5757,6 @@ def test_random_questions_by_tag_skipping_selected_questions(
             {"tag_id": tag2.id, "count": 3},
         ],
         is_active=True,
-        is_deleted=False,
     )
 
     db.add(test)
@@ -5836,7 +5768,6 @@ def test_random_questions_by_tag_skipping_selected_questions(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5868,7 +5799,6 @@ def test_random_questions_by_tag_skipping_selected_questions(
             created_by_id=user.id,
             organization_id=organization.id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5931,7 +5861,6 @@ def test_candidate_test_question_ids_in_order(
             created_by_id=user["id"],
             organization_id=user["organization_id"],
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()
@@ -5961,7 +5890,6 @@ def test_candidate_test_question_ids_in_order(
         "shuffle": False,
         "random_questions": False,
         "is_active": True,
-        "is_deleted": False,
         "question_revision_ids": inserted_question_ids,
     }
 
@@ -6027,7 +5955,6 @@ def test_get_test_result_with_random_question_true(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -6044,7 +5971,6 @@ def test_get_test_result_with_random_question_true(
             created_by_id=user.id,
             organization_id=user.organization_id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.commit()

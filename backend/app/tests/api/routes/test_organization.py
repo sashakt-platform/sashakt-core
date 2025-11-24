@@ -552,7 +552,6 @@ def test_get_aggregated_data_for_organization(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         random_questions=False,
         organization_id=org_id,
     )
@@ -568,7 +567,6 @@ def test_get_aggregated_data_for_organization(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=True,
         random_questions=False,
         organization_id=org_id,
     )
@@ -584,7 +582,6 @@ def test_get_aggregated_data_for_organization(
         link=random_lower_string(),
         created_by_id=user_id,
         is_active=True,
-        is_deleted=False,
         random_questions=False,
         is_template=True,
         organization_id=org_id,
@@ -664,7 +661,6 @@ def test_aggregated_data_for_state_admin(
         q = Question(
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -676,7 +672,6 @@ def test_aggregated_data_for_state_admin(
         q = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -692,7 +687,6 @@ def test_aggregated_data_for_state_admin(
             name=f"Test X {i + 1}",
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -706,7 +700,6 @@ def test_aggregated_data_for_state_admin(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -793,7 +786,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
         q = Question(
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -805,7 +797,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
         q = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -820,7 +811,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
         q = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -834,7 +824,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
         q = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(q)
         db.flush()
@@ -849,7 +838,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
             name=f"Test X {i + 1}",
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -863,7 +851,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -878,7 +865,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -894,7 +880,6 @@ def test_aggregated_data_for_state_admin_distinct_check(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)

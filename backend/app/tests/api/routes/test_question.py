@@ -4734,7 +4734,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4760,7 +4759,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4789,7 +4787,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4817,7 +4814,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
