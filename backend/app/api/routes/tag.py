@@ -422,7 +422,7 @@ def get_tag_by_id(
     current_user: CurrentUser,
 ) -> TagPublic:
     tag = session.get(Tag, tag_id)
-    if not tag:
+    if not tag or tag.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Tag not found")
     tag_type = None
     if tag.tag_type_id:

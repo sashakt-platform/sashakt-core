@@ -993,6 +993,26 @@ def test_read_tag_by_id(
     assert response_data["description"] == tag.description
     assert response_data["tag_type"] is None
 
+    user, organization = setup_user_organization(db)
+
+    new_tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+    )
+    db.add(new_tag)
+    db.commit()
+    db.refresh(new_tag)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/{new_tag.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+    assert response.status_code == 404
+    assert "Tag not found" in response_data["detail"]
+
 
 def test_update_tag_by_id(
     client: TestClient,
@@ -1172,14 +1192,15 @@ def test_delete_tag_by_id(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
-    user_b = create_random_user(db)
     db.add(tagtype)
     db.commit()
 
@@ -1187,8 +1208,8 @@ def test_delete_tag_by_id(
         name=random_lower_string(),
         description=random_lower_string(),
         tag_type_id=tagtype.id,
-        created_by_id=user_b.id,
-        organization_id=organization.id,
+        created_by_id=user_id,
+        organization_id=organization_id,
     )
     db.add(tag)
     db.commit()
@@ -1541,12 +1562,14 @@ def test_tag_is_active_toggle(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
     )
     db.add(tagtype)
     db.commit()
@@ -1555,7 +1578,7 @@ def test_tag_is_active_toggle(
         "name": "active tag",
         "description": random_lower_string(),
         "tag_type_id": tagtype.id,
-        "organization_id": organization.id,
+        "organization_id": organization_id,
         "is_active": True,
     }
     response = client.post(
