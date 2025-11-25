@@ -40,6 +40,7 @@ from app.models.candidate import (
     StartTestResponse,
     TestStatusSummary,
 )
+from app.models.location import State
 from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
@@ -51,6 +52,34 @@ router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Tes
 router_candidate_test_answer = APIRouter(
     prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
+
+
+def is_candidate_test_expired(session: SessionDep, candidate_test_id: int) -> bool:
+    # Single query for CandidateTest
+    candidate_test = session.get(CandidateTest, candidate_test_id)
+    if not candidate_test or not candidate_test.start_time:
+        return False
+
+    # Single query for Test
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        return False
+
+    time_now = get_timezone_aware_now()
+
+    # Check absolute end time first (simpler condition)
+    if test.end_time and time_now > test.end_time:
+        return True
+
+    # Check time limit based expiration
+    if test.time_limit:
+        allowed_end_time = candidate_test.start_time + timedelta(
+            minutes=test.time_limit
+        )
+        if time_now > allowed_end_time:
+            return True
+
+    return False
 
 
 def get_score_and_time(
@@ -364,6 +393,9 @@ def submit_answer_for_qr_candidate(
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
 
+    if is_candidate_test_expired(session, candidate_test_id):
+        raise HTTPException(status_code=410, detail="Candidate test has expired")
+
     # Check if answer already exists for this question
     existing_answer = session.exec(
         select(CandidateTestAnswer)
@@ -416,6 +448,9 @@ def submit_batch_answers_for_qr_candidate(
     """
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+
+    if is_candidate_test_expired(session, candidate_test_id):
+        raise HTTPException(status_code=410, detail="Candidate test has expired")
 
     results = []
     for answer in batch_request.answers:
@@ -478,7 +513,29 @@ def submit_test_for_qr_candidate(
 
     # Mark test as submitted and set end time
     candidate_test.is_submitted = True
-    candidate_test.end_time = get_timezone_aware_now()
+
+    if candidate_test.id and is_candidate_test_expired(session, candidate_test.id):
+        test_details = session.get(Test, candidate_test.test_id)
+        if test_details:
+            # Calculate the earliest possible end time
+            time_constraints = []
+
+            if test_details.end_time:
+                time_constraints.append(
+                    (test_details.end_time - candidate_test.start_time).total_seconds()
+                    / 60
+                )
+
+            if test_details.time_limit:
+                time_constraints.append(test_details.time_limit)
+
+            # Use the minimum constraint to calculate end time
+            if time_constraints:
+                candidate_test.end_time = candidate_test.start_time + timedelta(
+                    minutes=min(time_constraints)
+                )
+    else:
+        candidate_test.end_time = get_timezone_aware_now()
 
     session.add(candidate_test)
     session.commit()
@@ -517,9 +574,8 @@ def get_test_questions(
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    from app.models.location import State
-    from app.models.tag import Tag
-    from app.models.test import TestState, TestTag
+    if is_candidate_test_expired(session, candidate_test_id):
+        raise HTTPException(status_code=410, detail="Candidate test has expired")
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()
