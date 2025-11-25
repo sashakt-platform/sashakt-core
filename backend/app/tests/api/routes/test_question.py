@@ -106,7 +106,6 @@ def test_create_question(
     assert len(data["options"]) == 3
     assert "id" in data
     assert data["is_active"] is True
-    assert not data["is_deleted"]
     # Check created_by_id
     assert data["created_by_id"] == user_id
     # Check tags
@@ -1929,7 +1928,6 @@ def test_delete_question_associated_with_test_should_fail(
     assert data["detail"] == "Cannot delete question because it is linked to a test"
 
     db.refresh(q1)
-    assert q1.is_deleted is False
     assert q1.is_active is True
 
 
@@ -4229,33 +4227,6 @@ def test_check_question_duplication_if_deleted(
     assert another_duplicate_response.status_code == 400
 
 
-def test_create_question_is_deleted_defaults_to_false(
-    client: TestClient, get_user_superadmin_token: dict[str, str]
-) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
-    org_id = user_data["organization_id"]
-    question_data = {
-        "organization_id": org_id,
-        "question_text": random_lower_string(),
-        "question_type": QuestionType.single_choice,
-        "options": [
-            {"id": 1, "key": "A", "value": "Option 1"},
-            {"id": 2, "key": "B", "value": "Option 2"},
-        ],
-        "correct_answer": [1],
-        "is_mandatory": True,
-    }
-    response = client.post(
-        f"{settings.API_V1_STR}/questions/",
-        json=question_data,
-        headers=get_user_superadmin_token,
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "is_deleted" in data
-    assert data["is_deleted"] is False
-
-
 def test_create_duplicate_questions_with_same_text_and_no_tags(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -4763,7 +4734,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4789,7 +4759,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4818,7 +4787,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4846,7 +4814,6 @@ def test_question_list_state_user(
         question = Question(
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -4906,3 +4873,142 @@ def test_question_list_state_user(
     assert response.status_code == 200
     assert data["total"] == 8
     assert len(data["items"]) == 8
+
+
+def test_update_question_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existing_id = -9999
+    updated_data = {"is_active": True}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}",
+        json=updated_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    content = response.json()
+    assert content["detail"] == "Question not found"
+
+
+def test_get_question_revisions_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    non_existing_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/revisions",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_update_question_locations_not_found(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    non_existing_id = -9999
+
+    location_data = {
+        "locations": [
+            {
+                "state_id": state.id,
+                "district_id": district.id,
+                "block_id": None,
+            }
+        ]
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/locations",
+        json=location_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_get_question_tags_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existing_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/tags",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_update_question_tags_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existing_id = -9999
+
+    tag_data = {"tag_ids": [1, 2, 3]}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/tags",
+        json=tag_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"
+
+
+def test_create_question_revision_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    non_existing_id = -9999
+    revision_data = {
+        "question_text": random_lower_string(),
+        "instructions": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "media": None,
+        "is_active": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/{non_existing_id}/revisions",
+        json=revision_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question not found"

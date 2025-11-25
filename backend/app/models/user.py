@@ -97,7 +97,6 @@ class User(UserBase, table=True):
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
-    is_deleted: bool = Field(default=False, nullable=False)
     hashed_password: str
     question_revisions: list["QuestionRevision"] = Relationship(
         back_populates="created_by"
@@ -135,7 +134,6 @@ class UserPublic(UserBase):
     role_label: str
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
     states: list["State"] | None
 
 

@@ -345,11 +345,7 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
-    if (
-        not user
-        or user.is_deleted
-        or user.organization_id != current_user.organization_id
-    ):
+    if not user or user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="User not found")
     _ = user.states
 

@@ -1321,7 +1321,6 @@ def test_delete_linked_entity_should_fail(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()

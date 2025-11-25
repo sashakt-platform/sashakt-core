@@ -201,7 +201,6 @@ class Test(TestBase, table=True):
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
 
-    is_deleted: bool = Field(default=False, nullable=False)
     random_tag_count: list[TagRandomCreate] | None = Field(
         sa_type=JSON,
         default=None,
@@ -261,7 +260,6 @@ class TestPublic(TestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
     tags: list["TagPublic"]
     question_revisions: list["QuestionRevision"]
     states: list["State"]
