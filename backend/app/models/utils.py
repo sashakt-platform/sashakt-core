@@ -17,3 +17,7 @@ class MarkingScheme(TypedDict):
     correct: float
     wrong: float
     skipped: float
+
+
+LANGUAGE_LABELS = {"en": "English", "hi": "Hindi", "mr": "Marathi"}
+SUPPORTED_LANGUAGES = ["en", "hi", "mr"]

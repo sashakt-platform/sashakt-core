@@ -48,13 +48,21 @@ from app.models.test import (
     TestDistrict,
 )
 from app.models.user import User
-from app.models.utils import TimeLeft
+from app.models.utils import SUPPORTED_LANGUAGES, TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
+
+
+def validate_language(lang: str) -> None:
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language. Allowed languages: {SUPPORTED_LANGUAGES}",
+        )
 
 
 def check_linked_question(session: SessionDep, test_id: int) -> bool:
@@ -237,6 +245,8 @@ def create_test(
     )
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
+    validate_language(test_data.get("language", "en"))
+
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
         import uuid
@@ -597,6 +607,9 @@ def update_test(
             else test.time_limit
         )
         validate_test_time_config(start_time, end_time, time_limit)
+    if test_update.language is not None:
+        validate_language(test_update.language)
+
     if test_update.random_questions:
         if (
             test_update.no_of_random_questions is None
