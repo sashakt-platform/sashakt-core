@@ -190,6 +190,12 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
+    language: str = Field(
+        default="en",
+        title="Test Language",
+        description="Language of the test  (e.g., en, hi, mr).",
+        sa_column_kwargs={"server_default": "en"},
+    )
 
 
 class Test(TestBase, table=True):

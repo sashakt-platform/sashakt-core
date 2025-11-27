@@ -228,6 +228,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["created_by_id"] == user_id
+    assert data["language"] == "en"
     assert len(data["districts"]) == 1
     assert "id" in data
     assert "created_date" in data
@@ -288,6 +289,7 @@ def test_create_test(
         "random_questions": False,
         "no_of_random_questions": 4,
         "question_pagination": 1,
+        "language": "hi",
         "is_template": False,
         "template_id": sample_test.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
@@ -316,6 +318,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
+    assert data["language"] == payload["language"]
     assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
@@ -2129,6 +2132,7 @@ def test_update_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        language="hi",
     )
     db.add(test)
     db.commit()
@@ -2187,6 +2191,7 @@ def test_update_test(
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
         "district_ids": [district_a.id],
+        "language": "en",
     }
 
     response = client.put(
@@ -2203,6 +2208,7 @@ def test_update_test(
     assert data["end_time"] == payload["end_time"]
     assert data["time_limit"] == payload["time_limit"]
     assert data["marks_level"] == payload["marks_level"]
+    assert data["language"] == payload["language"]
 
     assert data["marks"] == payload["marks"]
     assert data["completion_message"] == payload["completion_message"]
@@ -3947,6 +3953,52 @@ def test_update_test_end_time_before_start_time(
     )
     assert response.status_code == 400
     assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_update_test_unsupported_language(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        start_time="2025-07-19T10:00:00Z",
+        end_time="2025-07-19T11:00:00Z",
+        language="en",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "name": random_lower_string(),
+        "language": "xx",
+        "start_time": "2025-07-19T10:00:00Z",
+        "end_time": "2025-07-19T11:00:00Z",
+        "time_limit": 60,
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported language" in response.json()["detail"]
+
+    payload["language"] = "hi"
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["language"] == "hi"
 
 
 def test_create_test_start_and_end_time_same(
