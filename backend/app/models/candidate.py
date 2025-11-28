@@ -269,3 +269,22 @@ class OverallTestAnalyticsResponse(SQLModel):
     total_candidates: int
     overall_score_percent: float
     overall_avg_time_minutes: float
+
+
+CorrectAnswerType = list[int] | list[str] | float | int | None
+
+
+class ReviewItem(SQLModel):
+    question_text: str
+    submitted_answer: str = Field(description="Answer submitted by candidate")
+    correct_answer: CorrectAnswerType = Field(
+        description="Correct answer for the question"
+    )
+    feedback: str | None = Field(description="Feedback for the question")
+    marks_obtained: float
+
+
+class CandidateReviewResponse(SQLModel):
+    candidate_test_id: int
+    test_id: int
+    items: list[ReviewItem] | None = None

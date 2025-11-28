@@ -33,9 +33,11 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateReviewResponse,
     CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
+    ReviewItem,
     StartTestRequest,
     StartTestResponse,
     TestStatusSummary,
@@ -1052,3 +1054,72 @@ def get_time_left(
 
     time_left = int(final_time_left.total_seconds())
     return TimeLeft(time_left=time_left)
+
+
+@router.get(
+    "/candidate-tests/{candidate_test_id}/review",
+    response_model=CandidateReviewResponse,
+)
+def get_detailed_review(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> CandidateReviewResponse:
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+
+    candidate_test = session.get(CandidateTest, candidate_test_id)
+
+    if not candidate_test or candidate_test.end_time is None:
+        raise HTTPException(status_code=400, detail="Test is not yet submitted")
+
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    if not test.is_review_enabled:
+        raise HTTPException(status_code=403, detail="Review is disabled for this test")
+
+    test_level_marking_scheme = (
+        test.marking_scheme if test.marks_level == "test" else None
+    )
+
+    results = session.exec(
+        select(CandidateTestAnswer, QuestionRevision)
+        .join(QuestionRevision)
+        .where(
+            QuestionRevision.id == CandidateTestAnswer.question_revision_id,
+        )
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+    ).all()
+
+    review_items: list[ReviewItem] = []
+
+    for candidate_answer, question_revision in results:
+        if test_level_marking_scheme:
+            marking_scheme = test_level_marking_scheme
+        elif test.marks_level == "question" and question_revision.marking_scheme:
+            marking_scheme = question_revision.marking_scheme
+        else:
+            marking_scheme = None
+
+        marks_obtained = (
+            float(marking_scheme.get("correct", 1)) if marking_scheme else 1
+        )
+
+        review_items.append(
+            ReviewItem(
+                question_text=question_revision.question_text,
+                submitted_answer=candidate_answer.response,
+                correct_answer=question_revision.correct_answer,
+                feedback=question_revision.instructions,
+                marks_obtained=marks_obtained,
+            )
+        )
+
+    return CandidateReviewResponse(
+        candidate_test_id=candidate_test_id,
+        test_id=test.id,
+        items=review_items,
+    )
