@@ -40,7 +40,7 @@ from app.models.candidate import (
     StartTestResponse,
     TestStatusSummary,
 )
-from app.models.question import Question, QuestionTag
+from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -1002,7 +1002,7 @@ def get_test_result(
             selected_correct = len(response_set & correct_set)
             selected_wrong = len(response_set - correct_set)
 
-            if revision.question_type.value == "single-choice":
+            if revision.question_type is QuestionType.single_choice:
                 if response_set == correct_set:
                     marks_obtained += correct_mark
                     correct += 1
@@ -1018,7 +1018,7 @@ def get_test_result(
                     marks_obtained += correct_mark
                     correct += 1
                 else:
-                    if selected_correct > 0:
+                    if selected_correct > 0 and len(correct_set) > 0:
                         partial = (selected_correct / len(correct_set)) * correct_mark
                     else:
                         partial = 0
