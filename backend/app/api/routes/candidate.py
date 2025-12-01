@@ -981,29 +981,52 @@ def get_test_result(
             marking_scheme = test.marking_scheme
         elif test.marks_level == "question":
             marking_scheme = revision.marking_scheme
+        else:
+            marking_scheme = None
 
-        if marking_scheme:
-            marks_maximum += marking_scheme["correct"]
+        correct_mark = marking_scheme["correct"] if marking_scheme else 0
+        wrong_mark = marking_scheme["wrong"] if marking_scheme else 0
+        skipped_mark = marking_scheme["skipped"] if marking_scheme else 0
+
+        marks_maximum += correct_mark
+
         if answer is None or not answer.response:
-            if marking_scheme:
-                marks_obtained += marking_scheme["skipped"]
+            marks_obtained += skipped_mark
             if revision.is_mandatory:
                 mandatory_not_attempted += 1
             else:
                 optional_not_attempted += 1
         else:
-            if revision.question_type.value in ["single-choice", "multi-choice"]:
-                response_list = convert_to_list(answer.response)
-                correct_list = convert_to_list(revision.correct_answer)
+            response_set = set(convert_to_list(answer.response))
+            correct_set = set(convert_to_list(revision.correct_answer))
+            selected_correct = len(response_set & correct_set)
+            selected_wrong = len(response_set - correct_set)
 
-                if set(response_list) == set(correct_list):
+            if revision.question_type.value == "single-choice":
+                if response_set == correct_set:
+                    marks_obtained += correct_mark
                     correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
                 else:
+                    marks_obtained += wrong_mark
                     incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+
+            else:
+                whole_correct = (
+                    selected_correct == len(correct_set) and selected_wrong == 0
+                )
+                if whole_correct:
+                    marks_obtained += correct_mark
+                    correct += 1
+                else:
+                    if selected_correct > 0:
+                        partial = (selected_correct / len(correct_set)) * correct_mark
+                    else:
+                        partial = 0
+                    partial += selected_wrong * wrong_mark
+                    partial = round(partial, 2)
+                    marks_obtained += partial
+                    incorrect += 1
+
     total_questions = len(candidate_test.question_revision_ids)
     return Result(
         correct_answer=correct,
