@@ -683,7 +683,7 @@ def delete_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
+    if role and role.name in (state_admin.name, test_admin.name):
         check_question_permission(session, current_user, question)
 
     if check_linked_test(session, question_id):
@@ -720,11 +720,11 @@ def bulk_delete_question(
         raise HTTPException(
             status_code=404, detail="Invalid Questions selected for deletion"
         )
-
+    role = session.get(Role, current_user.role_id)
+    is_admin_with_state = role and role.name in (state_admin.name, test_admin.name)
     for question in db_questions:
         try:
-            role = session.get(Role, current_user.role_id)
-            if role and role.name in ("state_admin", "test_admin"):
+            if is_admin_with_state:
                 check_question_permission(session, current_user, question)
 
             if question.id is not None and check_linked_test(session, question.id):
@@ -782,7 +782,7 @@ def update_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
+    if role and role.name in (state_admin.name, test_admin.name):
         check_question_permission(session, current_user, question)
 
     # Update basic question attributes

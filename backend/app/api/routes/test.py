@@ -951,10 +951,11 @@ def bulk_delete_question(
             status_code=404, detail="Invalid Tests selected for deletion"
         )
 
+    role = session.get(Role, current_user.role_id)
+    is_admin_with_state = role and role.name in (state_admin.name, test_admin.name)
     for test in db_test:
         try:
-            role = session.get(Role, current_user.role_id)
-            if role and role.name in (state_admin.name, test_admin.name):
+            if is_admin_with_state:
                 check_test_permission(session, current_user, test)
 
             if test.id is not None and check_linked_question(session, test.id):
