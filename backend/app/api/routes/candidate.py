@@ -221,7 +221,7 @@ def start_test_for_candidate(
     """
     # Find the test by ID
     test = session.get(Test, start_test_request.test_id)
-    if not test or test.is_deleted or (test.is_active is False):
+    if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
     question_revision_ids = [
         q.question_revision_id
@@ -1004,11 +1004,13 @@ def get_test_result(
                     incorrect += 1
                     if marking_scheme:
                         marks_obtained += marking_scheme["wrong"]
+    total_questions = len(candidate_test.question_revision_ids)
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
+        total_questions=total_questions,
         marks_obtained=marks_obtained if marking_scheme else None,
         marks_maximum=marks_maximum if marking_scheme else None,
     )

@@ -12,7 +12,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout (for logs)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         
       - name: Set deployment tag
         id: set_tag
@@ -26,7 +26,7 @@ jobs:
           echo "Will deploy tag: $DEPLOY_TAG"
           
       - name: Deploy via SSH (tag-based)
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}

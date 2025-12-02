@@ -1,10 +1,15 @@
-from typing import Any, cast
+import base64
+import csv
+from io import StringIO
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi_pagination import Page, paginate
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.routes.utils import clean_value
 from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
@@ -24,6 +29,7 @@ from app.models import (
     StatePublic,
     StateUpdate,
 )
+from app.models.location import BlockBulkUploadResponse
 from app.models.user import UserState
 
 router = APIRouter(prefix="/location", tags=["Location"])
@@ -32,6 +38,58 @@ country_router = APIRouter()
 state_router = APIRouter()
 district_router = APIRouter()
 block_router = APIRouter()
+
+
+def transform_countries_to_public(
+    items: list[Country] | Any,
+) -> list[CountryPublic]:
+    result: list[CountryPublic] = []
+    country_list: list[Country] = list(items) if not isinstance(items, list) else items
+
+    for country in country_list:
+        result.append(CountryPublic.model_validate(country))
+
+    return result
+
+
+def transform_states_to_public(
+    items: list[State] | Any,
+) -> list[StatePublic]:
+    result: list[StatePublic] = []
+    state_list: list[State] = list(items) if not isinstance(items, list) else items
+
+    for state in state_list:
+        result.append(StatePublic.model_validate(state))
+
+    return result
+
+
+def transform_districts_to_public(
+    items: list[tuple[District, State]] | Any,
+) -> list[DistrictPublic]:
+    result: list[DistrictPublic] = []
+
+    district_list = list(items) if not isinstance(items, list) else items
+
+    for district, state in district_list:
+        district.state = state
+        district_data = district.model_dump()
+        district_data["state"] = state
+        result.append(DistrictPublic(**district_data))
+
+    return result
+
+
+def transform_blocks_to_public(
+    items: list[Block] | Any,
+) -> list[BlockPublic]:
+    result: list[BlockPublic] = []
+    block_list: list[Block] = list(items) if not isinstance(items, list) else items
+
+    for block in block_list:
+        result.append(BlockPublic.model_validate(block))
+
+    return result
 
 
 # Create a Country
@@ -61,15 +119,20 @@ def get_countries(
     session: SessionDep,
     params: Pagination = Depends(),
     is_active: bool | None = None,
-) -> Page[Country]:
+) -> Page[CountryPublic]:
     query = select(Country)
 
     if is_active is not None:
         query = query.where(Country.is_active == is_active)
 
-    countries = session.exec(query).all()
+    countries: Page[CountryPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_countries_to_public(items),
+    )
 
-    return cast(Page[Country], paginate(countries, params=params))
+    return countries
 
 
 # Get Country by ID
@@ -143,7 +206,7 @@ def get_state(
     params: Pagination = Depends(),
     is_active: bool | None = None,
     country: int | None = None,
-) -> Page[State]:
+) -> Page[StatePublic]:
     query = select(State)
 
     if is_active is not None:
@@ -170,9 +233,14 @@ def get_state(
         if user_state_ids:
             query = query.where(col(State.id).in_(user_state_ids))
 
-    states = session.exec(query).all()
+    states: Page[StatePublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_states_to_public(items),
+    )
 
-    return cast(Page[State], paginate(states, params=params))
+    return states
 
 
 # Get State by ID
@@ -249,7 +317,7 @@ def get_district(
     params: Pagination = Depends(),
     state: int | None = None,
     state_ids: list[int] | None = Query(None),
-) -> Page[District]:
+) -> Page[DistrictPublic]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
@@ -276,15 +344,14 @@ def get_district(
         if user_state_ids:
             query = query.where(col(District.state_id).in_(user_state_ids))
 
-    # Apply apgination
-    results = session.exec(query).all()
+    districts: Page[DistrictPublic] = paginate(  # type: ignore[type-var]
+        session,
+        query,
+        params,
+        transformer=lambda items: transform_districts_to_public(items),
+    )
 
-    districts = []
-    for district, state_obj in results:
-        district.state = state_obj
-        districts.append(district)
-
-    return cast(Page[District], paginate(districts, params=params))
+    return districts
 
 
 # Get District by ID
@@ -358,7 +425,7 @@ def get_block(
     params: Pagination = Depends(),
     is_active: bool | None = None,
     district: int | None = None,
-) -> Page[Block]:
+) -> Page[BlockPublic]:
     query = select(Block)
 
     if is_active is not None:
@@ -367,9 +434,14 @@ def get_block(
     if district is not None:
         query = query.where(Block.district_id == district)
 
-    blocks = session.exec(query).all()
+    blocks: Page[BlockPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_blocks_to_public(items),
+    )
 
-    return cast(Page[Block], paginate(blocks, params=params))
+    return blocks
 
 
 # Get Block by ID
@@ -409,6 +481,153 @@ def update_block(
     session.commit()
     session.refresh(block_db)
     return block_db
+
+
+@block_router.post(
+    "/import",
+    response_model=BlockBulkUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(permission_dependency("create_location"))],
+)
+async def import_blocks_from_csv(
+    session: SessionDep,
+    file: UploadFile = File(
+        ..., description="CSV file with block_name, district_name, state_name"
+    ),
+) -> BlockBulkUploadResponse:
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are allowed")
+
+    try:
+        content = (await file.read()).decode("utf-8")
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="CSV file is empty")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file encoding")
+
+    csv_reader = csv.DictReader(StringIO(content))
+    required_headers = {"block_name", "district_name", "state_name"}
+    if not required_headers.issubset(csv_reader.fieldnames or []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV must contain headers: {', '.join(required_headers)}",
+        )
+
+    district_rows = session.exec(
+        select(District.id, District.name, State.name).join(State)
+    ).all()
+
+    district_map = {
+        (district_name.lower(), state_name.lower()): district_id
+        for district_id, district_name, state_name in district_rows
+    }
+
+    # Only load blocks for districts that exist in the CSV
+    district_ids_in_csv = set()
+
+    for rows in csv_reader:
+        district_name = clean_value(rows.get("district_name"))
+        state_name = clean_value(rows.get("state_name"))
+        district_key = (district_name.lower(), state_name.lower())
+        district_id = district_map.get(district_key)
+        if district_id:
+            district_ids_in_csv.add(district_id)
+
+    if district_ids_in_csv:
+        existing_block_rows = session.exec(
+            select(Block.name, Block.district_id).where(
+                col(Block.district_id).in_(district_ids_in_csv)
+            )
+        ).all()
+        existing_block_map = {
+            (block_name.lower(), district_id): True
+            for block_name, district_id in existing_block_rows
+        }
+    else:
+        existing_block_map = {}
+
+    success_count = failed_count = 0
+    failed_block_details = []
+    failed_districts = set()
+    duplicate_blocks = set()
+
+    # Reset CSV reader for actual processing
+    csv_reader = csv.DictReader(StringIO(content))
+
+    for row_num, row in enumerate(csv_reader, start=2):
+        block_name = clean_value(row.get("block_name"))
+        district_name = clean_value(row.get("district_name"))
+        state_name = clean_value(row.get("state_name"))
+
+        try:
+            if not all([block_name, district_name, state_name]):
+                raise ValueError("Missing required value(s)")
+
+            district_key = (district_name.lower(), state_name.lower())
+            district_id = district_map.get(district_key)
+
+            if not district_id:
+                failed_districts.add(f"{district_name} ({state_name})")
+                raise ValueError(
+                    f"District '{district_name}' in state '{state_name}' not found"
+                )
+
+            if (block_name.lower(), district_id) in existing_block_map:
+                duplicate_blocks.add(block_name)
+                raise ValueError("Block already exists")
+
+            new_block = Block(name=block_name, district_id=district_id, is_active=True)
+            session.add(new_block)
+            existing_block_map[(block_name.lower(), district_id)] = True
+            success_count += 1
+
+        except Exception as e:
+            failed_count += 1
+            failed_block_details.append(
+                {
+                    "row_number": row_num,
+                    "block_name": block_name,
+                    "district_name": district_name,
+                    "state_name": state_name,
+                    "error": str(e),
+                }
+            )
+
+    session.commit()
+
+    error_log = None
+    if failed_block_details:
+        csv_buffer = StringIO()
+        writer = csv.DictWriter(
+            csv_buffer,
+            fieldnames=[
+                "row_number",
+                "block_name",
+                "district_name",
+                "state_name",
+                "error",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(failed_block_details)
+        csv_bytes = csv_buffer.getvalue().encode("utf-8")
+        error_log = (
+            f"data:text/csv;base64,{base64.b64encode(csv_bytes).decode('utf-8')}"
+        )
+
+    message = f"Bulk upload complete. Created {success_count} blocks successfully. Failed to create {failed_count} blocks."
+    if failed_districts:
+        message += f" Missing districts: {', '.join(failed_districts)}."
+    if duplicate_blocks:
+        message += f" Duplicate blocks skipped: {', '.join(duplicate_blocks)}."
+
+    return BlockBulkUploadResponse(
+        message=message,
+        uploaded_blocks=success_count + failed_count,
+        success_blocks=success_count,
+        failed_blocks=failed_count,
+        error_log=error_log,
+    )
 
 
 # Include all routers

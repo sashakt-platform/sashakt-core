@@ -233,12 +233,6 @@ class Question(SQLModel, table=True):
         description="When this question was last modified",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool = Field(
-        default=False,
-        nullable=False,
-        sa_column_kwargs={"server_default": "false"},
-        description="Whether this question is marked as deleted",
-    )
 
     # Relationships
     # All revisions of this question
@@ -288,12 +282,6 @@ class QuestionRevision(QuestionBase, table=True):
         description="When this revision was last modified",
     )
 
-    is_deleted: bool = Field(
-        default=False,
-        nullable=False,
-        sa_column_kwargs={"server_default": "false"},
-        description="Whether this revision is marked as deleted",
-    )
     # Relationships
     # Parent question for this revision
     question: Question = Relationship(back_populates="revisions")
@@ -457,9 +445,6 @@ class QuestionPublic(SQLModel):
     created_date: datetime = Field(description="When this question was created")
     modified_date: datetime = Field(description="When this question was last modified")
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool = Field(
-        default=False, description="Whether this question is marked as deleted"
-    )
 
     # Current revision data
     question_text: str = Field(description="The question text")
@@ -511,9 +496,6 @@ class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool = Field(
-        default=False, description="Whether this question is marked as deleted"
-    )
 
 
 class BulkUploadQuestionsResponse(SQLModel):

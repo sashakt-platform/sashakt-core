@@ -1,3 +1,9 @@
+import base64
+import csv
+import io
+import os
+import tempfile
+
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -1309,3 +1315,220 @@ def test_filter_district_for_state_admin(
     # Verify state association on created admin
     assert created_admin["states"][0]["id"] == state.id
     assert created_admin["states"][0]["name"] == state.name
+
+
+def test_import_blocks_csv_all_scenarios(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+    state = State(name="state_a", country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name="district_a", state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    csv_content = """block_name,district_name,state_name
+Block A,district_a,state_a
+Block B,district_a,state_a
+,district_a,state_a
+Block D,NonExistentDistrict,state_a
+Block A,district_a,state_a
+Block E,district_a,state_a
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+        tmp_file.write(csv_content.encode("utf-8"))
+        tmp_file_path = tmp_file.name
+
+    try:
+        with open(tmp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/location/block/import",
+                files={"file": ("blocks_test.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["uploaded_blocks"] == 6
+        assert data["success_blocks"] == 3
+        assert data["failed_blocks"] == 3
+        assert "Missing districts" in data["message"]
+        assert "Duplicate blocks skipped" in data["message"]
+        assert data["error_log"] is not None
+        base64_csv = data["error_log"].split("base64,")[-1]
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        error_rows = list(csv_reader)
+        assert len(error_rows) == 3
+        expected_errors = {
+            4: "Missing required value(s)",
+            5: "District 'NonExistentDistrict' in state 'state_a' not found",
+            6: "Block already exists",
+        }
+        for row in error_rows:
+            row_num = int(row["row_number"])
+            assert expected_errors[row_num] in row["error"]
+
+    finally:
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+
+
+def test_import_blocks_reject_non_csv_file(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    file_content = b"This is not a CSV file"
+    non_csv_file = ("not_a_csv.txt", file_content, "text/plain")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/block/import",
+        files={"file": non_csv_file},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Only .csv files are allowed"
+
+
+def test_import_blocks_invalid_encoding(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    invalid_bytes = b"\xff\xfe\xfd\xfc"
+    invalid_file = ("invalid.csv", invalid_bytes, "text/csv")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/block/import",
+        files={"file": invalid_file},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Invalid file encoding"
+
+
+def test_import_blocks_csv_missing_headers(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    csv_content = """block_name,district_name
+Block A,Anantapur
+Block B,Anantapur
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+        tmp_file.write(csv_content.encode("utf-8"))
+        tmp_file_path = tmp_file.name
+
+    try:
+        with open(tmp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/location/block/import",
+                files={"file": ("blocks_missing_headers.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "CSV must contain headers" in data["detail"]
+        assert "state_name" in data["detail"]
+
+    finally:
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+
+
+def test_import_blocks_csv_multiple_state_combinations(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+
+    state_andhra = State(name="Andhra Pradesh", country_id=country.id)
+    state_telangana = State(name="Telangana", country_id=country.id)
+    db.add_all([state_andhra, state_telangana])
+    db.commit()
+    db.refresh(state_andhra)
+    db.refresh(state_telangana)
+
+    district_anantapur = District(name="district_aa", state_id=state_andhra.id)
+    district_kurnool = District(name="district_bb", state_id=state_andhra.id)
+    district_hyderabad = District(name="district_cc", state_id=state_telangana.id)
+
+    db.add_all([district_anantapur, district_kurnool, district_hyderabad])
+    db.commit()
+    db.refresh(district_anantapur)
+    db.refresh(district_kurnool)
+    db.refresh(district_hyderabad)
+
+    csv_content = """block_name,district_name,state_name
+Block A,district_aa,Andhra Pradesh
+Block B,district_bb,Andhra Pradesh
+Block C,district_cc,Telangana
+Block D,NonExistentDistrict,Telangana
+,district_cc,Telangana
+Block A,district_aa,Andhra Pradesh
+Block X,district_cc,Andhra Pradesh
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary_file:
+        temporary_file.write(csv_content.encode("utf-8"))
+        temporary_file_path = temporary_file.name
+
+    try:
+        with open(temporary_file_path, "rb") as file_object:
+            response = client.post(
+                f"{settings.API_V1_STR}/location/block/import",
+                files={"file": ("blocks_states_test.csv", file_object, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+
+        assert data["uploaded_blocks"] == 7
+        assert data["success_blocks"] == 3
+        assert data["failed_blocks"] == 4
+
+        assert "Missing districts" in data["message"]
+        assert "Duplicate blocks skipped" in data["message"]
+        assert data["error_log"] is not None
+
+        base64_csv = data["error_log"].split("base64,")[-1]
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        error_rows = list(csv_reader)
+
+        assert len(error_rows) == 4
+
+        expected_errors = {
+            5: "District 'NonExistentDistrict' in state 'Telangana' not found",
+            6: "Missing required value(s)",
+            7: "Block already exists",
+            8: "District 'district_cc' in state 'Andhra Pradesh' not found",
+        }
+
+        for row in error_rows:
+            row_number = int(row["row_number"])
+            assert expected_errors[row_number] in row["error"]
+
+    finally:
+        if os.path.exists(temporary_file_path):
+            os.unlink(temporary_file_path)

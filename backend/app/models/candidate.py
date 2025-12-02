@@ -224,7 +224,6 @@ class TestCandidatePublic(SQLModel):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool
 
     # Safe questions (no answers)
     question_revisions: list["QuestionCandidatePublic"]
@@ -243,6 +242,7 @@ class Result(SQLModel):
     incorrect_answer: int
     mandatory_not_attempted: int
     optional_not_attempted: int
+    total_questions: int
     marks_obtained: float | None
     marks_maximum: float | None
 

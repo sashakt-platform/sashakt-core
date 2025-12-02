@@ -2352,6 +2352,23 @@ def test_visibility_test_with_random_tag_count(
     assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
 
 
+def test_visibility_test_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_test_id = -9999
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
 def test_delete_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2492,7 +2509,6 @@ def test_get_public_test_info(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -2549,7 +2565,6 @@ def test_get_public_test_info_with_random_tag_count(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         random_tag_count=[{"tag_id": 1, "count": 3}, {"tag_id": 2, "count": 2}],
     )
     db.add(test)
@@ -2657,7 +2672,6 @@ def test_get_public_test_info_with_tag_count_only(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         random_tag_count=[{"tag_id": 1, "count": 4}, {"tag_id": 2, "count": 3}],
     )
     db.add(test)
@@ -2681,7 +2695,6 @@ def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> No
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=False,  # Inactive test
-        is_deleted=False,
         link=random_lower_string(),
     )
     db.add(test)
@@ -2701,10 +2714,11 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=True,  # Deleted test
         link=random_lower_string(),
     )
     db.add(test)
+    db.commit()
+    db.delete(test)
     db.commit()
 
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
@@ -2722,7 +2736,6 @@ def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -
             name="Public Start Timer Test",
             link="public-test-uuid",
             is_active=True,
-            is_deleted=False,
             start_time=future_start_time,
             created_by_id=create_random_user(db).id,
         )
@@ -2749,7 +2762,6 @@ def test_public_timer_when_test_already_started(
             name="Public Start Timer Test",
             link="public-test-uuid1",
             is_active=True,
-            is_deleted=False,
             start_time=datetime(2024, 5, 24, 9, 0, 0),
             end_time=fake_current_time + timedelta(days=1),
             created_by_id=create_random_user(db).id,
@@ -2784,10 +2796,11 @@ def test_public_timer_test_not_found_or_not_active(
             end_time=fake_current_time + timedelta(hours=2),
             time_limit=60,
             is_active=True,
-            is_deleted=True,  # Marked as deleted
             created_by_id=user.id,
         )
         db.add(deleted_test)
+        db.commit()
+        db.delete(deleted_test)
         db.commit()
         response = client.get(
             f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
@@ -2803,7 +2816,6 @@ def test_public_timer_returns_zero_if_start_time_none(
         name="Test with no start time",
         link="test-no-start-time",
         is_active=True,
-        is_deleted=False,
         start_time=None,  # This is the key for this test
         created_by_id=create_random_user(db).id,
     )
@@ -3295,11 +3307,12 @@ def test_clone_soft_deleted_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
-        is_deleted=True,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
+    db.delete(test)
+    db.commit()
     response = client.post(
         f"{settings.API_V1_STR}/test/{test.id}/clone",
         headers=get_user_superadmin_token,
@@ -3998,7 +4011,6 @@ def test_get_all_tests_includes_active_and_inactive(
     active_test = Test(
         name="Active Test",
         is_active=True,
-        is_deleted=False,
         created_by_id=user_id,
         organization_id=user_data["organization_id"],
     )
@@ -4006,7 +4018,6 @@ def test_get_all_tests_includes_active_and_inactive(
     inactive_test = Test(
         name="Inactive Test",
         is_active=False,
-        is_deleted=False,
         created_by_id=user_id,
         organization_id=user_data["organization_id"],
     )
@@ -4127,6 +4138,48 @@ def test_update_test_time_limit_exceeds_duration(
     assert "Time limit cannot be more than the duration" in data["detail"]
 
 
+def test_update_test_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_test_id = -9999
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 5,
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
+def test_get_test_by_id_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test fetching a test that does not exist should return 404."""
+
+    non_existent_test_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
 def test_update_test_end_time_before_start_time(
     client: TestClient,
     db: SessionDep,
@@ -4228,7 +4281,6 @@ def test_get_public_test_info_expire_test(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         start_time=get_current_time() - timedelta(hours=1),
         end_time=get_current_time() - timedelta(minutes=10),
     )
@@ -4500,7 +4552,6 @@ def test_get_public_test(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         random_questions=True,
         no_of_random_questions=4,
     )
@@ -4514,7 +4565,6 @@ def test_get_public_test(
             created_by_id=user.id,
             organization_id=user.organization_id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -5031,7 +5081,6 @@ def test_delete_test_with_attempted_candidate_should_fail(
         correct_answer=[2],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -5163,7 +5212,6 @@ def test_bulk_delete_test_with_attempted_candidate_should_fail(
         correct_answer=[2],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -5342,7 +5390,6 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
         correct_answer=[1],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -6026,7 +6073,6 @@ def test_clone_test_with_organization_id(
         correct_answer=[2],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -6135,7 +6181,6 @@ def test_test_list_state_user(
             name=f"Test X {i + 1}",
             created_by_id=user_state_x.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -6148,7 +6193,6 @@ def test_test_list_state_user(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -6162,7 +6206,6 @@ def test_test_list_state_user(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)
@@ -6177,7 +6220,6 @@ def test_test_list_state_user(
             name=f"Test Y {i + 1}",
             created_by_id=user_state_y.id,
             organization_id=new_organization.id,
-            is_deleted=False,
             is_template=False,
         )
         db.add(t)

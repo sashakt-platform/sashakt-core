@@ -75,7 +75,6 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
         role_id=db_user.role_id,
         organization_id=db_user.organization_id,
         created_by_id=db_user.created_by_id,
-        is_deleted=db_user.is_deleted,
         is_active=db_user.is_active,
         role_label=role_label,
         states=states or None,

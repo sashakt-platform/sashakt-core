@@ -1,7 +1,8 @@
-from typing import cast
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, not_, or_, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
@@ -22,6 +23,20 @@ from app.models.test import TestState
 from app.models.user import UserState
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
+
+
+def transform_organizations_to_public(
+    items: list[Organization] | Any,
+) -> list[OrganizationPublic]:
+    result: list[OrganizationPublic] = []
+    organization_list: list[Organization] = (
+        list(items) if not isinstance(items, list) else items
+    )
+
+    for organization in organization_list:
+        result.append(OrganizationPublic(**organization.model_dump()))
+
+    return result
 
 
 # Create a Organization
@@ -64,7 +79,7 @@ def get_organization(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Page[Organization]:
+) -> Page[OrganizationPublic]:
     query = select(Organization).where(not_(Organization.is_deleted))
 
     if name:
@@ -84,10 +99,14 @@ def get_organization(
             )
         query = query.order_by(column.desc() if is_desc else column)
 
-    # Execute query and get all organization
-    organization = session.exec(query).all()
+    organizations: Page[OrganizationPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_organizations_to_public(items),
+    )
 
-    return cast(Page[Organization], paginate(organization, params))
+    return organizations
 
 
 @router.get(
@@ -113,7 +132,7 @@ def get_organization_aggregated_stats_for_current_user(
         )
 
     questions_subquery = select(func.count(func.distinct(Question.id))).where(
-        not_(Question.is_deleted), Question.organization_id == organization_id
+        Question.organization_id == organization_id
     )
 
     if current_user_state_ids:
@@ -125,7 +144,7 @@ def get_organization_aggregated_stats_for_current_user(
         )
 
     users_subquery = select(func.count(func.distinct(User.id))).where(
-        User.organization_id == organization_id, not_(User.is_deleted)
+        User.organization_id == organization_id
     )
     if current_user_state_ids:
         users_subquery = users_subquery.join(UserState).where(
@@ -134,7 +153,6 @@ def get_organization_aggregated_stats_for_current_user(
 
     tests_subquery = select(func.count(func.distinct(Test.id))).where(
         Test.organization_id == organization_id,
-        not_(Test.is_deleted),
         not_(Test.is_template),
     )
     if current_user_state_ids:
