@@ -7342,16 +7342,16 @@ def test_candidate_review_api_test_level_marking(
     assert response.status_code == 200
     data = response.json()
 
-    assert data["candidate_test_id"] == candidate_test_id
-    assert data["test_id"] == test.id
-    assert len(data["items"]) == 2
+    assert len(data) == len(revisions)
 
-    for item, revision in zip(data["items"], revisions, strict=False):
-        assert item["question_text"] == revision.question_text
+    for item, revision in zip(data, revisions, strict=False):
+        question_dict = item["question"]
+        assert question_dict["id"] == revision.id
+        assert question_dict["question_text"] == revision.question_text
+        assert question_dict["correct_answer"] == revision.correct_answer
+        assert question_dict["instructions"] == revision.instructions
+
         assert item["submitted_answer"] == "{1}"
-        assert item["correct_answer"] == revision.correct_answer
-        assert item["feedback"] == revision.instructions
-        assert item["marks_obtained"] == marking_scheme["correct"]
 
 
 def test_candidate_review_api_question_level_marking(
@@ -7443,14 +7443,117 @@ def test_candidate_review_api_question_level_marking(
     )
     assert response.status_code == 200
     data = response.json()
+    assert len(data) == 3
 
-    assert data["candidate_test_id"] == candidate_test_id
-    assert data["test_id"] == test.id
-    assert len(data["items"]) == 3
-
-    for item, revision in zip(data["items"], revisions, strict=False):
-        assert item["question_text"] == revision.question_text
+    for item, revision in zip(data, revisions, strict=False):
+        question_dict = item["question"]
+        assert question_dict["id"] == revision.id
+        assert question_dict["question_text"] == revision.question_text
+        assert question_dict["correct_answer"] == revision.correct_answer
+        assert question_dict["instructions"] == revision.instructions
         assert item["submitted_answer"] == "{1}"
-        assert item["correct_answer"] == revision.correct_answer
-        assert item["feedback"] == revision.instructions
         assert item["marks_obtained"] == question_marking_scheme["correct"]
+
+
+def test_candidate_review_partial_answers(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    marking_scheme = {"correct": 2, "wrong": 0, "skipped": -1}
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        is_review_enabled=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    revisions = []
+    for _ in range(4):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision = QuestionRevision(
+            created_by_id=user.id,
+            question_id=question.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+            correct_answer=[1],
+            instructions=random_lower_string(),
+            is_mandatory=True,
+            is_active=True,
+            marking_scheme=marking_scheme,
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        revisions.append(revision)
+
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+    candidate_test_id = start_response["candidate_test_id"]
+    candidate_uuid = start_response["candidate_uuid"]
+
+    for rev in revisions[:2]:
+        db.add(
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=rev.id,
+                response=[2],
+                visited=True,
+                time_spent=5,
+            )
+        )
+    db.commit()
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.end_time = datetime.now()
+    candidate_test.is_submitted = True
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/candidate-tests/{candidate_test_id}/review",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 4
+
+    for i, revision in enumerate(revisions):
+        item = data[i]
+        question_data = item["question"]
+        assert question_data["id"] == revision.id
+        assert question_data["question_text"] == revision.question_text
+        assert question_data["correct_answer"] == revision.correct_answer
+        assert question_data["instructions"] == revision.instructions
+
+        if i < 2:
+            assert item["submitted_answer"] == "{2}"
+            assert item["marks_obtained"] == 0
+        else:
+            assert item["submitted_answer"] == ""
+            assert item["marks_obtained"] == -1
