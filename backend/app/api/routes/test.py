@@ -237,7 +237,6 @@ def create_test(
     )
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
-
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
         import uuid
@@ -598,7 +597,6 @@ def update_test(
             else test.time_limit
         )
         validate_test_time_config(start_time, end_time, time_limit)
-
     if test_update.random_questions:
         if (
             test_update.no_of_random_questions is None
