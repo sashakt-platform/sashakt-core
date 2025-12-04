@@ -240,6 +240,12 @@ class Test(TestBase, table=True):
     )
 
     organization: Optional["Organization"] = Relationship(back_populates="tests")
+    show_instant_feedback: bool = Field(
+        default=False,
+        title="Show Instant Feedback",
+        description="Show feedback to candidate immediately after each question",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class TestCreate(TestBase):
