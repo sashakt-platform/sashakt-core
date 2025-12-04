@@ -825,6 +825,9 @@ def create_question_revision(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Prepare data for JSON serialization
     options, marking_scheme, media = prepare_for_db(revision_data)
@@ -1086,6 +1089,7 @@ def update_question_tags(
     question_id: int,
     tag_data: QuestionTagsUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> list[TagPublic]:
     """
     Update all tags for a question by syncing the provided list of tag IDs.
@@ -1094,6 +1098,9 @@ def update_question_tags(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Get current tags
     current_tags_query = select(QuestionTag).where(

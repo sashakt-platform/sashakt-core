@@ -1094,6 +1094,7 @@ def test_question_tag_operations(
         json={
             "tag_ids": [tag1.id, tag2.id],  # Keep tag1, add tag2
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -1103,7 +1104,10 @@ def test_question_tag_operations(
     assert tag_ids == {tag1.id, tag2.id}
 
     # Get question tags to verify
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     tags = response.json()
 
     assert response.status_code == 200
@@ -1118,6 +1122,7 @@ def test_question_tag_operations(
         json={
             "tag_ids": [tag2.id],  # Keep only tag2, remove tag1
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -1126,7 +1131,10 @@ def test_question_tag_operations(
     assert updated_tags[0]["id"] == tag2.id
 
     # Verify tag was removed
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     tags = response.json()
 
     assert response.status_code == 200
@@ -2490,6 +2498,7 @@ def test_bulk_tag_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[0].id, tags[1].id, tags[2].id]},
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2512,6 +2521,7 @@ def test_bulk_tag_operations(
         json={
             "tag_ids": [tags[0].id, tags[3].id]
         },  # Keep tags[0], remove tags[1,2], add tags[3]
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2529,6 +2539,7 @@ def test_bulk_tag_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[3].id]},  # Keep only tags[3]
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2846,6 +2857,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[0].id]},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -2854,6 +2866,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[1].id, tags[2].id]},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 2
@@ -2869,6 +2882,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[0].id, tags[1].id, tags[2].id]},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
@@ -2876,6 +2890,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": []},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
@@ -2885,7 +2900,9 @@ def test_mixed_single_and_bulk_operations(
     assert len(current_tags) == 0
 
 
-def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
+def test_update_question_tags(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     """Test updating all tags for a question using PUT."""
     # Create organization, user, and initial tags
     org = Organization(name=random_lower_string())
@@ -2936,6 +2953,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2949,6 +2967,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 4
@@ -2958,6 +2977,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -2968,6 +2988,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 0
@@ -5123,6 +5144,92 @@ def test_state_admin_cannot_update_question_outside_their_state(
     )
     assert update_resp.status_code == 403
     assert "cannot modify" in update_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_update_tags_for_general_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    user = create_random_user(db)
+    tag_type = TagType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag_type)
+    db.flush()
+    tag = Tag(
+        name=random_lower_string(),
+        tag_type_id=tag_type.id,
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    admin_state = State(
+        name=random_lower_string(), is_active=True, country_id=country.id
+    )
+    other_state = State(
+        name=random_lower_string(), is_active=True, country_id=country.id
+    )
+    db.add_all([admin_state, other_state])
+    db.commit()
+    db.refresh(admin_state)
+    db.refresh(other_state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [admin_state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [other_state.id],
+    }
+    q_resp = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=get_user_superadmin_token,
+    )
+    q_id = q_resp.json()["id"]
+
+    tag_payload = {"tag_ids": [tag.id]}
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/questions/{q_id}/tags",
+        json=tag_payload,
+        headers=token_headers,
+    )
+
+    assert update_resp.status_code == 403
+    assert "cannot modify/delete" in update_resp.json()["detail"].lower()
 
 
 def test_question_list_state_user(
