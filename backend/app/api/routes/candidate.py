@@ -33,6 +33,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateReviewResponse,
     CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
@@ -1052,3 +1053,73 @@ def get_time_left(
 
     time_left = int(final_time_left.total_seconds())
     return TimeLeft(time_left=time_left)
+
+
+@router.get(
+    "/candidate-tests/{candidate_test_id}/instant-feedback",
+    response_model=CandidateReviewResponse,
+)
+def get_instant_feedback(
+    candidate_test_id: int,
+    session: SessionDep,
+    question_revision_id: int = Query(
+        ..., description="Question revision ID to get feedback for"
+    ),
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> CandidateReviewResponse:
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    if not test.show_instant_feedback:
+        raise HTTPException(
+            status_code=403, detail="Instant feedback is disabled for this test"
+        )
+
+    candidate_answer = session.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == question_revision_id)
+    ).first()
+
+    question_revision = session.get(QuestionRevision, question_revision_id)
+    if not question_revision:
+        raise HTTPException(status_code=404, detail="Question revision not found")
+
+    marks_obtained = None
+    if test.marks_level in ("test", "question"):
+        marking_scheme = (
+            test.marking_scheme
+            if test.marks_level == "test"
+            else question_revision.marking_scheme
+        )
+
+        if marking_scheme:
+            if candidate_answer is None or not candidate_answer.response:
+                marks_obtained = marking_scheme.get("skipped", 0)
+            else:
+                if question_revision.question_type.value in [
+                    "single-choice",
+                    "multi-choice",
+                ]:
+                    response_list = convert_to_list(candidate_answer.response)
+                    correct_list = convert_to_list(question_revision.correct_answer)
+                    if set(response_list) == set(correct_list):
+                        marks_obtained = marking_scheme.get("correct", 0)
+                    else:
+                        marks_obtained = marking_scheme.get("wrong", 0)
+
+    return CandidateReviewResponse(
+        question=question_revision,
+        submitted_answer=candidate_answer.response if candidate_answer else "",
+        marks_obtained=marks_obtained,
+    )
+
+
+CandidateReviewResponse.model_rebuild()

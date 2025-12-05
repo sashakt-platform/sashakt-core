@@ -269,3 +269,9 @@ class OverallTestAnalyticsResponse(SQLModel):
     total_candidates: int
     overall_score_percent: float
     overall_avg_time_minutes: float
+
+
+class CandidateReviewResponse(SQLModel):
+    question: "QuestionRevision" = Field(description="Full question revision object")
+    submitted_answer: str = Field(description="Answer submitted by candidate")
+    marks_obtained: float | None = None

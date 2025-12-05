@@ -7169,3 +7169,321 @@ def test_start_test_candidate_with_organization(
     assert candidate is not None
     assert candidate.organization_id is not None
     assert candidate.organization_id == test_data["organization_id"]
+
+
+def test_instant_feedback_disabled(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        created_by_id=user.id,
+        show_instant_feedback=False,
+        marks_level="question",
+        link=random_lower_string(),
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_type=QuestionType.single_choice,
+        question_text=random_lower_string(),
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    res = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+    candidate_test_id = res["candidate_test_id"]
+    candidate_uuid = res["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/candidate-tests/{candidate_test_id}/instant-feedback",
+        params={"question_revision_id": revision.id, "candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 403
+
+
+def test_instant_feedback_correct_answer(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    marking_scheme = {"correct": 2, "wrong": -1, "skipped": 0}
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        created_by_id=user.id,
+        show_instant_feedback=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    question_text = random_lower_string()
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_type=QuestionType.single_choice,
+        correct_answer=[1],
+        question_text=question_text,
+        marking_scheme=marking_scheme,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    res = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+    candidate_test_id = res["candidate_test_id"]
+    candidate_uuid = res["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=[1],
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/candidate-tests/{candidate_test_id}/instant-feedback",
+        params={"question_revision_id": revision.id, "candidate_uuid": candidate_uuid},
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["marks_obtained"] == 2
+    assert data["submitted_answer"] == "{1}"
+    assert data["question"]["id"] == revision.id
+    assert data["question"]["question_text"] == question_text
+
+
+def test_instant_feedback_wrong_answer(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    marking_scheme = {"correct": 2, "wrong": -1, "skipped": 0}
+
+    test = Test(
+        name=random_lower_string(),
+        time_limit=60,
+        created_by_id=user.id,
+        show_instant_feedback=True,
+        marks_level="question",
+        is_review_enabled=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    q = Question(organization_id=org.id)
+    db.add(q)
+    db.commit()
+    db.refresh(q)
+
+    question_text = random_lower_string()
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=q.id,
+        question_text=question_text,
+        instructions=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "opt1"},
+            {"id": 2, "key": "B", "value": "opt2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        marking_scheme=marking_scheme,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    res = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": random_lower_string()},
+    ).json()
+
+    cid = res["candidate_test_id"]
+    uuid = res["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=cid, question_revision_id=revision.id, response=[2]
+        )
+    )
+    db.commit()
+
+    r = client.get(
+        f"{settings.API_V1_STR}/candidate/candidate-tests/{cid}/instant-feedback",
+        params={"question_revision_id": revision.id, "candidate_uuid": uuid},
+    )
+
+    data = r.json()
+
+    assert r.status_code == 200
+    assert data["marks_obtained"] == -1
+    assert data["submitted_answer"] == "{2}"
+    assert data["question"]["id"] == revision.id
+    assert data["question"]["question_text"] == question_text
+    assert data["question"]["correct_answer"] == [1]
+
+
+def test_instant_feedback_skipped_question(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    organization = Organization(name=random_lower_string())
+    db.add(organization)
+    db.commit()
+    db.refresh(organization)
+
+    marking_scheme = {"correct": 2, "wrong": -1, "skipped": 0}
+
+    test = Test(
+        name=random_lower_string(),
+        time_limit=60,
+        created_by_id=user.id,
+        show_instant_feedback=True,
+        marks_level="question",
+        is_review_enabled=True,
+    )
+    db.add(test)
+    db.commit()
+
+    question = Question(organization_id=organization.id)
+    db.add(question)
+    db.commit()
+
+    question_text = random_lower_string()
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=question_text,
+        instructions=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "opt1"},
+            {"id": 2, "key": "B", "value": "opt2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        marking_scheme=marking_scheme,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_test_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": random_lower_string()},
+    ).json()
+
+    candidate_test_id = start_test_response["candidate_test_id"]
+    candidate_uuid = start_test_response["candidate_uuid"]
+
+    feedback_response = client.get(
+        f"{settings.API_V1_STR}/candidate/candidate-tests/{candidate_test_id}/instant-feedback",
+        params={"question_revision_id": revision.id, "candidate_uuid": candidate_uuid},
+    )
+
+    feedback_data = feedback_response.json()
+
+    assert feedback_response.status_code == 200
+    assert feedback_data["marks_obtained"] == 0
+    assert feedback_data["submitted_answer"] == ""
+    assert feedback_data["question"]["id"] == revision.id
+    assert feedback_data["question"]["question_text"] == question_text
+    assert feedback_data["question"]["correct_answer"] == [1]
+
+
+def test_instant_feedback_question_revision_not_found(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        time_limit=60,
+        created_by_id=user.id,
+        show_instant_feedback=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    res = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+    candidate_test_id = res["candidate_test_id"]
+    candidate_uuid = res["candidate_uuid"]
+
+    non_existent_question_revision_id = -999999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/candidate-tests/{candidate_test_id}/instant-feedback",
+        params={
+            "question_revision_id": non_existent_question_revision_id,
+            "candidate_uuid": candidate_uuid,
+        },
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Question revision not found"
