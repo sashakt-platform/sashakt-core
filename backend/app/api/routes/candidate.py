@@ -1089,7 +1089,9 @@ def get_instant_feedback(
     ).first()
 
     question_revision = session.get(QuestionRevision, question_revision_id)
-    if not question_revision:
+    if not question_revision or question_revision_id not in (
+        candidate_test.question_revision_ids or []
+    ):
         raise HTTPException(status_code=404, detail="Question revision not found")
 
     marks_obtained = None
