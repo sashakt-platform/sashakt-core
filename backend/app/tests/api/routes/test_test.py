@@ -228,7 +228,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["created_by_id"] == user_id
-    assert data["locale"] == "en-US"
+    assert data["locale"] == "EN_US"
     assert len(data["districts"]) == 1
     assert "id" in data
     assert "created_date" in data
@@ -289,7 +289,7 @@ def test_create_test(
         "random_questions": False,
         "no_of_random_questions": 4,
         "question_pagination": 1,
-        "locale": "hi-IN",
+        "locale": "HI_IN",
         "is_template": False,
         "template_id": sample_test.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
@@ -2132,7 +2132,7 @@ def test_update_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
-        locale="hi-IN",
+        locale="HI_IN",
     )
     db.add(test)
     db.commit()
@@ -2191,7 +2191,7 @@ def test_update_test(
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
         "district_ids": [district_a.id],
-        "locale": "en-US",
+        "locale": "EN_US",
     }
 
     response = client.put(
@@ -3967,7 +3967,7 @@ def test_update_test_unsupported_language(
         created_by_id=user.id,
         start_time="2025-07-19T10:00:00Z",
         end_time="2025-07-19T11:00:00Z",
-        locale="en-US",
+        locale="EN_US",
     )
     db.add(test)
     db.commit()
@@ -3989,9 +3989,9 @@ def test_update_test_unsupported_language(
     data = response.json()
 
     assert response.status_code == 422
-    assert data["detail"][0]["msg"] == "Input should be 'en-US', 'hi-IN' or 'mr-IN'"
+    assert data["detail"][0]["msg"] == "Input should be 'EN_US' or 'HI_IN'"
 
-    payload["locale"] = "hi-IN"
+    payload["locale"] = "HI_IN"
     response = client.put(
         f"{settings.API_V1_STR}/test/{test.id}",
         json=payload,
@@ -3999,7 +3999,7 @@ def test_update_test_unsupported_language(
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["locale"] == "hi-IN"
+    assert data["locale"] == "HI_IN"
 
 
 def test_create_test_start_and_end_time_same(

@@ -28,10 +28,9 @@ if TYPE_CHECKING:
     from app.models.location import Block, District, State
 
 
-class LanguageLabels(str, enum.Enum):
-    EN_US = "en-US"
-    HI_IN = "hi-IN"
-    MR_IN = "mr-IN"
+class LocaleEnum(str, enum.Enum):
+    EN_US = "EN_US"
+    HI_IN = "HI_IN"
 
 
 class TagRandomCreate(TypedDict):
@@ -196,11 +195,11 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
-    locale: LanguageLabels = Field(
-        default=LanguageLabels.EN_US,
+    locale: LocaleEnum = Field(
+        default=LocaleEnum.EN_US,
         title="Test Language",
-        description="Language of the test (e.g., en-US, hi-IN, mr-IN).",
-        sa_column_kwargs={"server_default": LanguageLabels.EN_US},
+        description="Language of the test (e.g., EN_US, HI_IN).",
+        sa_column_kwargs={"server_default": LocaleEnum.EN_US},
     )
 
 
