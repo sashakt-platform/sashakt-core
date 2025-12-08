@@ -29,6 +29,7 @@ class QuestionType(str, Enum):
     multi_choice = "multi-choice"
     subjective = "subjective"
     numerical_integer = "numerical-integer"
+    numerical_decimal = "numerical-decimal"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -81,7 +82,7 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | None
+CorrectAnswerType = list[int] | list[str] | float | int | str | dict[Any, Any] | None
 
 
 class QuestionRevisionInfo(SQLModel):
@@ -174,6 +175,37 @@ class QuestionBase(SQLModel):
                     raise ValueError(
                         "Multi-choice questions must have at least one correct answer."
                     )
+
+        elif question_type in [
+            QuestionType.numerical_integer,
+            QuestionType.numerical_decimal,
+        ]:
+            if correct_answer is not None:
+                try:
+                    value = (
+                        float(correct_answer)
+                        if isinstance(correct_answer, int | float | str)
+                        else None
+                    )
+                    if value is None:
+                        raise ValueError
+
+                    if question_type == QuestionType.numerical_integer:
+                        if not value.is_integer():
+                            raise ValueError(
+                                "Numerical integer questions must have an integer correct answer."
+                            )
+                        self.correct_answer = int(value)
+                    else:
+                        self.correct_answer = float(value)
+
+                except (ValueError, TypeError):
+                    msg = (
+                        "Numerical integer questions must have an integer correct answer. Examples: 5, 42, 0, -3"
+                        if question_type == QuestionType.numerical_integer
+                        else "Numerical decimal questions must have a decimal correct answer. Examples: 3.14, 0.75, -2.5, 5.0"
+                    )
+                    raise ValueError(msg)
 
         return self
 
