@@ -5017,8 +5017,8 @@ def test_create_question_revision_not_found(
 def test_create_test_with_subjective_question(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
     org = create_random_organization(db)
+    user = create_random_user(db, org.id)
 
     q1 = Question(organization_id=org.id)
     db.add(q1)
@@ -5077,6 +5077,7 @@ def test_create_test_with_subjective_question(
 
     payload = {
         "name": random_lower_string(),
+        "organization_id": org.id,
         "created_by_id": user.id,
         "is_active": True,
         "link": random_lower_string(),
@@ -5092,3 +5093,8 @@ def test_create_test_with_subjective_question(
     )
 
     assert response.status_code == 200
+    data = response.json()
+    question_types = [
+        q.get("question_type") for q in data.get("question_revisions", [])
+    ]
+    assert QuestionType.subjective in question_types
