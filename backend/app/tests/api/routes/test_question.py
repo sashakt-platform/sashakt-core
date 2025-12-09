@@ -5012,3 +5012,83 @@ def test_create_question_revision_not_found(
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "Question not found"
+
+
+def test_create_test_with_subjective_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    q1 = Question(organization_id=org.id)
+    db.add(q1)
+    db.flush()
+    q1_rev = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        marking_scheme={"correct": 10, "wrong": -5, "skipped": 0},
+        correct_answer=[1],
+    )
+    db.add(q1_rev)
+    db.flush()
+    q1.last_revision_id = q1_rev.id
+
+    q2 = Question(organization_id=org.id)
+    db.add(q2)
+    db.flush()
+    q2_rev = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        marking_scheme={"correct": 15, "wrong": -2, "skipped": 0},
+        correct_answer=[1, 2],
+    )
+    db.add(q2_rev)
+    db.flush()
+    q2.last_revision_id = q2_rev.id
+
+    q3 = Question(organization_id=org.id)
+    db.add(q3)
+    db.flush()
+    q3_rev = QuestionRevision(
+        question_id=q3.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        correct_answer=random_lower_string(),
+    )
+    db.add(q3_rev)
+    db.flush()
+    q3.last_revision_id = q3_rev.id
+    db.commit()
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "is_active": True,
+        "link": random_lower_string(),
+        "marks_level": "test",
+        "marking_scheme": {"correct": 5, "wrong": -1, "skipped": 1},
+        "question_revision_ids": [q1_rev.id, q2_rev.id, q3_rev.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
