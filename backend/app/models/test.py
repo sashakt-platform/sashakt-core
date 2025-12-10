@@ -190,6 +190,12 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
+    omr: bool = Field(
+        default=False,
+        title="OMR Mode",
+        description="Enable this to conduct the test in OMR format.",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):
