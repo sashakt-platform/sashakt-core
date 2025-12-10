@@ -543,12 +543,13 @@ def get_test_questions(
     if test.marks_level == "test":
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
+    is_omr_mode = getattr(test, "omr", False)
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(
             id=q.id,
-            question_text=q.question_text,
+            question_text=None if is_omr_mode else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
             options=q.options,
