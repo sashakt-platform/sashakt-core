@@ -33,6 +33,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateReviewResponse,
     CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
@@ -1052,3 +1053,100 @@ def get_time_left(
 
     time_left = int(final_time_left.total_seconds())
     return TimeLeft(time_left=time_left)
+
+
+@router.get(
+    "/candidate-tests/{candidate_test_id}/review",
+    response_model=list[CandidateReviewResponse],
+)
+def get_detailed_review(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> list[CandidateReviewResponse]:
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+
+    result = session.exec(
+        select(CandidateTest, Test)
+        .join(Test)
+        .where(CandidateTest.test_id == Test.id)
+        .where(CandidateTest.id == candidate_test_id)
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Candidate test or test not found")
+
+    candidate_test, test = result
+
+    if candidate_test.end_time is None:
+        raise HTTPException(status_code=400, detail="Test is not yet submitted")
+
+    if not test.is_review_enabled:
+        raise HTTPException(status_code=403, detail="Review is disabled for this test")
+    marks_obtained = None
+
+    is_test_level = test.marks_level == "test"
+    is_question_level = test.marks_level == "question"
+    test_level_marking_scheme = test.marking_scheme if is_test_level else None
+
+    submitted_answers = session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all()
+    answers_map = {ans.question_revision_id: ans for ans in submitted_answers}
+
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(candidate_test.question_revision_ids)
+        )
+    ).all()
+    revisions_map = {rev.id: rev for rev in question_revisions}
+
+    review_items: list[CandidateReviewResponse] = []
+
+    for question_id in candidate_test.question_revision_ids:
+        question_revision = revisions_map.get(question_id)
+
+        candidate_answer = answers_map.get(question_id)
+        if is_test_level:
+            marking_scheme = test_level_marking_scheme
+
+        elif (
+            is_question_level and question_revision and question_revision.marking_scheme
+        ):
+            marking_scheme = question_revision.marking_scheme
+        else:
+            marking_scheme = None
+
+        if marking_scheme:
+            if candidate_answer is None or not candidate_answer.response:
+                marks_obtained = marking_scheme.get("skipped", 0)
+
+            else:
+                if question_revision and question_revision.question_type.value in [
+                    "single-choice",
+                    "multi-choice",
+                ]:
+                    response_list = convert_to_list(candidate_answer.response)
+                    correct_list = convert_to_list(question_revision.correct_answer)
+
+                    if set(response_list) == set(correct_list):
+                        marks_obtained = marking_scheme.get("correct", 0)
+                    else:
+                        marks_obtained = marking_scheme.get("wrong", 0)
+
+        review_items.append(
+            CandidateReviewResponse(
+                question=question_revision,
+                submitted_answer=candidate_answer.response if candidate_answer else "",
+                marks_obtained=marks_obtained if marking_scheme else None,
+            )
+        )
+
+    return review_items
+
+
+CandidateReviewResponse.model_rebuild()
