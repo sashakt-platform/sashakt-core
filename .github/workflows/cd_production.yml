@@ -4,7 +4,7 @@ name: Deploy to Production tag
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   deploy:
@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Checkout (for logs)
         uses: actions/checkout@v6
-        
+
       - name: Set deployment tag
         id: set_tag
         run: |
@@ -24,24 +24,23 @@ jobs:
           echo "DEPLOY_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
           fi
           echo "Will deploy tag: $DEPLOY_TAG"
-          
+
       - name: Deploy via SSH (tag-based)
         uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-        
+
           script: |
             DEPLOY_TAG="${{ env.DEPLOY_TAG }}"
             set -euxo pipefail
             cd /home/ubuntu/sashakt-core
-        
 
             git fetch --all --tags --prune
             # use exported DEPLOY_TAG (it will be like "v1.0.2")
             git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
-            cp -v ../yaml-store/*.yml .
-            docker compose down || true
-            docker compose up -d
+
+            docker compose -f docker-compose.yml down || true
+            docker compose -f docker-compose.yml up -d
             echo "Deployment of tag $DEPLOY_TAG completed."
