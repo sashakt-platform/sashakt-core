@@ -57,7 +57,9 @@ from app.models.question import (
     Option,
     QuestionRevisionInfo,
 )
+from app.models.role import Role
 from app.models.test import TestQuestion
+from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -65,6 +67,53 @@ router = APIRouter(prefix="/questions", tags=["Questions"])
 # create sorting dependency
 QuestionSorting = create_sorting_dependency(QuestionSortConfig)
 QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
+
+
+def check_question_permission(
+    session: SessionDep, current_user: CurrentUser, question: Question
+) -> None:
+    locations = session.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question.id)
+    ).all()
+    question_state_ids = {loc.state_id for loc in locations if loc.state_id is not None}
+
+    user_state_ids = {
+        state_id
+        for state_id in session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
+        if state_id is not None
+    }
+    if not question_state_ids or not question_state_ids.issubset(user_state_ids):
+        raise HTTPException(
+            403,
+            "State/test-admin cannot modify/delete general questions or questions outside their location.",
+        )
+
+
+def add_question_to_failure_list(
+    session: SessionDep, question: Question, failure_list: list[QuestionPublic]
+) -> None:
+    revision = session.exec(
+        select(QuestionRevision).where(QuestionRevision.id == question.last_revision_id)
+    ).first()
+
+    locations = session.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question.id)
+    ).all()
+
+    tags = session.exec(
+        select(Tag)
+        .join(QuestionTag)
+        .where(QuestionTag.tag_id == Tag.id)
+        .where(QuestionTag.question_id == question.id)
+    ).all()
+    tags_list: list[Tag] | None = list(tags) if tags else None
+
+    if revision:
+        failure_list.append(
+            build_question_response(question, revision, list(locations), tags_list)
+        )
 
 
 def check_linked_test(session: SessionDep, question_id: int) -> bool:
@@ -624,11 +673,18 @@ def get_question_candidate_tests(
 @router.delete(
     "/{question_id}", dependencies=[Depends(permission_dependency("delete_question"))]
 )
-def delete_question(question_id: int, session: SessionDep) -> Message:
+def delete_question(
+    question_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Message:
     """Soft delete a question."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     if check_linked_test(session, question_id):
         raise HTTPException(
@@ -651,7 +707,7 @@ def bulk_delete_question(
 ) -> DeleteQuestion:
     """Soft delete a question."""
     success_count = 0
-    failure_list = []
+    failure_list: list[QuestionPublic] = []
     db_questions = session.exec(
         select(Question)
         .where(col(Question.id).in_(question_ids))
@@ -664,38 +720,22 @@ def bulk_delete_question(
         raise HTTPException(
             status_code=404, detail="Invalid Questions selected for deletion"
         )
-
+    role = session.get(Role, current_user.role_id)
+    is_admin_with_state = role and role.name in (state_admin.name, test_admin.name)
     for question in db_questions:
-        if question.id is not None and check_linked_test(session, question.id):
-            revision = session.exec(
-                select(QuestionRevision).where(
-                    QuestionRevision.id == question.last_revision_id
-                )
-            ).first()
+        try:
+            if is_admin_with_state:
+                check_question_permission(session, current_user, question)
 
-            locations = session.exec(
-                select(QuestionLocation).where(
-                    QuestionLocation.question_id == question.id
-                )
-            ).all()
+            if question.id is not None and check_linked_test(session, question.id):
+                add_question_to_failure_list(session, question, failure_list)
+            else:
+                session.delete(question)
+                session.commit()
+                success_count += 1
 
-            tags = session.exec(
-                select(Tag)
-                .join(QuestionTag)
-                .where(QuestionTag.tag_id == Tag.id)
-                .where(QuestionTag.question_id == question.id)
-            ).all()
-            tags_list: list[Tag] | None = list(tags) if tags else None
-            if revision:
-                failure_list.append(
-                    build_question_response(
-                        question, revision, list(locations), tags_list
-                    )
-                )
-        else:
-            session.delete(question)
-            session.commit()
-            success_count += 1
+        except HTTPException:
+            add_question_to_failure_list(session, question, failure_list)
 
     session.commit()
 
@@ -734,12 +774,16 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
 def update_question(
     question_id: int,
     session: SessionDep,
-    updated_data: QuestionUpdate = Body(...),  # is_active
+    current_user: CurrentUser,
+    updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Update basic question attributes
     question_data = updated_data.model_dump(exclude_unset=True)
@@ -781,6 +825,9 @@ def create_question_revision(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Prepare data for JSON serialization
     options, marking_scheme, media = prepare_for_db(revision_data)
@@ -1042,6 +1089,7 @@ def update_question_tags(
     question_id: int,
     tag_data: QuestionTagsUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> list[TagPublic]:
     """
     Update all tags for a question by syncing the provided list of tag IDs.
@@ -1050,6 +1098,9 @@ def update_question_tags(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Get current tags
     current_tags_query = select(QuestionTag).where(
