@@ -22,9 +22,9 @@ dependencies = [
     "sentry-sdk[fastapi]<2.0.0,>=1.40.6",
     "pyjwt<3.0.0,>=2.8.0",
     "fastapi-pagination>=0.13.3",
-    "cryptography>=41.0.0,<42.0.0",
     "google-cloud-bigquery>=3.11.0,<4.0.0",
     "google-auth>=2.20.0,<3.0.0",
+    "cryptography>=46.0.3",
 ]
 
 [dependency-groups]
