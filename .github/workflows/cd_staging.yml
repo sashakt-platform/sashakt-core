@@ -15,17 +15,6 @@ jobs:
       - name: Checkout (for logs)
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.4.15"
-          enable-cache: true
-
       - name: Pull latest changes and deploy
         uses: appleboy/ssh-action@v1.2.4
         with:
@@ -48,7 +37,7 @@ jobs:
       - name: Run migration
         timeout-minutes: 10
         run: |
-          docker compose -f docker-compose.yml exec backend bash scripts/run-migrations.sh || {
+          docker compose -f docker-compose.yml exec backend alembic upgrade head || {
             echo "Migration failed, checking logs..."
             docker compose -f docker-compose.yml logs backend
             exit 1
