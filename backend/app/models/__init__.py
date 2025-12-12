@@ -108,6 +108,8 @@ from .tag import (
     TagUpdate,
 )
 from .test import (
+    EntityPublicLimited,
+    TagRandomPublic,
     Test,
     TestCreate,
     TestDistrict,
@@ -252,10 +254,15 @@ __all__ = [
     "OrganizationProviderCreate",
     "OrganizationProviderPublic",
     "OrganizationProviderUpdate",
+    "EntityPublicLimited",
+    "TagRandomPublic",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
+EntityPublicLimited.model_rebuild()
+TagRandomPublic.model_rebuild()
 TestCandidatePublic.model_rebuild()
 TestPublic.model_rebuild()
+TestPublicLimited.model_rebuild()
 UserPublic.model_rebuild()
 UserPublicMe.model_rebuild()

@@ -516,7 +516,7 @@ def get_test(
     # let's get the tests with custom transformer
     tests: Page[TestPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_tests_to_public(session, items),
     )
