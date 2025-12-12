@@ -254,6 +254,8 @@ __all__ = [
     "OrganizationProviderCreate",
     "OrganizationProviderPublic",
     "OrganizationProviderUpdate",
+    "EntityPublicLimited",
+    "TagRandomPublic",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
