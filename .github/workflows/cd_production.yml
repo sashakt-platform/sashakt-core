@@ -1,5 +1,8 @@
 name: Deploy to Production tag
 
+permissions:
+  contents: read
+
 # Trigger only when a tag matching v* is pushed (eg v1.2.3)
 on:
   push:
