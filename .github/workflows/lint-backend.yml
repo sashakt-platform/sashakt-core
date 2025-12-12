@@ -28,5 +28,7 @@ jobs:
         with:
           version: "0.4.15"
           enable-cache: true
+      - run: uv sync --group dev
+        working-directory: backend
       - run: uv run bash scripts/lint.sh
         working-directory: backend
