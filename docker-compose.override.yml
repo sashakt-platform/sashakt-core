@@ -33,7 +33,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-        restart: true
     environment:
       - ADMINER_DESIGN=pepa-linha-dark
     labels:
