@@ -1,8 +1,5 @@
 name: Lint Backend
 
-permissions:
-  contents: read
-
 on:
   push:
     branches:
