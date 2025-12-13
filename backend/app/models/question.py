@@ -81,7 +81,7 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | None
+CorrectAnswerType = list[int] | list[str] | float | int | str | None
 
 
 class QuestionRevisionInfo(SQLModel):
