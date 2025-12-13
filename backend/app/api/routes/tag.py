@@ -378,7 +378,10 @@ def get_tags(
     query = (
         select(Tag)
         .options(selectinload(Tag.tag_type))
-        .where(Tag.organization_id == current_user.organization_id)
+        .where(
+            Tag.organization_id == current_user.organization_id,
+            Tag.is_active == True,  # noqa: E712
+        )
     )
     if name:
         # search in both tag name and tag type name

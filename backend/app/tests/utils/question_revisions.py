@@ -54,4 +54,11 @@ def create_random_question_revision(
     session.add(question_revision)
     session.commit()
     session.refresh(question_revision)
+
+    # set last_revision_id on the question as it is expected in API
+    question.last_revision_id = question_revision.id
+    session.add(question)
+    session.commit()
+    session.refresh(question)
+
     return question_revision
