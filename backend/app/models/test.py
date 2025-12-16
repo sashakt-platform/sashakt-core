@@ -190,6 +190,18 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
+    show_feedback_on_completion: bool = Field(
+        default=False,
+        title="Show Feedback on Completion",
+        description="If enabled, candidates can review their answers, correct answers, explanations after submitting the test.",
+        sa_column_kwargs={"server_default": "false"},
+    )
+    show_feedback_immediately: bool = Field(
+        default=False,
+        title="Show Instant Feedback",
+        description="Show feedback to candidate immediately after each question",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):

@@ -33,6 +33,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateReviewResponse,
     CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
@@ -1052,3 +1053,82 @@ def get_time_left(
 
     time_left = int(final_time_left.total_seconds())
     return TimeLeft(time_left=time_left)
+
+
+@router.get(
+    "/{candidate_test_id}/review-feedback",
+    response_model=list[CandidateReviewResponse],
+)
+def get_review_feedback(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+    question_revision_ids: list[int] | None = Query(
+        None, description="Optional list of question revision IDs for feedback"
+    ),
+) -> list[CandidateReviewResponse]:
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    show_instant_feedback = test.show_feedback_immediately
+    show_feedback_on_completion = test.show_feedback_on_completion
+
+    if candidate_test.end_time is None and not show_instant_feedback:
+        raise HTTPException(
+            status_code=403,
+            detail="Feedback is not enabled for this test during attempt",
+        )
+
+    if candidate_test.end_time is not None and not show_feedback_on_completion:
+        raise HTTPException(
+            status_code=403,
+            detail="Post-submission feedback is not enabled for this test",
+        )
+
+    question_ids_to_fetch = (
+        question_revision_ids or candidate_test.question_revision_ids
+    )
+
+    submitted_answers = session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id,
+            col(CandidateTestAnswer.question_revision_id).in_(question_ids_to_fetch),
+        )
+    ).all()
+
+    answers_by_question_id = {
+        ans.question_revision_id: ans for ans in submitted_answers
+    }
+
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(question_ids_to_fetch)
+        )
+    ).all()
+
+    revisions_by_id = {rev.id: rev for rev in question_revisions}
+
+    feedback_list: list[CandidateReviewResponse] = []
+
+    for question_id in question_ids_to_fetch:
+        if question_revision := revisions_by_id.get(question_id):
+            candidate_answer = answers_by_question_id.get(question_id)
+
+            feedback_list.append(
+                CandidateReviewResponse(
+                    question_revision_id=question_id,
+                    submitted_answer=candidate_answer.response
+                    if candidate_answer
+                    else "",
+                    correct_answer=question_revision.correct_answer,
+                )
+            )
+
+    return feedback_list
