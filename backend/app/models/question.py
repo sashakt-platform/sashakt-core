@@ -174,6 +174,9 @@ class QuestionBase(SQLModel):
                     raise ValueError(
                         "Multi-choice questions must have at least one correct answer."
                     )
+        elif question_type == QuestionType.subjective:
+            if options is not None and len(options) > 0:
+                raise ValueError("Subjective questions should not have options.")
 
         return self
 

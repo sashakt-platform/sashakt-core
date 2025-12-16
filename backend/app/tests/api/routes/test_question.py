@@ -131,6 +131,33 @@ def test_create_question(
     assert question_tags[0].tag_id == tag_id
 
 
+def test_create_subjective_question_with_options_should_fail(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    org_id = org_response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org_id,
+            "question_text": random_lower_string(),
+            "question_type": QuestionType.subjective,
+            "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+            "is_mandatory": True,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 422
+    assert "Subjective questions should not have options." in data["detail"][0]["msg"]
+
+
 def test_read_questions(
     client: TestClient,
     db: SessionDep,
