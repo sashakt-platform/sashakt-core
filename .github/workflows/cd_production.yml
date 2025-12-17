@@ -46,12 +46,4 @@ jobs:
 
             docker compose -f docker-compose.yml down || true
             docker compose -f docker-compose.yml up -d
-            echo "Code is deployed for tag $DEPLOY_TAG."
-
-            docker compose -f docker-compose.yml exec -T backend alembic upgrade head || {
-              echo "Migration failed, checking logs..."
-              docker compose -f docker-compose.yml logs backend
-              exit 1
-            }
-
             echo "Deployment completed."
