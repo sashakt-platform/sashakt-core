@@ -190,6 +190,12 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
+    partial_marks: bool = Field(
+        default=False,
+        title="Partial Marking",
+        description="Field to enable or disable partial marking for the test.",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):
