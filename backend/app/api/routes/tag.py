@@ -180,7 +180,7 @@ def get_tagtype(
 
     tagtypes: Page[TagTypePublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_tag_types_to_public(items),
     )
@@ -402,7 +402,7 @@ def get_tags(
 
     tags: Page[TagPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda tags_list: transform_tags_to_public(tags_list, current_user),
     )

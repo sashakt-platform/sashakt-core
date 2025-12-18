@@ -92,7 +92,7 @@ def read_users(
 
     users: Page[UserPublic] = paginate(
         session,
-        statement,  # type: ignore[arg-type]
+        statement,
         param,
         transformer=lambda items: [
             crud.get_user_public(db_user=user, session=session)
