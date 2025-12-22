@@ -17,7 +17,9 @@ from app.models import (
     Entity,
     EntityType,
     Organization,
+    OrganizationProvider,
     Permission,
+    Provider,
     Question,
     QuestionLocation,
     QuestionRevision,
@@ -87,6 +89,10 @@ def db() -> Generator[Session, None, None]:
             session.execute(statement)
             statement = delete(Role)
             session.execute(statement)
+            statement = delete(OrganizationProvider)
+            session.execute(statement)
+            statement = delete(Provider)
+            session.execute(statement)
             statement = delete(Organization)
             session.execute(statement)
             # Delete location hierarchy
@@ -98,6 +104,7 @@ def db() -> Generator[Session, None, None]:
             session.execute(statement)
             statement = delete(Country)
             session.execute(statement)
+
             session.commit()
         except Exception as e:
             print(f"Error during cleanup: {e}")
