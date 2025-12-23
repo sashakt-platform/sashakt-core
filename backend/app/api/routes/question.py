@@ -529,7 +529,7 @@ def get_questions(
             query = query.where(col(Question.id).in_(location_subquery))
 
     # get the questions with pagination and transform to QuestionPublic
-    questions: Page[QuestionPublic] = paginate(  # type: ignore[type-var]
+    questions: Page[QuestionPublic] = paginate(
         session,
         query,
         params,
