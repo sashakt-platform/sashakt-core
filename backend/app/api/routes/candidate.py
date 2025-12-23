@@ -40,7 +40,7 @@ from app.models.candidate import (
     StartTestResponse,
     TestStatusSummary,
 )
-from app.models.question import Question, QuestionTag
+from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
 from app.models.test import TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -51,6 +51,25 @@ router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Tes
 router_candidate_test_answer = APIRouter(
     prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
+
+
+def validate_subjective_answer_limit(
+    answer_limit: int,
+    response: str | None,
+) -> None:
+    """
+    Validates the response length for a subjective question.
+    Assumes answer_limit is provided (not None).
+    """
+    if response and len(response) > answer_limit:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Answer exceeds character limit of "
+                f"{answer_limit}. "
+                f"Current length: {len(response)}"
+            ),
+        )
 
 
 def get_score_and_time(
@@ -363,6 +382,20 @@ def submit_answer_for_qr_candidate(
     """
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    question_revision = session.get(
+        QuestionRevision, answer_request.question_revision_id
+    )
+    if not question_revision:
+        raise HTTPException(status_code=404, detail="Question revision not found")
+
+    if (
+        question_revision.question_type == QuestionType.subjective
+        and question_revision.subjective_answer_limit is not None
+    ):
+        validate_subjective_answer_limit(
+            answer_limit=question_revision.subjective_answer_limit,
+            response=answer_request.response,
+        )
 
     # Check if answer already exists for this question
     existing_answer = session.exec(
@@ -417,8 +450,34 @@ def submit_batch_answers_for_qr_candidate(
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
 
+    question_revision_ids = [
+        answer.question_revision_id for answer in batch_request.answers
+    ]
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(question_revision_ids)
+        )
+    ).all()
+    question_revision_map = {qr.id: qr for qr in question_revisions}
+
     results = []
     for answer in batch_request.answers:
+        question_revision = question_revision_map.get(answer.question_revision_id)
+        if not question_revision:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Question revision {answer.question_revision_id} not found",
+            )
+
+        if (
+            question_revision.question_type == QuestionType.subjective
+            and question_revision.subjective_answer_limit is not None
+        ):
+            validate_subjective_answer_limit(
+                answer_limit=question_revision.subjective_answer_limit,
+                response=answer.response,
+            )
+
         # Check if answer already exists for this question
         existing_answer = session.exec(
             select(CandidateTestAnswer)
@@ -992,7 +1051,13 @@ def get_test_result(
             else:
                 optional_not_attempted += 1
         else:
-            if revision.question_type.value in ["single-choice", "multi-choice"]:
+            # Handle subjective questions separately (cannot be auto-marked)
+            if revision.question_type == QuestionType.subjective:
+                # Subjective questions require manual review
+                # Don't count as correct/incorrect in auto-scoring
+                # They will need manual marking in the future
+                pass
+            elif revision.question_type.value in ["single-choice", "multi-choice"]:
                 response_list = convert_to_list(answer.response)
                 correct_list = convert_to_list(revision.correct_answer)
 
