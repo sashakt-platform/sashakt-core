@@ -54,28 +54,22 @@ router_candidate_test_answer = APIRouter(
 
 
 def validate_subjective_answer_limit(
-    question_revision: QuestionRevision,
+    answer_limit: int,
     response: str | None,
 ) -> None:
     """
-    Validates the response length for subjective questions.
-    Expects the QuestionRevision object to be already provided.
+    Validates the response length for a subjective question.
+    Assumes answer_limit is provided (not None).
     """
-    if (
-        question_revision.question_type == QuestionType.subjective
-        and response
-        and question_revision.subjective_answer_limit is not None
-    ):
-        response_length = len(response)
-        if response_length > question_revision.subjective_answer_limit:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Answer exceeds character limit of "
-                    f"{question_revision.subjective_answer_limit}. "
-                    f"Current length: {response_length}"
-                ),
-            )
+    if response and len(response) > answer_limit:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Answer exceeds character limit of "
+                f"{answer_limit}. "
+                f"Current length: {len(response)}"
+            ),
+        )
 
 
 def get_score_and_time(
@@ -394,28 +388,14 @@ def submit_answer_for_qr_candidate(
     if not question_revision:
         raise HTTPException(status_code=404, detail="Question revision not found")
 
-    if question_revision.question_type == QuestionType.subjective:
+    if (
+        question_revision.question_type == QuestionType.subjective
+        and question_revision.subjective_answer_limit is not None
+    ):
         validate_subjective_answer_limit(
-            question_revision=question_revision,
+            answer_limit=question_revision.subjective_answer_limit,
             response=answer_request.response,
         )
-
-    # question_revision = session.get(
-    #     QuestionRevision, answer_request.question_revision_id
-    # )
-    # if not question_revision:
-    #     raise HTTPException(status_code=404, detail="Question revision not found")
-
-    # if question_revision.question_type == QuestionType.subjective:
-    #     if answer_request.response is not None:
-    #         if question_revision.subjective_answer_limit is not None:
-    #             response_length = len(answer_request.response)
-
-    #             if response_length > question_revision.subjective_answer_limit:
-    #                 raise HTTPException(
-    #                     status_code=400,
-    #                     detail=f"Answer exceeds character limit of {question_revision.subjective_answer_limit}. Current length: {response_length}",
-    #                 )
 
     # Check if answer already exists for this question
     existing_answer = session.exec(
@@ -489,9 +469,12 @@ def submit_batch_answers_for_qr_candidate(
                 detail=f"Question revision {answer.question_revision_id} not found",
             )
 
-        if question_revision.question_type == QuestionType.subjective:
+        if (
+            question_revision.question_type == QuestionType.subjective
+            and question_revision.subjective_answer_limit is not None
+        ):
             validate_subjective_answer_limit(
-                question_revision=question_revision,
+                answer_limit=question_revision.subjective_answer_limit,
                 response=answer.response,
             )
 
