@@ -6,6 +6,7 @@ from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.utils import CorrectAnswerType
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
@@ -271,12 +272,9 @@ class OverallTestAnalyticsResponse(SQLModel):
     overall_avg_time_minutes: float
 
 
-CorrectAnswerType = list[int] | list[str] | float | int | None
-
-
 class CandidateReviewResponse(SQLModel):
     question_revision_id: int = Field(description="ID of the question revision")
-    submitted_answer: str = Field(description="Answer submitted by candidate")
+    submitted_answer: str | None = Field(description="Answer submitted by candidate")
     correct_answer: CorrectAnswerType = Field(
         description="Correct answer for the question"
     )

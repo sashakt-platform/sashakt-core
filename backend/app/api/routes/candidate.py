@@ -1124,9 +1124,9 @@ def get_review_feedback(
             feedback_list.append(
                 CandidateReviewResponse(
                     question_revision_id=question_id,
-                    submitted_answer=candidate_answer.response
-                    if candidate_answer
-                    else "",
+                    submitted_answer=(
+                        candidate_answer.response if candidate_answer else None
+                    ),
                     correct_answer=question_revision.correct_answer,
                 )
             )
