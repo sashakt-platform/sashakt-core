@@ -1,8 +1,8 @@
 """Add new feedback-related fields to Test model
 
-Revision ID: 2b435ba781c7
-Revises: b367cbc49fdf
-Create Date: 2025-12-15 16:38:50.046007
+Revision ID: 9e3b06e6fc34
+Revises: 61e8fcf99159
+Create Date: 2025-12-23 15:58:57.265981
 
 """
 from alembic import op
@@ -11,8 +11,8 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '2b435ba781c7'
-down_revision = 'b367cbc49fdf'
+revision = '9e3b06e6fc34'
+down_revision = '61e8fcf99159'
 branch_labels = None
 depends_on = None
 
