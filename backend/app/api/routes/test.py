@@ -38,6 +38,7 @@ from app.models import (
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.entity import Entity
 from app.models.location import District
+from app.models.role import Role
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
@@ -47,7 +48,7 @@ from app.models.test import (
     TagRandomPublic,
     TestDistrict,
 )
-from app.models.user import User
+from app.models.user import User, UserState
 from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
@@ -55,6 +56,80 @@ router = APIRouter(prefix="/test", tags=["Test"])
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
+
+
+def check_test_permission(
+    session: SessionDep,
+    current_user: CurrentUser,
+    test: Test,
+    *,
+    cached_user_state_ids: set[int] | None = None,
+) -> None:
+    test_state_ids = {
+        state_id
+        for state_id in session.exec(
+            select(TestState.state_id).where(TestState.test_id == test.id)
+        ).all()
+        if state_id is not None
+    }
+
+    district_state_rows = session.exec(
+        select(District.state_id)
+        .join(TestDistrict)
+        .where(TestDistrict.district_id == District.id)
+        .where(TestDistrict.test_id == test.id)
+    ).all()
+
+    for row in district_state_rows:
+        district_state_id = row[0] if isinstance(row, tuple) else row
+        if district_state_id is not None:
+            test_state_ids.add(district_state_id)
+
+    if cached_user_state_ids is not None:
+        user_state_ids = cached_user_state_ids
+    else:
+        user_state_ids = {
+            state_id
+            for state_id in session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+            if state_id is not None
+        }
+
+    if not test_state_ids or not test_state_ids.issubset(user_state_ids):
+        raise HTTPException(
+            403,
+            "State/test-admin cannot modify/delete general tests or tests outside their location.",
+        )
+
+
+def add_test_to_failure_list(
+    session: SessionDep, test: Test, failure_list: list[TestPublic]
+) -> None:
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
+    )
+    question_revisions = session.exec(question_revision_query).all()
+    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+    states = session.exec(state_query).all()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
+    )
+    districts = session.exec(district_query).all()
+
+    failure_list.append(
+        TestPublic(
+            **test.model_dump(),
+            tags=tags,
+            question_revisions=question_revisions,
+            states=states,
+            districts=districts,
+        )
+    )
 
 
 def check_linked_question(session: SessionDep, test_id: int) -> bool:
@@ -573,11 +648,16 @@ def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_test_permission(session, current_user, test)
+
     if (
         test_update.start_time is not None
         or test_update.end_time is not None
@@ -828,10 +908,15 @@ def visibility_test(
     "/{test_id}",
     dependencies=[Depends(permission_dependency("delete_test"))],
 )
-def delete_test(test_id: int, session: SessionDep) -> Message:
+def delete_test(
+    test_id: int, session: SessionDep, current_user: CurrentUser
+) -> Message:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_test_permission(session, current_user, test)
 
     if check_linked_question(session, test_id):
         raise HTTPException(
@@ -873,39 +958,32 @@ def bulk_delete_question(
             status_code=404, detail="Invalid Tests selected for deletion"
         )
 
-    for test in db_test:
-        if test.id is not None and check_linked_question(session, test.id):
-            tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-            tags = session.exec(tags_query).all()
-            question_revision_query = (
-                select(QuestionRevision)
-                .join(TestQuestion)
-                .where(TestQuestion.test_id == test.id)
-            )
-            question_revisions = session.exec(question_revision_query).all()
-            state_query = (
-                select(State).join(TestState).where(TestState.test_id == test.id)
-            )
-            states = session.exec(state_query).all()
-            district_query = (
-                select(District)
-                .join(TestDistrict)
-                .where(TestDistrict.test_id == test.id)
-            )
-            districts = session.exec(district_query).all()
-            if test:
-                failure_list.append(
-                    TestPublic(
-                        **test.model_dump(),
-                        tags=tags,
-                        question_revisions=question_revisions,
-                        states=states,
-                        districts=districts,
-                    )
-                )
+    role = session.get(Role, current_user.role_id)
+
+    if role and role.name in (state_admin.name, test_admin.name):
+        if current_user.states:
+            admin_state_ids = {
+                state.id for state in current_user.states if state.id is not None
+            }
         else:
-            session.delete(test)
-            success_count += 1
+            admin_state_ids = None
+    else:
+        admin_state_ids = None
+    for test in db_test:
+        try:
+            if admin_state_ids:
+                check_test_permission(
+                    session, current_user, test, cached_user_state_ids=admin_state_ids
+                )
+
+            if test.id is not None and check_linked_question(session, test.id):
+                add_test_to_failure_list(session, test, failure_list)
+            else:
+                session.delete(test)
+                success_count += 1
+
+        except HTTPException:
+            add_test_to_failure_list(session, test, failure_list)
 
     session.commit()
     return DeleteTest(
