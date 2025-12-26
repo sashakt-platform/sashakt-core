@@ -1423,6 +1423,7 @@ def test_question_location_operations(
                 },  # Add district
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1462,6 +1463,7 @@ def test_question_location_operations(
                 },  # Add block
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1491,6 +1493,7 @@ def test_question_location_operations(
                 },  # Keep block, remove district
             ]
         },
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
@@ -2722,6 +2725,7 @@ def test_bulk_location_operations(
                 },
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2765,6 +2769,7 @@ def test_bulk_location_operations(
                 # Remove district and block entirely
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2781,6 +2786,7 @@ def test_bulk_location_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/locations",
         json={"locations": []},
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2994,7 +3000,9 @@ def test_update_question_tags(
     assert len(response.json()) == 0
 
 
-def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
+def test_update_question_locations(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create organization and user
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -3049,6 +3057,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/locations",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -3065,6 +3074,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/locations",
         json={"locations": []},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 0
@@ -5405,7 +5415,7 @@ def test_question_list_state_user(
     assert data["total"] == 8
     assert len(data["items"]) == 8
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert test_admin_role is not None
 
     email = random_email()
