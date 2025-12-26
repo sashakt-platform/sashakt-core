@@ -67,7 +67,7 @@ def check_user_permission(
     ):
         raise HTTPException(
             403,
-            "State/test-admin cannot modify/delete general users or  users outside their state.",
+            "State/test-admin cannot modify/delete general users or users outside their state.",
         )
 
 
