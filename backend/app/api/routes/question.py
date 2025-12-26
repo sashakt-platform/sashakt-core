@@ -70,20 +70,27 @@ QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
 
 
 def check_question_permission(
-    session: SessionDep, current_user: CurrentUser, question: Question
+    session: SessionDep,
+    current_user: CurrentUser,
+    question: Question,
+    *,
+    cached_user_state_ids: set[int] | None = None,
 ) -> None:
     locations = session.exec(
         select(QuestionLocation).where(QuestionLocation.question_id == question.id)
     ).all()
     question_state_ids = {loc.state_id for loc in locations if loc.state_id is not None}
 
-    user_state_ids = {
-        state_id
-        for state_id in session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
-        if state_id is not None
-    }
+    if cached_user_state_ids is not None:
+        user_state_ids = cached_user_state_ids
+    else:
+        user_state_ids = {
+            state_id
+            for state_id in session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+            if state_id is not None
+        }
     if not question_state_ids or not question_state_ids.issubset(user_state_ids):
         raise HTTPException(
             403,
@@ -678,7 +685,6 @@ def delete_question(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Message:
-    """Soft delete a question."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -705,7 +711,6 @@ def delete_question(
 def bulk_delete_question(
     session: SessionDep, current_user: CurrentUser, question_ids: list[int] = Body(...)
 ) -> DeleteQuestion:
-    """Soft delete a question."""
     success_count = 0
     failure_list: list[QuestionPublic] = []
     db_questions = session.exec(
@@ -721,11 +726,26 @@ def bulk_delete_question(
             status_code=404, detail="Invalid Questions selected for deletion"
         )
     role = session.get(Role, current_user.role_id)
-    is_admin_with_state = role and role.name in (state_admin.name, test_admin.name)
+
+    if role and role.name in (state_admin.name, test_admin.name):
+        if current_user.states:
+            admin_state_ids = {
+                state.id for state in current_user.states if state.id is not None
+            }
+        else:
+            admin_state_ids = None
+    else:
+        admin_state_ids = None
+
     for question in db_questions:
         try:
-            if is_admin_with_state:
-                check_question_permission(session, current_user, question)
+            if admin_state_ids:
+                check_question_permission(
+                    session,
+                    current_user,
+                    question,
+                    cached_user_state_ids=admin_state_ids,
+                )
 
             if question.id is not None and check_linked_test(session, question.id):
                 add_question_to_failure_list(session, question, failure_list)
@@ -988,6 +1008,7 @@ def update_question_locations(
     question_id: int,
     location_data: QuestionLocationsUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> list[QuestionLocationPublic]:
     """
     Update all locations for a question by syncing the provided list.
@@ -996,6 +1017,10 @@ def update_question_locations(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Get current locations
     current_locations_query = select(QuestionLocation).where(

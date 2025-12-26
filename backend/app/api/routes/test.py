@@ -59,7 +59,11 @@ TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
 
 
 def check_test_permission(
-    session: SessionDep, current_user: CurrentUser, test: Test
+    session: SessionDep,
+    current_user: CurrentUser,
+    test: Test,
+    *,
+    cached_user_state_ids: set[int] | None = None,
 ) -> None:
     test_state_ids = {
         state_id
@@ -81,13 +85,16 @@ def check_test_permission(
         if district_state_id is not None:
             test_state_ids.add(district_state_id)
 
-    user_state_ids = {
-        state_id
-        for state_id in session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
-        if state_id is not None
-    }
+    if cached_user_state_ids is not None:
+        user_state_ids = cached_user_state_ids
+    else:
+        user_state_ids = {
+            state_id
+            for state_id in session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+            if state_id is not None
+        }
 
     if not test_state_ids or not test_state_ids.issubset(user_state_ids):
         raise HTTPException(
@@ -952,11 +959,22 @@ def bulk_delete_question(
         )
 
     role = session.get(Role, current_user.role_id)
-    is_admin_with_state = role and role.name in (state_admin.name, test_admin.name)
+
+    if role and role.name in (state_admin.name, test_admin.name):
+        if current_user.states:
+            admin_state_ids = {
+                state.id for state in current_user.states if state.id is not None
+            }
+        else:
+            admin_state_ids = None
+    else:
+        admin_state_ids = None
     for test in db_test:
         try:
-            if is_admin_with_state:
-                check_test_permission(session, current_user, test)
+            if admin_state_ids:
+                check_test_permission(
+                    session, current_user, test, cached_user_state_ids=admin_state_ids
+                )
 
             if test.id is not None and check_linked_question(session, test.id):
                 add_test_to_failure_list(session, test, failure_list)
