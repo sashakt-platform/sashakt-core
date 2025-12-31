@@ -7169,3 +7169,318 @@ def test_start_test_candidate_with_organization(
     assert candidate is not None
     assert candidate.organization_id is not None
     assert candidate.organization_id == test_data["organization_id"]
+
+
+def test_review_feedback_denied_during_test_when_instant_feedback_off(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        show_feedback_immediately=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+
+    candidate_test_id = start_response["candidate_test_id"]
+    candidate_uuid = start_response["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "Feedback is not enabled for this test during attempt"
+    )
+
+
+def test_review_feedback_not_available_after_submission_when_feedback_disabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        show_feedback_on_completion=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": random_lower_string()},
+            {"id": 2, "key": "B", "value": random_lower_string()},
+        ],
+        correct_answer="1",
+        instructions=random_lower_string(),
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+
+    candidate_test_id = start_response["candidate_test_id"]
+    candidate_uuid = start_response["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response="1",
+            visited=True,
+            time_spent=5,
+        )
+    )
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.end_time = datetime.now()
+    candidate_test.is_submitted = True
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 403
+    assert (
+        response.json()["detail"]
+        == "Post-submission feedback is not enabled for this test"
+    )
+
+
+def test_instant_feedback_returns_only_requested_question(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        show_feedback_immediately=True,
+        show_feedback_on_completion=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    revisions: list[QuestionRevision] = []
+
+    for _ in range(2):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision = QuestionRevision(
+            created_by_id=user.id,
+            question_id=question.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.multi_choice,
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+            correct_answer=[1, 2],
+            is_active=True,
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+
+        revisions.append(revision)
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+
+    candidate_test_id = start_response["candidate_test_id"]
+    candidate_uuid = start_response["candidate_uuid"]
+
+    first_question_id = revisions[0].id
+    second_question_id = revisions[1].id
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=first_question_id,
+            response="1",
+            visited=True,
+            time_spent=5,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={
+            "candidate_uuid": candidate_uuid,
+            "question_revision_ids": [first_question_id],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == 1
+    assert data[0]["question_revision_id"] == first_question_id
+    assert data[0]["submitted_answer"] == "1"
+    assert data[0]["correct_answer"] == revisions[0].correct_answer
+
+    returned_ids = {item["question_revision_id"] for item in data}
+    assert second_question_id not in returned_ids
+
+
+def test_review_feedback_allowed_after_submission(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    marking_scheme = {"correct": 2, "wrong": -1, "skipped": 0}
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        show_feedback_on_completion=True,
+        show_feedback_immediately=False,
+        marks_level="test",
+        marking_scheme=marking_scheme,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    revisions: list[QuestionRevision] = []
+
+    for _ in range(2):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+
+        revision = QuestionRevision(
+            created_by_id=user.id,
+            question_id=question.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": random_lower_string()},
+                {"id": 2, "key": "B", "value": random_lower_string()},
+            ],
+            correct_answer=[1],
+            instructions=random_lower_string(),
+            is_mandatory=True,
+            is_active=True,
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+
+        revisions.append(revision)
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    ).json()
+
+    candidate_test_id = start_response["candidate_test_id"]
+    candidate_uuid = start_response["candidate_uuid"]
+
+    for rev in revisions:
+        db.add(
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=rev.id,
+                response="1",
+                visited=True,
+                time_spent=5,
+            )
+        )
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.end_time = datetime.now()
+    candidate_test.is_submitted = True
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == len(revisions)
+
+    for item, revision in zip(data, revisions, strict=False):
+        assert item["question_revision_id"] == revision.id
+        assert item["submitted_answer"] == "1"
+        assert item["correct_answer"] == [1]

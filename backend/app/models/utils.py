@@ -17,3 +17,6 @@ class MarkingScheme(TypedDict):
     correct: float
     wrong: float
     skipped: float
+
+
+CorrectAnswerType = list[int] | list[str] | float | int | None
