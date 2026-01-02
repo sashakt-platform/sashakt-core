@@ -43,6 +43,8 @@ from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
     EntityPublicLimited,
+    LocaleEnum,
+    LocaleModel,
     MarksLevelEnum,
     TagRandomCreate,
     TagRandomPublic,
@@ -597,6 +599,18 @@ def get_test(
     )
 
     return tests
+
+
+@router.get(
+    "/localization",
+    response_model=list[LocaleModel],
+    dependencies=[Depends(permission_dependency("create_test"))],
+)
+def get_localization() -> list[LocaleModel]:
+    return [
+        LocaleModel(language="English", code=LocaleEnum.EN_US),
+        LocaleModel(language="Hindi", code=LocaleEnum.HI_IN),
+    ]
 
 
 @router.get(

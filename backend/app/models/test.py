@@ -29,8 +29,16 @@ if TYPE_CHECKING:
 
 
 class LocaleEnum(str, enum.Enum):
-    EN_US = "EN_US"
-    HI_IN = "HI_IN"
+    EN_US = "en-US"
+    HI_IN = "hi-IN"
+
+
+class LocaleModel(SQLModel):
+    language: str
+    code: LocaleEnum
+
+
+DEFAULTLOCALE = LocaleEnum.EN_US.value
 
 
 class TagRandomCreate(TypedDict):
@@ -195,11 +203,13 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
-    locale: LocaleEnum = Field(
-        default=LocaleEnum.EN_US,
-        title="Test Language",
-        description="Language of the test (e.g., EN_US, HI_IN).",
-        sa_column_kwargs={"server_default": LocaleEnum.EN_US},
+    locale: str = Field(
+        default=DEFAULTLOCALE,
+        title="Set Language of Test",
+        description="Add a BCP-47 locale tag for language",
+        sa_column_kwargs={
+            "server_default": DEFAULTLOCALE,
+        },
     )
 
 
@@ -259,6 +269,7 @@ class TestCreate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
+    locale: LocaleEnum = LocaleEnum.EN_US
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -293,6 +304,7 @@ class TestUpdate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
+    locale: LocaleEnum = LocaleEnum.EN_US
 
 
 class EntityPublicLimited(SQLModel):
