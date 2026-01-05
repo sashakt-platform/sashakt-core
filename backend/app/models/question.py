@@ -82,7 +82,7 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | str | dict[Any, Any] | None
+CorrectAnswerType = list[int] | list[str] | float | int | None
 
 
 class QuestionRevisionInfo(SQLModel):
@@ -182,13 +182,10 @@ class QuestionBase(SQLModel):
         ]:
             if correct_answer is not None:
                 try:
-                    value = (
-                        float(correct_answer)
-                        if isinstance(correct_answer, int | float | str)
-                        else None
-                    )
-                    if value is None:
-                        raise ValueError
+                    if not isinstance(correct_answer, (int | float)):
+                        raise TypeError
+
+                    value = float(correct_answer)
 
                     if question_type == QuestionType.numerical_integer:
                         if not value.is_integer():
@@ -197,7 +194,7 @@ class QuestionBase(SQLModel):
                             )
                         self.correct_answer = int(value)
                     else:
-                        self.correct_answer = float(value)
+                        self.correct_answer = value
 
                 except (ValueError, TypeError):
                     msg = (

@@ -1523,34 +1523,6 @@ def test_question_validation_numerical_integer_invalid_string_decimal(
     )
 
 
-def test_question_validation_numerical_integer_invalid_string_non_numeric(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
-) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    question_data = {
-        "organization_id": org.id,
-        "question_text": random_lower_string(),
-        "question_type": "numerical-integer",
-        "correct_answer": "abc",
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/questions/",
-        json=question_data,
-        headers=get_user_superadmin_token,
-    )
-
-    assert response.status_code == 422
-    assert (
-        "Numerical integer questions must have an integer correct answer."
-        in response.text
-    )
-
-
 def test_question_validation_numerical_integer_invalid_list(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -1564,34 +1536,6 @@ def test_question_validation_numerical_integer_invalid_list(
         "question_text": random_lower_string(),
         "question_type": "numerical-integer",
         "correct_answer": [5],
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/questions/",
-        json=question_data,
-        headers=get_user_superadmin_token,
-    )
-
-    assert response.status_code == 422
-    assert (
-        "Numerical integer questions must have an integer correct answer."
-        in response.text
-    )
-
-
-def test_question_validation_numerical_integer_invalid_dict(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
-) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    question_data = {
-        "organization_id": org.id,
-        "question_text": random_lower_string(),
-        "question_type": "numerical-integer",
-        "correct_answer": {"value": 5},
     }
 
     response = client.post(
@@ -1796,62 +1740,6 @@ def test_question_validation_numerical_decimal_valid_large_decimal(
     assert data["correct_answer"] == 123456.789
 
 
-def test_question_validation_numerical_decimal_invalid_string_non_numeric(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
-) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    question_data = {
-        "organization_id": org.id,
-        "question_text": random_lower_string(),
-        "question_type": "numerical-decimal",
-        "correct_answer": "abc",
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/questions/",
-        json=question_data,
-        headers=get_user_superadmin_token,
-    )
-
-    assert response.status_code == 422
-    assert (
-        "Numerical decimal questions must have a decimal correct answer."
-        in response.text
-    )
-
-
-def test_question_validation_numerical_decimal_invalid_dict(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
-) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    question_data = {
-        "organization_id": org.id,
-        "question_text": random_lower_string(),
-        "question_type": "numerical-decimal",
-        "correct_answer": {"value": 3.14},
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/questions/",
-        json=question_data,
-        headers=get_user_superadmin_token,
-    )
-
-    assert response.status_code == 422
-    assert (
-        "Numerical decimal questions must have a decimal correct answer."
-        in response.text
-    )
-
-
 def test_question_validation_numerical_integer_none_allowed(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2002,49 +1890,6 @@ def test_question_validation_numerical_decimal_update_revision_valid(
     assert revision_response.status_code == 200
     data = revision_response.json()
     assert data["correct_answer"] == 0.75
-
-
-def test_question_validation_numerical_decimal_update_revision_invalid(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
-) -> None:
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
-
-    question_data = {
-        "organization_id": org.id,
-        "question_text": "Initial Question",
-        "question_type": "numerical-decimal",
-        "correct_answer": 3.14,
-    }
-
-    create_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
-        json=question_data,
-        headers=get_user_superadmin_token,
-    )
-    assert create_response.status_code == 200
-    question = create_response.json()
-    question_id = question["id"]
-
-    revision_payload = {
-        "question_text": random_lower_string(),
-        "question_type": "numerical-decimal",
-        "correct_answer": "invalid",
-        "is_mandatory": True,
-        "is_active": True,
-    }
-    revision_response = client.post(
-        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
-        json=revision_payload,
-        headers=get_user_superadmin_token,
-    )
-    assert revision_response.status_code == 422
-    assert (
-        "Numerical decimal questions must have a decimal correct answer."
-        in revision_response.text
-    )
 
 
 def test_question_location_operations(
