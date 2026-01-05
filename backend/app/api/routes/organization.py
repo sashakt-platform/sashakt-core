@@ -80,7 +80,10 @@ def get_organization(
         examples=["-created_date", "name"],
     ),
 ) -> Page[OrganizationPublic]:
-    query = select(Organization).where(not_(Organization.is_deleted))
+    query = select(Organization).where(
+        not_(Organization.is_deleted),
+        Organization.is_active == True,  # noqa: E712
+    )
 
     if name:
         query = query.where(col(Organization.name).contains(name))

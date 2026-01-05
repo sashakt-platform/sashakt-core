@@ -180,7 +180,7 @@ def get_tagtype(
 
     tagtypes: Page[TagTypePublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_tag_types_to_public(items),
     )
@@ -378,7 +378,10 @@ def get_tags(
     query = (
         select(Tag)
         .options(selectinload(Tag.tag_type))
-        .where(Tag.organization_id == current_user.organization_id)
+        .where(
+            Tag.organization_id == current_user.organization_id,
+            Tag.is_active == True,  # noqa: E712
+        )
     )
     if name:
         # search in both tag name and tag type name
@@ -402,7 +405,7 @@ def get_tags(
 
     tags: Page[TagPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda tags_list: transform_tags_to_public(tags_list, current_user),
     )

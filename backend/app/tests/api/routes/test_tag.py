@@ -1520,20 +1520,27 @@ def test_inactive_tag_not_listed(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user, organization = setup_user_organization(db)
+    # Get current user organization
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    # Create tag type in the current user organization
     tagtype = TagType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=org_id,
+        created_by_id=user_id,
     )
     db.add(tagtype)
     db.commit()
+    db.refresh(tagtype)
+
+    # Create an inactive tag
     data = {
         "name": "tag is added with is_active status false",
         "description": random_lower_string(),
         "tag_type_id": tagtype.id,
-        "organization_id": organization.id,
         "is_active": False,
     }
     response = client.post(
@@ -1543,17 +1550,19 @@ def test_inactive_tag_not_listed(
     )
     assert response.status_code == 200
     created_tag = response.json()
-    items = created_tag
-    tag_id = items["id"]
-    assert items["is_active"] is False
+    tag_id = created_tag["id"]
+    assert created_tag["is_active"] is False
+
+    # Verify the inactive tag is NOT in the list
     response = client.get(
         f"{settings.API_V1_STR}/tag/",
         headers=get_user_superadmin_token,
     )
+    assert response.status_code == 200
     response_data = response.json()
-    assert_paginated_response(response, min_expected_total=1)
     items = response_data["items"]
-    # The inactive tag should NOT be in the response
+
+    # The inactive tag should not be in the response
     assert all(item["id"] != tag_id for item in items)
 
 
