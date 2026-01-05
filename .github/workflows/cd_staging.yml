@@ -1,0 +1,35 @@
+name: Deploy to Staging
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout (for logs)
+        uses: actions/checkout@v6
+
+      - name: Pull latest changes and deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+
+          script: |
+            set -euxo pipefail
+            cd /home/ubuntu/sashakt-core
+
+            git fetch --all
+            git checkout main
+            git pull origin main
+
+            docker compose -f docker-compose.yml down || true
+            docker compose -f docker-compose.yml up -d
+            echo "Deployment completed."
