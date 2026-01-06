@@ -1,8 +1,8 @@
 """Add numerical-decimal question type
 
-Revision ID: dce3be203c15
-Revises: b367cbc49fdf
-Create Date: 2025-12-05 20:02:15.724032
+Revision ID: 69cec3bb0d87
+Revises: 61e8fcf99159
+Create Date: 2026-01-06 12:58:35.468274
 
 """
 from alembic import op
@@ -11,8 +11,8 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = 'dce3be203c15'
-down_revision = 'b367cbc49fdf'
+revision = '69cec3bb0d87'
+down_revision = '61e8fcf99159'
 branch_labels = None
 depends_on = None
 
