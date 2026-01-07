@@ -1018,14 +1018,28 @@ def get_test_result(
                     marks_obtained += correct_mark
                     correct += 1
                 else:
-                    if selected_correct > 0 and len(correct_set) > 0:
-                        partial = (selected_correct / len(correct_set)) * correct_mark
+                    if marking_scheme and marking_scheme.get("partial"):
+                        partial_rule = marking_scheme["partial"]
+
+                        if selected_wrong == 0 and selected_correct > 0:
+                            partial = 0.0
+
+                            for condition in partial_rule["correct_answers"]:
+                                if (
+                                    condition["num_correct_selected"]
+                                    == selected_correct
+                                ):
+                                    partial = condition["marks"]
+                                    break
+
+                            marks_obtained += partial
+                            correct += 1
+                        else:
+                            marks_obtained += marking_scheme["wrong"]
+                            incorrect += 1
                     else:
-                        partial = 0
-                    partial += selected_wrong * wrong_mark
-                    partial = round(partial, 2)
-                    marks_obtained += partial
-                    incorrect += 1
+                        marks_obtained += wrong_mark
+                        incorrect += 1
 
     total_questions = len(candidate_test.question_revision_ids)
     return Result(
