@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 # Generic message
@@ -11,9 +11,18 @@ class TimeLeft(TypedDict):
     time_left: int | None
 
 
-class MarkingScheme(TypedDict):
-    """Defines scoring rules for a question"""
+class PartialMarkCondition(TypedDict):
+    num_correct_selected: int
+    marks: int
 
+
+class PartialMarkRule(TypedDict):
+    correct_answers: list[PartialMarkCondition]
+
+
+class MarkingScheme(TypedDict):
     correct: float
     wrong: float
     skipped: float
+
+    partial: NotRequired[PartialMarkRule]
