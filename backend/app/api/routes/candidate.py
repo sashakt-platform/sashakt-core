@@ -543,13 +543,14 @@ def get_test_questions(
     if test.marks_level == "test":
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
-    is_omr_mode = getattr(test, "omr", False)
+    omr_mode = getattr(test, "omr", "NEVER")
+    hide_question_text = omr_mode != "NEVER"
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(
             id=q.id,
-            question_text=None if is_omr_mode else q.question_text,
+            question_text=None if hide_question_text else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
             options=[
@@ -559,7 +560,7 @@ def get_test_questions(
                 }
                 for opt in (q.options or [])
             ]
-            if is_omr_mode and q.options
+            if hide_question_text and q.options
             else q.options,
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,

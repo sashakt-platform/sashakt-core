@@ -24,7 +24,7 @@ from app.models.location import Country, District, State
 from app.models.question import QuestionTag, QuestionType
 from app.models.role import Role
 from app.models.tag import Tag, TagType
-from app.models.test import TestDistrict, TestQuestion, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestQuestion, TestState, TestTag
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import (
@@ -1439,7 +1439,7 @@ def test_get_test_questions_omr_mode(client: TestClient, db: SessionDep) -> None
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
-        omr=True,
+        omr=OMRMode.ALWAYS.value,
     )
     db.add(test)
     db.commit()
@@ -1520,7 +1520,7 @@ def test_get_test_questions_normal_mode(client: TestClient, db: SessionDep) -> N
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
-        omr=False,
+        omr="NEVER",
     )
     db.add(test)
     db.commit()
