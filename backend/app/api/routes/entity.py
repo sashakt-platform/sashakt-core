@@ -290,7 +290,7 @@ def get_entities(
 
     entities: Page[EntityPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_entities_to_public(items, current_user),
     )

@@ -43,6 +43,34 @@ UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 
 
+def check_user_permission(
+    session: SessionDep, current_user: CurrentUser, target_user: User
+) -> None:
+    target_user_state_ids = {
+        user_state
+        for user_state in session.exec(
+            select(UserState.state_id).where(UserState.user_id == target_user.id)
+        ).all()
+        if user_state is not None
+    }
+
+    current_user_state_ids = {
+        state_id
+        for state_id in session.exec(
+            select(UserState.state_id).where(UserState.user_id == current_user.id)
+        ).all()
+        if state_id is not None
+    }
+
+    if not target_user_state_ids or not target_user_state_ids.issubset(
+        current_user_state_ids
+    ):
+        raise HTTPException(
+            403,
+            "State/test-admin cannot modify/delete general users or users outside their state.",
+        )
+
+
 @router.get(
     "/",
     dependencies=[Depends(permission_dependency("read_user"))],
@@ -92,7 +120,7 @@ def read_users(
 
     users: Page[UserPublic] = paginate(
         session,
-        statement,  # type: ignore[arg-type]
+        statement,
         param,
         transformer=lambda items: [
             crud.get_user_public(db_user=user, session=session)
@@ -359,11 +387,7 @@ def read_user_by_id(
     response_model=UserPublic,
 )
 def update_user(
-    *,
-    session: SessionDep,
-    user_id: int,
-    user_in: UserUpdate,
-    current_user: CurrentUser,
+    *, session: SessionDep, user_id: int, user_in: UserUpdate, current_user: CurrentUser
 ) -> Any:
     """
     Update a user.
@@ -375,6 +399,10 @@ def update_user(
             status_code=404,
             detail="The user with this id does not exist in the system",
         )
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_user_permission(session, current_user, db_user)
+
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
@@ -435,6 +463,9 @@ def delete_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_user_permission(session, current_user, user)
     if user == current_user:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
