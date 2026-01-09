@@ -208,10 +208,10 @@ class TestBase(SQLModel):
         sa_column_kwargs={"server_default": LocaleEnum.EN_US},
     )
     omr: OMRMode = Field(
-        default=OMRMode.NEVER.value,
+        default=OMRMode.NEVER,
         title="OMR Mode",
         description="Defines OMR behavior for the test",
-        sa_column_kwargs={"server_default": OMRMode.NEVER.value},
+        sa_column_kwargs={"server_default": OMRMode.NEVER},
     )
 
 
