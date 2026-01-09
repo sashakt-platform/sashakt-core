@@ -494,6 +494,9 @@ def get_test_questions(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
+    use_omr: bool | None = Query(
+        None, description="Applicable only when test OMR mode is OPTIONAL"
+    ),
 ) -> TestCandidatePublic:
     """
     Get test questions for a candidate test, verified by candidate UUID.
@@ -545,6 +548,15 @@ def get_test_questions(
             q.marking_scheme = test.marking_scheme
     omr_mode = getattr(test, "omr", "NEVER")
     hide_question_text = omr_mode != "NEVER"
+    if omr_mode == "OPTIONAL":
+        if use_omr is None:
+            raise HTTPException(
+                status_code=400,
+                detail="use_omr is required when test OMR mode is OPTIONAL",
+            )
+        hide_question_text = use_omr
+    else:
+        hide_question_text = omr_mode == "ALWAYS"
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
