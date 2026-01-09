@@ -1438,7 +1438,7 @@ def test_get_test_questions_omr_optional_yes(
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
-        omr=OMRMode.OPTIONAL.value,
+        omr=OMRMode.OPTIONAL,
     )
     db.add(test)
     db.commit()
@@ -1464,7 +1464,7 @@ def test_get_test_questions_omr_optional_yes(
             "use_omr": True,
         },
     )
-
+    assert response.status_code == 200
     data = response.json()
     question_data = data["question_revisions"][0]
     assert question_data["question_text"] is None
@@ -1507,7 +1507,7 @@ def test_get_test_questions_omr_optional_missing_use_omr(
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
-        omr=OMRMode.OPTIONAL.value,
+        omr=OMRMode.OPTIONAL,
     )
     db.add(test)
     db.commit()
@@ -1574,7 +1574,7 @@ def test_get_test_questions_omr_mode(client: TestClient, db: SessionDep) -> None
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
-        omr=OMRMode.ALWAYS.value,
+        omr=OMRMode.ALWAYS,
     )
     db.add(test)
     db.commit()
@@ -1655,7 +1655,7 @@ def test_get_test_questions_normal_mode(client: TestClient, db: SessionDep) -> N
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
-        omr="NEVER",
+        omr=OMRMode.NEVER,
     )
     db.add(test)
     db.commit()
