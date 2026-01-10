@@ -392,7 +392,7 @@ def submit_answer_for_qr_candidate(
             response=answer_request.response,
             visited=answer_request.visited,
             time_spent=answer_request.time_spent,
-            bokmarked=answer_request.bookmarked,
+            bookmarked=answer_request.bookmarked,
         )
         session.add(candidate_test_answer)
         session.commit()
