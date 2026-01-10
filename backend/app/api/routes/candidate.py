@@ -379,6 +379,7 @@ def submit_answer_for_qr_candidate(
         existing_answer.response = answer_request.response
         existing_answer.visited = answer_request.visited
         existing_answer.time_spent = answer_request.time_spent
+        existing_answer.bookmarked = answer_request.bookmarked
         session.add(existing_answer)
         session.commit()
         session.refresh(existing_answer)
@@ -391,6 +392,7 @@ def submit_answer_for_qr_candidate(
             response=answer_request.response,
             visited=answer_request.visited,
             time_spent=answer_request.time_spent,
+            bokmarked=answer_request.bookmarked,
         )
         session.add(candidate_test_answer)
         session.commit()
@@ -433,6 +435,7 @@ def submit_batch_answers_for_qr_candidate(
             existing_answer.response = answer.response
             existing_answer.visited = answer.visited
             existing_answer.time_spent = answer.time_spent
+            existing_answer.bookmarked = answer.bookmarked
             session.add(existing_answer)
             results.append(existing_answer)
         else:
@@ -443,6 +446,7 @@ def submit_batch_answers_for_qr_candidate(
                 response=answer.response,
                 visited=answer.visited,
                 time_spent=answer.time_spent,
+                bookmarked=answer.bookmarked,
             )
             session.add(new_answer)
             results.append(new_answer)
