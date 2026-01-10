@@ -197,6 +197,11 @@ class TestBase(SQLModel):
             "server_default": DEFAULT_LOCALE,
         },
     )
+    show_question_palette: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Whether question palette should be visible for test taker.",
+    )
 
 
 class Test(TestBase, table=True):
