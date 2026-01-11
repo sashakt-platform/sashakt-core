@@ -31,7 +31,6 @@ def upgrade():
         UPDATE test
         SET locale = CASE locale
             WHEN 'EN_US' THEN 'en-US'
-            WHEN 'HI_IN' THEN 'hi-IN'
             ELSE locale
         END
         """
@@ -53,7 +52,6 @@ def downgrade():
         UPDATE test
         SET locale = CASE locale
             WHEN 'en-US' THEN 'EN_US'
-            WHEN 'hi-IN' THEN 'HI_IN'
             ELSE 'EN_US'
         END
     """)

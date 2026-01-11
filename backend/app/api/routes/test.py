@@ -43,17 +43,16 @@ from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
     EntityPublicLimited,
-    LocaleEnum,
-    LocaleModel,
     MarksLevelEnum,
     TagRandomCreate,
     TagRandomPublic,
     TestDistrict,
 )
 from app.models.user import User, UserState
-from app.models.utils import TimeLeft
+from app.models.utils import LOCALE_NAMES, TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
+router_language = APIRouter(prefix="/languages", tags=["Languages"])
 
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
@@ -601,16 +600,13 @@ def get_test(
     return tests
 
 
-@router.get(
-    "/localization",
-    response_model=list[LocaleModel],
+@router_language.get(
+    "/",
+    response_model=dict[str, str],
     dependencies=[Depends(permission_dependency("create_test"))],
 )
-def get_localization() -> list[LocaleModel]:
-    return [
-        LocaleModel(language="English", code=LocaleEnum.EN_US),
-        LocaleModel(language="Hindi", code=LocaleEnum.HI_IN),
-    ]
+def get_localization() -> dict[str, str]:
+    return LOCALE_NAMES
 
 
 @router.get(

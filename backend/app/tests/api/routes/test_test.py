@@ -6702,22 +6702,23 @@ def test_localization_list(
     client: TestClient, get_user_testadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/test/localization/",
+        f"{settings.API_V1_STR}/languages/",
         headers=get_user_testadmin_token,
     )
 
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert isinstance(response.json(), dict)
     data = response.json()
     assert len(data) == 2
 
     # Check if the expected dictionaries exist in the response
     expected_items = [
-        {"language": "English", "code": "en-US"},
-        {"language": "Hindi", "code": "hi-IN"},
+        {"en-US": "English"},
+        {"hi-IN": "Hindi"},
     ]
 
     for expected_item in expected_items:
-        assert expected_item in data, (
-            f"Expected item {expected_item} not found in response"
+        # Check if expected_item is a subset of data
+        assert expected_item.items() <= data.items(), (
+            f"Expected items {expected_item} not found in response data {data}"
         )

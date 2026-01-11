@@ -9,7 +9,7 @@ from typing_extensions import Self, TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.organization import Organization
-from app.models.utils import MarkingScheme
+from app.models.utils import DEFAULTLOCALE, LocaleEnum, MarkingScheme
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -26,19 +26,6 @@ if TYPE_CHECKING:
         User,
     )
     from app.models.location import Block, District, State
-
-
-class LocaleEnum(str, enum.Enum):
-    EN_US = "en-US"
-    HI_IN = "hi-IN"
-
-
-class LocaleModel(SQLModel):
-    language: str
-    code: LocaleEnum
-
-
-DEFAULTLOCALE = LocaleEnum.EN_US.value
 
 
 class TagRandomCreate(TypedDict):
@@ -269,7 +256,7 @@ class TestCreate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum = LocaleEnum.EN_US
+    locale: LocaleEnum = LocaleEnum.ENGLISH
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -304,7 +291,7 @@ class TestUpdate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum = LocaleEnum.EN_US
+    locale: LocaleEnum = LocaleEnum.ENGLISH
 
 
 class EntityPublicLimited(SQLModel):
