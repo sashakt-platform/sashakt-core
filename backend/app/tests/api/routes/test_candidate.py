@@ -7647,3 +7647,89 @@ def test_update_candidate_test_answer_with_bookmark(
     assert data["visited"] is True
     assert data["time_spent"] == 20
     assert data["bookmarked"] is True
+
+
+def test_bookmark_question_without_answering(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test bookmarking a question without providing an answer (response=null)."""
+    user = create_random_user(db)
+
+    # Create organization and question setup
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    # Create question with revision
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 5+5?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "9"},
+            {"id": 2, "key": "B", "value": "10"},
+            {"id": 3, "key": "C", "value": "11"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    # Create test
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    # Link question to test
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test (creates candidate with UUID)
+    payload = {"test_id": test.id, "device_info": "Bookmark Without Answer Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Submit bookmark with response=None (no answer, just bookmark)
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": None,
+        "visited": True,
+        "time_spent": 10,
+        "bookmarked": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["candidate_test_id"] == candidate_test_id
+    assert data["question_revision_id"] == question_revision.id
+    assert data["response"] is None
+    assert data["visited"] is True
+    assert data["time_spent"] == 10
+    assert data["bookmarked"] is True

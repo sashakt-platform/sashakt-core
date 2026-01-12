@@ -28,7 +28,7 @@ class CandidateTestAnswerBase(SQLModel):
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
-    response: str | None = Field(nullable=False, default=None)
+    response: str | None = Field(nullable=True, default=None)
     visited: bool = Field(nullable=False, default=False)
     time_spent: int = Field(nullable=True, default=0)
     bookmarked: bool = Field(
