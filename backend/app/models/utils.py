@@ -1,5 +1,3 @@
-import enum
-
 from sqlmodel import SQLModel
 from typing_extensions import TypedDict
 
@@ -21,14 +19,10 @@ class MarkingScheme(TypedDict):
     skipped: float
 
 
-class LocaleEnum(str, enum.Enum):
-    ENGLISH = "en-US"
-    HINDI = "hi-IN"
-
-
-LOCALE_NAMES = {
-    LocaleEnum.ENGLISH.value: "English",
-    LocaleEnum.HINDI.value: "Hindi",
+# Supported locales
+SUPPORTED_LOCALES: dict[str, str] = {
+    "en-US": "English",
+    "hi-IN": "Hindi",
 }
 
-DEFAULTLOCALE = LOCALE_NAMES[LocaleEnum.ENGLISH.value]
+DEFAULT_LOCALE = "en-US"

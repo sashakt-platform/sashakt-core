@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     candidate,
     entity,
+    languages,
     location,
     login,
     organization,
@@ -27,7 +28,7 @@ api_router.include_router(permissions.router)
 api_router.include_router(organization.router)
 api_router.include_router(location.router)
 api_router.include_router(test.router)
-api_router.include_router(test.router_language)
+api_router.include_router(languages.router)
 api_router.include_router(tag.router_tag)
 api_router.include_router(tag.router_tagtype)
 api_router.include_router(question.router)

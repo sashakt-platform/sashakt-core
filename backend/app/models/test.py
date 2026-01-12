@@ -2,14 +2,14 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Union
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import Self, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.organization import Organization
-from app.models.utils import DEFAULTLOCALE, LocaleEnum, MarkingScheme
+from app.models.utils import DEFAULT_LOCALE, SUPPORTED_LOCALES, MarkingScheme
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -191,11 +191,11 @@ class TestBase(SQLModel):
         sa_column_kwargs={"server_default": "false"},
     )
     locale: str = Field(
-        default=DEFAULTLOCALE,
+        default=DEFAULT_LOCALE,
         title="Set Language of Test",
         description="Add a BCP-47 locale tag for language",
         sa_column_kwargs={
-            "server_default": DEFAULTLOCALE,
+            "server_default": DEFAULT_LOCALE,
         },
     )
 
@@ -250,13 +250,25 @@ class Test(TestBase, table=True):
     organization: Optional["Organization"] = Relationship(back_populates="tests")
 
 
-class TestCreate(TestBase):
+class LocaleValidator(SQLModel):
+    """Locale validation in create/update schemas."""
+
+    @field_validator("locale", check_fields=False)
+    @classmethod
+    def validate_locale(cls, v: str) -> str:
+        if v not in SUPPORTED_LOCALES:
+            supported = ", ".join(SUPPORTED_LOCALES.keys())
+            raise ValueError(f"Unsupported locale '{v}'. Supported: {supported}")
+        return v
+
+
+class TestCreate(LocaleValidator, TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum = LocaleEnum.ENGLISH
+    locale: str = DEFAULT_LOCALE
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -285,13 +297,13 @@ class TestPublic(TestBase):
     )
 
 
-class TestUpdate(TestBase):
+class TestUpdate(LocaleValidator, TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum = LocaleEnum.ENGLISH
+    locale: str = DEFAULT_LOCALE
 
 
 class EntityPublicLimited(SQLModel):

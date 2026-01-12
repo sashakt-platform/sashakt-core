@@ -4252,7 +4252,7 @@ def test_update_test_unsupported_language(
     data = response.json()
 
     assert response.status_code == 422
-    assert data["detail"][0]["msg"] == "Input should be 'en-US' or 'hi-IN'"
+    assert "Unsupported locale" in data["detail"][0]["msg"]
 
     payload["locale"] = "hi-IN"
     response = client.put(
