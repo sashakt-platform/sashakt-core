@@ -49,10 +49,9 @@ from app.models.test import (
     TestDistrict,
 )
 from app.models.user import User, UserState
-from app.models.utils import LOCALE_NAMES, TimeLeft
+from app.models.utils import TimeLeft
 
 router = APIRouter(prefix="/test", tags=["Test"])
-router_language = APIRouter(prefix="/languages", tags=["Languages"])
 
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
@@ -598,15 +597,6 @@ def get_test(
     )
 
     return tests
-
-
-@router_language.get(
-    "/",
-    response_model=dict[str, str],
-    dependencies=[Depends(permission_dependency("create_test"))],
-)
-def get_localization() -> dict[str, str]:
-    return LOCALE_NAMES
 
 
 @router.get(

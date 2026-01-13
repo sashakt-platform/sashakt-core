@@ -9,7 +9,7 @@ from typing_extensions import Self, TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.organization import Organization
-from app.models.utils import DEFAULTLOCALE, LocaleEnum, MarkingScheme
+from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -191,11 +191,10 @@ class TestBase(SQLModel):
         sa_column_kwargs={"server_default": "false"},
     )
     locale: str = Field(
-        default=DEFAULTLOCALE,
         title="Set Language of Test",
         description="Add a BCP-47 locale tag for language",
         sa_column_kwargs={
-            "server_default": DEFAULTLOCALE,
+            "server_default": DEFAULT_LOCALE,
         },
     )
 
@@ -256,7 +255,7 @@ class TestCreate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum = LocaleEnum.ENGLISH
+    locale: LocaleEnum = DEFAULT_LOCALE
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -291,7 +290,7 @@ class TestUpdate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum = LocaleEnum.ENGLISH
+    locale: LocaleEnum
 
 
 class EntityPublicLimited(SQLModel):

@@ -22,13 +22,10 @@ class MarkingScheme(TypedDict):
 
 
 class LocaleEnum(str, enum.Enum):
-    ENGLISH = "en-US"
-    HINDI = "hi-IN"
+    English = "en-US"
+    Hindi = "hi-IN"
 
 
-LOCALE_NAMES = {
-    LocaleEnum.ENGLISH.value: "English",
-    LocaleEnum.HINDI.value: "Hindi",
-}
+SUPPORTED_LOCALES = {loc.value: loc.name for loc in LocaleEnum}
 
-DEFAULTLOCALE = LOCALE_NAMES[LocaleEnum.ENGLISH.value]
+DEFAULT_LOCALE = LocaleEnum.English
