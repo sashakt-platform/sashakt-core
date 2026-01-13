@@ -1051,12 +1051,17 @@ def get_test_result(
             else:
                 optional_not_attempted += 1
         else:
-            # Handle subjective questions separately (cannot be auto-marked)
             if revision.question_type == QuestionType.subjective:
-                # Subjective questions require manual review
-                # Don't count as correct/incorrect in auto-scoring
-                # They will need manual marking in the future
-                pass
+                is_attempted = bool(answer.response)
+
+                if is_attempted:
+                    correct += 1
+                    # if marking_scheme:
+                    #     marks_obtained += marking_scheme["correct"]
+                else:
+                    incorrect += 1
+                    # if marking_scheme:
+                    #     marks_obtained += marking_scheme["wrong"]
             elif revision.question_type.value in ["single-choice", "multi-choice"]:
                 response_list = convert_to_list(answer.response)
                 correct_list = convert_to_list(revision.correct_answer)
