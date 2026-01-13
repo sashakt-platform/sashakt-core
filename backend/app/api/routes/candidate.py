@@ -1056,12 +1056,12 @@ def get_test_result(
 
                 if is_attempted:
                     correct += 1
-                    # if marking_scheme:
-                    #     marks_obtained += marking_scheme["correct"]
+                    if marking_scheme:
+                        marks_obtained += marking_scheme["correct"]
                 else:
                     incorrect += 1
-                    # if marking_scheme:
-                    #     marks_obtained += marking_scheme["wrong"]
+                    if marking_scheme:
+                        marks_obtained += marking_scheme["wrong"]
             elif revision.question_type.value in ["single-choice", "multi-choice"]:
                 response_list = convert_to_list(answer.response)
                 correct_list = convert_to_list(revision.correct_answer)
