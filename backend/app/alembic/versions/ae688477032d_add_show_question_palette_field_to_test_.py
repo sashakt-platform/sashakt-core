@@ -1,7 +1,7 @@
 """add show_question_palette field to test model
 
 Revision ID: ae688477032d
-Revises: 61e8fcf99159
+Revises: 2457a2835629
 Create Date: 2026-01-10 05:51:48.851410
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = 'ae688477032d'
-down_revision = '61e8fcf99159'
+down_revision = '2457a2835629'
 branch_labels = None
 depends_on = None
 
