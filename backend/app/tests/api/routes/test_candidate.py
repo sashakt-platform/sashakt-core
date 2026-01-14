@@ -1722,6 +1722,237 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     assert "Test already submitted" in response.json()["detail"]
 
 
+def test_submit_test_fails_with_unanswered_mandatory_question(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that test submission fails when mandatory questions are not answered."""
+    user = create_random_user(db)
+
+    # Setup test with a mandatory question
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="Mandatory Question",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Try to submit without answering mandatory question
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    assert "mandatory question(s) not answered" in response.json()["detail"]
+
+
+def test_submit_test_fails_with_bookmarked_but_unanswered_mandatory_question(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that submission fails when mandatory question is bookmarked but not answered."""
+    user = create_random_user(db)
+
+    # Setup test with a mandatory question
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="Mandatory Question",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Bookmark the question but don't answer it
+    bookmark_answer = {
+        "question_revision_id": question_revision.id,
+        "response": None,
+        "visited": True,
+        "time_spent": 10,
+        "bookmarked": True,
+    }
+    client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=bookmark_answer,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    # Try to submit - should fail because mandatory question is not answered
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    assert "mandatory question(s) not answered" in response.json()["detail"]
+
+
+def test_submit_test_succeeds_with_answered_mandatory_question(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that submission succeeds when all mandatory questions are answered."""
+    user = create_random_user(db)
+
+    # Setup test with a mandatory question
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="Mandatory Question",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    # Start test
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Answer the mandatory question
+    answer = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 30,
+    }
+    client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    # Submit test - should succeed
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_submitted"] is True
+
+
 def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> None:
     """Test that submitting answer to same question updates existing answer."""
     user = create_random_user(db)
