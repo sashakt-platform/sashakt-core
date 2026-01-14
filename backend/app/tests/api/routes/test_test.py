@@ -6840,7 +6840,6 @@ def test_update_test_show_question_palette(
         "link": test_link,
         "is_active": True,
         "show_question_palette": False,
-        "locale": "en-US",
     }
 
     create_response = client.post(
@@ -6860,6 +6859,7 @@ def test_update_test_show_question_palette(
         "link": test_link,
         "is_active": True,
         "show_question_palette": True,
+        "locale": "en-US",
     }
 
     update_response = client.put(
