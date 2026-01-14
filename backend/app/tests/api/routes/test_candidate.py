@@ -7964,3 +7964,27 @@ def test_bookmark_question_without_answering(
     assert data["visited"] is True
     assert data["time_spent"] == 10
     assert data["bookmarked"] is True
+
+    # Submit bookmark with response=None (no answer, remove bookmark)
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": None,
+        "visited": True,
+        "time_spent": 10,
+        "bookmarked": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["candidate_test_id"] == candidate_test_id
+    assert data["question_revision_id"] == question_revision.id
+    assert data["response"] is None
+    assert data["visited"] is True
+    assert data["time_spent"] == 10
+    assert data["bookmarked"] is False
