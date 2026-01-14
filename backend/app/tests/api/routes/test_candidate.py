@@ -5795,6 +5795,7 @@ def test_candidate_tag_random_count_update(
         shuffle=True,
         random_tag_count=[{"tag_id": tag.id, "count": 2}],
         is_active=True,
+        locale="en-US",
     )
     db.add(test)
     db.commit()
@@ -5838,6 +5839,7 @@ def test_candidate_tag_random_count_update(
         "marks": 100,
         "shuffle": True,
         "random_tag_count": [{"tag_id": tag.id, "count": 4}],
+        "locale": "en-US",
     }
 
     response = client.put(
