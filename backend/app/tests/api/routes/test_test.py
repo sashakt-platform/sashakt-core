@@ -228,7 +228,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["created_by_id"] == user_id
-    assert data["locale"] == "EN_US"
+    assert data["locale"] == "en-US"
     assert len(data["districts"]) == 1
     assert "id" in data
     assert "created_date" in data
@@ -289,7 +289,7 @@ def test_create_test(
         "random_questions": False,
         "no_of_random_questions": 4,
         "question_pagination": 1,
-        "locale": "HI_IN",
+        "locale": "hi-IN",
         "is_template": False,
         "template_id": sample_test.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
@@ -2132,7 +2132,7 @@ def test_update_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
-        locale="HI_IN",
+        locale="hi-IN",
     )
     db.add(test)
     db.commit()
@@ -2191,7 +2191,7 @@ def test_update_test(
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
         "district_ids": [district_a.id],
-        "locale": "EN_US",
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -4124,6 +4124,7 @@ def test_update_test_time_limit_exceeds_duration(
         start_time="2025-07-19T10:00:00Z",
         end_time="2025-07-19T10:30:00Z",
         time_limit=30,
+        locale="en-US",
     )
     db.add(test)
     db.commit()
@@ -4133,6 +4134,7 @@ def test_update_test_time_limit_exceeds_duration(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "time_limit": 60,
+        "locale": "en-US",
     }
     response = client.put(
         f"{settings.API_V1_STR}/test/{test.id}",
@@ -4155,6 +4157,7 @@ def test_update_test_not_available(
         "description": random_lower_string(),
         "time_limit": 30,
         "marks": 5,
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -4208,6 +4211,7 @@ def test_update_test_end_time_before_start_time(
         "start_time": "2025-07-20T10:00:00Z",
         "end_time": "2025-07-19T10:00:00Z",
         "time_limit": 10,
+        "locale": "en-US",
     }
     response = client.put(
         f"{settings.API_V1_STR}/test/{test.id}",
@@ -4218,23 +4222,40 @@ def test_update_test_end_time_before_start_time(
     assert "End time cannot be earlier than start time" in response.json()["detail"]
 
 
-def test_update_test_unsupported_language(
+def test_test_check_unsupported_language(
     client: TestClient,
-    db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user = create_random_user(db)
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 5,
+        "locale": "xx",
+    }
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
-        start_time="2025-07-19T10:00:00Z",
-        end_time="2025-07-19T11:00:00Z",
-        locale="EN_US",
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
+
+    data = response.json()
+
+    assert response.status_code == 422
+    assert data["detail"][0]["msg"] == "Input should be 'en-US' or 'hi-IN'"
+
+    payload["locale"] = "en-US"
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["locale"] == "en-US"
 
     payload = {
         "name": random_lower_string(),
@@ -4244,25 +4265,46 @@ def test_update_test_unsupported_language(
         "time_limit": 60,
     }
 
+    test_id = data["id"]
+
     response = client.put(
-        f"{settings.API_V1_STR}/test/{test.id}",
+        f"{settings.API_V1_STR}/test/{test_id}",
         json=payload,
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
     assert response.status_code == 422
-    assert data["detail"][0]["msg"] == "Input should be 'EN_US' or 'HI_IN'"
+    assert data["detail"][0]["msg"] == "Input should be 'en-US' or 'hi-IN'"
 
-    payload["locale"] = "HI_IN"
+    payload["locale"] = "hi-IN"
     response = client.put(
-        f"{settings.API_V1_STR}/test/{test.id}",
+        f"{settings.API_V1_STR}/test/{test_id}",
         json=payload,
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
-    assert data["locale"] == "HI_IN"
+    assert data["locale"] == "hi-IN"
+
+
+def test_localization_default_language(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    payload = {
+        "name": random_lower_string(),
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["locale"] == "en-US"
 
 
 def test_create_test_start_and_end_time_same(
@@ -4503,6 +4545,7 @@ def test_update_test_random_question_validation_fails(
         "no_of_random_questions": 5,
         "tag_ids": [tag_a.id],
         "state_ids": [state_a.id],
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -4564,6 +4607,7 @@ def test_update_test_random_question_success(
         "tag_ids": [tag_a.id, tag_b.id],
         "state_ids": [state_a.id, state_b.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -4930,6 +4974,7 @@ def test_mapping_test_with_district(
         "created_by_id": user.id,
         "tag_ids": [],
         "district_ids": [district_1.id, district_2.id],
+        "locale": "en-US",
     }
 
     response = client.post(
@@ -6677,3 +6722,29 @@ def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_match
 
     assert delete_resp.status_code == 403
     assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_localization_list(
+    client: TestClient, get_user_testadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/languages/",
+        headers=get_user_testadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), dict)
+    data = response.json()
+    assert len(data) == 2
+
+    # Check if the expected dictionaries exist in the response
+    expected_items = [
+        {"en-US": "English"},
+        {"hi-IN": "Hindi"},
+    ]
+
+    for expected_item in expected_items:
+        # Check if expected_item is a subset of data
+        assert expected_item.items() <= data.items(), (
+            f"Expected items {expected_item} not found in response data {data}"
+        )
