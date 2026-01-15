@@ -42,7 +42,7 @@ from app.models.candidate import (
 )
 from app.models.question import Question, QuestionTag
 from app.models.tag import Tag
-from app.models.test import TestDistrict, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -546,9 +546,9 @@ def get_test_questions(
     if test.marks_level == "test":
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
-    omr_mode = getattr(test, "omr", "NEVER")
-    hide_question_text = omr_mode != "NEVER"
-    if omr_mode == "OPTIONAL":
+    omr_mode = getattr(test, "omr", OMRMode.NEVER)
+    hide_question_text = omr_mode != OMRMode.NEVER
+    if omr_mode == OMRMode.OPTIONAL:
         if use_omr is None:
             raise HTTPException(
                 status_code=400,
@@ -556,7 +556,7 @@ def get_test_questions(
             )
         hide_question_text = use_omr
     else:
-        hide_question_text = omr_mode == "ALWAYS"
+        hide_question_text = omr_mode == OMRMode.ALWAYS
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
