@@ -468,9 +468,15 @@ def submit_test_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
+    auto_submit: bool = Query(
+        False,
+        description="If true, skip mandatory validation (used for timeout auto-submit)",
+    ),
 ) -> CandidateTest:
     """
     Submit/finish test for QR code candidates using UUID authentication.
+
+    When auto_submit=True (test timed out), mandatory field validation is skipped.
     """
     # Verify UUID access
     candidate_test = verify_candidate_uuid_access(
@@ -480,9 +486,9 @@ def submit_test_for_qr_candidate(
     if candidate_test.is_submitted:
         raise HTTPException(status_code=400, detail="Test already submitted")
 
-    # Validate mandatory questions are answered
+    # Validate mandatory questions are answered (skip if auto_submit due to timeout)
     assigned_question_ids = candidate_test.question_revision_ids
-    if assigned_question_ids:
+    if not auto_submit and assigned_question_ids:
         # Get all mandatory question revisions for this test
         mandatory_questions_query = select(QuestionRevision).where(
             col(QuestionRevision.id).in_(assigned_question_ids),
