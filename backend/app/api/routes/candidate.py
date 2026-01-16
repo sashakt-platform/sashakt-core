@@ -494,8 +494,8 @@ def get_test_questions(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-    use_omr: bool | None = Query(
-        None, description="Applicable only when test OMR mode is OPTIONAL"
+    use_omr: bool = Query(
+        False, description="Applicable only when test OMR mode is OPTIONAL"
     ),
 ) -> TestCandidatePublic:
     """
@@ -547,16 +547,15 @@ def get_test_questions(
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
     omr_mode = getattr(test, "omr", OMRMode.NEVER)
-    hide_question_text = omr_mode != OMRMode.NEVER
-    if omr_mode == OMRMode.OPTIONAL:
-        if use_omr is None:
-            raise HTTPException(
-                status_code=400,
-                detail="use_omr is required when test OMR mode is OPTIONAL",
-            )
-        hide_question_text = use_omr
-    else:
-        hide_question_text = omr_mode == OMRMode.ALWAYS
+
+    if omr_mode == OMRMode.NEVER:
+        hide_question_text = False
+
+    elif omr_mode == OMRMode.ALWAYS:
+        hide_question_text = True
+
+    elif omr_mode == OMRMode.OPTIONAL:
+        hide_question_text = bool(use_omr)
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
