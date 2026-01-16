@@ -9,7 +9,7 @@ from typing_extensions import Self, TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.organization import Organization
-from app.models.utils import MarkingScheme
+from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -26,11 +26,6 @@ if TYPE_CHECKING:
         User,
     )
     from app.models.location import Block, District, State
-
-
-class LocaleEnum(str, enum.Enum):
-    EN_US = "EN_US"
-    HI_IN = "HI_IN"
 
 
 class TagRandomCreate(TypedDict):
@@ -195,11 +190,12 @@ class TestBase(SQLModel):
         description="Field to set whether candidate profile is to be filled before the test or not.",
         sa_column_kwargs={"server_default": "false"},
     )
-    locale: LocaleEnum = Field(
-        default=LocaleEnum.EN_US,
-        title="Test Language",
-        description="Language of the test (e.g., EN_US, HI_IN).",
-        sa_column_kwargs={"server_default": LocaleEnum.EN_US},
+    locale: str = Field(
+        title="Set Language of Test",
+        description="Add a BCP-47 locale tag for language",
+        sa_column_kwargs={
+            "server_default": DEFAULT_LOCALE,
+        },
     )
 
 
@@ -259,6 +255,7 @@ class TestCreate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
+    locale: LocaleEnum = DEFAULT_LOCALE
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -293,6 +290,7 @@ class TestUpdate(TestBase):
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
+    locale: LocaleEnum
 
 
 class EntityPublicLimited(SQLModel):
