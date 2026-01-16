@@ -7880,6 +7880,108 @@ def test_update_candidate_test_answer_with_bookmark(
     assert data["bookmarked"] is True
 
 
+def test_update_answer_retains_bookmark_when_not_passed(
+    client: TestClient, db: SessionDep, get_user_candidate_token: dict[str, str]
+) -> None:
+    """Test that updating answer without bookmark field retains existing bookmark value."""
+    user = create_random_user(db)
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        random_questions=False,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time="2025-03-14T12:00:00Z",
+        is_submitted=False,
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+
+    # Step 1: Create answer with bookmark=True but no response (null)
+    candidate_test_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=question_revision.id,
+        response=None,
+        visited=True,
+        time_spent=10,
+        bookmarked=True,
+    )
+    db.add(candidate_test_answer)
+    db.commit()
+
+    # Verify initial state - bookmarked with no answer
+    assert candidate_test_answer.bookmarked is True
+    assert candidate_test_answer.response is None
+
+    # Step 2: Update with answer but WITHOUT passing bookmark field
+    response = client.put(
+        f"{settings.API_V1_STR}/candidate_test_answer/{candidate_test_answer.id}",
+        json={
+            "response": "[1]",
+            "visited": True,
+            "time_spent": 20,
+        },
+        headers=get_user_candidate_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response"] == "[1]"
+    assert data["visited"] is True
+    assert data["time_spent"] == 20
+    # Bookmark should be retained as True since we didn't pass it
+    assert data["bookmarked"] is True
+
+
 def test_bookmark_question_without_answering(
     client: TestClient, db: SessionDep
 ) -> None:
