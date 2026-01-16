@@ -68,7 +68,7 @@ class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
     time_spent: int
-    bookmarked: bool
+    bookmarked: bool | None = None
 
 
 # QR Code Candidate Request Models
