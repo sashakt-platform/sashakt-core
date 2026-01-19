@@ -53,6 +53,26 @@ router_candidate_test_answer = APIRouter(
 )
 
 
+def is_candidate_test_expired(
+    session: SessionDep, candidate_test: CandidateTest
+) -> bool:
+    if not candidate_test or not candidate_test.start_time:
+        return False
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        return False
+
+    time_now = get_timezone_aware_now()
+
+    if (test.end_time and time_now > test.end_time) or (
+        test.time_limit
+        and time_now > candidate_test.start_time + timedelta(minutes=test.time_limit)
+    ):
+        return True
+
+    return False
+
+
 def get_score_and_time(
     session: SessionDep, candidate_test: CandidateTest
 ) -> tuple[float, float, float]:
@@ -480,38 +500,41 @@ def submit_test_for_qr_candidate(
     if candidate_test.is_submitted:
         raise HTTPException(status_code=400, detail="Test already submitted")
 
-    # Validate mandatory questions are answered
-    assigned_question_ids = candidate_test.question_revision_ids
-    if assigned_question_ids:
-        # Get all mandatory question revisions for this test
-        mandatory_questions_query = select(QuestionRevision).where(
-            col(QuestionRevision.id).in_(assigned_question_ids),
-            QuestionRevision.is_mandatory == True,  # noqa: E712
-        )
-        mandatory_questions = session.exec(mandatory_questions_query).all()
+    test_expired = is_candidate_test_expired(session, candidate_test)
 
-        if mandatory_questions:
-            mandatory_question_ids = {q.id for q in mandatory_questions}
-
-            # Get answered mandatory questions (with non-empty response)
-            answered_query = select(CandidateTestAnswer.question_revision_id).where(
-                CandidateTestAnswer.candidate_test_id == candidate_test_id,
-                col(CandidateTestAnswer.question_revision_id).in_(
-                    mandatory_question_ids
-                ),
-                CandidateTestAnswer.response.is_not(None),  # type: ignore
-                CandidateTestAnswer.response != "",
+    if not test_expired:
+        # Validate mandatory questions are answered
+        assigned_question_ids = candidate_test.question_revision_ids
+        if assigned_question_ids:
+            # Get all mandatory question revisions for this test
+            mandatory_questions_query = select(QuestionRevision).where(
+                col(QuestionRevision.id).in_(assigned_question_ids),
+                QuestionRevision.is_mandatory == True,  # noqa: E712
             )
-            answered_ids = set(session.exec(answered_query).all())
+            mandatory_questions = session.exec(mandatory_questions_query).all()
 
-            # Find unanswered mandatory questions
-            unanswered_mandatory = mandatory_question_ids - answered_ids
+            if mandatory_questions:
+                mandatory_question_ids = {q.id for q in mandatory_questions}
 
-            if unanswered_mandatory:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cannot submit test. {len(unanswered_mandatory)} mandatory question(s) not answered.",
+                # Get answered mandatory questions (with non-empty response)
+                answered_query = select(CandidateTestAnswer.question_revision_id).where(
+                    CandidateTestAnswer.candidate_test_id == candidate_test_id,
+                    col(CandidateTestAnswer.question_revision_id).in_(
+                        mandatory_question_ids
+                    ),
+                    CandidateTestAnswer.response.is_not(None),  # type: ignore
+                    CandidateTestAnswer.response != "",
                 )
+                answered_ids = set(session.exec(answered_query).all())
+
+                # Find unanswered mandatory questions
+                unanswered_mandatory = mandatory_question_ids - answered_ids
+
+                if unanswered_mandatory:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot submit test. {len(unanswered_mandatory)} mandatory question(s) not answered.",
+                    )
 
     # Mark test as submitted and set end time
     candidate_test.is_submitted = True
