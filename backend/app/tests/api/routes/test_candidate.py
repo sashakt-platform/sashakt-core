@@ -8090,3 +8090,225 @@ def test_bookmark_question_without_answering(
     assert data["visited"] is True
     assert data["time_spent"] == 10
     assert data["bookmarked"] is False
+
+
+def test_get_test_result_with_only_numerical_decimal_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    decimal_q1 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.numerical_decimal,
+        correct_answer=3.14,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme={"correct": 1, "wrong": 0, "skipped": 0},
+    )
+
+    decimal_q2 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.numerical_decimal,
+        correct_answer=5.0,
+        is_mandatory=False,
+        is_active=True,
+        marking_scheme={"correct": 1, "wrong": 0, "skipped": 0},
+    )
+
+    db.add_all([decimal_q1, decimal_q2])
+    db.commit()
+    db.refresh(decimal_q1)
+    db.refresh(decimal_q2)
+
+    db.add_all(
+        [
+            TestQuestion(test_id=test.id, question_revision_id=decimal_q1.id),
+            TestQuestion(test_id=test.id, question_revision_id=decimal_q2.id),
+        ]
+    )
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    answers = [
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=decimal_q1.id,
+            response=3.14,
+            visited=True,
+            time_spent=20,
+        ),
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=decimal_q2.id,
+            response=5.0,
+            visited=True,
+            time_spent=20,
+        ),
+    ]
+
+    db.add_all(answers)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 2
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 0
+    assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 2
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 2
+
+
+def test_get_test_result_with_numerical_decimal_tolerance(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    decimal_q1 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.numerical_decimal,
+        correct_answer=1.5,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme={"correct": 2, "wrong": -1, "skipped": 0},
+    )
+
+    decimal_q2 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.numerical_decimal,
+        correct_answer=2.0,
+        is_mandatory=False,
+        is_active=True,
+        marking_scheme={"correct": 2, "wrong": -1, "skipped": 0},
+    )
+
+    db.add_all([decimal_q1, decimal_q2])
+    db.commit()
+    db.refresh(decimal_q1)
+    db.refresh(decimal_q2)
+
+    db.add_all(
+        [
+            TestQuestion(test_id=test.id, question_revision_id=decimal_q1.id),
+            TestQuestion(test_id=test.id, question_revision_id=decimal_q2.id),
+        ]
+    )
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    answers = [
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=decimal_q1.id,
+            response=1.8,
+            visited=True,
+            time_spent=20,
+        ),
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=decimal_q2.id,
+            response=2.7,
+            visited=True,
+            time_spent=20,
+        ),
+    ]
+
+    db.add_all(answers)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 0
+    assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 2
+    assert data["marks_obtained"] == 1
+    assert data["marks_maximum"] == 4
