@@ -45,5 +45,5 @@ jobs:
             git checkout "tags/$DEPLOY_TAG" -f || git checkout -B "deploy-$DEPLOY_TAG" "tags/$DEPLOY_TAG"
 
             docker compose -f docker-compose.yml down || true
-            docker compose -f docker-compose.yml up -d --build --wait
+            docker compose -f docker-compose.yml up -d --build --wait --wait-timeout 120s
             echo "Deployment completed."
