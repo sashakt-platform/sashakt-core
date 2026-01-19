@@ -8090,3 +8090,130 @@ def test_bookmark_question_without_answering(
     assert data["visited"] is True
     assert data["time_spent"] == 10
     assert data["bookmarked"] is False
+
+
+def test_submit_test_after_expiry(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+
+    with patch("app.api.routes.candidate.get_timezone_aware_now") as mocked_now:
+        mocked_now.return_value = fake_current_time
+
+        user = create_random_user(db)
+        test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_instructions=random_lower_string(),
+            link=random_lower_string(),
+            created_by_id=user.id,
+            is_active=True,
+            is_deleted=False,
+            time_limit=60,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+
+        payload = {"test_id": test.id, "device_info": random_lower_string()}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+        candidate_uuid = start_data["candidate_uuid"]
+        candidate_test_id = start_data["candidate_test_id"]
+
+        mocked_now.return_value = fake_current_time + timedelta(hours=2)
+
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+            headers=get_user_superadmin_token,
+        )
+
+        assert response.status_code == 200
+
+
+def test_submit_test_with_unanswered_mandatory_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+
+    with patch("app.api.routes.candidate.get_timezone_aware_now") as mocked_now:
+        mocked_now.return_value = fake_current_time
+
+        user = create_random_user(db)
+        org = Organization(name=random_lower_string())
+        db.add(org)
+        db.commit()
+        db.refresh(org)
+
+        test = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            time_limit=60,
+            marks=100,
+            start_instructions=random_lower_string(),
+            link=random_lower_string(),
+            created_by_id=user.id,
+            is_active=True,
+            is_deleted=False,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+
+        revisions = []
+        for i in range(3):
+            question = Question(organization_id=org.id)
+            db.add(question)
+            db.commit()
+            db.refresh(question)
+
+            revision_data = {
+                "created_by_id": user.id,
+                "question_id": question.id,
+                "question_text": f"Question {i + 1}",
+                "question_type": QuestionType.single_choice,
+                "options": [
+                    {"id": 1, "key": "A", "value": "Option A"},
+                    {"id": 2, "key": "B", "value": "Option B"},
+                    {"id": 3, "key": "C", "value": "Option C"},
+                ],
+                "correct_answer": [2],
+                "is_mandatory": True,
+                "is_active": True,
+                "is_deleted": False,
+            }
+            revision = QuestionRevision(**revision_data)
+            db.add(revision)
+            db.commit()
+            db.refresh(revision)
+            revisions.append(revision)
+
+        for rev in revisions:
+            test_question = TestQuestion(test_id=test.id, question_revision_id=rev.id)
+            db.add(test_question)
+            db.commit()
+
+        payload = {"test_id": test.id, "device_info": random_lower_string()}
+        start_response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test", json=payload
+        )
+        start_data = start_response.json()
+
+        candidate_uuid = start_data["candidate_uuid"]
+        candidate_test_id = start_data["candidate_test_id"]
+
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+            params={"candidate_uuid": candidate_uuid},
+            headers=get_user_superadmin_token,
+        )
+
+        assert response.status_code == 400, response.text
+        data = response.json()
+        assert (
+            "Cannot submit test. 3 mandatory question(s) not answered."
+            in data["detail"]
+        )
