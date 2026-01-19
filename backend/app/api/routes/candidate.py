@@ -1041,6 +1041,44 @@ def get_test_result(
                     incorrect += 1
                     if marking_scheme:
                         marks_obtained += marking_scheme["wrong"]
+
+            elif revision.question_type.value in [
+                "numerical-integer",
+                "numerical-decimal",
+            ]:
+                try:
+                    user_value = float(answer.response)
+                except (TypeError, ValueError):
+                    incorrect += 1
+                    if marking_scheme:
+                        marks_obtained += marking_scheme["wrong"]
+                    continue
+
+                if isinstance(revision.correct_answer, int | float):
+                    correct_value = float(revision.correct_answer)
+
+                else:
+                    incorrect += 1
+                    if marking_scheme:
+                        marks_obtained += marking_scheme["wrong"]
+                    continue
+
+                if revision.question_type.value == "numerical-integer":
+                    is_correct = user_value.is_integer() and int(user_value) == int(
+                        correct_value
+                    )
+                else:
+                    is_correct = abs(user_value - correct_value) <= 0.5
+
+                if is_correct:
+                    correct += 1
+                    if marking_scheme:
+                        marks_obtained += marking_scheme["correct"]
+                else:
+                    incorrect += 1
+                    if marking_scheme:
+                        marks_obtained += marking_scheme["wrong"]
+
     total_questions = len(candidate_test.question_revision_ids)
     return Result(
         correct_answer=correct,
