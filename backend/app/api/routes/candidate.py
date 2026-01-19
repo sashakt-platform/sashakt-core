@@ -509,7 +509,7 @@ def submit_test_for_qr_candidate(
             # Get all mandatory question revisions for this test
             mandatory_questions_query = select(QuestionRevision).where(
                 col(QuestionRevision.id).in_(assigned_question_ids),
-                QuestionRevision.is_mandatory == True,  # noqa: E712
+                col(QuestionRevision.is_mandatory),
             )
             mandatory_questions = session.exec(mandatory_questions_query).all()
 
@@ -522,8 +522,8 @@ def submit_test_for_qr_candidate(
                     col(CandidateTestAnswer.question_revision_id).in_(
                         mandatory_question_ids
                     ),
-                    CandidateTestAnswer.response.is_not(None),  # type: ignore
-                    CandidateTestAnswer.response != "",
+                    col(CandidateTestAnswer.response).is_not(None),
+                    col(CandidateTestAnswer.response) != "",
                 )
                 answered_ids = set(session.exec(answered_query).all())
 
