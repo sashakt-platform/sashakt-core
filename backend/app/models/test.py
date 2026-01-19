@@ -301,6 +301,7 @@ class TestUpdate(TestBase):
 class EntityPublicLimited(SQLModel):
     id: int
     name: str
+    label: str
     state: Union["State", None] = None
     district: Union["District", None] = None
     block: Union["Block", None] = None

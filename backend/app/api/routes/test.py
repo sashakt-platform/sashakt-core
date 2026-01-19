@@ -260,13 +260,18 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
             EntityPublicLimited(
                 id=entity.id,
                 name=entity.name,
+                label=(
+                    f"{entity.name} - ({block.name})"
+                    if (block := session.get(Block, entity.block_id))
+                    else entity.name
+                ),
                 state=session.get(State, entity.state_id) if entity.state_id else None,
                 district=(
                     session.get(District, entity.district_id)
                     if entity.district_id
                     else None
                 ),
-                block=session.get(Block, entity.block_id) if entity.block_id else None,
+                block=block,
             )
             for entity in entities
         ]
