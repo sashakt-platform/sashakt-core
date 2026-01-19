@@ -6748,3 +6748,161 @@ def test_localization_list(
         assert expected_item.items() <= data.items(), (
             f"Expected items {expected_item} not found in response data {data}"
         )
+
+
+def test_create_test_with_show_question_palette_true(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_question_palette set to True."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_question_palette": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_question_palette"] is True
+
+
+def test_create_test_with_show_question_palette_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_question_palette set to False."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_question_palette": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_question_palette"] is False
+
+
+def test_create_test_show_question_palette_defaults_to_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that show_question_palette defaults to False when not specified."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_question_palette"] is False
+
+
+def test_update_test_show_question_palette(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test updating show_question_palette from False to True."""
+    # Create test with show_question_palette=False
+    test_name = random_lower_string()
+    test_description = random_lower_string()
+    test_link = random_lower_string()
+    create_payload = {
+        "name": test_name,
+        "description": test_description,
+        "time_limit": 30,
+        "marks": 10,
+        "link": test_link,
+        "is_active": True,
+        "show_question_palette": False,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=create_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    test_id = create_response.json()["id"]
+
+    # Update to show_question_palette=True using PUT
+    update_payload = {
+        "name": test_name,
+        "description": test_description,
+        "time_limit": 30,
+        "marks": 10,
+        "link": test_link,
+        "is_active": True,
+        "show_question_palette": True,
+        "locale": "en-US",
+    }
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_response.status_code == 200
+    data = update_response.json()
+    assert data["show_question_palette"] is True
+
+
+def test_get_test_returns_show_question_palette(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that getting a test returns the show_question_palette field."""
+    # Create test with show_question_palette=True
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_question_palette": True,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    test_id = create_response.json()["id"]
+
+    # Get test by ID
+    get_response = client.get(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert get_response.status_code == 200
+    data = get_response.json()
+    assert "show_question_palette" in data
+    assert data["show_question_palette"] is True
