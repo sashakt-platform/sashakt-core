@@ -31,5 +31,5 @@ jobs:
             git pull origin main
 
             docker compose -f docker-compose.yml down || true
-            docker compose -f docker-compose.yml up -d
+            docker compose -f docker-compose.yml up -d --build --wait
             echo "Deployment completed."
