@@ -5,7 +5,13 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, not_, or_, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    Pagination,
+    SessionDep,
+    get_current_user,
+    permission_dependency,
+)
 from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
@@ -37,6 +43,54 @@ def transform_organizations_to_public(
         result.append(OrganizationPublic(**organization.model_dump()))
 
     return result
+
+
+@router.get(
+    "/current",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("read_organization"))],
+)
+def get_current_organization(
+    current_user: User = Depends(get_current_user),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    if not organization or organization.is_deleted or not organization.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization not found",
+        )
+
+    return transform_organizations_to_public([organization])[0]
+
+
+@router.patch(
+    "/current",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_organization"))],
+)
+def update_current_organization(
+    *,
+    session: SessionDep,
+    org_in: OrganizationUpdate,
+    current_user: User = Depends(get_current_user),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    if organization.is_deleted or not organization.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization not found",
+        )
+
+    org_data = org_in.model_dump(exclude_unset=True)
+    organization.sqlmodel_update(org_data)
+
+    session.add(organization)
+    session.commit()
+    session.refresh(organization)
+
+    return transform_organizations_to_public([organization])[0]
 
 
 # Create a Organization

@@ -19,6 +19,13 @@ class OrganizationBase(SQLModel):
         default=None, title="Description", description="Description of the organization"
     )
     is_active: bool = Field(default=True)
+    shortcode: str | None = Field(
+        default=None,
+        index=True,
+        unique=True,
+        description="Unique short code used to identify the organization",
+    )
+    logo: str | None = Field(default=None)
 
 
 class Organization(OrganizationBase, table=True):
