@@ -70,3 +70,9 @@ class AggregatedData(SQLModel):
     total_questions: int
     total_users: int
     total_tests: int
+
+
+class OrganizationPublicMinimal(SQLModel):
+    name: str
+    logo: str | None = None
+    shortcode: str

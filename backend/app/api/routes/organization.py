@@ -24,6 +24,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.organization import OrganizationPublicMinimal
 from app.models.question import QuestionLocation
 from app.models.test import TestState
 from app.models.user import UserState
@@ -306,3 +307,32 @@ def delete_organization(organization_id: int, session: SessionDep) -> Message:
     session.refresh(organization)
 
     return Message(message="Organization deleted successfully")
+
+
+@router.get(
+    "/public/{org_shortcode}",
+    response_model=OrganizationPublicMinimal,
+)
+def get_public_organization_by_shortcode(
+    org_shortcode: str,
+    session: SessionDep,
+) -> OrganizationPublicMinimal:
+    organization = session.exec(
+        select(Organization).where(
+            Organization.shortcode == org_shortcode,
+            Organization.is_deleted == False,  # noqa: E712
+            Organization.is_active,
+        )
+    ).first()
+
+    if not organization:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization not found",
+        )
+
+    return OrganizationPublicMinimal(
+        name=organization.name,
+        logo=organization.logo,
+        shortcode=organization.shortcode,
+    )
