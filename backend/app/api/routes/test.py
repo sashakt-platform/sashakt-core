@@ -256,20 +256,58 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
 
         entities = session.exec(query).all()
 
-        profile_list = [
-            EntityPublicLimited(
-                id=entity.id,
-                name=entity.name,
-                state=session.get(State, entity.state_id) if entity.state_id else None,
-                district=(
-                    session.get(District, entity.district_id)
-                    if entity.district_id
-                    else None
-                ),
-                block=session.get(Block, entity.block_id) if entity.block_id else None,
+        entity_block_ids = {e.block_id for e in entities if e.block_id is not None}
+        entity_state_ids = {e.state_id for e in entities if e.state_id is not None}
+        entity_district_ids = {
+            e.district_id for e in entities if e.district_id is not None
+        }
+
+        blocks_by_id = (
+            {
+                b.id: b
+                for b in session.exec(
+                    select(Block).where(col(Block.id).in_(entity_block_ids))
+                ).all()
+            }
+            if entity_block_ids
+            else {}
+        )
+        states_by_id = (
+            {
+                s.id: s
+                for s in session.exec(
+                    select(State).where(col(State.id).in_(entity_state_ids))
+                ).all()
+            }
+            if entity_state_ids
+            else {}
+        )
+        districts_by_id = (
+            {
+                d.id: d
+                for d in session.exec(
+                    select(District).where(col(District.id).in_(entity_district_ids))
+                ).all()
+            }
+            if entity_district_ids
+            else {}
+        )
+
+        for entity in entities:
+            block = blocks_by_id.get(entity.block_id)
+            state = states_by_id.get(entity.state_id)
+            district = districts_by_id.get(entity.district_id)
+
+            profile_list.append(
+                EntityPublicLimited(
+                    id=entity.id,
+                    name=entity.name,
+                    label=f"{entity.name} - ({block.name})" if block else entity.name,
+                    state=state,
+                    district=district,
+                    block=block,
+                )
             )
-            for entity in entities
-        ]
 
     if (
         test.random_questions
