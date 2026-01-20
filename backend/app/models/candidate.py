@@ -28,9 +28,14 @@ class CandidateTestAnswerBase(SQLModel):
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
-    response: str | None = Field(nullable=False, default=None)
+    response: str | None = Field(nullable=True, default=None)
     visited: bool = Field(nullable=False, default=False)
     time_spent: int = Field(nullable=True, default=0)
+    bookmarked: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Was this question bookmarked by test taker?",
+    )
 
 
 class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
@@ -63,6 +68,7 @@ class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
     time_spent: int
+    bookmarked: bool | None = None
 
 
 # QR Code Candidate Request Models
@@ -73,6 +79,7 @@ class CandidateAnswerSubmitRequest(SQLModel):
     response: str | None = None
     visited: bool = False
     time_spent: int = 0
+    bookmarked: bool = False
 
 
 class BatchAnswerSubmitRequest(SQLModel):
@@ -87,6 +94,7 @@ class CandidateAnswerUpdateRequest(SQLModel):
     response: str | None = None
     visited: bool | None = None
     time_spent: int | None = None
+    bookmarked: bool = False
 
 
 # Linking Tables between Candidate and Test
