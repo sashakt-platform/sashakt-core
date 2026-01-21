@@ -950,7 +950,6 @@ def test_get_current_organization_deleted(
     org = Organization(
         name=random_lower_string(),
         description=random_lower_string(),
-        is_active=True,
         is_deleted=True,
     )
     db.add(org)
@@ -977,6 +976,49 @@ def test_get_current_organization_deleted(
     headers = authentication_token_from_email(client=client, email=email, db=db)
     response = client.get(
         f"{settings.API_V1_STR}/organization/current", headers=headers
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert data["detail"] == "Organization not found"
+
+
+def test_get_current_organization_inactive(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        is_active=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    email = random_email()
+    role = db.exec(select(Role).where(Role.name == "candidate")).first()
+    assert role is not None
+
+    user_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "organization_id": org.id,
+    }
+
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/current",
+        headers=headers,
     )
     data = response.json()
 
@@ -1115,6 +1157,52 @@ def test_update_current_organization_inactive(
         json={"name": random_lower_string()},
         headers=headers,
     )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert data["detail"] == "Organization not found"
+
+
+def test_get_public_organization_by_shortcode_success(
+    client: TestClient, db: SessionDep
+) -> None:
+    org = Organization(
+        name=random_lower_string(),
+        logo=random_lower_string(),
+        shortcode=random_lower_string(),
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.get(f"{settings.API_V1_STR}/organization/public/{org.shortcode}")
+
+    data = response.json()
+
+    assert response.status_code == status.HTTP_200_OK
+    assert data["name"] == org.name
+    assert data["logo"] == org.logo
+    assert data["shortcode"] == org.shortcode
+
+
+def test_get_public_organization_by_shortcode_inactive(
+    client: TestClient, db: SessionDep
+) -> None:
+    org = Organization(
+        name=random_lower_string(),
+        logo=random_lower_string(),
+        shortcode=random_lower_string(),
+        is_active=False,
+        is_deleted=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.get(f"{settings.API_V1_STR}/organization/public/{org.shortcode}")
+
     data = response.json()
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
