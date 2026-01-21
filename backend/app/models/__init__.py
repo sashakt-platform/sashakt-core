@@ -23,6 +23,12 @@ from .candidate import (
     CandidateUpdate,
     TestCandidatePublic,
 )
+from .certificate import (
+    Certificate,
+    CertificateCreate,
+    CertificatePublic,
+    CertificateUpdate,
+)
 from .entity import (
     Entity,
     EntityBase,
@@ -134,6 +140,10 @@ from .utils import Message
 
 __all__ = [
     "NewPassword",
+    "Certificate",
+    "CertificateCreate",
+    "CertificatePublic",
+    "CertificateUpdate",
     "RefreshTokenRequest",
     "Token",
     "TokenPayload",
