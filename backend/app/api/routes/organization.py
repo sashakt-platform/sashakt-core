@@ -56,12 +56,6 @@ def get_current_organization(
 ) -> OrganizationPublic:
     organization = current_user.organization
 
-    if not organization or organization.is_deleted or not organization.is_active:
-        raise HTTPException(
-            status_code=404,
-            detail="Organization not found",
-        )
-
     return transform_organizations_to_public([organization])[0]
 
 
@@ -77,12 +71,6 @@ def update_current_organization(
     current_user: User = Depends(get_current_user),
 ) -> OrganizationPublic:
     organization = current_user.organization
-
-    if organization.is_deleted or not organization.is_active:
-        raise HTTPException(
-            status_code=404,
-            detail="Organization not found",
-        )
 
     org_data = org_in.model_dump(exclude_unset=True)
     organization.sqlmodel_update(org_data)
@@ -320,7 +308,7 @@ def get_public_organization_by_shortcode(
     organization = session.exec(
         select(Organization).where(
             Organization.shortcode == org_shortcode,
-            Organization.is_deleted == False,  # noqa: E712
+            col(Organization.is_deleted).is_(False),
             Organization.is_active,
         )
     ).first()
