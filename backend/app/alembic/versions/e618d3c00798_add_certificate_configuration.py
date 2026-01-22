@@ -1,8 +1,8 @@
 """Add certificate configuration
 
-Revision ID: 70f385a475c3
+Revision ID: e618d3c00798
 Revises: 705a8c3d0b59
-Create Date: 2026-01-21 15:28:09.543312
+Create Date: 2026-01-22 14:52:20.209825
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision = '70f385a475c3'
+revision = 'e618d3c00798'
 down_revision = '705a8c3d0b59'
 branch_labels = None
 depends_on = None
@@ -27,6 +27,8 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created_date', sa.DateTime(), nullable=True),
     sa.Column('modified_date', sa.DateTime(), nullable=True),
+    sa.Column('created_by_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['created_by_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_certificate_name'), 'certificate', ['name'], unique=False)
