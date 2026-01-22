@@ -5,7 +5,13 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, not_, or_, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    Pagination,
+    SessionDep,
+    get_current_user,
+    permission_dependency,
+)
 from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
@@ -18,6 +24,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.organization import OrganizationPublicMinimal
 from app.models.question import QuestionLocation
 from app.models.test import TestState
 from app.models.user import UserState
@@ -37,6 +44,42 @@ def transform_organizations_to_public(
         result.append(OrganizationPublic(**organization.model_dump()))
 
     return result
+
+
+@router.get(
+    "/current",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("read_organization"))],
+)
+def get_current_organization(
+    current_user: User = Depends(get_current_user),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    return transform_organizations_to_public([organization])[0]
+
+
+@router.patch(
+    "/current",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_organization"))],
+)
+def update_current_organization(
+    *,
+    session: SessionDep,
+    org_in: OrganizationUpdate,
+    current_user: User = Depends(get_current_user),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    org_data = org_in.model_dump(exclude_unset=True)
+    organization.sqlmodel_update(org_data)
+
+    session.add(organization)
+    session.commit()
+    session.refresh(organization)
+
+    return transform_organizations_to_public([organization])[0]
 
 
 # Create a Organization
@@ -252,3 +295,32 @@ def delete_organization(organization_id: int, session: SessionDep) -> Message:
     session.refresh(organization)
 
     return Message(message="Organization deleted successfully")
+
+
+@router.get(
+    "/public/{org_shortcode}",
+    response_model=OrganizationPublicMinimal,
+)
+def get_public_organization_by_shortcode(
+    org_shortcode: str,
+    session: SessionDep,
+) -> OrganizationPublicMinimal:
+    organization = session.exec(
+        select(Organization).where(
+            Organization.shortcode == org_shortcode,
+            col(Organization.is_deleted).is_(False),
+            Organization.is_active,
+        )
+    ).first()
+
+    if not organization:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization not found",
+        )
+
+    return OrganizationPublicMinimal(
+        name=organization.name,
+        logo=organization.logo,
+        shortcode=organization.shortcode,
+    )
