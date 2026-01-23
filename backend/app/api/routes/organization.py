@@ -63,7 +63,7 @@ def get_current_organization(
 @router.patch(
     "/current",
     response_model=OrganizationPublic,
-    dependencies=[Depends(permission_dependency("update_organization"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 async def update_current_organization(
     *,
@@ -124,7 +124,7 @@ async def update_current_organization(
 @router.delete(
     "/current/logo",
     response_model=OrganizationPublic,
-    dependencies=[Depends(permission_dependency("update_organization"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 async def delete_current_organization_logo(
     *,
