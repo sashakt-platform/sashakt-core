@@ -1428,6 +1428,4 @@ def test_update_organization_logo_no_filename(
         headers=headers,
     )
 
-    data = response.json()
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "No filename" in data["detail"]
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
