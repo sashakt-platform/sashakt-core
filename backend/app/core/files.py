@@ -106,7 +106,6 @@ def validate_image_dimensions(file_content: bytes) -> None:
 
     Args:
         file_content: Image file content as bytes
-        file_extension: File extension for error messages
 
     Raises:
         HTTPException: If dimensions are invalid or image cannot be opened
