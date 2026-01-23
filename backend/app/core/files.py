@@ -154,6 +154,21 @@ def init_upload_directories() -> None:
     LOGO_DIR.mkdir(parents=True, exist_ok=True, mode=0o755)
 
 
+def sanitize_organization_id(organization_id: int) -> int:
+    """
+    Ensure organization_id is a safe, positive integer suitable for use in filenames.
+    """
+    try:
+        safe_id = int(organization_id)
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid organization id for filename: {organization_id!r}")
+
+    if safe_id <= 0:
+        raise ValueError(f"Organization id must be positive: {safe_id}")
+
+    return safe_id
+
+
 def generate_logo_filename(organization_id: int, file_extension: str) -> str:
     """
     Generate a unique filename for logo upload.
@@ -169,8 +184,9 @@ def generate_logo_filename(organization_id: int, file_extension: str) -> str:
         generate_logo_filename(42, ".png")
         => "org_42_f47ac10b-58cc-4372-a567-0e02b2c3d479.png"
     """
+    safe_org_id = sanitize_organization_id(organization_id)
     unique_id = uuid.uuid4()
-    return f"org_{organization_id}_{unique_id}{file_extension}"
+    return f"org_{safe_org_id}_{unique_id}{file_extension}"
 
 
 def save_logo_file(
