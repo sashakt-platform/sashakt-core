@@ -6,7 +6,12 @@ from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
-from app.models.certificate import Certificate, CertificateCreate, CertificatePublic
+from app.models.certificate import (
+    Certificate,
+    CertificateCreate,
+    CertificatePublic,
+    CertificateUpdate,
+)
 
 router = APIRouter(prefix="/certificate", tags=["Certificate"])
 
@@ -80,5 +85,28 @@ def get_certificate_by_id(
 
     if not certificate or certificate.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Certificate not found")
+
+    return certificate
+
+
+# Update Certificate
+@router.put("/{certificate_id}", response_model=CertificatePublic)
+def update_certificate(
+    certificate_id: int,
+    updated_data: CertificateUpdate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Certificate:
+    certificate = session.get(Certificate, certificate_id)
+
+    if not certificate or certificate.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+
+    certificate_data = updated_data.model_dump(exclude_unset=True)
+    certificate.sqlmodel_update(certificate_data)
+
+    session.add(certificate)
+    session.commit()
+    session.refresh(certificate)
 
     return certificate
