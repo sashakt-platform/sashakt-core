@@ -50,7 +50,11 @@ def create_certificate(
     return certificate
 
 
-@router.get("/", response_model=Page[CertificatePublic])
+@router.get(
+    "/",
+    response_model=Page[CertificatePublic],
+    dependencies=[Depends(permission_dependency("read_certificate"))],
+)
 def get_certificates(
     session: SessionDep,
     current_user: CurrentUser,
@@ -76,7 +80,11 @@ def get_certificates(
     return certificates
 
 
-@router.get("/{certificate_id}", response_model=CertificatePublic)
+@router.get(
+    "/{certificate_id}",
+    response_model=CertificatePublic,
+    dependencies=[Depends(permission_dependency("read_certificate"))],
+)
 def get_certificate_by_id(
     certificate_id: int,
     session: SessionDep,
@@ -91,7 +99,11 @@ def get_certificate_by_id(
 
 
 # Update Certificate
-@router.put("/{certificate_id}", response_model=CertificatePublic)
+@router.put(
+    "/{certificate_id}",
+    response_model=CertificatePublic,
+    dependencies=[Depends(permission_dependency("update_certificate"))],
+)
 def update_certificate(
     certificate_id: int,
     updated_data: CertificateUpdate,
@@ -114,7 +126,10 @@ def update_certificate(
 
 
 # Delete Certificate
-@router.delete("/{certificate_id}")
+@router.delete(
+    "/{certificate_id}",
+    dependencies=[Depends(permission_dependency("delete_certificate"))],
+)
 def delete_certificate(
     certificate_id: int,
     session: SessionDep,
