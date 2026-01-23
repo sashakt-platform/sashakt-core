@@ -83,6 +83,8 @@ async def update_current_organization(
     # Handle logo upload if provided
     if logo is not None:
         file_content, file_ext = await validate_logo_upload(logo)
+        if organization.id is None:
+            raise HTTPException(status_code=500, detail="Organization ID is missing")
         new_logo_path = save_logo_file(organization.id, file_content, file_ext)
 
     # Build update dictionary from non-None parameters
