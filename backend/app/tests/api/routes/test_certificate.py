@@ -109,3 +109,52 @@ def test_get_certificates(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 2
+
+
+def test_get_certificate_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/{certificate.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert response_data["name"] == certificate.name
+    assert response_data["description"] == certificate.description
+    assert response_data["organization_id"] == certificate.organization_id
+    assert response_data["created_by_id"] == certificate.created_by_id
+    assert response_data["is_active"] is True
+    assert "created_date" in response_data
+    assert "modified_date" in response_data
+
+
+def test_get_certificate_by_id_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/-9",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Certificate not found"

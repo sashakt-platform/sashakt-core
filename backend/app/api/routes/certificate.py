@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import func, select
@@ -68,3 +68,17 @@ def get_certificates(
     )
 
     return certificates
+
+
+@router.get("/{certificate_id}", response_model=CertificatePublic)
+def get_certificate_by_id(
+    certificate_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Certificate:
+    certificate = session.get(Certificate, certificate_id)
+
+    if not certificate or certificate.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+
+    return certificate
