@@ -6,6 +6,7 @@ from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.models import Message
 from app.models.certificate import (
     Certificate,
     CertificateCreate,
@@ -110,3 +111,21 @@ def update_certificate(
     session.refresh(certificate)
 
     return certificate
+
+
+# Delete Certificate
+@router.delete("/{certificate_id}")
+def delete_certificate(
+    certificate_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Message:
+    certificate = session.get(Certificate, certificate_id)
+
+    if not certificate or certificate.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+
+    session.delete(certificate)
+    session.commit()
+
+    return Message(message="Certificate deleted successfully")

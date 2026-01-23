@@ -245,3 +245,66 @@ def test_update_certificate_not_found(
 
     assert response.status_code == 404
     assert response_data["detail"] == "Certificate not found"
+
+
+def test_delete_certificate_by_id(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/{certificate.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+    assert response_data["id"] == certificate.id
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/certificate/{certificate.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 200
+
+    assert "deleted" in response_data["message"].lower()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/{certificate.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 404
+    assert response_data["detail"] == "Certificate not found"
+
+
+def test_delete_certificate_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.delete(
+        f"{settings.API_V1_STR}/certificate/-90",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 404
+    assert response_data["detail"] == "Certificate not found"
