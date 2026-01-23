@@ -1351,3 +1351,83 @@ def test_delete_logo_when_none_exists(
     data = response.json()
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert "has no logo to delete" in data["detail"]
+
+
+def test_update_organization_logo_empty_file(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test rejecting empty file upload."""
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Try to upload empty file
+    from io import BytesIO
+
+    empty_file = BytesIO(b"")
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("empty.png", empty_file, "image/png")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Empty file" in data["detail"]
+
+
+def test_update_organization_logo_no_filename(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test rejecting file upload with no filename."""
+    from app.tests.utils.files import create_test_image
+
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Try to upload file with empty filename
+    logo_file = create_test_image(width=100, height=100, format="PNG")
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("", logo_file, "image/png")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "No filename" in data["detail"]
