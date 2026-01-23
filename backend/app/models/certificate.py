@@ -7,6 +7,7 @@ from app.core.timezone import get_timezone_aware_now
 from app.models.user import User
 
 if TYPE_CHECKING:
+    from app.models.organization import Organization
     from app.models.test import Test
 
 
@@ -20,6 +21,11 @@ class CertificateBase(SQLModel):
         description="Certificate template file URL",
     )
     is_active: bool = Field(default=True)
+    organization_id: int = Field(
+        foreign_key="organization.id",
+        nullable=False,
+        description="Organization ID to which the Certificate belongs",
+    )
 
 
 class Certificate(CertificateBase, table=True):
@@ -36,6 +42,7 @@ class Certificate(CertificateBase, table=True):
         nullable=False,
         description="User ID who created the Certificate",
     )
+    organization: "Organization" = Relationship(back_populates="certificates")
 
     # relationship with Test
     tests: list["Test"] = Relationship(back_populates="certificate")

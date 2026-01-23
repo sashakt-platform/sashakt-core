@@ -1,22 +1,28 @@
 from fastapi.testclient import TestClient
 
+from app.api.deps import SessionDep
 from app.core.config import settings
+from app.models.certificate import Certificate
+from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import get_current_user_data
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import assert_paginated_response, random_lower_string
 
 
 def test_create_certificate(
     client: TestClient,
+    db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
+    user, organization = setup_user_organization(db)
 
     data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
         "url": random_lower_string(),
         "is_active": True,
+        "organization_id": organization.id,
     }
 
     response = client.post(
@@ -34,3 +40,72 @@ def test_create_certificate(
     assert response_data["created_by_id"] == user_id
     assert "created_date" in response_data
     assert "modified_date" in response_data
+
+
+def test_get_certificates(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name="testcertificate",
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/",
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    response_data = data["items"]
+
+    assert_paginated_response(response)
+    assert response.status_code == 200
+
+    assert any(item["name"] == certificate.name for item in response_data)
+    assert any(item["description"] == certificate.description for item in response_data)
+    assert any(
+        item["organization_id"] == certificate.organization_id for item in response_data
+    )
+    assert any(
+        item["created_by_id"] == certificate.created_by_id for item in response_data
+    )
+    assert any(item["is_active"] == certificate.is_active for item in response_data)
+
+    for name_query in ["Testcertificate", "TESTCERTIFICATE", " TeStCeRtIfIcAtE"]:
+        response = client.get(
+            f"{settings.API_V1_STR}/certificate/?name={name_query}",
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert any(item["name"].lower() == "testcertificate" for item in data["items"])
+
+    certificate = Certificate(
+        name="testcertificateAnother",
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/?name=TESTCERTIFICATE",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2

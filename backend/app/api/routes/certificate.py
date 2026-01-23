@@ -1,9 +1,27 @@
-from fastapi import APIRouter, Depends
+from typing import Any
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from fastapi import APIRouter, Depends
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
+from sqlmodel import func, select
+
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models.certificate import Certificate, CertificateCreate, CertificatePublic
 
 router = APIRouter(prefix="/certificate", tags=["Certificate"])
+
+
+def transform_certificates_to_public(
+    items: list[Certificate] | Any,
+) -> list[CertificatePublic]:
+    result: list[CertificatePublic] = []
+    certificate_list: list[Certificate] = (
+        list(items) if not isinstance(items, list) else items
+    )
+
+    for certificate in certificate_list:
+        result.append(CertificatePublic(**certificate.model_dump()))
+    return result
 
 
 @router.post(
@@ -24,3 +42,29 @@ def create_certificate(
     session.commit()
     session.refresh(certificate)
     return certificate
+
+
+@router.get("/", response_model=Page[CertificatePublic])
+def get_certificates(
+    session: SessionDep,
+    current_user: CurrentUser,
+    params: Pagination = Depends(),
+    name: str | None = None,
+) -> Page[CertificatePublic]:
+    query = select(Certificate).where(
+        Certificate.organization_id == current_user.organization_id,
+    )
+
+    if name:
+        query = query.where(
+            func.trim(func.lower(Certificate.name)).like(f"%{name.strip().lower()}%")
+        )
+
+    certificates: Page[CertificatePublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_certificates_to_public(items),
+    )
+
+    return certificates
