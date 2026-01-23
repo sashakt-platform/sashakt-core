@@ -44,8 +44,8 @@ async def validate_logo_upload(file: UploadFile) -> tuple[bytes, str]:
     Raises:
         HTTPException: If validation fails
     """
-    # Read file content
-    file_content = await file.read()
+    # Read file content with bounded memory consumption
+    file_content = await file.read(MAX_LOGO_SIZE_BYTES + 1)
 
     # 1. Check file size
     file_size = len(file_content)
