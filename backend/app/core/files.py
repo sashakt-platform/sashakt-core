@@ -263,11 +263,12 @@ def delete_logo_file(logo_path: str | None) -> None:
     # Security check: verify resolved path is within upload directory
     try:
         resolved_path = file_path.resolve()
-        if not str(resolved_path).startswith(str(UPLOAD_ROOT.resolve())):
-            raise ValueError(f"Path escapes upload directory: {logo_path}")
-    except Exception:
-        # If path resolution fails, don't delete
+    except OSError:
+        # If path resolution fails (e.g., broken symlinks), don't delete
         return
+
+    if not resolved_path.is_relative_to(UPLOAD_ROOT.resolve()):
+        raise ValueError(f"Path escapes upload directory: {logo_path}")
 
     # Delete file if it exists
     if file_path.exists() and file_path.is_file():
