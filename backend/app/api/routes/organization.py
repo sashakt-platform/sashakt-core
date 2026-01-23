@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, not_, or_, select
@@ -12,6 +12,7 @@ from app.api.deps import (
     get_current_user,
     permission_dependency,
 )
+from app.core.files import delete_logo_file, save_logo_file, validate_logo_upload
 from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
@@ -64,20 +65,84 @@ def get_current_organization(
     response_model=OrganizationPublic,
     dependencies=[Depends(permission_dependency("update_organization"))],
 )
-def update_current_organization(
+async def update_current_organization(
     *,
     session: SessionDep,
-    org_in: OrganizationUpdate,
+    current_user: User = Depends(get_current_user),
+    name: str | None = Form(None),
+    shortcode: str | None = Form(None),
+    logo: UploadFile | None = File(
+        None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
+    ),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    old_logo_path = organization.logo
+    new_logo_path = None
+
+    # Handle logo upload if provided
+    if logo is not None:
+        file_content, file_ext = await validate_logo_upload(logo)
+        new_logo_path = save_logo_file(organization.id, file_content, file_ext)
+
+    # Build update dictionary from non-None parameters
+    update_data = {}
+    if name is not None:
+        update_data["name"] = name
+    if shortcode is not None:
+        update_data["shortcode"] = shortcode
+    if new_logo_path is not None:
+        update_data["logo"] = new_logo_path
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No update data provided")
+
+    organization.sqlmodel_update(update_data)
+    session.add(organization)
+
+    # Commit to database and handle rollback if needed
+    try:
+        session.commit()
+        session.refresh(organization)
+    except Exception:
+        # Rollback the database transaction
+        session.rollback()
+        # Clean up the newly uploaded file if it was saved
+        if new_logo_path:
+            delete_logo_file(new_logo_path)
+        raise
+
+    # Clean up old logo file if replaced (only after successful DB commit)
+    if new_logo_path and old_logo_path and old_logo_path != new_logo_path:
+        delete_logo_file(old_logo_path)
+
+    return transform_organizations_to_public([organization])[0]
+
+
+@router.delete(
+    "/current/logo",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_organization"))],
+)
+async def delete_current_organization_logo(
+    *,
+    session: SessionDep,
     current_user: User = Depends(get_current_user),
 ) -> OrganizationPublic:
     organization = current_user.organization
 
-    org_data = org_in.model_dump(exclude_unset=True)
-    organization.sqlmodel_update(org_data)
+    if not organization.logo:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization has no logo to delete",
+        )
 
+    old_logo_path = organization.logo
+    organization.logo = None
     session.add(organization)
     session.commit()
     session.refresh(organization)
+    delete_logo_file(old_logo_path)
 
     return transform_organizations_to_public([organization])[0]
 
