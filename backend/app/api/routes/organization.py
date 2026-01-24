@@ -12,7 +12,12 @@ from app.api.deps import (
     get_current_user,
     permission_dependency,
 )
-from app.core.files import delete_logo_file, save_logo_file, validate_logo_upload
+from app.core.files import (
+    delete_logo_file,
+    get_absolute_logo_url,
+    save_logo_file,
+    validate_logo_upload,
+)
 from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
@@ -42,7 +47,9 @@ def transform_organizations_to_public(
     )
 
     for organization in organization_list:
-        result.append(OrganizationPublic(**organization.model_dump()))
+        org_data = organization.model_dump()
+        org_data["logo"] = get_absolute_logo_url(org_data.get("logo"))
+        result.append(OrganizationPublic(**org_data))
 
     return result
 
@@ -388,6 +395,6 @@ def get_public_organization_by_shortcode(
 
     return OrganizationPublicMinimal(
         name=organization.name,
-        logo=organization.logo,
+        logo=get_absolute_logo_url(organization.logo),
         shortcode=organization.shortcode,
     )

@@ -9,6 +9,8 @@ import magic
 from fastapi import HTTPException, UploadFile
 from PIL import Image
 
+from app.core.config import settings
+
 # Configuration
 UPLOAD_ROOT = Path("/app/uploads")
 LOGO_DIR = UPLOAD_ROOT / "organizations" / "logos"
@@ -278,3 +280,20 @@ def delete_logo_file(logo_path: str | None) -> None:
             # Silently ignore deletion errors (file in use, permissions, etc.)
             # The file will be orphaned but not cause issues
             pass
+
+
+def get_absolute_logo_url(relative_path: str | None) -> str | None:
+    """
+    Convert a relative logo path to an absolute URL.
+
+    Args:
+        relative_path: Relative path stored in database (e.g., "/uploads/organizations/logos/org_42_xxx.png")
+
+    Returns:
+        Absolute URL or None if no path provided
+    """
+    if not relative_path:
+        return None
+
+    scheme = "https" if settings.ENVIRONMENT != "local" else "http"
+    return f"{scheme}://{settings.DOMAIN}{relative_path}"
