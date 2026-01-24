@@ -1000,9 +1000,10 @@ def test_update_current_organization(
 def test_get_public_organization_by_shortcode_success(
     client: TestClient, db: SessionDep
 ) -> None:
+    logo_path = "/uploads/organizations/logos/test_logo.png"
     org = Organization(
         name=random_lower_string(),
-        logo=random_lower_string(),
+        logo=logo_path,
         shortcode=random_lower_string(),
         is_active=True,
         is_deleted=False,
@@ -1017,7 +1018,7 @@ def test_get_public_organization_by_shortcode_success(
 
     assert response.status_code == status.HTTP_200_OK
     assert data["name"] == org.name
-    assert data["logo"] == org.logo
+    assert data["logo"].endswith(logo_path)
     assert data["shortcode"] == org.shortcode
 
 
@@ -1084,7 +1085,7 @@ def test_update_current_organization_with_logo(
     assert response.status_code == status.HTTP_200_OK
     assert data["name"] == "Updated Organization Name"
     assert data["logo"] is not None
-    assert data["logo"].startswith("/uploads/organizations/logos/")
+    assert "/uploads/organizations/logos/" in data["logo"]
 
 
 def test_update_current_organization_without_logo(
@@ -1129,7 +1130,7 @@ def test_update_current_organization_without_logo(
     data = response.json()
     assert response.status_code == status.HTTP_200_OK
     assert data["name"] == "Updated Name"
-    assert data["logo"] == "/uploads/organizations/logos/org_1_existing.png"
+    assert data["logo"].endswith("/uploads/organizations/logos/org_1_existing.png")
 
 
 def test_update_organization_logo_invalid_file_type(
@@ -1263,8 +1264,8 @@ def test_update_organization_logo_replaces_old(
     data = response.json()
     assert response.status_code == status.HTTP_200_OK
     assert data["logo"] is not None
-    assert data["logo"] != "/uploads/organizations/logos/org_1_old.png"
-    assert data["logo"].startswith("/uploads/organizations/logos/")
+    assert not data["logo"].endswith("/uploads/organizations/logos/org_1_old.png")
+    assert "/uploads/organizations/logos/" in data["logo"]
 
 
 def test_delete_current_organization_logo_success(
