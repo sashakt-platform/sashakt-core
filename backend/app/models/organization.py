@@ -7,7 +7,7 @@ from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import Candidate
 
 if TYPE_CHECKING:
-    from app.models import EntityType, Question, Tag, TagType, Test, User
+    from app.models import Certificate, EntityType, Question, Tag, TagType, Test, User
     from app.models.provider import OrganizationProvider
 
 
@@ -42,6 +42,7 @@ class Organization(OrganizationBase, table=True):
     tag_types: list["TagType"] = Relationship(back_populates="organization")
     tags: list["Tag"] = Relationship(back_populates="organization")
     entity_types: list["EntityType"] = Relationship(back_populates="organization")
+    certificates: list["Certificate"] = Relationship(back_populates="organization")
     users: list["User"] = Relationship(back_populates="organization")
     question: list["Question"] = Relationship(back_populates="organization")
     organization_providers: list["OrganizationProvider"] = Relationship(

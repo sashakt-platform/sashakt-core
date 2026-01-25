@@ -574,5 +574,42 @@
     "state_admin": false,
     "test_admin": false,
     "candidate": false
-  }
+  },
+  {
+  "name": "create_certificate",
+  "description": "Create New Certificate",
+  "super_admin": true,
+  "system_admin": true,
+  "state_admin": false,
+  "test_admin": false,
+  "candidate": false
+},
+{
+  "name": "update_certificate",
+  "description": "Update Existing Certificate",
+  "super_admin": true,
+  "system_admin": true,
+  "state_admin": false,
+  "test_admin": false,
+  "candidate": false
+},
+{
+  "name": "delete_certificate",
+  "description": "Delete Existing Certificate",
+  "super_admin": true,
+  "system_admin": true,
+  "state_admin": false,
+  "test_admin": false,
+  "candidate": false
+},
+{
+  "name": "read_certificate",
+  "description": "Read Certificate Details",
+  "super_admin": true,
+  "system_admin": true,
+  "state_admin": false,
+  "test_admin": false,
+  "candidate": false
+}
+
 ]

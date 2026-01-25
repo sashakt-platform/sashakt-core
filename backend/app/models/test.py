@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         TagPublic,
         User,
     )
+    from app.models.certificate import Certificate
     from app.models.location import Block, District, State
 
 
@@ -231,6 +232,13 @@ class Test(TestBase, table=True):
         title="Organization ID",
         description="ID of the organization to which the test belongs.",
     )
+    certificate_id: int | None = Field(
+        default=None,
+        foreign_key="certificate.id",
+        nullable=True,
+        description="Certificate linked to this test",
+    )
+    certificate: Optional["Certificate"] = Relationship(back_populates="tests")
 
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
