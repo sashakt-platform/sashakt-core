@@ -238,7 +238,7 @@ class Test(TestBase, table=True):
         nullable=True,
         description="Certificate linked to this test",
     )
-    certificate: "Certificate" = Relationship(back_populates="tests")
+    certificate: Optional["Certificate"] = Relationship(back_populates="tests")
 
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}

@@ -40,9 +40,11 @@ def create_certificate(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Certificate:
+    # organization_id should be set to the current user's organization
     certificate = Certificate(
-        **certificate_create.model_dump(),
+        **certificate_create.model_dump(exclude={"organization_id"}),
         created_by_id=current_user.id,
+        organization_id=current_user.organization_id,
     )
     session.add(certificate)
     session.commit()
@@ -66,8 +68,17 @@ def get_certificates(
     )
 
     if name:
+        # escape LIKE pattern special characters to prevent injection
+        #  TODO: may be able to use built-in escaping in SQLModel/SQLAlchemy in the future
+        safe_name = (
+            name.strip()
+            .lower()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
         query = query.where(
-            func.trim(func.lower(Certificate.name)).like(f"%{name.strip().lower()}%")
+            func.trim(func.lower(Certificate.name)).like(f"%{safe_name}%", escape="\\")
         )
 
     certificates: Page[CertificatePublic] = paginate(
@@ -116,6 +127,9 @@ def update_certificate(
         raise HTTPException(status_code=404, detail="Certificate not found")
 
     certificate_data = updated_data.model_dump(exclude_unset=True)
+
+    # prevent cross-tenant reassignment by removing organization_id from update
+    certificate_data.pop("organization_id", None)
     certificate.sqlmodel_update(certificate_data)
 
     session.add(certificate)
