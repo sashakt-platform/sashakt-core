@@ -13,6 +13,7 @@ from app.models.certificate import (
     CertificatePublic,
     CertificateUpdate,
 )
+from app.models.test import Test
 
 router = APIRouter(prefix="/certificate", tags=["Certificate"])
 
@@ -153,6 +154,17 @@ def delete_certificate(
 
     if not certificate or certificate.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Certificate not found")
+
+    # check for associated tests before deleting
+    related_tests = session.exec(
+        select(Test).where(Test.certificate_id == certificate_id)
+    ).first()
+
+    if related_tests:
+        raise HTTPException(
+            status_code=400,
+            detail="Certificate has associated tests and cannot be deleted",
+        )
 
     session.delete(certificate)
     session.commit()

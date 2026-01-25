@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.certificate import Certificate
+from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import get_current_user_data
 from app.tests.utils.utils import assert_paginated_response, random_lower_string
@@ -308,3 +309,51 @@ def test_delete_certificate_not_found(
 
     assert response.status_code == 404
     assert response_data["detail"] == "Certificate not found"
+
+
+def test_delete_certificate_with_associated_tests(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # try deleting certificate, should throw 400 error
+    response = client.delete(
+        f"{settings.API_V1_STR}/certificate/{certificate.id}",
+        headers=get_user_superadmin_token,
+    )
+    response_data = response.json()
+
+    assert response.status_code == 400
+    assert "associated tests" in response_data["detail"].lower()
+
+    # verify certificate still exists
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/{certificate.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
