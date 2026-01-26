@@ -1,19 +1,23 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.provider_config import provider_config_service
 from app.models import Message
+from app.models.candidate import CandidateTest
 from app.models.certificate import (
     Certificate,
     CertificateCreate,
     CertificatePublic,
     CertificateUpdate,
 )
+from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.test import Test
+from app.services.google_slides import GoogleSlidesService
 
 router = APIRouter(prefix="/certificate", tags=["Certificate"])
 
@@ -170,3 +174,96 @@ def delete_certificate(
     session.commit()
 
     return Message(message="Certificate deleted successfully")
+
+
+@router.get("/download/{token}")
+def download_certificate(
+    token: str,
+    session: SessionDep,
+) -> Response:
+    """
+    Download certificate PDF using a token.
+    No authentication required - token is the authentication.
+    """
+    # Find candidate_test by token in certificate_data
+    candidate_test = session.exec(
+        select(CandidateTest).where(
+            CandidateTest.certificate_data["token"].as_string() == token
+        )
+    ).first()
+
+    if not candidate_test or not candidate_test.certificate_data:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+
+    # Get certificate data from snapshot
+    cert_data = candidate_test.certificate_data
+
+    # Get test and certificate
+    test = session.get(Test, candidate_test.test_id)
+    if not test or not test.certificate_id:
+        raise HTTPException(status_code=404, detail="No certificate for this test")
+
+    certificate = session.get(Certificate, test.certificate_id)
+    if not certificate or not certificate.is_active:
+        raise HTTPException(status_code=404, detail="Certificate not available")
+
+    # Get Google Slides provider for the organization
+    org_provider = session.exec(
+        select(OrganizationProvider)
+        .join(Provider)
+        .where(
+            OrganizationProvider.organization_id == test.organization_id,
+            Provider.provider_type == ProviderType.GOOGLE_SLIDES,
+            OrganizationProvider.is_enabled,
+            Provider.is_active,
+        )
+    ).first()
+
+    if not org_provider or not org_provider.config_json:
+        raise HTTPException(
+            status_code=503,
+            detail="Certificate generation service not configured",
+        )
+
+    # Decrypt config and create service
+    try:
+        config = provider_config_service.get_config_for_use(org_provider.config_json)
+        slides_service = GoogleSlidesService(config)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Certificate generation service unavailable",
+        )
+
+    # Use data from snapshot
+    candidate_name = cert_data.get("candidate_name", "Candidate")
+    test_name = cert_data.get("test_name", test.name)
+    score_str = cert_data.get("score", "N/A")
+    completion_date = cert_data.get("completion_date", "N/A")
+
+    # Generate certificate PDF
+    try:
+        pdf_bytes = slides_service.generate_certificate_pdf(
+            template_url=certificate.url,
+            candidate_name=candidate_name,
+            test_name=test_name,
+            completion_date=completion_date,
+            score=score_str,
+            certificate_title=f"Certificate - {test_name} - {candidate_name}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to generate certificate",
+        )
+
+    # Return PDF as downloadable file
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="certificate_{candidate_test.id}.pdf"'
+        },
+    )

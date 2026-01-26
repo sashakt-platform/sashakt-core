@@ -8,6 +8,7 @@ from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
+from app.core.certificate_token import generate_certificate_token
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
@@ -1065,6 +1066,54 @@ def get_test_result(
                     if marking_scheme:
                         marks_obtained += marking_scheme["wrong"]
     total_questions = len(candidate_test.question_revision_ids)
+
+    # Generate certificate download URL if test has a certificate assigned
+    certificate_download_url = None
+    if test.certificate_id:
+        # Check if certificate_data already exists (reuse token)
+        if candidate_test.certificate_data and candidate_test.certificate_data.get(
+            "token"
+        ):
+            token = candidate_test.certificate_data["token"]
+        else:
+            # Generate new token and save certificate data snapshot
+            token = generate_certificate_token()
+
+            # Get candidate for name
+            candidate = session.get(Candidate, candidate_test.candidate_id)
+
+            # Since all users are anonymous, use partial UUID
+            candidate_name = (
+                f"Candidate {str(candidate.identity)[:8]}" if candidate else "Candidate"
+            )
+
+            # Format score string from already-calculated values
+            if marks_maximum > 0:
+                score_percentage = marks_obtained / marks_maximum * 100
+                score_str = f"{marks_obtained:.1f}/{marks_maximum:.1f} ({score_percentage:.1f}%)"
+            else:
+                score_str = "N/A"
+
+            # Format completion date
+            completion_date = (
+                candidate_test.end_time.strftime("%B %d, %Y")
+                if candidate_test.end_time
+                else "N/A"
+            )
+
+            # Save certificate data snapshot
+            candidate_test.certificate_data = {
+                "token": token,
+                "candidate_name": candidate_name,
+                "test_name": test.name,
+                "score": score_str,
+                "completion_date": completion_date,
+            }
+            session.add(candidate_test)
+            session.commit()
+
+        certificate_download_url = f"/api/v1/certificate/download/{token}"
+
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
@@ -1073,6 +1122,7 @@ def get_test_result(
         total_questions=total_questions,
         marks_obtained=marks_obtained if marking_scheme else None,
         marks_maximum=marks_maximum if marking_scheme else None,
+        certificate_download_url=certificate_download_url,
     )
 
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class ProviderType(str, Enum):
     BIGQUERY = "BIGQUERY"
+    GOOGLE_SLIDES = "GOOGLE_SLIDES"
 
 
 class ProviderBase(SQLModel):
