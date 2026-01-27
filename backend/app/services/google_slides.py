@@ -141,11 +141,19 @@ class GoogleSlidesService:
         """
         Delete a presentation (cleanup after PDF generation).
 
+        For Shared Drives, this moves the file to trash since service accounts
+        with Content Manager role cannot permanently delete files.
+
         Args:
             presentation_id: ID of the presentation to delete
         """
         drive = self._get_drive_service()
-        drive.files().delete(fileId=presentation_id, supportsAllDrives=True).execute()
+        # Use trash (update with trashed=True) instead of delete for Shared Drive compatibility
+        drive.files().update(
+            fileId=presentation_id,
+            body={"trashed": True},
+            supportsAllDrives=True,
+        ).execute()
 
     def test_connection(self) -> bool:
         """
