@@ -60,8 +60,9 @@ class GoogleSlidesService:
         Handles URLs like:
         - https://docs.google.com/presentation/d/PRESENTATION_ID/edit
         - https://docs.google.com/presentation/d/PRESENTATION_ID/edit#slide=id.p
+        - https://docs.google.com/presentation/u/0/d/PRESENTATION_ID/edit
         """
-        match = re.search(r"/presentation/d/([a-zA-Z0-9-_]+)", url)
+        match = re.search(r"/presentation(?:/u/\d+)?/d/([a-zA-Z0-9-_]+)", url)
         if match:
             return match.group(1)
         raise ValueError(f"Could not extract presentation ID from URL: {url}")

@@ -1036,6 +1036,7 @@ def get_test_result(
     optional_not_attempted = 0
     marks_obtained = 0.0
     marks_maximum = 0.0
+    marking_scheme = None
 
     for revision, answer in joined_data:
         if test.marks_level == "test":
