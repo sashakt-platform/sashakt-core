@@ -3,8 +3,8 @@ import re
 from typing import Any
 
 from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.discovery import build  # type: ignore[import-untyped]
+from googleapiclient.http import MediaIoBaseDownload  # type: ignore[import-untyped]
 
 
 class GoogleSlidesService:
@@ -34,7 +34,7 @@ class GoogleSlidesService:
             "auth_provider_x509_cert_url": self.config["auth_provider_x509_cert_url"],
             "client_x509_cert_url": self.config["client_x509_cert_url"],
         }
-        return service_account.Credentials.from_service_account_info(
+        return service_account.Credentials.from_service_account_info(  # type: ignore[no-any-return,no-untyped-call]
             credentials_info, scopes=self.SCOPES
         )
 
@@ -83,7 +83,7 @@ class GoogleSlidesService:
             .copy(fileId=template_id, body={"name": title}, supportsAllDrives=True)
             .execute()
         )
-        return copy["id"]
+        return str(copy["id"])
 
     def replace_placeholders(
         self, presentation_id: str, replacements: dict[str, str]

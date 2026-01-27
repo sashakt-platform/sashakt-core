@@ -99,11 +99,9 @@ class ProviderConfigService:
         self, provider_type: ProviderType, config: dict[str, Any]
     ) -> dict[str, Any]:
         if provider_type == ProviderType.BIGQUERY:
-            validated_config = BigQueryConfig(**config)
-            return validated_config.model_dump()
+            return BigQueryConfig(**config).model_dump()
         elif provider_type == ProviderType.GOOGLE_SLIDES:
-            validated_config = GoogleSlidesConfig(**config)
-            return validated_config.model_dump()
+            return GoogleSlidesConfig(**config).model_dump()
         else:
             raise ValueError(f"Unknown provider type: {provider_type}")
 

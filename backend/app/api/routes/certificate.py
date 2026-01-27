@@ -188,7 +188,7 @@ def download_certificate(
     # Find candidate_test by token in certificate_data
     candidate_test = session.exec(
         select(CandidateTest).where(
-            CandidateTest.certificate_data["token"].as_string() == token
+            CandidateTest.certificate_data["token"].as_string() == token  # type: ignore[index]
         )
     ).first()
 
