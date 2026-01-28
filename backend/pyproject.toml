@@ -26,6 +26,8 @@ dependencies = [
     "google-auth>=2.20.0,<3.0.0",
     "google-api-python-client>=2.100.0,<3.0.0",
     "cryptography>=46.0.3",
+    "python-magic>=0.4.27",
+    "Pillow>=10.0.0",
 ]
 
 [dependency-groups]
