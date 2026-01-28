@@ -23,6 +23,7 @@ from app.core.sorting import (
     create_sorting_dependency,
 )
 from app.models import (
+    District,
     Message,
     State,
     UpdatePassword,
@@ -33,7 +34,7 @@ from app.models import (
     UserUpdateMe,
 )
 from app.models.role import Role
-from app.models.user import UserPublicMe, UserState
+from app.models.user import UserDistrict, UserPublicMe, UserState
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -153,12 +154,18 @@ def validate_user_return_role(
                 detail="A user can be linked to only one state.",
             )
 
+        if user_in.district_ids and len(user_in.district_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="A user can be linked to only one district.",
+            )
         if role.name == state_admin.name and (
-            user_in.state_ids is None or len(user_in.state_ids) != 1
+            (user_in.state_ids is None or len(user_in.state_ids) != 1)
+            and (user_in.district_ids is None or len(user_in.district_ids) != 1)
         ):
             raise HTTPException(
                 status_code=400,
-                detail="A user with 'State Admin' role must be associated with a state.",
+                detail="A user with 'State Admin' role must be associated with a state or a district.",
             )
 
         # Validate state exists
@@ -172,6 +179,18 @@ def validate_user_return_role(
                 raise HTTPException(
                     status_code=400,
                     detail="Invalid State Details",
+                )
+        # Validate district exists
+        if user_in.district_ids is not None:
+            matched_districts = list(
+                session.exec(
+                    select(District).where(col(District.id).in_(user_in.district_ids))
+                ).all()
+            )
+            if len(matched_districts) != len(set(user_in.district_ids or [])):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid District Details",
                 )
     return role
 
@@ -209,25 +228,35 @@ def create_user(
         created_by_id=current_user.id,
     )
 
-    if role and role.name == state_admin.name and user_in.state_ids:
-        user_states = [
-            UserState(user_id=user.id, state_id=state_id)
-            for state_id in user_in.state_ids
-        ]
-        session.add_all(user_states)
+    if role and role.name == state_admin.name:
+        if user_in.state_ids:
+            user_states = [
+                UserState(user_id=user.id, state_id=state_id)
+                for state_id in user_in.state_ids
+            ]
+            session.add_all(user_states)
+        if user_in.district_ids:
+            user_districts = [
+                UserDistrict(user_id=user.id, district_id=district_id)
+                for district_id in user_in.district_ids
+            ]
+            session.add_all(user_districts)
 
     elif role and role.name == test_admin.name:
         current_role = session.get(Role, current_user.role_id)
-        if (
-            current_role
-            and current_role.name == state_admin.name
-            and current_user.states
-        ):
-            creator_states = current_user.states
-            session.add_all(
-                UserState(user_id=user.id, state_id=creator_state.id)
-                for creator_state in creator_states
-            )
+        if current_role and current_role.name == state_admin.name:
+            if current_user.states:
+                creator_states = current_user.states
+                session.add_all(
+                    UserState(user_id=user.id, state_id=creator_state.id)
+                    for creator_state in creator_states
+                )
+            if current_user.districts:
+                creator_districts = current_user.districts
+                session.add_all(
+                    UserDistrict(user_id=user.id, district_id=creator_district.id)
+                    for creator_district in creator_districts
+                )
 
         elif user_in.state_ids:
             user_states = [
@@ -235,6 +264,13 @@ def create_user(
                 for state_id in user_in.state_ids
             ]
             session.add_all(user_states)
+
+        elif user_in.district_ids:
+            user_districts = [
+                UserDistrict(user_id=user.id, district_id=district_id)
+                for district_id in user_in.district_ids
+            ]
+            session.add_all(user_districts)
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -414,12 +450,20 @@ def update_user(
         session=session, user_in=user_in, current_user=current_user
     )
 
-    if role.name == state_admin.name and user_in.state_ids:
-        db_user.states = list(
-            session.exec(
-                select(State).where(col(State.id).in_(user_in.state_ids))
-            ).all()
-        )
+    if role.name == state_admin.name:
+        if user_in.state_ids:
+            db_user.states = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+        if user_in.district_ids:
+            db_user.districts = list(
+                session.exec(
+                    select(District).where(col(District.id).in_(user_in.district_ids))
+                ).all()
+            )
+
     elif role.name == test_admin.name:
         creator_role = session.get(Role, current_user.role_id)
         if creator_role and creator_role.name == state_admin.name:
@@ -431,6 +475,14 @@ def update_user(
                 ).all()
             )
             db_user.states = creator_states
+            creator_districts = list(
+                session.exec(
+                    select(District)
+                    .join(UserDistrict)
+                    .where(UserDistrict.user_id == current_user.id)
+                ).all()
+            )
+            db_user.districts = creator_districts
         else:
             if not user_in.state_ids:
                 db_user.states = []
@@ -443,6 +495,21 @@ def update_user(
                 db_user.states = list(
                     session.exec(
                         select(State).where(col(State.id).in_(user_in.state_ids))
+                    ).all()
+                )
+            if not user_in.district_ids:
+                db_user.districts = []
+            else:
+                if len(user_in.district_ids) != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A test-admin may be linked to at most one district.",
+                    )
+                db_user.districts = list(
+                    session.exec(
+                        select(District).where(
+                            col(District.id).in_(user_in.district_ids)
+                        )
                     ).all()
                 )
 
