@@ -145,9 +145,18 @@
   },
   {
     "name": "update_organization",
-    "description": "Update Existing Organization",
+    "description": "Update Any Organization",
     "super_admin": true,
     "system_admin": false,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "update_my_organization",
+    "description": "Update Own Organization",
+    "super_admin": true,
+    "system_admin": true,
     "state_admin": false,
     "test_admin": false,
     "candidate": false
