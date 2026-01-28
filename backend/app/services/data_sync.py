@@ -34,6 +34,7 @@ from app.models.test import MarksLevelEnum, TestDistrict, TestQuestion, TestTag
 from app.models.user import UserState
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
+from app.services.google_slides import GoogleSlidesService
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +225,7 @@ class DataSyncService:
             return None
 
     def test_provider_connection(self, organization_id: int, provider_id: int) -> bool:
-        """Test connection to a BigQuery provider"""
+        """Test connection to a provider (BigQuery or Google Slides)"""
         with Session(engine) as session:
             org_provider = session.exec(
                 select(OrganizationProvider)
@@ -239,10 +240,6 @@ class DataSyncService:
             if not org_provider:
                 return False
 
-            # Only test BigQuery connections
-            if org_provider.provider.provider_type != ProviderType.BIGQUERY:
-                return False
-
             try:
                 if org_provider.config_json is None:
                     return False
@@ -250,8 +247,16 @@ class DataSyncService:
                     org_provider.config_json
                 )
 
-                bigquery_service = BigQueryService(organization_id, decrypted_config)
-                return bigquery_service.test_connection()
+                if org_provider.provider.provider_type == ProviderType.BIGQUERY:
+                    bigquery_service = BigQueryService(
+                        organization_id, decrypted_config
+                    )
+                    return bigquery_service.test_connection()
+                elif org_provider.provider.provider_type == ProviderType.GOOGLE_SLIDES:
+                    slides_service = GoogleSlidesService(decrypted_config)
+                    return slides_service.test_connection()
+                else:
+                    return False
             except Exception:
                 return False
 
@@ -747,11 +752,13 @@ class DataSyncService:
             "start_time": (test.start_time.isoformat() if test.start_time else None),
             "end_time": (test.end_time.isoformat() if test.end_time else None),
             "marks": test.marks,
-            "marks_level": "QUESTION"
-            if test.marks_level == MarksLevelEnum.QUESTION
-            else "TEST"
-            if test.marks_level == MarksLevelEnum.TEST
-            else None,
+            "marks_level": (
+                "QUESTION"
+                if test.marks_level == MarksLevelEnum.QUESTION
+                else "TEST"
+                if test.marks_level == MarksLevelEnum.TEST
+                else None
+            ),
             "marking_scheme": test.marking_scheme,
             "created_by_id": test.created_by_id,
             "organization_id": test.organization_id,
