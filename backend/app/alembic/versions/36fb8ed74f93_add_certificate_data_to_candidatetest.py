@@ -1,7 +1,7 @@
 """add certificate_data to candidatetest
 
 Revision ID: 36fb8ed74f93
-Revises: bc4b80a867c5
+Revises: a3e860749be5
 Create Date: 2026-01-25 19:29:55.962261
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '36fb8ed74f93'
-down_revision = 'bc4b80a867c5'
+down_revision = 'a3e860749be5'
 branch_labels = None
 depends_on = None
 
