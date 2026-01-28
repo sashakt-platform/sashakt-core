@@ -1,7 +1,7 @@
 """Add update_my_organization permission to roles
 
 Revision ID: a3e860749be5
-Revises: b71c076d89a3
+Revises: bc4b80a867c5
 Create Date: 2026-01-23
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'a3e860749be5'
-down_revision = 'b71c076d89a3'
+down_revision = 'bc4b80a867c5'
 branch_labels = None
 depends_on = None
 
