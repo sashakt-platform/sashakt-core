@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
+from app.models.certificate import Certificate
 from app.models.entity import Entity, EntityType
 from app.models.location import Block, District
 from app.models.question import QuestionType
@@ -6997,3 +6998,117 @@ def test_get_test_returns_show_question_palette(
     data = get_response.json()
     assert "show_question_palette" in data
     assert data["show_question_palette"] is True
+
+
+def test_create_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "certificate_id": certificate.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["certificate_id"] == certificate.id
+
+
+def test_update_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+    assert create_resp.json()["certificate_id"] is None
+
+    update_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "certificate_id": certificate.id,
+    }
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_resp.status_code == 200
+    data = update_resp.json()
+    assert data["certificate_id"] == certificate.id
+
+    update_payload["certificate_id"] = None
+    remove_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert remove_resp.status_code == 200
+    data_remove = remove_resp.json()
+    assert data_remove["certificate_id"] is None
