@@ -377,10 +377,11 @@ def submit_answer_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTestAnswer:
+) -> CandidateTestAnswerPublic:
     """
     Submit answer for QR code candidates using UUID authentication.
     Creates new answer or updates existing one.
+    Returns the answer along with correct answer from question revision.
     """
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
@@ -404,7 +405,7 @@ def submit_answer_for_qr_candidate(
         session.add(existing_answer)
         session.commit()
         session.refresh(existing_answer)
-        return existing_answer
+        saved_answer = existing_answer
     else:
         # Create new answer
         candidate_test_answer = CandidateTestAnswer(
@@ -418,7 +419,24 @@ def submit_answer_for_qr_candidate(
         session.add(candidate_test_answer)
         session.commit()
         session.refresh(candidate_test_answer)
-        return candidate_test_answer
+        saved_answer = candidate_test_answer
+
+    question_revision = session.get(
+        QuestionRevision, answer_request.question_revision_id
+    )
+
+    return CandidateTestAnswerPublic(
+        id=saved_answer.id,
+        candidate_test_id=saved_answer.candidate_test_id,
+        question_revision_id=saved_answer.question_revision_id,
+        response=saved_answer.response,
+        visited=saved_answer.visited,
+        time_spent=saved_answer.time_spent,
+        bookmarked=saved_answer.bookmarked,
+        created_date=saved_answer.created_date,
+        modified_date=saved_answer.modified_date,
+        correct_answer=question_revision.correct_answer if question_revision else None,
+    )
 
 
 @router.post(
@@ -432,10 +450,11 @@ def submit_batch_answers_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> list[CandidateTestAnswer]:
+) -> list[CandidateTestAnswerPublic]:
     """
     Submit multiple answers for QR code candidates using UUID authentication.
     Creates new answers or updates existing ones in a single transaction.
+    Returns answers along with correct answers from question revisions.
     """
     # Verify UUID access
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
@@ -479,7 +498,32 @@ def submit_batch_answers_for_qr_candidate(
     for result in results:
         session.refresh(result)
 
-    return results
+    question_revision_ids = [r.question_revision_id for r in results]
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(question_revision_ids)
+        )
+    ).all()
+    correct_answers_map = {qr.id: qr.correct_answer for qr in question_revisions}
+
+    response = []
+    for result in results:
+        response.append(
+            CandidateTestAnswerPublic(
+                id=result.id,
+                candidate_test_id=result.candidate_test_id,
+                question_revision_id=result.question_revision_id,
+                response=result.response,
+                visited=result.visited,
+                time_spent=result.time_spent,
+                bookmarked=result.bookmarked,
+                created_date=result.created_date,
+                modified_date=result.modified_date,
+                correct_answer=correct_answers_map.get(result.question_revision_id),
+            )
+        )
+
+    return response
 
 
 @router.post("/submit_test/{candidate_test_id}", response_model=CandidateTestPublic)
@@ -489,9 +533,10 @@ def submit_test_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTest:
+) -> CandidateTestPublic:
     """
     Submit/finish test for QR code candidates using UUID authentication.
+    Returns the test with all answers and their correct answers.
     """
     # Verify UUID access
     candidate_test = verify_candidate_uuid_access(
@@ -544,7 +589,54 @@ def submit_test_for_qr_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
-    return candidate_test
+
+    answers = session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all()
+
+    question_revision_ids = [a.question_revision_id for a in answers]
+    if question_revision_ids:
+        question_revisions = session.exec(
+            select(QuestionRevision).where(
+                col(QuestionRevision.id).in_(question_revision_ids)
+            )
+        ).all()
+        correct_answers_map = {qr.id: qr.correct_answer for qr in question_revisions}
+    else:
+        correct_answers_map = {}
+
+    answers_with_feedback = [
+        CandidateTestAnswerPublic(
+            id=answer.id,
+            candidate_test_id=answer.candidate_test_id,
+            question_revision_id=answer.question_revision_id,
+            response=answer.response,
+            visited=answer.visited,
+            time_spent=answer.time_spent,
+            bookmarked=answer.bookmarked,
+            created_date=answer.created_date,
+            modified_date=answer.modified_date,
+            correct_answer=correct_answers_map.get(answer.question_revision_id),
+        )
+        for answer in answers
+    ]
+
+    return CandidateTestPublic(
+        id=candidate_test.id,
+        test_id=candidate_test.test_id,
+        candidate_id=candidate_test.candidate_id,
+        device=candidate_test.device,
+        consent=candidate_test.consent,
+        start_time=candidate_test.start_time,
+        end_time=candidate_test.end_time,
+        is_submitted=candidate_test.is_submitted,
+        certificate_data=candidate_test.certificate_data,
+        created_date=candidate_test.created_date,
+        modified_date=candidate_test.modified_date,
+        answers=answers_with_feedback,
+    )
 
 
 # Get test questions after verification
