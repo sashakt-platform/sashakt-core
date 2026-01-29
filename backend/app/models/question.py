@@ -81,7 +81,7 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | None
+CorrectAnswerType = list[int] | list[str] | float | int | str | None
 
 
 class QuestionRevisionInfo(SQLModel):
@@ -174,6 +174,9 @@ class QuestionBase(SQLModel):
                     raise ValueError(
                         "Multi-choice questions must have at least one correct answer."
                     )
+        elif question_type == QuestionType.subjective:
+            if options is not None and len(options) > 0:
+                raise ValueError("Subjective questions should not have options.")
 
         return self
 
