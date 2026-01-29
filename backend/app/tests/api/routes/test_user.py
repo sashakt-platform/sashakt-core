@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app import crud
+from app.api.deps import SessionDep
 from app.core.config import settings
 from app.core.roles import super_admin
 from app.core.security import verify_password
@@ -3187,3 +3188,122 @@ def test_state_admin_can_update_user_in_same_district(
     )
     assert update_resp.status_code == 200
     assert update_resp.json()["full_name"] == "Updated Name"
+
+
+def test_district_user_cannot_modify_out_of_scope_user(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+
+    district_1 = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district_1)
+    db.commit()
+
+    district_2 = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district_2)
+    db.commit()
+
+    email = random_email()
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org,
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_systemadmin_token,
+    )
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    assert response.status_code == 200
+
+    user_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org,
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+    user_id = data["id"]
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+        json=user_payload,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+
+    user_payload_district_2 = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org,
+        "district_ids": [district_2.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload_district_2,
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+    user_id = data["id"]
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+        json=user_payload_district_2,
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "cannot modify/delete" in data["detail"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=token_headers,
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "cannot modify/delete" in data["detail"]

@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page
@@ -47,57 +47,81 @@ UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 def check_user_permission(
     session: SessionDep, current_user: CurrentUser, target_user: User
 ) -> None:
-    target_user_state_ids = {
-        user_state
-        for user_state in session.exec(
-            select(UserState.state_id).where(UserState.user_id == target_user.id)
-        ).all()
-        if user_state is not None
-    }
+    """Check if the current user has permission to modify the user.
+    A district level user can only modify users of same district.
+    A state level user can only modify users of same state."""
 
-    current_user_state_ids = {
-        state_id
-        for state_id in session.exec(
-            select(UserState.state_id).where(UserState.user_id == current_user.id)
-        ).all()
-        if state_id is not None
-    }
+    user_location_level: Literal["state", "district"] | None = None
+    user_location_ids: set[int] | None = None
+    exception_message = "State/test-admin cannot modify/delete general users or users outside their location."
 
-    target_user_district_ids = {
-        user_district
-        for user_district in session.exec(
+    if len(current_user.districts) > 0:
+        user_location_level = "district"
+        user_location_ids = {
+            district.id
+            for district in current_user.districts
+            if district.id is not None
+        }
+    elif len(current_user.states) > 0:
+        user_location_level = "state"
+        user_location_ids = {
+            state.id for state in current_user.states if state.id is not None
+        }
+
+    # If the user has no scoped locations, deny (matches “cannot modify general/out of scope”)
+    if not user_location_level or not user_location_ids:
+        raise HTTPException(
+            403,
+            exception_message,
+        )
+    user_district_ids: set[int] = set()
+    user_state_ids: set[int] = set()
+
+    if user_location_level == "district":
+        district_rows = session.exec(
             select(UserDistrict.district_id).where(
                 UserDistrict.user_id == target_user.id
             )
         ).all()
-        if user_district is not None
-    }
+        for row in district_rows:
+            district_id = row[0] if isinstance(row, tuple) else row
+            if district_id is not None:
+                user_district_ids.add(int(district_id))
 
-    current_user_district_ids = {
-        district_id
-        for district_id in session.exec(
-            select(UserDistrict.district_id).where(
-                UserDistrict.user_id == current_user.id
-            )
-        ).all()
-        if district_id is not None
-    }
-
-    target_has_no_locations = not target_user_state_ids and not target_user_district_ids
-
-    state_out_of_scope = bool(
-        target_user_state_ids
-    ) and not target_user_state_ids.issubset(current_user_state_ids)
-
-    district_out_of_scope = bool(
-        target_user_district_ids
-    ) and not target_user_district_ids.issubset(current_user_district_ids)
-
-    if target_has_no_locations or state_out_of_scope or district_out_of_scope:
-        raise HTTPException(
-            status_code=403,
-            detail="State/test-admin cannot modify/delete general users or users outside their location.",
+        district_out_of_scope = (not user_district_ids) or (
+            not user_district_ids.issubset(user_location_ids)
         )
+        if district_out_of_scope:
+            raise HTTPException(
+                403,
+                exception_message,
+            )
+    else:
+        state_rows = session.exec(
+            select(UserState.state_id).where(UserState.user_id == target_user.id)
+        ).all()
+        for row in state_rows:
+            state_id = row[0] if isinstance(row, tuple) else row
+            if state_id is not None:
+                user_state_ids.add(int(state_id))
+        # also include states derived from user districts
+        district_state_rows = session.exec(
+            select(District.state_id)
+            .join(UserDistrict, UserDistrict.district_id == District.id)
+            .where(UserDistrict.user_id == target_user.id)
+        ).all()
+        for row in district_state_rows:
+            district_state_id = row[0] if isinstance(row, tuple) else row
+            if district_state_id is not None:
+                user_state_ids.add(int(district_state_id))
+        state_out_of_scope = (not user_state_ids) or (
+            not user_state_ids.issubset(user_location_ids)
+        )
+        if state_out_of_scope:
+            raise HTTPException(
+                403,
+                exception_message,
+            )
 
 
 @router.get(
