@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.models import (
         Candidate,
         Certificate,
+        District,
         Entity,
         EntityType,
         Organization,
@@ -30,6 +31,16 @@ class UserState(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
     state_id: int = Field(foreign_key="state.id", ondelete="CASCADE")
     __table_args__ = (UniqueConstraint("user_id", "state_id"),)
+
+
+class UserDistrict(SQLModel, table=True):
+    __tablename__ = "userdistrict"
+    __test__ = False
+    id: int | None = Field(default=None, primary_key=True)
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
+    user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
+    district_id: int = Field(foreign_key="district.id", ondelete="CASCADE")
+    __table_args__ = (UniqueConstraint("user_id", "district_id"),)
 
 
 # Shared properties
@@ -70,6 +81,9 @@ class UserCreate(UserBase):
     state_ids: list[int] | None = Field(
         default=None, description="IDs of states to associate with the user"
     )
+    district_ids: list[int] | None = Field(
+        default=None, description="IDs of districts to associate with the user"
+    )
 
 
 # Properties to receive via API on update, all are optional
@@ -77,6 +91,7 @@ class UserUpdate(UserBase):
     email: EmailStr | None = Field(default=None, max_length=255)  # type: ignore
     password: str | None = Field(default=None, min_length=8, max_length=40)
     state_ids: list[int] | None = None
+    district_ids: list[int] | None = None
 
 
 class UserUpdateMe(SQLModel):
@@ -123,10 +138,9 @@ class User(UserBase, table=True):
     states: list["State"] | None = Relationship(
         back_populates="users", link_model=UserState
     )
-
-    # TODO : We need to save tokens post user creation
-    # token: str
-    # refresh_token: str
+    districts: list["District"] | None = Relationship(
+        back_populates="users", link_model=UserDistrict
+    )
 
 
 # Properties to return via API, id is always required
@@ -137,6 +151,7 @@ class UserPublic(UserBase):
     created_date: datetime
     modified_date: datetime
     states: list["State"] | None
+    districts: list["District"] | None
 
 
 class UsersPublic(SQLModel):
