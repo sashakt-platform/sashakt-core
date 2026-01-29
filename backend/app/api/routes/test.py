@@ -547,16 +547,31 @@ def get_test(
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        current_user_state_ids = (
-            [state.id for state in current_user.states] if current_user.states else []
+        current_user_district_ids = (
+            [district.id for district in current_user.districts]
+            if current_user.districts
+            else []
         )
-        if current_user_state_ids:
-            query = query.outerjoin(TestState).where(
+        if current_user_district_ids:
+            query = query.outerjoin(TestDistrict).where(
                 or_(
-                    col(TestState.state_id).is_(None),
-                    col(TestState.state_id).in_(current_user_state_ids),
+                    col(TestDistrict.district_id).is_(None),
+                    col(TestDistrict.district_id).in_(current_user_district_ids),
                 )
             )
+        else:
+            current_user_state_ids = (
+                [state.id for state in current_user.states]
+                if current_user.states
+                else []
+            )
+            if current_user_state_ids:
+                query = query.outerjoin(TestState).where(
+                    or_(
+                        col(TestState.state_id).is_(None),
+                        col(TestState.state_id).in_(current_user_state_ids),
+                    )
+                )
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
