@@ -148,14 +148,6 @@ def read_users(
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        current_user_state_ids = (
-            [state.id for state in current_user.states] if current_user.states else []
-        )
-        if current_user_state_ids:
-            statement = statement.join(UserState).where(
-                col(UserState.state_id).in_(current_user_state_ids),
-            )
-
         current_user_district_ids = (
             [district.id for district in current_user.districts]
             if current_user.districts
@@ -165,6 +157,17 @@ def read_users(
             statement = statement.join(UserDistrict).where(
                 col(UserDistrict.district_id).in_(current_user_district_ids),
             )
+
+        else:
+            current_user_state_ids = (
+                [state.id for state in current_user.states]
+                if current_user.states
+                else []
+            )
+            if current_user_state_ids:
+                statement = statement.join(UserState).where(
+                    col(UserState.state_id).in_(current_user_state_ids),
+                )
 
     # apply search filter if search parameter is provided
     if search:

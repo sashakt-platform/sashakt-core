@@ -3224,7 +3224,7 @@ def test_district_user_cannot_modify_out_of_scope_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": state.id,
+        "state_id": [state.id],
         "district_ids": [district_1.id],
     }
 
@@ -3245,7 +3245,7 @@ def test_district_user_cannot_modify_out_of_scope_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": state.id,
+        "state_id": [state.id],
         "district_ids": [district_1.id],
     }
 
@@ -3277,7 +3277,7 @@ def test_district_user_cannot_modify_out_of_scope_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": state.id,
+        "state_id": [state.id],
         "district_ids": [district_2.id],
     }
 
@@ -3310,3 +3310,131 @@ def test_district_user_cannot_modify_out_of_scope_user(
     assert response.status_code == 403
     data = response.json()
     assert "cannot modify/delete" in data["detail"]
+
+
+def test_get_users_by_district_user(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    org_id = user_data["organization_id"]
+
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_1, state_2])
+    db.commit()
+    db.refresh(state_1)
+    db.refresh(state_2)
+
+    district_1 = District(
+        name=random_lower_string(), is_active=True, state_id=state_1.id
+    )
+    district_11 = District(
+        name=random_lower_string(), is_active=True, state_id=state_1.id
+    )
+    district_2 = District(
+        name=random_lower_string(), is_active=True, state_id=state_2.id
+    )
+    db.add_all([district_1, district_11, district_2])
+    db.commit()
+    db.refresh(district_1)
+    db.refresh(district_11)
+    db.refresh(district_2)
+
+    email = random_email()
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    state_admin_user_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_id": state_1.id,
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_user_payload,
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    state_admin_user_id = data["id"]
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_1_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_1.id],
+        "district_ids": [district_1.id],
+    }
+
+    user_11_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_1.id],
+        "district_ids": [district_11.id],
+    }
+
+    user_2_payload = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_2.id],
+        "district_ids": [district_2.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_1_payload,
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    user_1 = data["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_11_payload,
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_2_payload,
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 2
+    assert any(user_1 == item["id"] for item in items)
+    assert any(state_admin_user_id == item["id"] for item in items)

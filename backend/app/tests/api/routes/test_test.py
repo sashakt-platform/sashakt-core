@@ -7148,7 +7148,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": state.id,
+        "state_id": [state.id],
         "district_ids": [district_1.id],
     }
 
