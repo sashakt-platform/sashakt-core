@@ -78,14 +78,14 @@ def check_test_permission(
         user_location_level = cached_user_location_level
         user_location_ids = cached_user_location_ids
     else:
-        if len(current_user.districts) > 0:
+        if current_user.districts and len(current_user.districts) > 0:
             user_location_level = "district"
             user_location_ids = {
                 district.id
                 for district in current_user.districts
                 if district.id is not None
             }
-        elif len(current_user.states) > 0:
+        elif current_user.states and len(current_user.states) > 0:
             user_location_level = "state"
             user_location_ids = {
                 state.id for state in current_user.states if state.id is not None
@@ -127,7 +127,8 @@ def check_test_permission(
         # also include states derived from test districts
         district_state_rows = session.exec(
             select(District.state_id)
-            .join(TestDistrict, TestDistrict.district_id == District.id)
+            .join(TestDistrict)
+            .where(TestDistrict.district_id == District.id)
             .where(TestDistrict.test_id == test.id)
         ).all()
         for row in district_state_rows:
@@ -1053,6 +1054,8 @@ def bulk_delete_question(
         )
 
     role = session.get(Role, current_user.role_id)
+    admin_location_ids: set[int] | None = None
+    admin_location_level: Literal["state", "district"] | None = None
 
     if role and role.name in (state_admin.name, test_admin.name):
         if current_user.states:
@@ -1065,12 +1068,6 @@ def bulk_delete_question(
                 state.id for state in current_user.districts if state.id is not None
             }
             admin_location_level = "district"
-        else:
-            admin_location_ids = None
-            admin_location_level = None
-    else:
-        admin_location_ids = None
-        admin_location_level = None
     for test in db_test:
         try:
             if admin_location_ids:

@@ -55,14 +55,14 @@ def check_user_permission(
     user_location_ids: set[int] | None = None
     exception_message = "State/test-admin cannot modify/delete general users or users outside their location."
 
-    if len(current_user.districts) > 0:
+    if current_user.districts and len(current_user.districts) > 0:
         user_location_level = "district"
         user_location_ids = {
             district.id
             for district in current_user.districts
             if district.id is not None
         }
-    elif len(current_user.states) > 0:
+    elif current_user.states and len(current_user.states) > 0:
         user_location_level = "state"
         user_location_ids = {
             state.id for state in current_user.states if state.id is not None
@@ -107,7 +107,8 @@ def check_user_permission(
         # also include states derived from user districts
         district_state_rows = session.exec(
             select(District.state_id)
-            .join(UserDistrict, UserDistrict.district_id == District.id)
+            .join(UserDistrict)
+            .where(UserDistrict.district_id == District.id)
             .where(UserDistrict.user_id == target_user.id)
         ).all()
         for row in district_state_rows:
