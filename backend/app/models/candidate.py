@@ -66,6 +66,13 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     correct_answer: CorrectAnswerType = None
 
 
+class CandidateTestAnswerFeedback(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    correct_answer: CorrectAnswerType = None
+
+
 class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
@@ -157,7 +164,7 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    answers: list["CandidateTestAnswerPublic"] = []
+    answers: list["CandidateTestAnswerFeedback"] = []
 
 
 class CandidateTestUpdate(SQLModel):

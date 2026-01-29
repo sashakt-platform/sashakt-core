@@ -1705,6 +1705,7 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     data = response.json()
     assert data["is_submitted"] is True
     assert data["end_time"] is not None
+    assert data["answers"] == []
 
     # Verify in database
     db.refresh(candidate_test)
@@ -1950,7 +1951,20 @@ def test_submit_test_succeeds_with_answered_mandatory_question(
     )
 
     assert response.status_code == 200
-    assert response.json()["is_submitted"] is True
+    data = response.json()
+    assert data["is_submitted"] is True
+
+    assert len(data["answers"]) == 1
+    answer_data = data["answers"][0]
+    assert answer_data["question_revision_id"] == question_revision.id
+    assert answer_data["response"] == "[1]"
+    assert answer_data["correct_answer"] == [1]
+
+    assert set(answer_data.keys()) == {
+        "question_revision_id",
+        "response",
+        "correct_answer",
+    }
 
 
 def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> None:

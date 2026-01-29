@@ -20,6 +20,7 @@ from app.models import (
     CandidateTest,
     CandidateTestAnswer,
     CandidateTestAnswerCreate,
+    CandidateTestAnswerFeedback,
     CandidateTestAnswerPublic,
     CandidateTestAnswerUpdate,
     CandidateTestCreate,
@@ -608,16 +609,9 @@ def submit_test_for_qr_candidate(
         correct_answers_map = {}
 
     answers_with_feedback = [
-        CandidateTestAnswerPublic(
-            id=answer.id,
-            candidate_test_id=answer.candidate_test_id,
+        CandidateTestAnswerFeedback(
             question_revision_id=answer.question_revision_id,
             response=answer.response,
-            visited=answer.visited,
-            time_spent=answer.time_spent,
-            bookmarked=answer.bookmarked,
-            created_date=answer.created_date,
-            modified_date=answer.modified_date,
             correct_answer=correct_answers_map.get(answer.question_revision_id),
         )
         for answer in answers
