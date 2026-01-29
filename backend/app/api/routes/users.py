@@ -63,12 +63,40 @@ def check_user_permission(
         if state_id is not None
     }
 
-    if not target_user_state_ids or not target_user_state_ids.issubset(
-        current_user_state_ids
-    ):
+    target_user_district_ids = {
+        user_district
+        for user_district in session.exec(
+            select(UserDistrict.district_id).where(
+                UserDistrict.user_id == target_user.id
+            )
+        ).all()
+        if user_district is not None
+    }
+
+    current_user_district_ids = {
+        district_id
+        for district_id in session.exec(
+            select(UserDistrict.district_id).where(
+                UserDistrict.user_id == current_user.id
+            )
+        ).all()
+        if district_id is not None
+    }
+
+    target_has_no_locations = not target_user_state_ids and not target_user_district_ids
+
+    state_out_of_scope = bool(
+        target_user_state_ids
+    ) and not target_user_state_ids.issubset(current_user_state_ids)
+
+    district_out_of_scope = bool(
+        target_user_district_ids
+    ) and not target_user_district_ids.issubset(current_user_district_ids)
+
+    if target_has_no_locations or state_out_of_scope or district_out_of_scope:
         raise HTTPException(
-            403,
-            "State/test-admin cannot modify/delete general users or users outside their state.",
+            status_code=403,
+            detail="State/test-admin cannot modify/delete general users or users outside their location.",
         )
 
 
@@ -102,6 +130,16 @@ def read_users(
         if current_user_state_ids:
             statement = statement.join(UserState).where(
                 col(UserState.state_id).in_(current_user_state_ids),
+            )
+
+        current_user_district_ids = (
+            [district.id for district in current_user.districts]
+            if current_user.districts
+            else []
+        )
+        if current_user_district_ids:
+            statement = statement.join(UserDistrict).where(
+                col(UserDistrict.district_id).in_(current_user_district_ids),
             )
 
     # apply search filter if search parameter is provided
