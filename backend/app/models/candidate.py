@@ -6,6 +6,7 @@ from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.utils import CorrectAnswerType
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
@@ -62,6 +63,14 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    correct_answer: CorrectAnswerType = None
+
+
+class CandidateTestAnswerFeedback(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    correct_answer: CorrectAnswerType = None
 
 
 class CandidateTestAnswerUpdate(SQLModel):
@@ -155,6 +164,7 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):
