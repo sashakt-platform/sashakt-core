@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         TagType,
         Test,
     )
+    from app.models.form import Form
 
 
 class UserState(SQLModel, table=True):
@@ -123,6 +124,7 @@ class User(UserBase, table=True):
     states: list["State"] | None = Relationship(
         back_populates="users", link_model=UserState
     )
+    forms: list["Form"] = Relationship(back_populates="created_by")
 
     # TODO : We need to save tokens post user creation
     # token: str
