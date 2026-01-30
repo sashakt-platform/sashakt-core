@@ -164,7 +164,7 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    answers: list["CandidateTestAnswerFeedback"] = []
+    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):

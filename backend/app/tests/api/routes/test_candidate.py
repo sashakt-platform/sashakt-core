@@ -1853,7 +1853,7 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     data = response.json()
     assert data["is_submitted"] is True
     assert data["end_time"] is not None
-    assert data["answers"] == []
+    assert data["answers"] is None
 
     # Verify in database
     db.refresh(candidate_test)
@@ -2194,11 +2194,7 @@ def test_submit_test_hides_correct_answer_when_feedback_disabled(
     assert response.status_code == 200
     data = response.json()
     assert data["is_submitted"] is True
-    assert len(data["answers"]) == 1
-    answer_data = data["answers"][0]
-    assert answer_data["question_revision_id"] == question_revision.id
-    assert answer_data["response"] == "[1]"
-    assert answer_data["correct_answer"] is None
+    assert data["answers"] is None
 
 
 def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> None:

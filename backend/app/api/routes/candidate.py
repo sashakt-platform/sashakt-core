@@ -609,18 +609,19 @@ def submit_test_for_qr_candidate(
     session.commit()
     session.refresh(candidate_test)
 
-    answers = session.exec(
-        select(CandidateTestAnswer).where(
-            CandidateTestAnswer.candidate_test_id == candidate_test_id
-        )
-    ).all()
-
     test = session.get(Test, candidate_test.test_id)
     show_feedback = test.show_feedback_on_completion if test else False
 
-    correct_answers_map = {}
+    answers_with_feedback = None
     if show_feedback:
+        answers = session.exec(
+            select(CandidateTestAnswer).where(
+                CandidateTestAnswer.candidate_test_id == candidate_test_id
+            )
+        ).all()
+
         question_revision_ids = [answer.question_revision_id for answer in answers]
+        correct_answers_map = {}
         if question_revision_ids:
             question_revisions = session.exec(
                 select(QuestionRevision).where(
@@ -632,14 +633,14 @@ def submit_test_for_qr_candidate(
                 for question_revision in question_revisions
             }
 
-    answers_with_feedback = [
-        CandidateTestAnswerFeedback(
-            question_revision_id=answer.question_revision_id,
-            response=answer.response,
-            correct_answer=correct_answers_map.get(answer.question_revision_id),
-        )
-        for answer in answers
-    ]
+        answers_with_feedback = [
+            CandidateTestAnswerFeedback(
+                question_revision_id=answer.question_revision_id,
+                response=answer.response,
+                correct_answer=correct_answers_map.get(answer.question_revision_id),
+            )
+            for answer in answers
+        ]
 
     return CandidateTestPublic(
         id=candidate_test.id,
