@@ -37,6 +37,7 @@ from app.models import (
 )
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.entity import Entity
+from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
 from app.models.role import Role
 from app.models.tag import Tag, TagPublic
@@ -329,8 +330,29 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
             tag_rule.get("count", 0) for tag_rule in test.random_tag_count
         )
 
+    # Include form structure if candidate_profile is enabled and form_id is set
+    form_public: FormPublic | None = None
+    if test.candidate_profile and test.form_id:
+        form = session.exec(
+            select(Form)
+            .options(selectinload(Form.fields))  # type: ignore[arg-type]
+            .where(Form.id == test.form_id)
+        ).first()
+        if form:
+            fields_public = [
+                FormFieldPublic(**field.model_dump())
+                for field in sorted(form.fields or [], key=lambda f: f.order)
+            ]
+            form_public = FormPublic(
+                **form.model_dump(exclude={"fields"}),
+                fields=fields_public,
+            )
+
     return TestPublicLimited(
-        **test.model_dump(), total_questions=total_questions, profile_list=profile_list
+        **test.model_dump(),
+        total_questions=total_questions,
+        profile_list=profile_list,
+        form=form_public,
     )
 
 

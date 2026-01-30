@@ -8,7 +8,12 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    OptionalCurrentUser,
+    Pagination,
+    SessionDep,
+    permission_dependency,
+)
 from app.api.routes.utils import clean_value
 from app.core.roles import state_admin, test_admin
 from app.models import (
@@ -197,11 +202,10 @@ def create_state(
 @state_router.get(
     "/",
     response_model=Page[StatePublic],
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state(
     session: SessionDep,
-    current_user: CurrentUser,
+    current_user: OptionalCurrentUser,
     name: str | None = None,
     params: Pagination = Depends(),
     is_active: bool | None = None,
@@ -220,7 +224,8 @@ def get_state(
             func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
         )
 
-    if (
+    # Apply role-based filtering only if user is authenticated
+    if current_user and (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
@@ -247,7 +252,6 @@ def get_state(
 @state_router.get(
     "/{state_id}",
     response_model=StatePublic,
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state_by_id(
     state_id: int,
@@ -307,11 +311,10 @@ def create_district(
 @district_router.get(
     "/",
     response_model=Page[DistrictPublic],
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district(
     session: SessionDep,
-    current_user: CurrentUser,
+    current_user: OptionalCurrentUser,
     name: str | None = None,
     is_active: bool | None = None,
     params: Pagination = Depends(),
@@ -332,7 +335,8 @@ def get_district(
     if name:
         query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
 
-    if (
+    # Apply role-based filtering only if user is authenticated
+    if current_user and (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
@@ -358,7 +362,6 @@ def get_district(
 @district_router.get(
     "/{district_id}",
     response_model=DistrictPublic,
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district_by_id(
     district_id: int,
@@ -418,7 +421,6 @@ def create_block(
 @block_router.get(
     "/",
     response_model=Page[BlockPublic],
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block(
     session: SessionDep,
@@ -448,7 +450,6 @@ def get_block(
 @block_router.get(
     "/{block_id}",
     response_model=BlockPublic,
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block_by_id(
     block_id: int,
