@@ -385,7 +385,9 @@ def submit_answer_for_qr_candidate(
     Returns the answer along with correct answer from question revision.
     """
     # Verify UUID access
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
 
     # Check if answer already exists for this question
     existing_answer = session.exec(
@@ -422,9 +424,15 @@ def submit_answer_for_qr_candidate(
         session.refresh(candidate_test_answer)
         saved_answer = candidate_test_answer
 
-    question_revision = session.get(
-        QuestionRevision, answer_request.question_revision_id
-    )
+    test = session.get(Test, candidate_test.test_id)
+    show_feedback = test.show_feedback_immediately if test else False
+
+    correct_answer = None
+    if show_feedback:
+        question_revision = session.get(
+            QuestionRevision, answer_request.question_revision_id
+        )
+        correct_answer = question_revision.correct_answer if question_revision else None
 
     return CandidateTestAnswerPublic(
         id=saved_answer.id,
@@ -436,7 +444,7 @@ def submit_answer_for_qr_candidate(
         bookmarked=saved_answer.bookmarked,
         created_date=saved_answer.created_date,
         modified_date=saved_answer.modified_date,
-        correct_answer=question_revision.correct_answer if question_revision else None,
+        correct_answer=correct_answer,
     )
 
 
@@ -458,7 +466,9 @@ def submit_batch_answers_for_qr_candidate(
     Returns answers along with correct answers from question revisions.
     """
     # Verify UUID access
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
 
     results = []
     for answer in batch_request.answers:
@@ -499,13 +509,21 @@ def submit_batch_answers_for_qr_candidate(
     for result in results:
         session.refresh(result)
 
-    question_revision_ids = [r.question_revision_id for r in results]
-    question_revisions = session.exec(
-        select(QuestionRevision).where(
-            col(QuestionRevision.id).in_(question_revision_ids)
-        )
-    ).all()
-    correct_answers_map = {qr.id: qr.correct_answer for qr in question_revisions}
+    test = session.get(Test, candidate_test.test_id)
+    show_feedback = test.show_feedback_immediately if test else False
+
+    correct_answers_map = {}
+    if show_feedback:
+        question_revision_ids = [result.question_revision_id for result in results]
+        question_revisions = session.exec(
+            select(QuestionRevision).where(
+                col(QuestionRevision.id).in_(question_revision_ids)
+            )
+        ).all()
+        correct_answers_map = {
+            question_revision.id: question_revision.correct_answer
+            for question_revision in question_revisions
+        }
 
     response = []
     for result in results:
@@ -597,16 +615,22 @@ def submit_test_for_qr_candidate(
         )
     ).all()
 
-    question_revision_ids = [a.question_revision_id for a in answers]
-    if question_revision_ids:
-        question_revisions = session.exec(
-            select(QuestionRevision).where(
-                col(QuestionRevision.id).in_(question_revision_ids)
-            )
-        ).all()
-        correct_answers_map = {qr.id: qr.correct_answer for qr in question_revisions}
-    else:
-        correct_answers_map = {}
+    test = session.get(Test, candidate_test.test_id)
+    show_feedback = test.show_feedback_on_completion if test else False
+
+    correct_answers_map = {}
+    if show_feedback:
+        question_revision_ids = [answer.question_revision_id for answer in answers]
+        if question_revision_ids:
+            question_revisions = session.exec(
+                select(QuestionRevision).where(
+                    col(QuestionRevision.id).in_(question_revision_ids)
+                )
+            ).all()
+            correct_answers_map = {
+                question_revision.id: question_revision.correct_answer
+                for question_revision in question_revisions
+            }
 
     answers_with_feedback = [
         CandidateTestAnswerFeedback(

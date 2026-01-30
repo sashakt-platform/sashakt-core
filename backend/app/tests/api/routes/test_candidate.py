@@ -1912,6 +1912,7 @@ def test_submit_test_succeeds_with_answered_mandatory_question(
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
+        show_feedback_on_completion=True,
     )
     db.add(test)
     db.commit()
