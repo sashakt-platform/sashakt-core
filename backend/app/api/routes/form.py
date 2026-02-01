@@ -137,7 +137,7 @@ def get_forms(
 
     forms: Page[FormPublic] = paginate(
         session,
-        query,
+        query,  # type: ignore[arg-type]
         params,
         transformer=lambda items: transform_forms_to_public(items),
     )
@@ -326,7 +326,7 @@ def get_form_fields(
         raise HTTPException(status_code=404, detail="Form not found")
 
     fields = session.exec(
-        select(FormField).where(FormField.form_id == form_id).order_by(FormField.order)
+        select(FormField).where(FormField.form_id == form_id).order_by(FormField.order)  # type: ignore[arg-type]
     ).all()
 
     return [FormFieldPublic(**field.model_dump()) for field in fields]
@@ -372,7 +372,7 @@ def reorder_form_fields(
 
     # Return updated fields in order
     updated_fields = session.exec(
-        select(FormField).where(FormField.form_id == form_id).order_by(FormField.order)
+        select(FormField).where(FormField.form_id == form_id).order_by(FormField.order)  # type: ignore[arg-type]
     ).all()
 
     return [FormFieldPublic(**field.model_dump()) for field in updated_fields]
@@ -489,7 +489,7 @@ def get_form_responses(
 
     responses: Page[FormResponsePublic] = paginate(
         session,
-        query,
+        query,  # type: ignore[arg-type]
         params,
         transformer=lambda items: [
             FormResponsePublic(**item.model_dump()) for item in items
