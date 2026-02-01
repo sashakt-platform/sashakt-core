@@ -221,7 +221,7 @@ def get_state(
 
     if name:
         query = query.where(
-            func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
+            func.lower(State.name).contains(name.strip().lower(), autoescape=True)
         )
 
     # Apply role-based filtering only if user is authenticated
@@ -333,7 +333,9 @@ def get_district(
         query = query.where(col(District.state_id).in_(state_ids))
 
     if name:
-        query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
+        query = query.where(
+            func.lower(District.name).contains(name.strip().lower(), autoescape=True)
+        )
 
     # Apply role-based filtering only if user is authenticated
     if current_user and (

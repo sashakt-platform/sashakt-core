@@ -126,7 +126,7 @@ def get_forms(
 
     if name:
         query = query.where(
-            func.trim(func.lower(Form.name)).like(f"%{name.strip().lower()}%")
+            func.lower(Form.name).contains(name.strip().lower(), autoescape=True)
         )
 
     if is_active is not None:

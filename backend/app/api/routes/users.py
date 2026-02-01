@@ -105,10 +105,11 @@ def read_users(
 
     # apply search filter if search parameter is provided
     if search:
+        search_term = search.strip().lower()
         search_filter = or_(
-            func.lower(User.full_name).like(f"%{search.lower()}%"),
-            func.lower(User.email).like(f"%{search.lower()}%"),
-            func.lower(User.phone).like(f"%{search.lower()}%"),
+            func.lower(User.full_name).contains(search_term, autoescape=True),
+            func.lower(User.email).contains(search_term, autoescape=True),
+            func.lower(User.phone).contains(search_term, autoescape=True),
         )
         statement = statement.where(search_filter)
 

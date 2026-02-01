@@ -550,11 +550,15 @@ def get_test(
         query = query.where(Test.is_active == is_active)
 
     if name is not None:
-        query = query.where(func.lower(Test.name).like(f"%{name.lower()}%"))
+        query = query.where(
+            func.lower(Test.name).contains(name.strip().lower(), autoescape=True)
+        )
 
     if description is not None:
         query = query.where(
-            func.lower(Test.description).like(f"%{description.lower()}%")
+            func.lower(Test.description).contains(
+                description.strip().lower(), autoescape=True
+            )
         )
 
     if completion_message is not None:

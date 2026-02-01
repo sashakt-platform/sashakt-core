@@ -169,7 +169,7 @@ def get_tagtype(
     )
     if name:
         query = query.where(
-            func.trim(func.lower(TagType.name)).like(f"%{name.strip().lower()}%")
+            func.lower(TagType.name).contains(name.strip().lower(), autoescape=True)
         )
 
     # apply default sorting if no sorting was specified

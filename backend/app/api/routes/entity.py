@@ -136,7 +136,7 @@ def get_entitytype(
     )
     if name:
         query = query.where(
-            func.trim(func.lower(EntityType.name)).like(f"%{name.strip().lower()}%")
+            func.lower(EntityType.name).contains(name.strip().lower(), autoescape=True)
         )
 
     entity_types: Page[EntityTypePublic] = paginate(
@@ -281,7 +281,7 @@ def get_entities(
 
     if name:
         query = query.where(
-            func.trim(func.lower(Entity.name)).like(f"%{name.strip().lower()}%")
+            func.lower(Entity.name).contains(name.strip().lower(), autoescape=True)
         )
 
     # apply default sorting if no sorting was specified
