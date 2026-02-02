@@ -789,17 +789,11 @@ def get_test_summary(
     """
     Get Summary of Tests: total submitted, not submitted (active/inactive)
     """
-    current_user_state_ids: list[int] = []
     current_user_district_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        current_user_state_ids = (
-            [state.id for state in current_user.states if state.id is not None]
-            if current_user.states
-            else []
-        )
         current_user_district_ids = (
             [
                 district.id
@@ -825,11 +819,19 @@ def get_test_summary(
         )
         query = query.where(col(Test.id).in_(district_test_ids))
 
-    elif current_user_state_ids:
-        state_test_ids = select(TestState.test_id).where(
-            col(TestState.state_id).in_(current_user_state_ids)
+    else:
+        current_user_state_ids: list[int] = []
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
-        query = query.where(col(Test.id).in_(state_test_ids))
+
+        if current_user_state_ids:
+            state_test_ids = select(TestState.test_id).where(
+                col(TestState.state_id).in_(current_user_state_ids)
+            )
+            query = query.where(col(Test.id).in_(state_test_ids))
 
     if start_date and Test.start_time is not None:
         query = query.where(Test.start_time >= start_date)
