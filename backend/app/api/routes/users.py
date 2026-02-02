@@ -13,6 +13,7 @@ from app.api.deps import (
     get_current_active_superuser,
     permission_dependency,
 )
+from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
 from app.core.roles import can_assign_role, state_admin, test_admin
 from app.core.security import get_password_hash, verify_password
@@ -55,18 +56,7 @@ def check_user_permission(
     user_location_ids: set[int] | None = None
     exception_message = "State/test-admin cannot modify/delete general users or users outside their location."
 
-    if current_user.districts and len(current_user.districts) > 0:
-        user_location_level = "district"
-        user_location_ids = {
-            district.id
-            for district in current_user.districts
-            if district.id is not None
-        }
-    elif current_user.states and len(current_user.states) > 0:
-        user_location_level = "state"
-        user_location_ids = {
-            state.id for state in current_user.states if state.id is not None
-        }
+    user_location_level, user_location_ids = get_current_user_location_ids(current_user)
 
     # If the user has no scoped locations, deny (matches “cannot modify general/out of scope”)
     if not user_location_level or not user_location_ids:
@@ -75,7 +65,6 @@ def check_user_permission(
             exception_message,
         )
     user_district_ids: set[int] = set()
-    user_state_ids: set[int] = set()
 
     if user_location_level == "district":
         district_rows = session.exec(
@@ -97,6 +86,7 @@ def check_user_permission(
                 exception_message,
             )
     else:
+        user_state_ids: set[int] = set()
         state_rows = session.exec(
             select(UserState.state_id).where(UserState.user_id == target_user.id)
         ).all()
