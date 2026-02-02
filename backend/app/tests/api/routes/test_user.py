@@ -3228,7 +3228,7 @@ def test_district_user_cannot_modify_out_of_scope_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": [state.id],
+        "state_ids": [state.id],
         "district_ids": [district_1.id],
     }
 
@@ -3249,7 +3249,7 @@ def test_district_user_cannot_modify_out_of_scope_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": [state.id],
+        "state_ids": [state.id],
         "district_ids": [district_1.id],
     }
 
@@ -3281,7 +3281,7 @@ def test_district_user_cannot_modify_out_of_scope_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org,
-        "state_id": [state.id],
+        "state_ids": [state.id],
         "district_ids": [district_2.id],
     }
 
@@ -3359,7 +3359,7 @@ def test_get_users_by_district_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org_id,
-        "state_id": state_1.id,
+        "state_ids": [state_1.id],
         "district_ids": [district_1.id],
     }
 
