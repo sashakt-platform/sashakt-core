@@ -220,11 +220,6 @@ def validate_user_return_role(
                 detail="A user can be linked to only one state.",
             )
 
-        if user_in.district_ids and len(user_in.district_ids) > 1:
-            raise HTTPException(
-                status_code=400,
-                detail="A user can be linked to only one district.",
-            )
         if role.name == state_admin.name and (
             (user_in.state_ids is None or len(user_in.state_ids) != 1)
             and (user_in.district_ids is None or len(user_in.district_ids) != 1)
@@ -566,11 +561,6 @@ def update_user(
             if not user_in.district_ids:
                 db_user.districts = []
             else:
-                if len(user_in.district_ids) != 1:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="A test-admin may be linked to at most one district.",
-                    )
                 db_user.districts = list(
                     session.exec(
                         select(District).where(

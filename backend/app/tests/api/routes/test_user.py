@@ -1156,7 +1156,7 @@ def test_create_user_multiple_state_assignment_error(
         assert response.json()["detail"] == "A user can be linked to only one state."
 
 
-def test_create_user_multiple_district_assignment_error(
+def test_create_user_multiple_district_assignment(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
@@ -1210,8 +1210,10 @@ def test_create_user_multiple_district_assignment_error(
             headers=get_user_superadmin_token,
             json=data,
         )
-        assert response.status_code == 400
-        assert response.json()["detail"] == "A user can be linked to only one district."
+        assert response.status_code == 200
+        assert response.json()["role_id"] == role.id
+        assert "districts" in response.json()
+        assert len(response.json()["districts"]) == 2
 
 
 def test_create_test_admin_single_state_success(
@@ -2160,7 +2162,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     assert patch_resp.json()["detail"] == "A user can be linked to only one state."
 
 
-def test_update_normal_user_to_test_admin_with_multiple_districts_should_fail(
+def test_update_normal_user_to_test_admin_with_multiple_districts(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     country = Country(name=random_lower_string(), is_active=True)
@@ -2168,20 +2170,20 @@ def test_update_normal_user_to_test_admin_with_multiple_districts_should_fail(
     db.commit()
     db.refresh(country)
 
-    state1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
-    db.add(state1)
+    state_1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_1)
     db.commit()
-    db.refresh(state1)
+    db.refresh(state_1)
 
     district_1 = District(
-        name=random_lower_string(), is_active=True, state_id=state1.id
+        name=random_lower_string(), is_active=True, state_id=state_1.id
     )
     db.add(district_1)
     db.commit()
     db.refresh(district_1)
 
     district_2 = District(
-        name=random_lower_string(), is_active=True, state_id=state1.id
+        name=random_lower_string(), is_active=True, state_id=state_1.id
     )
     db.add(district_2)
     db.commit()
@@ -2214,6 +2216,7 @@ def test_update_normal_user_to_test_admin_with_multiple_districts_should_fail(
         "full_name": random_lower_string(),
         "phone": random_lower_string(),
         "organization_id": org.id,
+        "state_ids": [state_1.id],
         "district_ids": [district_1.id, district_2.id],
     }
     patch_resp = client.patch(
@@ -2222,8 +2225,9 @@ def test_update_normal_user_to_test_admin_with_multiple_districts_should_fail(
         json=patch_payload,
     )
 
-    assert patch_resp.status_code == 400
-    assert patch_resp.json()["detail"] == "A user can be linked to only one district."
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["role_id"] == test_admin_role.id
+    assert len(patch_resp.json()["districts"]) == 2
 
 
 def test_update_normal_user_to_test_admin_without_states_districts(
