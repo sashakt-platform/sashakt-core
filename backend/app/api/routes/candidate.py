@@ -679,6 +679,7 @@ def get_test_summary(
     Get Summary of Tests: total submitted, not submitted (active/inactive)
     """
     current_user_state_ids: list[int] = []
+    current_user_district_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
@@ -686,6 +687,15 @@ def get_test_summary(
         current_user_state_ids = (
             [state.id for state in current_user.states if state.id is not None]
             if current_user.states
+            else []
+        )
+        current_user_district_ids = (
+            [
+                district.id
+                for district in current_user.districts
+                if district.id is not None
+            ]
+            if current_user.districts
             else []
         )
 
@@ -697,7 +707,14 @@ def get_test_summary(
         .where(Test.created_by_id == User.id)
         .where(User.organization_id == current_user.organization_id)
     )
-    if current_user_state_ids:
+
+    if current_user_district_ids:
+        district_test_ids = select(TestDistrict.test_id).where(
+            col(TestDistrict.district_id).in_(current_user_district_ids)
+        )
+        query = query.where(col(Test.id).in_(district_test_ids))
+
+    elif current_user_state_ids:
         state_test_ids = select(TestState.test_id).where(
             col(TestState.state_id).in_(current_user_state_ids)
         )
