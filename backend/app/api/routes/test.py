@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, exists, func, or_, select
+from sqlmodel import col, exists, func, select
 
 from app.api.deps import (
     CurrentUser,
@@ -545,11 +545,9 @@ def get_test(
             else []
         )
         if current_user_district_ids:
-            query = query.outerjoin(TestDistrict).where(
-                or_(
-                    col(TestDistrict.district_id).is_(None),
-                    col(TestDistrict.district_id).in_(current_user_district_ids),
-                )
+            # only show tests assigned to current users district
+            query = query.join(TestDistrict).where(
+                col(TestDistrict.district_id).in_(current_user_district_ids)
             )
         else:
             current_user_state_ids = (
@@ -558,12 +556,12 @@ def get_test(
                 else []
             )
             if current_user_state_ids:
-                query = query.outerjoin(TestState).where(
-                    or_(
-                        col(TestState.state_id).is_(None),
-                        col(TestState.state_id).in_(current_user_state_ids),
-                    )
+                # only show tests assigned to current users state
+                query = query.join(TestState).where(
+                    col(TestState.state_id).in_(current_user_state_ids)
                 )
+
+        # if no district or state assigned, show all tests (no filter applied)
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
