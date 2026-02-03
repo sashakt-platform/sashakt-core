@@ -1711,3 +1711,33 @@ Clf Kasauli 3,CLF,Testblock,{existing_district.name},{state.name}
     finally:
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_permission_check_entity(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+    )
+    assert response.status_code == 401
+
+
+def test_permission_check_entity_type(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+    )
+    assert response.status_code == 401

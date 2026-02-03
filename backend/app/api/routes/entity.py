@@ -9,7 +9,7 @@ from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
 from sqlmodel import and_, col, func, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.api.routes.utils import clean_value
 from app.core.sorting import (
     EntitySortConfig,
@@ -96,7 +96,11 @@ def transform_entities_to_public(
 
 
 # Routers for EntityType
-@router_entitytype.post("/", response_model=EntityTypePublic)
+@router_entitytype.post(
+    "/",
+    response_model=EntityTypePublic,
+    dependencies=[Depends(permission_dependency("create_entity"))],
+)
 def create_entitytype(
     entitytype_create: EntityTypeCreate,
     session: SessionDep,
@@ -124,7 +128,11 @@ def create_entitytype(
     return entity_type
 
 
-@router_entitytype.get("/", response_model=Page[EntityTypePublic])
+@router_entitytype.get(
+    "/",
+    response_model=Page[EntityTypePublic],
+    dependencies=[Depends(permission_dependency("read_entity"))],
+)
 def get_entitytype(
     session: SessionDep,
     current_user: CurrentUser,
@@ -149,7 +157,11 @@ def get_entitytype(
     return entity_types
 
 
-@router_entitytype.get("/{entitytype_id}", response_model=EntityTypePublic)
+@router_entitytype.get(
+    "/{entitytype_id}",
+    response_model=EntityTypePublic,
+    dependencies=[Depends(permission_dependency("read_entity"))],
+)
 def get_entitytype_by_id(
     entitytype_id: int,
     session: SessionDep,
@@ -162,7 +174,11 @@ def get_entitytype_by_id(
 
 
 # Update EntityType
-@router_entitytype.put("/{entitytype_id}", response_model=EntityTypePublic)
+@router_entitytype.put(
+    "/{entitytype_id}",
+    response_model=EntityTypePublic,
+    dependencies=[Depends(permission_dependency("update_entity"))],
+)
 def update_entitytype(
     entitytype_id: int,
     updated_data: EntityTypeUpdate,
@@ -182,7 +198,9 @@ def update_entitytype(
 
 
 # Delete EntityType
-@router_entitytype.delete("/{entitytype_id}")
+@router_entitytype.delete(
+    "/{entitytype_id}", dependencies=[Depends(permission_dependency("delete_entity"))]
+)
 def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
     entitytype = session.get(EntityType, entitytype_id)
     if not entitytype:
@@ -206,7 +224,11 @@ def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
 
 
 # Create an Entity (EntityType required)
-@router_entity.post("/", response_model=EntityPublic)
+@router_entity.post(
+    "/",
+    response_model=EntityPublic,
+    dependencies=[Depends(permission_dependency("create_entity"))],
+)
 def create_entity(
     entity_create: EntityCreate,
     session: SessionDep,
@@ -264,7 +286,11 @@ def create_entity(
 
 
 # Get all Entities
-@router_entity.get("/", response_model=Page[EntityPublic])
+@router_entity.get(
+    "/",
+    response_model=Page[EntityPublic],
+    dependencies=[Depends(permission_dependency("read_entity"))],
+)
 def get_entities(
     session: SessionDep,
     current_user: CurrentUser,
@@ -299,7 +325,11 @@ def get_entities(
 
 
 # Get Entity by ID
-@router_entity.get("/{entity_id}", response_model=EntityPublic)
+@router_entity.get(
+    "/{entity_id}",
+    response_model=EntityPublic,
+    dependencies=[Depends(permission_dependency("read_entity"))],
+)
 def get_entity_by_id(
     entity_id: int,
     session: SessionDep,
@@ -333,7 +363,11 @@ def get_entity_by_id(
 
 
 # Update an Entity
-@router_entity.put("/{entity_id}", response_model=EntityPublic)
+@router_entity.put(
+    "/{entity_id}",
+    response_model=EntityPublic,
+    dependencies=[Depends(permission_dependency("update_entity"))],
+)
 def update_entity(
     entity_id: int,
     updated_data: EntityUpdate,
@@ -377,7 +411,9 @@ def update_entity(
 
 
 # Delete an Entity
-@router_entity.delete("/{entity_id}")
+@router_entity.delete(
+    "/{entity_id}", dependencies=[Depends(permission_dependency("delete_entity"))]
+)
 def delete_entity(entity_id: int, session: SessionDep) -> Message:
     entity = session.get(Entity, entity_id)
     if not entity:
@@ -401,6 +437,7 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
 @router_entity.post(
     "/import",
     response_model=EntityBulkUploadResponse,
+    dependencies=[Depends(permission_dependency("create_entity"))],
 )
 async def import_entities_from_csv(
     session: SessionDep,

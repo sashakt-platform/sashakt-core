@@ -585,40 +585,75 @@
     "candidate": false
   },
   {
-  "name": "create_certificate",
-  "description": "Create New Certificate",
-  "super_admin": true,
-  "system_admin": true,
-  "state_admin": false,
-  "test_admin": false,
-  "candidate": false
-},
-{
-  "name": "update_certificate",
-  "description": "Update Existing Certificate",
-  "super_admin": true,
-  "system_admin": true,
-  "state_admin": false,
-  "test_admin": false,
-  "candidate": false
-},
-{
-  "name": "delete_certificate",
-  "description": "Delete Existing Certificate",
-  "super_admin": true,
-  "system_admin": true,
-  "state_admin": false,
-  "test_admin": false,
-  "candidate": false
-},
-{
-  "name": "read_certificate",
-  "description": "Read Certificate Details",
-  "super_admin": true,
-  "system_admin": true,
-  "state_admin": false,
-  "test_admin": false,
-  "candidate": false
-}
-
+    "name": "create_certificate",
+    "description": "Create New Certificate",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "update_certificate",
+    "description": "Update Existing Certificate",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "delete_certificate",
+    "description": "Delete Existing Certificate",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "read_certificate",
+    "description": "Read Certificate Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "read_entity",
+    "description": "Read Entity Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
+  },
+  {
+    "name": "create_entity",
+    "description": "Create New Entity",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "update_entity",
+    "description": "Update Existing Entity",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "delete_entity",
+    "description": "Delete Existing Entity",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  }
 ]
