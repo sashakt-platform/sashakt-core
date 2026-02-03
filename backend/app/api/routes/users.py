@@ -165,7 +165,7 @@ def read_users(
             # get all users with districts in the same state
             subquery = (
                 select(UserDistrict.user_id)
-                .join(District, UserDistrict.district_id == District.id)
+                .join(District, col(UserDistrict.district_id) == col(District.id))
                 .where(col(District.state_id).in_(state_ids_from_districts))
                 .distinct()
             )
