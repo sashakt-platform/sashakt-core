@@ -77,14 +77,26 @@ def check_user_permission(
             if district_id is not None:
                 user_district_ids.add(int(district_id))
 
-        district_out_of_scope = (not user_district_ids) or (
-            not user_district_ids.issubset(user_location_ids)
+        # target user must have districts
+        if not user_district_ids:
+            raise HTTPException(403, exception_message)
+
+        # get states for current user's districts
+        current_user_state_ids = set(
+            session.exec(
+                select(District.state_id).where(col(District.id).in_(user_location_ids))
+            ).all()
         )
-        if district_out_of_scope:
-            raise HTTPException(
-                403,
-                exception_message,
-            )
+        # get states for target user's districts
+        target_user_state_ids = set(
+            session.exec(
+                select(District.state_id).where(col(District.id).in_(user_district_ids))
+            ).all()
+        )
+        # allow if they share at least one state
+        in_same_state = bool(current_user_state_ids & target_user_state_ids)
+        if not in_same_state:
+            raise HTTPException(403, exception_message)
     else:
         user_state_ids: set[int] = set()
         state_rows = session.exec(
@@ -145,12 +157,19 @@ def read_users(
             else []
         )
         if current_user_district_ids:
-            district_subquery = (
+            # get state IDs from current user's districts
+            state_ids_from_districts = select(District.state_id).where(
+                col(District.id).in_(current_user_district_ids)
+            )
+
+            # get all users with districts in the same state
+            subquery = (
                 select(UserDistrict.user_id)
-                .where(col(UserDistrict.district_id).in_(current_user_district_ids))
+                .join(District, UserDistrict.district_id == District.id)
+                .where(col(District.state_id).in_(state_ids_from_districts))
                 .distinct()
             )
-            statement = statement.where(col(User.id).in_(district_subquery))
+            statement = statement.where(col(User.id).in_(subquery))
 
         else:
             current_user_state_ids = (
