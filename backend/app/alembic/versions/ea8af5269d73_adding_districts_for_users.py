@@ -1,7 +1,7 @@
 """Adding Districts for Users
 
 Revision ID: ea8af5269d73
-Revises: e92a68d46642
+Revises: a5c2082ddd43
 Create Date: 2026-01-28 20:52:59.041346
 
 """
