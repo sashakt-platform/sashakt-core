@@ -8,6 +8,7 @@ from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
+from app.core.certificate_token import generate_certificate_token
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
@@ -19,6 +20,7 @@ from app.models import (
     CandidateTest,
     CandidateTestAnswer,
     CandidateTestAnswerCreate,
+    CandidateTestAnswerFeedback,
     CandidateTestAnswerPublic,
     CandidateTestAnswerUpdate,
     CandidateTestCreate,
@@ -395,13 +397,16 @@ def submit_answer_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTestAnswer:
+) -> CandidateTestAnswerPublic:
     """
     Submit answer for QR code candidates using UUID authentication.
     Creates new answer or updates existing one.
+    Returns the answer along with correct answer from question revision.
     """
     # Verify UUID access
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
     question_revision = session.get(
         QuestionRevision, answer_request.question_revision_id
     )
@@ -436,7 +441,7 @@ def submit_answer_for_qr_candidate(
         session.add(existing_answer)
         session.commit()
         session.refresh(existing_answer)
-        return existing_answer
+        saved_answer = existing_answer
     else:
         # Create new answer
         candidate_test_answer = CandidateTestAnswer(
@@ -450,7 +455,30 @@ def submit_answer_for_qr_candidate(
         session.add(candidate_test_answer)
         session.commit()
         session.refresh(candidate_test_answer)
-        return candidate_test_answer
+        saved_answer = candidate_test_answer
+
+    test = session.get(Test, candidate_test.test_id)
+    show_feedback = test.show_feedback_immediately if test else False
+
+    correct_answer = None
+    if show_feedback:
+        question_revision = session.get(
+            QuestionRevision, answer_request.question_revision_id
+        )
+        correct_answer = question_revision.correct_answer if question_revision else None
+
+    return CandidateTestAnswerPublic(
+        id=saved_answer.id,
+        candidate_test_id=saved_answer.candidate_test_id,
+        question_revision_id=saved_answer.question_revision_id,
+        response=saved_answer.response,
+        visited=saved_answer.visited,
+        time_spent=saved_answer.time_spent,
+        bookmarked=saved_answer.bookmarked,
+        created_date=saved_answer.created_date,
+        modified_date=saved_answer.modified_date,
+        correct_answer=correct_answer,
+    )
 
 
 @router.post(
@@ -464,13 +492,16 @@ def submit_batch_answers_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> list[CandidateTestAnswer]:
+) -> list[CandidateTestAnswerPublic]:
     """
     Submit multiple answers for QR code candidates using UUID authentication.
     Creates new answers or updates existing ones in a single transaction.
+    Returns answers along with correct answers from question revisions.
     """
     # Verify UUID access
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
 
     question_revision_ids = [
         answer.question_revision_id for answer in batch_request.answers
@@ -537,7 +568,40 @@ def submit_batch_answers_for_qr_candidate(
     for result in results:
         session.refresh(result)
 
-    return results
+    test = session.get(Test, candidate_test.test_id)
+    show_feedback = test.show_feedback_immediately if test else False
+
+    correct_answers_map = {}
+    if show_feedback:
+        question_revision_ids = [result.question_revision_id for result in results]
+        question_revisions = session.exec(
+            select(QuestionRevision).where(
+                col(QuestionRevision.id).in_(question_revision_ids)
+            )
+        ).all()
+        correct_answers_map = {
+            question_revision.id: question_revision.correct_answer
+            for question_revision in question_revisions
+        }
+
+    response = []
+    for result in results:
+        response.append(
+            CandidateTestAnswerPublic(
+                id=result.id,
+                candidate_test_id=result.candidate_test_id,
+                question_revision_id=result.question_revision_id,
+                response=result.response,
+                visited=result.visited,
+                time_spent=result.time_spent,
+                bookmarked=result.bookmarked,
+                created_date=result.created_date,
+                modified_date=result.modified_date,
+                correct_answer=correct_answers_map.get(result.question_revision_id),
+            )
+        )
+
+    return response
 
 
 @router.post("/submit_test/{candidate_test_id}", response_model=CandidateTestPublic)
@@ -547,9 +611,10 @@ def submit_test_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTest:
+) -> CandidateTestPublic:
     """
     Submit/finish test for QR code candidates using UUID authentication.
+    Returns the test with all answers and their correct answers.
     """
     # Verify UUID access
     candidate_test = verify_candidate_uuid_access(
@@ -602,7 +667,54 @@ def submit_test_for_qr_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
-    return candidate_test
+
+    test = session.get(Test, candidate_test.test_id)
+    show_feedback = test.show_feedback_on_completion if test else False
+
+    answers_with_feedback = None
+    if show_feedback:
+        answers = session.exec(
+            select(CandidateTestAnswer).where(
+                CandidateTestAnswer.candidate_test_id == candidate_test_id
+            )
+        ).all()
+
+        question_revision_ids = [answer.question_revision_id for answer in answers]
+        correct_answers_map = {}
+        if question_revision_ids:
+            question_revisions = session.exec(
+                select(QuestionRevision).where(
+                    col(QuestionRevision.id).in_(question_revision_ids)
+                )
+            ).all()
+            correct_answers_map = {
+                question_revision.id: question_revision.correct_answer
+                for question_revision in question_revisions
+            }
+
+        answers_with_feedback = [
+            CandidateTestAnswerFeedback(
+                question_revision_id=answer.question_revision_id,
+                response=answer.response,
+                correct_answer=correct_answers_map.get(answer.question_revision_id),
+            )
+            for answer in answers
+        ]
+
+    return CandidateTestPublic(
+        id=candidate_test.id,
+        test_id=candidate_test.test_id,
+        candidate_id=candidate_test.candidate_id,
+        device=candidate_test.device,
+        consent=candidate_test.consent,
+        start_time=candidate_test.start_time,
+        end_time=candidate_test.end_time,
+        is_submitted=candidate_test.is_submitted,
+        certificate_data=candidate_test.certificate_data,
+        created_date=candidate_test.created_date,
+        modified_date=candidate_test.modified_date,
+        answers=answers_with_feedback,
+    )
 
 
 # Get test questions after verification
@@ -1094,6 +1206,7 @@ def get_test_result(
     optional_not_attempted = 0
     marks_obtained = 0.0
     marks_maximum = 0.0
+    marking_scheme = None
 
     for revision, answer in joined_data:
         if test.marks_level == "test":
@@ -1135,6 +1248,54 @@ def get_test_result(
                     if marking_scheme:
                         marks_obtained += marking_scheme["wrong"]
     total_questions = len(candidate_test.question_revision_ids)
+
+    # Generate certificate download URL if test has a certificate assigned
+    certificate_download_url = None
+    if test.certificate_id:
+        # Check if certificate_data already exists (reuse token)
+        if candidate_test.certificate_data and candidate_test.certificate_data.get(
+            "token"
+        ):
+            token = candidate_test.certificate_data["token"]
+        else:
+            # Generate new token and save certificate data snapshot
+            token = generate_certificate_token()
+
+            # Get candidate for name
+            candidate = session.get(Candidate, candidate_test.candidate_id)
+
+            # Since all users are anonymous, use partial UUID
+            candidate_name = (
+                f"Candidate {str(candidate.identity)[:8]}" if candidate else "Candidate"
+            )
+
+            # Format score string from already-calculated values
+            if marks_maximum > 0:
+                score_percentage = marks_obtained / marks_maximum * 100
+                score_str = f"{marks_obtained:.1f}/{marks_maximum:.1f} ({score_percentage:.1f}%)"
+            else:
+                score_str = "N/A"
+
+            # Format completion date
+            completion_date = (
+                candidate_test.end_time.strftime("%B %d, %Y")
+                if candidate_test.end_time
+                else "N/A"
+            )
+
+            # Save certificate data snapshot
+            candidate_test.certificate_data = {
+                "token": token,
+                "candidate_name": candidate_name,
+                "test_name": test.name,
+                "score": score_str,
+                "completion_date": completion_date,
+            }
+            session.add(candidate_test)
+            session.commit()
+
+        certificate_download_url = f"/api/v1/certificate/download/{token}"
+
     return Result(
         correct_answer=correct,
         incorrect_answer=incorrect,
@@ -1143,6 +1304,7 @@ def get_test_result(
         total_questions=total_questions,
         marks_obtained=marks_obtained if marking_scheme else None,
         marks_maximum=marks_maximum if marking_scheme else None,
+        certificate_download_url=certificate_download_url,
     )
 
 

@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.utils import CorrectAnswerType
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
@@ -62,6 +63,14 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    correct_answer: CorrectAnswerType = None
+
+
+class CandidateTestAnswerFeedback(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    correct_answer: CorrectAnswerType = None
 
 
 class CandidateTestAnswerUpdate(SQLModel):
@@ -109,6 +118,11 @@ class CandidateTestBase(SQLModel):
     start_time: datetime = Field(nullable=False)
     end_time: datetime | None = Field(nullable=True, default=None)
     is_submitted: bool = Field(default=False, nullable=False)
+    certificate_data: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSON),
+        description="Certificate data snapshot (token, candidate_name, test_name, score, completion_date)",
+    )
 
 
 class CandidateTest(CandidateTestBase, table=True):
@@ -150,6 +164,7 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):
@@ -253,6 +268,7 @@ class Result(SQLModel):
     total_questions: int
     marks_obtained: float | None
     marks_maximum: float | None
+    certificate_download_url: str | None = None
 
 
 class TestStatusSummary(SQLModel):

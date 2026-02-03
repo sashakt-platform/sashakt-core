@@ -1,11 +1,15 @@
+from pathlib import Path
+
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from fastapi_pagination import add_pagination
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.core.files import init_upload_directories
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -20,6 +24,14 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
 )
+
+# Initialize upload directories on startup
+init_upload_directories()
+
+# Mount static files for uploads
+UPLOAD_ROOT = Path("/app/uploads")
+if UPLOAD_ROOT.exists():
+    app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
 
 add_pagination(app)
 

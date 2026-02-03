@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
+from app.models.certificate import Certificate
 from app.models.entity import Entity, EntityType
 from app.models.location import Block, District
 from app.models.question import QuestionType
@@ -5874,6 +5875,97 @@ def test_get_public_test_location_details(
             assert entity["block"]["id"] == block.id
 
 
+def test_get_public_test_location_details_with_profile_label(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+    )
+
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    db.add_all([entity_A, entity_B])
+    db.commit()
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    profile_list = data["profile_list"]
+
+    for entity in profile_list:
+        if entity["id"] == entity_A.id:
+            assert entity["label"] == entity_A.name
+
+        if entity["id"] == entity_B.id:
+            assert entity["label"] == f"{entity_B.name} - ({block.name})"
+
+
 def test_candidate_profile_lower_location_entity(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -6906,3 +6998,117 @@ def test_get_test_returns_show_question_palette(
     data = get_response.json()
     assert "show_question_palette" in data
     assert data["show_question_palette"] is True
+
+
+def test_create_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "certificate_id": certificate.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["certificate_id"] == certificate.id
+
+
+def test_update_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+    assert create_resp.json()["certificate_id"] is None
+
+    update_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "certificate_id": certificate.id,
+    }
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_resp.status_code == 200
+    data = update_resp.json()
+    assert data["certificate_id"] == certificate.id
+
+    update_payload["certificate_id"] = None
+    remove_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert remove_resp.status_code == 200
+    data_remove = remove_resp.json()
+    assert data_remove["certificate_id"] is None
