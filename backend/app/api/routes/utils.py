@@ -48,9 +48,11 @@ def clean_value(value: str | None) -> str:
 def get_current_user_location_ids(
     current_user: CurrentUser,
 ) -> tuple[Literal["district", "state"] | None, set[int] | None]:
+    """Returns the location scope level and IDs for the current user.
+    District takes precedence over state if both are assigned.
+    """
     user_location_level: Literal["district", "state"] | None = None
     user_location_ids: set[int] | None = None
-    """Returns the location IDs (district or state) for the current user."""
     if current_user.districts and len(current_user.districts) > 0:
         user_location_level = "district"
         user_location_ids = {

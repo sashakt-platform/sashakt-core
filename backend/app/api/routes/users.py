@@ -462,7 +462,11 @@ def read_user_by_id(
     user = session.get(User, user_id)
     if not user or user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="User not found")
-    _ = user.states
+
+    # check location based access for state/district admins
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_user_permission(session, current_user, user)
 
     user_public = crud.get_user_public(db_user=user, session=session)
     return user_public
