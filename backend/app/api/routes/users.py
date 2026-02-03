@@ -145,8 +145,10 @@ def read_users(
             else []
         )
         if current_user_district_ids:
-            statement = statement.join(UserDistrict).where(
-                col(UserDistrict.district_id).in_(current_user_district_ids),
+            statement = (
+                statement.join(UserDistrict)
+                .where(col(UserDistrict.district_id).in_(current_user_district_ids))
+                .distinct()
             )
 
         else:
@@ -156,8 +158,10 @@ def read_users(
                 else []
             )
             if current_user_state_ids:
-                statement = statement.join(UserState).where(
-                    col(UserState.state_id).in_(current_user_state_ids),
+                statement = (
+                    statement.join(UserState)
+                    .where(col(UserState.state_id).in_(current_user_state_ids))
+                    .distinct()
                 )
 
     # apply search filter if search parameter is provided
