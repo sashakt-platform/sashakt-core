@@ -1049,18 +1049,9 @@ def bulk_delete_question(
     admin_location_level: Literal["state", "district"] | None = None
 
     if role and role.name in (state_admin.name, test_admin.name):
-        if current_user.states:
-            admin_location_ids = {
-                state.id for state in current_user.states if state.id is not None
-            }
-            admin_location_level = "state"
-        elif current_user.districts:
-            admin_location_ids = {
-                district.id
-                for district in current_user.districts
-                if district.id is not None
-            }
-            admin_location_level = "district"
+        admin_location_level, admin_location_ids = get_current_user_location_ids(
+            current_user
+        )
     for test in db_test:
         try:
             if admin_location_ids:
