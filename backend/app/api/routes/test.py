@@ -690,10 +690,17 @@ def get_test(
     response_model=TestPublic,
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
+def get_test_by_id(
+    test_id: int, session: SessionDep, current_user: CurrentUser
+) -> TestPublic:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+
+    # check location based access for state/district admins
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_test_permission(session, current_user, test)
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()
