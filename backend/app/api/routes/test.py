@@ -546,11 +546,12 @@ def get_test(
         )
         if current_user_district_ids:
             # only show tests assigned to current users district
-            query = (
-                query.join(TestDistrict)
+            district_subquery = (
+                select(TestDistrict.test_id)
                 .where(col(TestDistrict.district_id).in_(current_user_district_ids))
                 .distinct()
             )
+            query = query.where(col(Test.id).in_(district_subquery))
         else:
             current_user_state_ids = (
                 [state.id for state in current_user.states]
@@ -559,11 +560,12 @@ def get_test(
             )
             if current_user_state_ids:
                 # only show tests assigned to current users state
-                query = (
-                    query.join(TestState)
+                state_subquery = (
+                    select(TestState.test_id)
                     .where(col(TestState.state_id).in_(current_user_state_ids))
                     .distinct()
                 )
+                query = query.where(col(Test.id).in_(state_subquery))
 
         # if no district or state assigned, show all tests (no filter applied)
 

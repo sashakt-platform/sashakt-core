@@ -145,11 +145,12 @@ def read_users(
             else []
         )
         if current_user_district_ids:
-            statement = (
-                statement.join(UserDistrict)
+            district_subquery = (
+                select(UserDistrict.user_id)
                 .where(col(UserDistrict.district_id).in_(current_user_district_ids))
                 .distinct()
             )
+            statement = statement.where(col(User.id).in_(district_subquery))
 
         else:
             current_user_state_ids = (
@@ -158,11 +159,12 @@ def read_users(
                 else []
             )
             if current_user_state_ids:
-                statement = (
-                    statement.join(UserState)
+                state_subquery = (
+                    select(UserState.user_id)
                     .where(col(UserState.state_id).in_(current_user_state_ids))
                     .distinct()
                 )
+                statement = statement.where(col(User.id).in_(state_subquery))
 
     # apply search filter if search parameter is provided
     if search:
