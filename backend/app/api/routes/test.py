@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, exists, func, select
+from sqlmodel import col, exists, func, or_, select
 
 from app.api.deps import (
     CurrentUser,
@@ -545,13 +545,25 @@ def get_test(
             else []
         )
         if current_user_district_ids:
-            # only show tests assigned to current users district
+            # tests with no district AND no state assigned
+            no_location_assigned = ~exists(
+                select(TestDistrict.test_id).where(TestDistrict.test_id == Test.id)
+            ) & ~exists(select(TestState.test_id).where(TestState.test_id == Test.id))
+
+            # tests assigned to current users district
             district_subquery = (
                 select(TestDistrict.test_id)
                 .where(col(TestDistrict.district_id).in_(current_user_district_ids))
                 .distinct()
             )
-            query = query.where(col(Test.id).in_(district_subquery))
+
+            # show unassigned tests OR tests matching users district
+            query = query.where(
+                or_(
+                    no_location_assigned,
+                    col(Test.id).in_(district_subquery),
+                )
+            )
         else:
             current_user_state_ids = (
                 [state.id for state in current_user.states]
@@ -559,13 +571,25 @@ def get_test(
                 else []
             )
             if current_user_state_ids:
-                # only show tests assigned to current users state
+                # tests with no state assigned
+                no_state_assigned = ~exists(
+                    select(TestState.test_id).where(TestState.test_id == Test.id)
+                )
+
+                # tests assigned to current users state
                 state_subquery = (
                     select(TestState.test_id)
                     .where(col(TestState.state_id).in_(current_user_state_ids))
                     .distinct()
                 )
-                query = query.where(col(Test.id).in_(state_subquery))
+
+                # show unassigned tests OR tests matching users state
+                query = query.where(
+                    or_(
+                        no_state_assigned,
+                        col(Test.id).in_(state_subquery),
+                    )
+                )
 
         # if no district or state assigned, show all tests (no filter applied)
 

@@ -6424,10 +6424,12 @@ def test_test_list_state_user(
     )
     data = response.json()
     assert response.status_code == 200
-    # state admin should only see tests assigned to their state (3 + 2 = 5)
-    # tests with no state assigned are not visible to state admins
-    assert data["total"] == 5
-    assert len(data["items"]) == 5
+    # state admin should see:
+    # - tests assigned to their state (3 + 2 = 5)
+    # - tests with no state assigned (2)
+    # Total: 7 tests
+    assert data["total"] == 7
+    assert len(data["items"]) == 7
 
 
 def test_state_admin_cannot_delete_general_test(
