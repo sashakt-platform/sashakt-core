@@ -81,21 +81,9 @@ def check_user_permission(
         if not user_district_ids:
             raise HTTPException(403, exception_message)
 
-        # get states for current user's districts
-        current_user_state_ids = set(
-            session.exec(
-                select(District.state_id).where(col(District.id).in_(user_location_ids))
-            ).all()
-        )
-        # get states for target user's districts
-        target_user_state_ids = set(
-            session.exec(
-                select(District.state_id).where(col(District.id).in_(user_district_ids))
-            ).all()
-        )
-        # allow if they share at least one state
-        in_same_state = bool(current_user_state_ids & target_user_state_ids)
-        if not in_same_state:
+        # allow if they share at least one district
+        in_same_district = bool(user_location_ids & user_district_ids)
+        if not in_same_district:
             raise HTTPException(403, exception_message)
     else:
         user_state_ids: set[int] = set()
@@ -157,16 +145,10 @@ def read_users(
             else []
         )
         if current_user_district_ids:
-            # get state IDs from current user's districts
-            state_ids_from_districts = select(District.state_id).where(
-                col(District.id).in_(current_user_district_ids)
-            )
-
-            # get all users with districts in the same state
+            # get all users with districts matching current users districts
             subquery = (
                 select(UserDistrict.user_id)
-                .join(District, col(UserDistrict.district_id) == col(District.id))
-                .where(col(District.state_id).in_(state_ids_from_districts))
+                .where(col(UserDistrict.district_id).in_(current_user_district_ids))
                 .distinct()
             )
             statement = statement.where(col(User.id).in_(subquery))

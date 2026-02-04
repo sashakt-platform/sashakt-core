@@ -3457,8 +3457,8 @@ def test_get_users_by_district_user(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    # with same-state access, district admin can see all users in state_1
-    # (state_admin_user, user_1, user_11) but not user_2 (different state)
-    assert len(items) == 3
+    # district-level admin can only see users in same district
+    # (state_admin_user, user_1) but not user_11 (different district) or user_2 (different state)
+    assert len(items) == 2
     assert any(user_1 == item["id"] for item in items)
     assert any(state_admin_user_id == item["id"] for item in items)
