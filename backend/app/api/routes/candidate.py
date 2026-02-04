@@ -614,18 +614,13 @@ def submit_test_for_qr_candidate(
 
     answers_with_feedback = None
     if show_feedback:
-        answers = session.exec(
-            select(CandidateTestAnswer).where(
-                CandidateTestAnswer.candidate_test_id == candidate_test_id
-            )
-        ).all()
+        assigned_question_revision_ids = candidate_test.question_revision_ids or []
 
-        question_revision_ids = [answer.question_revision_id for answer in answers]
         correct_answers_map = {}
-        if question_revision_ids:
+        if assigned_question_revision_ids:
             question_revisions = session.exec(
                 select(QuestionRevision).where(
-                    col(QuestionRevision.id).in_(question_revision_ids)
+                    col(QuestionRevision.id).in_(assigned_question_revision_ids)
                 )
             ).all()
             correct_answers_map = {
@@ -633,13 +628,22 @@ def submit_test_for_qr_candidate(
                 for question_revision in question_revisions
             }
 
+        answers = session.exec(
+            select(CandidateTestAnswer).where(
+                CandidateTestAnswer.candidate_test_id == candidate_test_id
+            )
+        ).all()
+        candidate_answers_map = {
+            answer.question_revision_id: answer.response for answer in answers
+        }
+
         answers_with_feedback = [
             CandidateTestAnswerFeedback(
-                question_revision_id=answer.question_revision_id,
-                response=answer.response,
-                correct_answer=correct_answers_map.get(answer.question_revision_id),
+                question_revision_id=question_revision_id,
+                response=candidate_answers_map.get(question_revision_id),
+                correct_answer=correct_answers_map.get(question_revision_id),
             )
-            for answer in answers
+            for question_revision_id in assigned_question_revision_ids
         ]
 
     return CandidateTestPublic(
