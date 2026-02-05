@@ -1,7 +1,7 @@
 """Add permissions for entity
 
 Revision ID: 303084e65c1e
-Revises: a5c2082ddd43
+Revises: ea8af5269d73
 Create Date: 2026-02-03 15:05:30.987697
 
 """
@@ -15,7 +15,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '303084e65c1e'
-down_revision = 'a5c2082ddd43'
+down_revision = 'ea8af5269d73'
 branch_labels = None
 depends_on = None
 
