@@ -302,8 +302,11 @@ def get_entities(
 ) -> Page[EntityPublic]:
     query = (
         select(Entity)
-        .join(Entity.entity_type)
-        .where(EntityType.organization_id == current_user.organization_id)
+        .where(
+            Entity.entity_type.has(  # type: ignore[attr-defined]
+                EntityType.organization_id == current_user.organization_id
+            )
+        )
         .options(
             selectinload(Entity.entity_type),  # type: ignore[arg-type]
             selectinload(Entity.state),  # type: ignore[arg-type]
