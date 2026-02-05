@@ -107,10 +107,11 @@ def create_entitytype(
     current_user: CurrentUser,
 ) -> EntityType:
     normalized_name = entitytype_create.name.strip().lower()
+    organization_id = current_user.organization_id
     existing = session.exec(
         select(EntityType)
         .where(func.lower(func.trim(EntityType.name)) == normalized_name)
-        .where(EntityType.organization_id == entitytype_create.organization_id)
+        .where(EntityType.organization_id == organization_id)
     ).first()
     if existing:
         raise HTTPException(
@@ -120,6 +121,7 @@ def create_entitytype(
     entity_type = EntityType(
         **entitytype_create.model_dump(),
         created_by_id=current_user.id,
+        organization_id=organization_id,
     )
 
     session.add(entity_type)
