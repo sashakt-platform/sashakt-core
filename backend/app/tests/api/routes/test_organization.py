@@ -4,12 +4,17 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models.location import Country, State
+from app.models.location import Country, District, State
 from app.models.organization import Organization
-from app.models.question import Question, QuestionLocation, QuestionRevision
+from app.models.question import (
+    Question,
+    QuestionLocation,
+    QuestionRevision,
+    QuestionType,
+)
 from app.models.role import Role
 from app.models.test import Test, TestState
-from app.models.user import UserState
+from app.models.user import UserDistrict, UserState
 from app.tests.utils.files import (
     create_large_test_image,
     create_test_image,
@@ -714,6 +719,184 @@ def test_aggregated_data_for_state_admin(
         tests.append(t)
 
     db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/aggregated_data",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_questions"] == 4
+    assert data["total_tests"] == 3
+    assert data["total_users"] == 2
+
+
+def test_aggregated_data_for_state_admin_for_district(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    district_x1 = District(
+        name=random_lower_string(), state_id=state_x.id, is_active=True
+    )
+    district_x2 = District(
+        name=random_lower_string(), state_id=state_x.id, is_active=True
+    )
+    district_x3 = District(
+        name=random_lower_string(), state_id=state_x.id, is_active=True
+    )
+    district_y1 = District(
+        name=random_lower_string(), state_id=state_y.id, is_active=True
+    )
+
+    db.add_all([district_x1, district_x2, district_x3, district_y1])
+    db.commit()
+    db.refresh(district_x1)
+    db.refresh(district_x2)
+    db.refresh(district_x3)
+    db.refresh(district_y1)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": organization_id,
+        "state_ids": [state_x.id],
+        "district_ids": [
+            district_x1.id,
+            district_x2.id,
+        ],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_district_x12 = create_random_user(db, organization_id)
+    db.add(user_district_x12)
+    db.commit()
+    db.refresh(user_district_x12)
+    db.add(UserState(user_id=user_district_x12.id, state_id=state_x.id))
+    db.add(UserDistrict(user_id=user_district_x12.id, district_id=district_x1.id))
+    db.add(UserDistrict(user_id=user_district_x12.id, district_id=district_x2.id))
+
+    user_district_x3 = create_random_user(db, organization_id)
+    db.add(user_district_x3)
+    db.commit()
+    db.refresh(user_district_x3)
+    db.add(UserState(user_id=user_district_x3.id, state_id=state_x.id))
+    db.add(UserDistrict(user_id=user_district_x3.id, district_id=district_x3.id))
+
+    user_state_y = create_random_user(db, organization_id)
+    db.add(user_state_y)
+    db.commit()
+    db.refresh(user_state_y)
+    db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+
+    db.commit()
+
+    for _ in range(4):
+        response = client.post(
+            f"{settings.API_V1_STR}/questions/",
+            json={
+                "organization_id": organization_id,
+                "question_text": random_lower_string(),
+                "question_type": QuestionType.single_choice,
+                "options": [
+                    {"id": 1, "key": "A", "value": "Option 1"},
+                    {"id": 2, "key": "B", "value": "Option 2"},
+                ],
+                "correct_answer": [1],
+                "is_mandatory": True,
+                "state_ids": [state_x.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    for _ in range(2):
+        response = client.post(
+            f"{settings.API_V1_STR}/questions/",
+            json={
+                "organization_id": organization_id,
+                "question_text": random_lower_string(),
+                "question_type": QuestionType.single_choice,
+                "options": [
+                    {"id": 1, "key": "A", "value": "Option 1"},
+                    {"id": 2, "key": "B", "value": "Option 2"},
+                ],
+                "correct_answer": [1],
+                "is_mandatory": True,
+                "state_ids": [state_y.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    db.commit()
+
+    for _ in range(3):
+        response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={
+                "name": random_lower_string(),
+                "description": random_lower_string(),
+                "time_limit": 30,
+                "marks": 10,
+                "link": random_lower_string(),
+                "is_active": True,
+                "locale": "en-US",
+                "state_ids": [state_x.id],
+                "district_ids": [district_x1.id, district_x2.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    for _ in range(2):
+        response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={
+                "name": random_lower_string(),
+                "description": random_lower_string(),
+                "time_limit": 30,
+                "marks": 10,
+                "link": random_lower_string(),
+                "is_active": True,
+                "locale": "en-US",
+                "state_ids": [state_x.id],
+                "district_ids": [district_x3.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/aggregated_data",

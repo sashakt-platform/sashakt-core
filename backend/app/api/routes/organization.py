@@ -32,8 +32,8 @@ from app.models import (
 )
 from app.models.organization import OrganizationPublicMinimal
 from app.models.question import QuestionLocation
-from app.models.test import TestState
-from app.models.user import UserState
+from app.models.test import TestDistrict, TestState
+from app.models.user import UserDistrict, UserState
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
 
@@ -241,6 +241,7 @@ def get_organization_aggregated_stats_for_current_user(
     organization_id = current_user.organization_id
 
     current_user_state_ids: list[int] = []
+    current_user_district_ids: list[int] = []
     if (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
@@ -248,6 +249,16 @@ def get_organization_aggregated_stats_for_current_user(
         current_user_state_ids = (
             [state.id for state in current_user.states if state.id is not None]
             if current_user.states
+            else []
+        )
+
+        current_user_district_ids = (
+            [
+                district.id
+                for district in current_user.districts
+                if district.id is not None
+            ]
+            if current_user.districts
             else []
         )
 
@@ -266,7 +277,11 @@ def get_organization_aggregated_stats_for_current_user(
     users_subquery = select(func.count(func.distinct(User.id))).where(
         User.organization_id == organization_id
     )
-    if current_user_state_ids:
+    if current_user_district_ids:
+        users_subquery = users_subquery.join(UserDistrict).where(
+            col(UserDistrict.district_id).in_(current_user_district_ids)
+        )
+    elif current_user_state_ids:
         users_subquery = users_subquery.join(UserState).where(
             col(UserState.state_id).in_(current_user_state_ids)
         )
@@ -275,7 +290,16 @@ def get_organization_aggregated_stats_for_current_user(
         Test.organization_id == organization_id,
         not_(Test.is_template),
     )
-    if current_user_state_ids:
+
+    if current_user_district_ids:
+        tests_subquery = tests_subquery.outerjoin(TestDistrict).where(
+            or_(
+                col(TestDistrict.district_id).is_(None),
+                col(TestDistrict.district_id).in_(current_user_district_ids),
+            )
+        )
+
+    elif current_user_state_ids:
         tests_subquery = tests_subquery.outerjoin(TestState).where(
             or_(
                 col(TestState.state_id).is_(None),
