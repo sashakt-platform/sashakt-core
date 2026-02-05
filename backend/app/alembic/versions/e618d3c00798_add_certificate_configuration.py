@@ -1,7 +1,7 @@
 """Add certificate configuration
 
 Revision ID: e618d3c00798
-Revises: 705a8c3d0b59
+Revises: b71c076d89a3
 Create Date: 2026-01-22 14:52:20.209825
 
 """
