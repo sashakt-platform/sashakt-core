@@ -300,11 +300,16 @@ def get_entities(
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[EntityPublic]:
-    query = select(Entity).options(
-        selectinload(Entity.entity_type),  # type: ignore[arg-type]
-        selectinload(Entity.state),  # type: ignore[arg-type]
-        selectinload(Entity.district),  # type: ignore[arg-type]
-        selectinload(Entity.block),  # type: ignore[arg-type]
+    query = (
+        select(Entity)
+        .join(Entity.entity_type)
+        .where(EntityType.organization_id == current_user.organization_id)
+        .options(
+            selectinload(Entity.entity_type),  # type: ignore[arg-type]
+            selectinload(Entity.state),  # type: ignore[arg-type]
+            selectinload(Entity.district),  # type: ignore[arg-type]
+            selectinload(Entity.block),  # type: ignore[arg-type]
+        )
     )
 
     if name:

@@ -14,7 +14,11 @@ from app.models.location import Block, Country, District, State
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import assert_paginated_response, random_lower_string
+from app.tests.utils.utils import (
+    assert_paginated_response,
+    random_email,
+    random_lower_string,
+)
 
 
 def test_create_entitytype(
@@ -1733,3 +1737,149 @@ def test_permission_check_entity_type(
         f"{settings.API_V1_STR}/entitytype/",
     )
     assert response.status_code == 401
+
+
+def test_get_entities_filtered_by_organization(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
+    """
+    Test that users can only see entities belonging to entity types
+    from their own organization, even when entities from multiple
+    organizations exist in the database.
+    """
+    from sqlmodel import select
+
+    from app import crud
+    from app.models import Organization, Role, UserCreate
+
+    # Get super_admin role
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    if not super_admin_role:
+        raise Exception("super_admin role not found in database")
+
+    # Create organization 1 with super_admin user
+    org1 = Organization(name=random_lower_string(), description=random_lower_string())
+    db.add(org1)
+    db.commit()
+    db.refresh(org1)
+
+    user1_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        phone=random_lower_string(),
+        full_name=random_lower_string(),
+        role_id=super_admin_role.id,
+        organization_id=org1.id,
+    )
+    user1 = crud.create_user(session=db, user_create=user1_in)
+
+    # Create organization 2 with super_admin user
+    org2 = Organization(name=random_lower_string(), description=random_lower_string())
+    db.add(org2)
+    db.commit()
+    db.refresh(org2)
+
+    user2_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        phone=random_lower_string(),
+        full_name=random_lower_string(),
+        role_id=super_admin_role.id,
+        organization_id=org2.id,
+    )
+    user2 = crud.create_user(session=db, user_create=user2_in)
+
+    # Create entity types for each organization
+    entity_type_org1 = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org1.id,
+        created_by_id=user1.id,
+    )
+    entity_type_org2 = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org2.id,
+        created_by_id=user2.id,
+    )
+    db.add_all([entity_type_org1, entity_type_org2])
+    db.commit()
+    db.refresh(entity_type_org1)
+    db.refresh(entity_type_org2)
+
+    # Create entities for organization 1
+    entity_names_org_1 = [random_lower_string() for _ in range(2)]
+    entity_names_org_2 = [random_lower_string() for _ in range(2)]
+    entity1_org1 = Entity(
+        name=entity_names_org_1[0],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org1.id,
+        created_by_id=user1.id,
+    )
+    entity2_org1 = Entity(
+        name=entity_names_org_1[1],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org1.id,
+        created_by_id=user1.id,
+    )
+
+    # Create entities for organization 2
+    entity1_org2 = Entity(
+        name=entity_names_org_2[0],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org2.id,
+        created_by_id=user2.id,
+    )
+    entity2_org2 = Entity(
+        name=entity_names_org_2[1],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org2.id,
+        created_by_id=user2.id,
+    )
+
+    db.add_all([entity1_org1, entity2_org1, entity1_org2, entity2_org2])
+    db.commit()
+    # Get authentication tokens for both users
+    user1_token = {"Authorization": f"Bearer {user1.token}"}
+    user2_token = {"Authorization": f"Bearer {user2.token}"}
+
+    # User1 should only see entities from org1
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=user1_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Verify user1 sees only org1 entities
+    assert entity_names_org_1[0] in entity_names
+    assert entity_names_org_1[1] in entity_names
+    assert entity_names_org_2[0] not in entity_names
+    assert entity_names_org_2[1] not in entity_names
+
+    # Verify entity types belong to org1
+    for entity in data["items"]:
+        if entity["entity_type"] is not None:
+            assert entity["entity_type"]["organization_id"] == org1.id
+
+    # User2 should only see entities from org2
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=user2_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Verify user2 sees only org2 entities
+    assert entity_names_org_2[0] in entity_names
+    assert entity_names_org_2[1] in entity_names
+    assert entity_names_org_1[0] not in entity_names
+    assert entity_names_org_1[1] not in entity_names
+
+    # Verify entity types belong to org2
+    for entity in data["items"]:
+        if entity["entity_type"] is not None:
+            assert entity["entity_type"]["organization_id"] == org2.id
