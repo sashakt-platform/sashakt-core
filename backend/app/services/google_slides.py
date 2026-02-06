@@ -12,13 +12,11 @@ class GoogleSlidesService:
 
     SCOPES = [
         "https://www.googleapis.com/auth/presentations",
-        "https://www.googleapis.com/auth/drive",
     ]
 
     def __init__(self, config: dict[str, Any]):
         self.config = config
         self._slides_service = None
-        self._drive_service = None
 
     def _get_credentials(self) -> service_account.Credentials:
         """Get Google service account credentials from config."""
@@ -45,13 +43,6 @@ class GoogleSlidesService:
             self._slides_service = build("slides", "v1", credentials=credentials)
         return self._slides_service
 
-    def _get_drive_service(self) -> Any:
-        """Get or create Google Drive API service."""
-        if self._drive_service is None:
-            credentials = self._get_credentials()
-            self._drive_service = build("drive", "v3", credentials=credentials)
-        return self._drive_service
-
     @staticmethod
     def extract_presentation_id(url: str) -> str:
         """
@@ -67,19 +58,40 @@ class GoogleSlidesService:
             return match.group(1)
         raise ValueError(f"Could not extract presentation ID from URL: {url}")
 
-    def test_connection(self) -> bool:
+    def test_connection(self, template_url: str) -> bool:
         """
-        Test if the service account can access Google APIs.
+        Test if the service account can access the template presentation.
+
+        Args:
+            template_url: Google Slides URL of the template to test access
 
         Returns:
             True if connection is successful, False otherwise
         """
         try:
-            drive = self._get_drive_service()
-            drive.files().list(pageSize=1).execute()
+            template_id = self.extract_presentation_id(template_url)
+            slides = self._get_slides_service()
+            slides.presentations().get(presentationId=template_id).execute()
             return True
         except Exception:
             return False
+
+    def delete_slide(self, template_id: str, page_id: str) -> None:
+        """
+        Delete a slide from a presentation.
+
+        Args:
+            template_id: ID of the presentation
+            page_id: ID of the slide to delete
+        """
+        try:
+            slides = self._get_slides_service()
+            slides.presentations().batchUpdate(
+                presentationId=template_id,
+                body={"requests": [{"deleteObject": {"objectId": page_id}}]},
+            ).execute()
+        except Exception:
+            pass  # Don't fail on cleanup
 
     def generate_certificate_image(
         self,
@@ -89,15 +101,14 @@ class GoogleSlidesService:
         completion_date: str,
         score: str,
         size: str = "LARGE",
-    ) -> bytes:
+    ) -> tuple[bytes, dict[str, str]]:
         """
         Generate a certificate image from a Google Slides template.
 
         Flow:
-        1. Duplicate the template slide with a unique ID
-        2. Replace placeholders on the duplicated slide only
-        3. Get thumbnail of the duplicated slide
-        4. Delete the duplicated slide
+        1. Duplicate the template slide and replace placeholders (single API call)
+        2. Get thumbnail of the duplicated slide
+        3. Return image and cleanup info (deletion handled by caller in background)
 
         Args:
             template_url: Google Slides URL of the template
@@ -108,7 +119,7 @@ class GoogleSlidesService:
             size: Image size - SMALL (200px), MEDIUM (800px), or LARGE (1600px)
 
         Returns:
-            PNG image contents as bytes
+            Tuple of (PNG image bytes, cleanup info dict with template_id and page_id)
         """
         template_id = self.extract_presentation_id(template_url)
         slides = self._get_slides_service()
@@ -123,31 +134,24 @@ class GoogleSlidesService:
         # Generate a unique ID for the duplicated slide
         new_page_id = f"cert_{uuid.uuid4().hex[:12]}"
 
-        try:
-            # 1. Duplicate the template slide
-            slides.presentations().batchUpdate(
-                presentationId=template_id,
-                body={
-                    "requests": [
-                        {
-                            "duplicateObject": {
-                                "objectId": original_page_id,
-                                "objectIds": {original_page_id: new_page_id},
-                            }
-                        }
-                    ]
-                },
-            ).execute()
+        # Build combined requests: duplicate + all replacements
+        replacements = {
+            "{{candidate_name}}": candidate_name,
+            "{{test_name}}": test_name,
+            "{{completion_date}}": completion_date,
+            "{{score}}": score,
+        }
 
-            # 2. Replace placeholders on the duplicated slide only
-            replacements = {
-                "{{candidate_name}}": candidate_name,
-                "{{test_name}}": test_name,
-                "{{completion_date}}": completion_date,
-                "{{score}}": score,
+        requests: list[dict[str, Any]] = [
+            {
+                "duplicateObject": {
+                    "objectId": original_page_id,
+                    "objectIds": {original_page_id: new_page_id},
+                }
             }
-
-            replace_requests = [
+        ]
+        for placeholder, value in replacements.items():
+            requests.append(
                 {
                     "replaceAllText": {
                         "containsText": {"text": placeholder, "matchCase": True},
@@ -155,42 +159,36 @@ class GoogleSlidesService:
                         "pageObjectIds": [new_page_id],
                     }
                 }
-                for placeholder, value in replacements.items()
-            ]
-
-            slides.presentations().batchUpdate(
-                presentationId=template_id,
-                body={"requests": replace_requests},
-            ).execute()
-
-            # 3. Get thumbnail of the duplicated slide
-            thumbnail = (
-                slides.presentations()
-                .pages()
-                .getThumbnail(
-                    presentationId=template_id,
-                    pageObjectId=new_page_id,
-                    thumbnailProperties_thumbnailSize=size,
-                )
-                .execute()
             )
 
-            content_url = thumbnail.get("contentUrl")
-            if not content_url:
-                raise ValueError("Failed to get thumbnail URL")
+        # 1. Duplicate slide and replace placeholders in a single API call
+        slides.presentations().batchUpdate(
+            presentationId=template_id,
+            body={"requests": requests},
+        ).execute()
 
-            # 4. Fetch the image
-            with httpx.Client() as client:
-                response = client.get(content_url)
-                response.raise_for_status()
-                return response.content
+        # 2. Get thumbnail of the duplicated slide
+        thumbnail = (
+            slides.presentations()
+            .pages()
+            .getThumbnail(
+                presentationId=template_id,
+                pageObjectId=new_page_id,
+                thumbnailProperties_thumbnailSize=size,
+            )
+            .execute()
+        )
 
-        finally:
-            # Always cleanup: delete the duplicated slide
-            try:
-                slides.presentations().batchUpdate(
-                    presentationId=template_id,
-                    body={"requests": [{"deleteObject": {"objectId": new_page_id}}]},
-                ).execute()
-            except Exception:
-                pass  # Don't fail on cleanup
+        content_url = thumbnail.get("contentUrl")
+        if not content_url:
+            raise ValueError("Failed to get thumbnail URL")
+
+        # 3. Fetch the image
+        with httpx.Client() as client:
+            response = client.get(content_url)
+            response.raise_for_status()
+            image_bytes = response.content
+
+        # Return image and cleanup info (caller handles deletion in background)
+        cleanup_info = {"template_id": template_id, "page_id": new_page_id}
+        return image_bytes, cleanup_info

@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import func, select
@@ -180,6 +180,7 @@ def delete_certificate(
 def download_certificate(
     token: str,
     session: SessionDep,
+    background_tasks: BackgroundTasks,
 ) -> Response:
     """
     Download certificate image using a token.
@@ -243,7 +244,7 @@ def download_certificate(
 
     # Generate certificate image using getThumbnail API
     try:
-        image_bytes = slides_service.generate_certificate_image(
+        image_bytes, cleanup_info = slides_service.generate_certificate_image(
             template_url=certificate.url,
             candidate_name=candidate_name,
             test_name=test_name,
@@ -257,6 +258,13 @@ def download_certificate(
             status_code=503,
             detail="Failed to generate certificate",
         )
+
+    # Schedule slide cleanup in background (user doesn't wait)
+    background_tasks.add_task(
+        slides_service.delete_slide,
+        cleanup_info["template_id"],
+        cleanup_info["page_id"],
+    )
 
     # Return image as downloadable file
     return Response(

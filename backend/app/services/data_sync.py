@@ -13,6 +13,7 @@ from app.models import (
     Candidate,
     CandidateTest,
     CandidateTestAnswer,
+    Certificate,
     District,
     Entity,
     EntityType,
@@ -253,8 +254,17 @@ class DataSyncService:
                     )
                     return bigquery_service.test_connection()
                 elif org_provider.provider.provider_type == ProviderType.GOOGLE_SLIDES:
+                    # Find a certificate to test access against
+                    certificate = session.exec(
+                        select(Certificate).where(
+                            Certificate.organization_id == organization_id,
+                            Certificate.is_active,
+                        )
+                    ).first()
+                    if not certificate:
+                        return False
                     slides_service = GoogleSlidesService(decrypted_config)
-                    return slides_service.test_connection()
+                    return slides_service.test_connection(certificate.url)
                 else:
                     return False
             except Exception:
