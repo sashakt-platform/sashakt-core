@@ -9,7 +9,7 @@ class Message(SQLModel):
     message: str
 
 
-CorrectAnswerType = list[int] | list[str] | float | int | None
+CorrectAnswerType = list[int] | list[str] | float | int | str | None
 
 
 class TimeLeft(TypedDict):
