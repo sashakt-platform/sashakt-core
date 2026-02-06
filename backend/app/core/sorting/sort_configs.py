@@ -8,10 +8,13 @@ API field names to actual database columns/relationships.
 from typing import Any
 
 from app.models import (
+    Block,
+    District,
     Entity,
     EntityType,
     Question,
     QuestionRevision,
+    State,
     Tag,
     TagType,
     Test,
@@ -75,6 +78,9 @@ EntitySortConfig: Any = {
     "created_date": Entity.created_date,
     "modified_date": Entity.modified_date,
     "entity_type_name": (Entity.entity_type, EntityType.name),
+    "state": (Entity.state, State.name),
+    "district": (Entity.district, District.name),
+    "block": (Entity.block, Block.name),
 }
 
 
