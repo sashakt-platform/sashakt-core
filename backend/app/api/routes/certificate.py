@@ -182,7 +182,7 @@ def download_certificate(
     session: SessionDep,
 ) -> Response:
     """
-    Download certificate PDF using a token.
+    Download certificate image using a token.
     No authentication required - token is the authentication.
     """
     # Find candidate_test by token in certificate_data
@@ -241,9 +241,9 @@ def download_certificate(
     score_str = cert_data.get("score", "N/A")
     completion_date = cert_data.get("completion_date", "N/A")
 
-    # Generate certificate PDF
+    # Generate certificate image using getThumbnail API
     try:
-        pdf_bytes = slides_service.generate_certificate_pdf(
+        image_bytes = slides_service.generate_certificate_image(
             template_url=certificate.url,
             candidate_name=candidate_name,
             test_name=test_name,
@@ -259,11 +259,11 @@ def download_certificate(
             detail="Failed to generate certificate",
         )
 
-    # Return PDF as downloadable file
+    # Return image as downloadable file
     return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
+        content=image_bytes,
+        media_type="image/png",
         headers={
-            "Content-Disposition": f'attachment; filename="certificate_{candidate_test.id}.pdf"'
+            "Content-Disposition": f'attachment; filename="certificate_{candidate_test.id}.png"'
         },
     )

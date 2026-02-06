@@ -1,10 +1,9 @@
-import io
 import re
 from typing import Any
 
+import httpx
 from google.oauth2 import service_account
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
-from googleapiclient.http import MediaIoBaseDownload  # type: ignore[import-untyped]
 
 
 class GoogleSlidesService:
@@ -114,33 +113,64 @@ class GoogleSlidesService:
                 presentationId=presentation_id, body={"requests": requests}
             ).execute()
 
-    def export_as_pdf(self, presentation_id: str) -> bytes:
+    def get_first_page_id(self, presentation_id: str) -> str:
         """
-        Export presentation as PDF.
+        Get the object ID of the first page (slide) in a presentation.
+
+        Args:
+            presentation_id: ID of the presentation
+
+        Returns:
+            Object ID of the first page
+        """
+        slides = self._get_slides_service()
+        presentation = (
+            slides.presentations().get(presentationId=presentation_id).execute()
+        )
+        pages = presentation.get("slides", [])
+        if not pages:
+            raise ValueError("Presentation has no slides")
+        return str(pages[0]["objectId"])
+
+    def export_as_image(self, presentation_id: str, size: str = "LARGE") -> bytes:
+        """
+        Export the first slide of a presentation as a PNG image using getThumbnail API.
 
         Args:
             presentation_id: ID of the presentation to export
+            size: Thumbnail size - SMALL (200px), MEDIUM (800px), or LARGE (1600px)
 
         Returns:
-            PDF file contents as bytes
+            PNG image contents as bytes
         """
-        drive = self._get_drive_service()
-        request = drive.files().export_media(
-            fileId=presentation_id, mimeType="application/pdf"
+        slides = self._get_slides_service()
+        page_id = self.get_first_page_id(presentation_id)
+
+        # Get thumbnail URL using Google Slides API
+        thumbnail = (
+            slides.presentations()
+            .pages()
+            .getThumbnail(
+                presentationId=presentation_id,
+                pageObjectId=page_id,
+                thumbnailProperties_thumbnailSize=size,
+            )
+            .execute()
         )
 
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
+        content_url = thumbnail.get("contentUrl")
+        if not content_url:
+            raise ValueError("Failed to get thumbnail URL")
 
-        fh.seek(0)
-        return fh.read()
+        # Fetch the image from the URL (valid for 30 minutes)
+        with httpx.Client() as client:
+            response = client.get(content_url)
+            response.raise_for_status()
+            return response.content
 
     def delete_presentation(self, presentation_id: str) -> None:
         """
-        Delete a presentation (cleanup after PDF generation).
+        Delete a presentation (cleanup after certificate generation).
 
         For Shared Drives, this moves the file to trash since service accounts
         with Content Manager role cannot permanently delete files.
@@ -170,7 +200,7 @@ class GoogleSlidesService:
         except Exception:
             return False
 
-    def generate_certificate_pdf(
+    def generate_certificate_image(
         self,
         template_url: str,
         candidate_name: str,
@@ -178,9 +208,10 @@ class GoogleSlidesService:
         completion_date: str,
         score: str,
         certificate_title: str = "Certificate",
+        size: str = "LARGE",
     ) -> bytes:
         """
-        Generate a certificate PDF from a Google Slides template.
+        Generate a certificate image from a Google Slides template.
 
         Args:
             template_url: Google Slides URL of the template
@@ -189,9 +220,10 @@ class GoogleSlidesService:
             completion_date: Date to replace {{completion_date}}
             score: Score to replace {{score}}
             certificate_title: Title for the copied presentation
+            size: Image size - SMALL (200px), MEDIUM (800px), or LARGE (1600px)
 
         Returns:
-            PDF file contents as bytes
+            PNG image contents as bytes
         """
         template_id = self.extract_presentation_id(template_url)
         copy_id = None
@@ -209,10 +241,9 @@ class GoogleSlidesService:
             }
             self.replace_placeholders(copy_id, replacements)
 
-            # Export as PDF
-            pdf_bytes = self.export_as_pdf(copy_id)
+            image_bytes = self.export_as_image(copy_id, size)
 
-            return pdf_bytes
+            return image_bytes
 
         finally:
             # Always cleanup the copy
