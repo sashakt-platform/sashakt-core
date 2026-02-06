@@ -183,8 +183,8 @@ class GoogleSlidesService:
         if not content_url:
             raise ValueError("Failed to get thumbnail URL")
 
-        # 3. Fetch the image
-        with httpx.Client() as client:
+        # 3. Fetch the image (with timeout to avoid hanging indefinitely)
+        with httpx.Client(timeout=15.0) as client:
             response = client.get(content_url)
             response.raise_for_status()
             image_bytes = response.content
