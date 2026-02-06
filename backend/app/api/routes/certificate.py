@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import func, select
@@ -180,9 +180,10 @@ def delete_certificate(
 def download_certificate(
     token: str,
     session: SessionDep,
+    background_tasks: BackgroundTasks,
 ) -> Response:
     """
-    Download certificate PDF using a token.
+    Download certificate image using a token.
     No authentication required - token is the authentication.
     """
     # Find candidate_test by token in certificate_data
@@ -241,15 +242,14 @@ def download_certificate(
     score_str = cert_data.get("score", "N/A")
     completion_date = cert_data.get("completion_date", "N/A")
 
-    # Generate certificate PDF
+    # Generate certificate image using getThumbnail API
     try:
-        pdf_bytes = slides_service.generate_certificate_pdf(
+        image_bytes, cleanup_info = slides_service.generate_certificate_image(
             template_url=certificate.url,
             candidate_name=candidate_name,
             test_name=test_name,
             completion_date=completion_date,
             score=score_str,
-            certificate_title=f"Certificate - {test_name} - {candidate_name}",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -259,11 +259,18 @@ def download_certificate(
             detail="Failed to generate certificate",
         )
 
-    # Return PDF as downloadable file
+    # Schedule slide cleanup in background (user doesn't wait)
+    background_tasks.add_task(
+        slides_service.delete_slide,
+        cleanup_info["template_id"],
+        cleanup_info["page_id"],
+    )
+
+    # Return image as downloadable file
     return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
+        content=image_bytes,
+        media_type="image/png",
         headers={
-            "Content-Disposition": f'attachment; filename="certificate_{candidate_test.id}.pdf"'
+            "Content-Disposition": f'attachment; filename="certificate_{candidate_test.id}.png"'
         },
     )
