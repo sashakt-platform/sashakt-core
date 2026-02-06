@@ -249,7 +249,6 @@ def download_certificate(
             test_name=test_name,
             completion_date=completion_date,
             score=score_str,
-            certificate_title=f"Certificate - {test_name} - {candidate_name}",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

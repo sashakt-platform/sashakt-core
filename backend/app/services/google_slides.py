@@ -1,4 +1,5 @@
 import re
+import uuid
 from typing import Any
 
 import httpx
@@ -66,126 +67,6 @@ class GoogleSlidesService:
             return match.group(1)
         raise ValueError(f"Could not extract presentation ID from URL: {url}")
 
-    def copy_presentation(self, template_id: str, title: str) -> str:
-        """
-        Copy a presentation template.
-
-        Args:
-            template_id: ID of the template presentation
-            title: Title for the new presentation
-
-        Returns:
-            ID of the copied presentation
-        """
-        drive = self._get_drive_service()
-        copy = (
-            drive.files()
-            .copy(fileId=template_id, body={"name": title}, supportsAllDrives=True)
-            .execute()
-        )
-        return str(copy["id"])
-
-    def replace_placeholders(
-        self, presentation_id: str, replacements: dict[str, str]
-    ) -> None:
-        """
-        Replace text placeholders in presentation using Google Slides API.
-
-        Args:
-            presentation_id: ID of the presentation to modify
-            replacements: Dict of placeholder -> replacement value
-        """
-        slides = self._get_slides_service()
-
-        requests = []
-        for placeholder, value in replacements.items():
-            requests.append(
-                {
-                    "replaceAllText": {
-                        "containsText": {"text": placeholder, "matchCase": True},
-                        "replaceText": value,
-                    }
-                }
-            )
-
-        if requests:
-            slides.presentations().batchUpdate(
-                presentationId=presentation_id, body={"requests": requests}
-            ).execute()
-
-    def get_first_page_id(self, presentation_id: str) -> str:
-        """
-        Get the object ID of the first page (slide) in a presentation.
-
-        Args:
-            presentation_id: ID of the presentation
-
-        Returns:
-            Object ID of the first page
-        """
-        slides = self._get_slides_service()
-        presentation = (
-            slides.presentations().get(presentationId=presentation_id).execute()
-        )
-        pages = presentation.get("slides", [])
-        if not pages:
-            raise ValueError("Presentation has no slides")
-        return str(pages[0]["objectId"])
-
-    def export_as_image(self, presentation_id: str, size: str = "LARGE") -> bytes:
-        """
-        Export the first slide of a presentation as a PNG image using getThumbnail API.
-
-        Args:
-            presentation_id: ID of the presentation to export
-            size: Thumbnail size - SMALL (200px), MEDIUM (800px), or LARGE (1600px)
-
-        Returns:
-            PNG image contents as bytes
-        """
-        slides = self._get_slides_service()
-        page_id = self.get_first_page_id(presentation_id)
-
-        # Get thumbnail URL using Google Slides API
-        thumbnail = (
-            slides.presentations()
-            .pages()
-            .getThumbnail(
-                presentationId=presentation_id,
-                pageObjectId=page_id,
-                thumbnailProperties_thumbnailSize=size,
-            )
-            .execute()
-        )
-
-        content_url = thumbnail.get("contentUrl")
-        if not content_url:
-            raise ValueError("Failed to get thumbnail URL")
-
-        # Fetch the image from the URL (valid for 30 minutes)
-        with httpx.Client() as client:
-            response = client.get(content_url)
-            response.raise_for_status()
-            return response.content
-
-    def delete_presentation(self, presentation_id: str) -> None:
-        """
-        Delete a presentation (cleanup after certificate generation).
-
-        For Shared Drives, this moves the file to trash since service accounts
-        with Content Manager role cannot permanently delete files.
-
-        Args:
-            presentation_id: ID of the presentation to delete
-        """
-        drive = self._get_drive_service()
-        # Use trash (update with trashed=True) instead of delete for Shared Drive compatibility
-        drive.files().update(
-            fileId=presentation_id,
-            body={"trashed": True},
-            supportsAllDrives=True,
-        ).execute()
-
     def test_connection(self) -> bool:
         """
         Test if the service account can access Google APIs.
@@ -207,11 +88,16 @@ class GoogleSlidesService:
         test_name: str,
         completion_date: str,
         score: str,
-        certificate_title: str = "Certificate",
         size: str = "LARGE",
     ) -> bytes:
         """
         Generate a certificate image from a Google Slides template.
+
+        Flow:
+        1. Duplicate the template slide with a unique ID
+        2. Replace placeholders on the duplicated slide only
+        3. Get thumbnail of the duplicated slide
+        4. Delete the duplicated slide
 
         Args:
             template_url: Google Slides URL of the template
@@ -219,36 +105,92 @@ class GoogleSlidesService:
             test_name: Name to replace {{test_name}}
             completion_date: Date to replace {{completion_date}}
             score: Score to replace {{score}}
-            certificate_title: Title for the copied presentation
             size: Image size - SMALL (200px), MEDIUM (800px), or LARGE (1600px)
 
         Returns:
             PNG image contents as bytes
         """
         template_id = self.extract_presentation_id(template_url)
-        copy_id = None
+        slides = self._get_slides_service()
+
+        # Get the original slide's page ID
+        presentation = slides.presentations().get(presentationId=template_id).execute()
+        pages = presentation.get("slides", [])
+        if not pages:
+            raise ValueError("Template presentation has no slides")
+        original_page_id = pages[0]["objectId"]
+
+        # Generate a unique ID for the duplicated slide
+        new_page_id = f"cert_{uuid.uuid4().hex[:12]}"
 
         try:
-            # Copy the template
-            copy_id = self.copy_presentation(template_id, certificate_title)
+            # 1. Duplicate the template slide
+            slides.presentations().batchUpdate(
+                presentationId=template_id,
+                body={
+                    "requests": [
+                        {
+                            "duplicateObject": {
+                                "objectId": original_page_id,
+                                "objectIds": {original_page_id: new_page_id},
+                            }
+                        }
+                    ]
+                },
+            ).execute()
 
-            # Replace placeholders using Google Slides API
+            # 2. Replace placeholders on the duplicated slide only
             replacements = {
                 "{{candidate_name}}": candidate_name,
                 "{{test_name}}": test_name,
                 "{{completion_date}}": completion_date,
                 "{{score}}": score,
             }
-            self.replace_placeholders(copy_id, replacements)
 
-            image_bytes = self.export_as_image(copy_id, size)
+            replace_requests = [
+                {
+                    "replaceAllText": {
+                        "containsText": {"text": placeholder, "matchCase": True},
+                        "replaceText": value,
+                        "pageObjectIds": [new_page_id],
+                    }
+                }
+                for placeholder, value in replacements.items()
+            ]
 
-            return image_bytes
+            slides.presentations().batchUpdate(
+                presentationId=template_id,
+                body={"requests": replace_requests},
+            ).execute()
+
+            # 3. Get thumbnail of the duplicated slide
+            thumbnail = (
+                slides.presentations()
+                .pages()
+                .getThumbnail(
+                    presentationId=template_id,
+                    pageObjectId=new_page_id,
+                    thumbnailProperties_thumbnailSize=size,
+                )
+                .execute()
+            )
+
+            content_url = thumbnail.get("contentUrl")
+            if not content_url:
+                raise ValueError("Failed to get thumbnail URL")
+
+            # 4. Fetch the image
+            with httpx.Client() as client:
+                response = client.get(content_url)
+                response.raise_for_status()
+                return response.content
 
         finally:
-            # Always cleanup the copy
-            if copy_id:
-                try:
-                    self.delete_presentation(copy_id)
-                except Exception:
-                    pass  # Log but don't fail on cleanup
+            # Always cleanup: delete the duplicated slide
+            try:
+                slides.presentations().batchUpdate(
+                    presentationId=template_id,
+                    body={"requests": [{"deleteObject": {"objectId": new_page_id}}]},
+                ).execute()
+            except Exception:
+                pass  # Don't fail on cleanup
