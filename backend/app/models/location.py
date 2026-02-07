@@ -5,7 +5,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.test import Test, TestDistrict, TestState
-from app.models.user import User, UserState
+from app.models.user import User, UserDistrict, UserState
 
 if TYPE_CHECKING:
     from app.models.entity import Entity
@@ -116,6 +116,9 @@ class District(DistrictBase, table=True):
         back_populates="districts", link_model=TestDistrict
     )
     entities: list["Entity"] | None = Relationship(back_populates="district")
+    users: list["User"] | None = Relationship(
+        back_populates="districts", link_model=UserDistrict
+    )
 
 
 class DistrictPublic(DistrictBase):

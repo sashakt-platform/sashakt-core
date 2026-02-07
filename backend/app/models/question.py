@@ -11,7 +11,7 @@ from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
 from app.models.user import UserPublic
-from app.models.utils import MarkingScheme
+from app.models.utils import CorrectAnswerType, MarkingScheme
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -81,7 +81,6 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | None
 
 
 class QuestionRevisionInfo(SQLModel):
@@ -174,6 +173,9 @@ class QuestionBase(SQLModel):
                     raise ValueError(
                         "Multi-choice questions must have at least one correct answer."
                     )
+        elif question_type == QuestionType.subjective:
+            if options is not None and len(options) > 0:
+                raise ValueError("Subjective questions should not have options.")
 
         return self
 

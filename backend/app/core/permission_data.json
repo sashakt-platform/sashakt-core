@@ -621,6 +621,42 @@
     "candidate": false
   },
   {
+    "name": "read_entity",
+    "description": "Read Entity Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
+  },
+  {
+    "name": "create_entity",
+    "description": "Create New Entity",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "update_entity",
+    "description": "Update Existing Entity",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "delete_entity",
+    "description": "Delete Existing Entity",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
     "name": "create_form",
     "description": "Create New Form",
     "super_admin": true,
@@ -653,7 +689,7 @@
     "super_admin": true,
     "system_admin": true,
     "state_admin": true,
-    "test_admin": false,
+    "test_admin": true,
     "candidate": false
   },
   {

@@ -1528,6 +1528,237 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     assert answer.response == "6"
 
 
+def test_submit_answer_for_subjective_qr_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="Explain polymorphism",
+        question_type=QuestionType.subjective,
+        options=None,
+        correct_answer=None,
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "Polymorphism allows objects to take many forms in OOP.",
+        "visited": True,
+        "time_spent": 45,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["candidate_test_id"] == candidate_test_id
+    assert data["question_revision_id"] == question_revision.id
+    assert data["response"] == answer_payload["response"]
+    assert data["visited"] is True
+    assert data["time_spent"] == 45
+
+    answer = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == question_revision.id)
+    ).first()
+    assert answer is not None
+    assert answer.response == answer_payload["response"]
+
+
+def test_submit_answer_hides_correct_answer_when_immediate_feedback_disabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that correct_answer is None when show_feedback_immediately is False."""
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_immediately=False,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 20,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] is None
+
+
+def test_submit_answer_returns_correct_answer_when_immediate_feedback_enabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that correct_answer is returned when show_feedback_immediately is True."""
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_immediately=True,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 20,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == [1]
+
+
 def test_submit_answer_invalid_uuid(client: TestClient, db: SessionDep) -> None:
     """Test that answer submission fails with invalid candidate UUID."""
     user = create_random_user(db)
@@ -1705,6 +1936,7 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     data = response.json()
     assert data["is_submitted"] is True
     assert data["end_time"] is not None
+    assert data["answers"] is None
 
     # Verify in database
     db.refresh(candidate_test)
@@ -1911,6 +2143,7 @@ def test_submit_test_succeeds_with_answered_mandatory_question(
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
+        show_feedback_on_completion=True,
     )
     db.add(test)
     db.commit()
@@ -1950,7 +2183,101 @@ def test_submit_test_succeeds_with_answered_mandatory_question(
     )
 
     assert response.status_code == 200
-    assert response.json()["is_submitted"] is True
+    data = response.json()
+    assert data["is_submitted"] is True
+
+    assert len(data["answers"]) == 1
+    answer_data = data["answers"][0]
+    assert answer_data["question_revision_id"] == question_revision.id
+    assert answer_data["response"] == "[1]"
+    assert answer_data["correct_answer"] == [1]
+
+    assert set(answer_data.keys()) == {
+        "question_revision_id",
+        "response",
+        "correct_answer",
+    }
+
+
+def test_submit_test_hides_correct_answer_when_feedback_disabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that correct_answer is None when show_feedback_on_completion is False."""
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_on_completion=False,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 20,
+    }
+    client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    # Submit test
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_submitted"] is True
+    assert data["answers"] is None
 
 
 def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> None:
@@ -3313,6 +3640,297 @@ def test_result_with_no_answers(
     assert data["marks_maximum"] == 2
 
 
+def test_result_with_subjective_attempted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    question_1 = Question(organization_id=org.id)
+    db.add(question_1)
+    db.commit()
+    db.refresh(question_1)
+
+    revision_1 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question_1.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision_1)
+    db.commit()
+    db.refresh(revision_1)
+
+    question_2 = Question(organization_id=org.id)
+    db.add(question_2)
+    db.commit()
+    db.refresh(question_2)
+
+    revision_2 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question_2.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision_2)
+    db.commit()
+    db.refresh(revision_2)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+        question_revision_ids=[revision_1.id, revision_2.id],
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    mcq_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision_1.id,
+        response="1",
+        visited=True,
+        time_spent=20,
+    )
+    db.add(mcq_answer)
+
+    subjective_answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision_2.id,
+        response="Encapsulation bundles data and methods",
+        visited=True,
+        time_spent=30,
+    )
+    db.add(subjective_answer)
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 2
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 0
+    assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 2
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 2
+
+
+def test_result_with_subjective_attempted_but_empty_response(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="test",
+        marking_scheme={
+            "correct": 5,
+            "wrong": -2,
+            "skipped": 0,
+        },
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+        question_revision_ids=[revision.id],
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision.id,
+        response=None,
+        visited=True,
+        time_spent=20,
+    )
+    db.add(answer)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 0
+    assert data["marks_maximum"] == 5
+
+
+def test_result_with_subjective_not_attempted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        end_time=None,
+        is_submitted=True,
+        question_revision_ids=[revision.id],
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 1
+    assert data["optional_not_attempted"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 0
+    assert data["marks_maximum"] == 1
+
+
 def test_result_with_mixed_answers_test_level_marking(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -4258,6 +4876,210 @@ def test_submit_batch_answers_for_qr_candidate(
     assert answers[1].response == "1"
 
 
+def test_submit_batch_answers_for_qr_candidate_with_subjective(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question_1 = Question(organization_id=org.id)
+    db.add(question_1)
+    db.flush()
+
+    qr_1 = QuestionRevision(
+        question_id=question_1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(qr_1)
+    db.flush()
+    question_1.last_revision_id = qr_1.id
+
+    question_2 = Question(organization_id=org.id)
+    db.add(question_2)
+    db.flush()
+
+    qr_2 = QuestionRevision(
+        question_id=question_2.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        subjective_answer_limit=50,
+    )
+    db.add(qr_2)
+    db.flush()
+    question_2.last_revision_id = qr_2.id
+
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qr_1.id))
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qr_2.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    subjective_response = "Encapsulation binds data and methods"
+
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": qr_1.id,
+                "response": "4",
+                "visited": True,
+                "time_spent": 30,
+            },
+            {
+                "question_revision_id": qr_2.id,
+                "response": subjective_response,
+                "visited": True,
+                "time_spent": 45,
+            },
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+    data.sort(key=lambda x: x["question_revision_id"])
+
+    assert data[0]["question_revision_id"] == qr_1.id
+    assert data[0]["response"] == "4"
+    assert data[0]["visited"] is True
+    assert data[0]["time_spent"] == 30
+
+    assert data[1]["question_revision_id"] == qr_2.id
+    assert data[1]["response"] == subjective_response
+    assert len(data[1]["response"]) <= 50
+    assert data[1]["visited"] is True
+    assert data[1]["time_spent"] == 45
+
+
+def test_submit_batch_answers_for_qr_candidate_subjective_exceeds_limit(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question_1 = Question(organization_id=org.id)
+    db.add(question_1)
+    db.flush()
+
+    qr_1 = QuestionRevision(
+        question_id=question_1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(qr_1)
+    db.flush()
+    question_1.last_revision_id = qr_1.id
+
+    question_2 = Question(organization_id=org.id)
+    db.add(question_2)
+    db.flush()
+
+    qr_2 = QuestionRevision(
+        question_id=question_2.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        subjective_answer_limit=20,
+    )
+    db.add(qr_2)
+    db.flush()
+    question_2.last_revision_id = qr_2.id
+
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qr_1.id))
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qr_2.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    long_subjective_response = "Encapsulation is a core OOP principle"
+
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": qr_1.id,
+                "response": "4",
+                "visited": True,
+                "time_spent": 30,
+            },
+            {
+                "question_revision_id": qr_2.id,
+                "response": long_subjective_response,
+                "visited": True,
+                "time_spent": 45,
+            },
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "exceeds character limit" in data["detail"]
+    assert str(qr_2.subjective_answer_limit) in data["detail"]
+
+
 def test_submit_batch_answers_invalid_uuid(client: TestClient, db: SessionDep) -> None:
     """Test submitting batch answers with invalid UUID"""
     user = create_random_user(db)
@@ -4413,6 +5235,154 @@ def test_submit_batch_answers_update_existing(
     db.refresh(initial_answer)
     assert initial_answer.response == "4"
     assert initial_answer.time_spent == 30
+
+
+def test_submit_batch_answers_hides_correct_answer_when_immediate_feedback_disabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that correct_answer is None in batch response when show_feedback_immediately is False."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_immediately=False,
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": question_revision.id,
+                "response": "[1]",
+                "visited": True,
+                "time_spent": 20,
+            }
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["correct_answer"] is None
+
+
+def test_submit_batch_answers_returns_correct_answer_when_immediate_feedback_enabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test that correct_answer is returned in batch response when show_feedback_immediately is True."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_immediately=True,
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": question_revision.id,
+                "response": "[1]",
+                "visited": True,
+                "time_spent": 20,
+            }
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["correct_answer"] == [1]
 
 
 def test_candidate_timer_with_specific_dates(
@@ -6725,6 +7695,136 @@ def test_summary_filtered_by_state(
         assert summary["not_submitted_inactive"] == 0
 
 
+def test_summary_filtered_by_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    email = random_email()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x])
+    db.commit()
+    db.refresh(state_x)
+
+    district_x1 = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    district_x2 = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    district_x3 = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    db.add_all([district_x1, district_x2, district_x3])
+    db.commit()
+    db.refresh(district_x1)
+    db.refresh(district_x2)
+    db.refresh(district_x3)
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_x.id],
+        "district_ids": [district_x1.id, district_x2.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+    user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
+    user_id = user_resp.json()["id"]
+
+    fake_now = datetime(2025, 9, 29, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        test_x1_x2 = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        test_x3 = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        db.add_all([test_x1_x2, test_x3])
+        db.commit()
+        db.refresh(test_x1_x2)
+        db.refresh(test_x3)
+
+        candidate_x1_x2 = Candidate(user_id=user_id)
+        candidate_x3 = Candidate(user_id=user_id)
+        db.add_all([candidate_x1_x2, candidate_x3])
+        db.commit()
+        db.refresh(candidate_x1_x2)
+        db.refresh(candidate_x3)
+
+        db.add_all(
+            [
+                CandidateTest(
+                    test_id=test_x1_x2.id,
+                    candidate_id=candidate_x1_x2.id,
+                    is_submitted=False,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=None,
+                    device="laptop",
+                    consent=True,
+                ),
+                CandidateTest(
+                    test_id=test_x3.id,
+                    candidate_id=candidate_x3.id,
+                    is_submitted=False,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=None,
+                    device="laptop",
+                    consent=True,
+                ),
+            ]
+        )
+        db.commit()
+
+        db.add_all(
+            [
+                TestState(test_id=test_x1_x2.id, state_id=state_x.id),
+                TestDistrict(test_id=test_x1_x2.id, district_id=district_x1.id),
+                TestDistrict(test_id=test_x1_x2.id, district_id=district_x2.id),
+                TestState(test_id=test_x3.id, state_id=state_x.id),
+                TestDistrict(test_id=test_x3.id, district_id=district_x3.id),
+            ]
+        )
+        db.commit()
+
+        resp = client.get(
+            f"{settings.API_V1_STR}/candidate/summary", headers=token_headers
+        )
+        assert resp.status_code == 200
+        summary = resp.json()
+        assert summary["total_test_not_submitted"] == 1
+        assert summary["not_submitted_active"] == 1
+        assert summary["not_submitted_inactive"] == 0
+
+
 def test_summary_active_submitted_by_state(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -6824,6 +7924,132 @@ def test_summary_active_submitted_by_state(
             [
                 TestState(test_id=test_x.id, state_id=state_x.id),
                 TestState(test_id=test_y.id, state_id=state_y.id),
+            ]
+        )
+        db.commit()
+
+        resp = client.get(
+            f"{settings.API_V1_STR}/candidate/summary", headers=token_headers
+        )
+        assert resp.status_code == 200
+        summary = resp.json()
+        assert summary["total_test_submitted"] == 1
+        assert summary["total_test_not_submitted"] == 0
+        assert summary["not_submitted_active"] == 0
+        assert summary["not_submitted_inactive"] == 0
+
+
+def test_summary_active_submitted_by_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    email = random_email()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_x)
+    db.commit()
+    db.refresh(state_x)
+
+    district_x1 = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    district_x2 = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    db.add_all([district_x1, district_x2])
+    db.commit()
+    db.refresh(district_x1)
+    db.refresh(district_x2)
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_x.id],
+        "district_ids": [district_x1.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+    user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
+    user_id = user_resp.json()["id"]
+
+    fake_now = datetime(2025, 9, 29, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        test_x1 = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        test_x2 = Test(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+            created_by_id=user_id,
+            is_template=False,
+        )
+        db.add_all([test_x1, test_x2])
+        db.commit()
+        db.refresh(test_x1)
+        db.refresh(test_x2)
+
+        candidate_x = Candidate(user_id=user_id)
+        candidate_y = Candidate(user_id=user_id)
+        db.add_all([candidate_x, candidate_y])
+        db.commit()
+        db.refresh(candidate_x)
+        db.refresh(candidate_y)
+
+        db.add_all(
+            [
+                CandidateTest(
+                    test_id=test_x1.id,
+                    candidate_id=candidate_x.id,
+                    is_submitted=True,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=datetime(2025, 9, 29, 11, 30),
+                    device="laptop",
+                    consent=True,
+                ),
+                CandidateTest(
+                    test_id=test_x2.id,
+                    candidate_id=candidate_y.id,
+                    is_submitted=True,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=datetime(2025, 9, 29, 11, 30),
+                    device="laptop",
+                    consent=True,
+                ),
+            ]
+        )
+        db.commit()
+
+        db.add_all(
+            [
+                TestState(test_id=test_x1.id, state_id=state_x.id),
+                TestState(test_id=test_x2.id, state_id=state_x.id),
+                TestDistrict(test_id=test_x1.id, district_id=district_x1.id),
+                TestDistrict(test_id=test_x2.id, district_id=district_x2.id),
             ]
         )
         db.commit()

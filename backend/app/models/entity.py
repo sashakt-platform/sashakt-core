@@ -24,11 +24,6 @@ class EntityTypeBase(SQLModel):
         default=None, nullable=True, description="Description of the Entity Type"
     )
     is_active: bool = Field(default=True)
-    organization_id: int = Field(
-        foreign_key="organization.id",
-        nullable=False,
-        description="Organization ID to which the Entity Type belongs",
-    )
 
 
 class EntityType(EntityTypeBase, table=True):
@@ -37,6 +32,11 @@ class EntityType(EntityTypeBase, table=True):
     modified_date: datetime | None = Field(
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
+    )
+    organization_id: int = Field(
+        foreign_key="organization.id",
+        nullable=False,
+        description="Organization ID to which the Entity Type belongs",
     )
     entities: list["Entity"] = Relationship(back_populates="entity_type")
     created_by: "User" = Relationship(back_populates="entity_types")
@@ -57,6 +57,10 @@ class EntityTypePublic(EntityTypeBase):
     created_date: datetime
     modified_date: datetime
     created_by_id: int = Field(description="ID of the user who created the Entity Type")
+    organization_id: int = Field(
+        title="ID of the organization",
+        description="ID of the organization to which the test belongs.",
+    )
 
 
 class EntityTypeUpdate(EntityTypeBase):
