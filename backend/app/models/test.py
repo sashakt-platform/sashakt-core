@@ -26,6 +26,7 @@ if TYPE_CHECKING:
         User,
     )
     from app.models.certificate import Certificate
+    from app.models.form import Form, FormPublic
     from app.models.location import Block, District, State
 
 
@@ -221,6 +222,12 @@ class TestBase(SQLModel):
         description="Show feedback to candidate immediately after each question",
         sa_column_kwargs={"server_default": "false"},
     )
+    form_id: int | None = Field(
+        default=None,
+        foreign_key="form.id",
+        nullable=True,
+        description="Form to be filled when candidate_profile is enabled",
+    )
 
 
 class Test(TestBase, table=True):
@@ -252,6 +259,7 @@ class Test(TestBase, table=True):
     )
 
     certificate: Optional["Certificate"] = Relationship(back_populates="tests")
+    form: Optional["Form"] = Relationship(back_populates="tests")
 
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
@@ -339,3 +347,4 @@ class TestPublicLimited(TestBase):
     id: int
     total_questions: int
     profile_list: list["EntityPublicLimited"] | None = None
+    form: "FormPublic | None" = None
