@@ -37,6 +37,11 @@ class CandidateTestAnswerBase(SQLModel):
         sa_column_kwargs={"server_default": "false"},
         description="Was this question bookmarked by test taker?",
     )
+    is_reviewed: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Has this answer been reviewed?",
+    )
 
 
 class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
@@ -63,7 +68,6 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    correct_answer: CorrectAnswerType = None
 
 
 class CandidateTestAnswerFeedback(SQLModel):
@@ -73,11 +77,19 @@ class CandidateTestAnswerFeedback(SQLModel):
     correct_answer: CorrectAnswerType = None
 
 
+class CandidateReviewResponse(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    submitted_answer: str | None = None
+    correct_answer: CorrectAnswerType = None
+
+
 class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
     time_spent: int
     bookmarked: bool | None = None
+    is_reviewed: bool = False
 
 
 # QR Code Candidate Request Models
@@ -89,6 +101,7 @@ class CandidateAnswerSubmitRequest(SQLModel):
     visited: bool = False
     time_spent: int = 0
     bookmarked: bool = False
+    is_reviewed: bool = False
 
 
 class BatchAnswerSubmitRequest(SQLModel):
