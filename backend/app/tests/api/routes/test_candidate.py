@@ -9305,7 +9305,7 @@ def test_submit_answer_saves_is_reviewed_field(
         "response": "Option 1",
         "visited": True,
         "time_spent": 30,
-        "is_reviwed": True,
+        "is_reviewed": True,
     }
 
     response = client.post(

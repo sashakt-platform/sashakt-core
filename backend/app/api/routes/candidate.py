@@ -442,7 +442,7 @@ def submit_answer_for_qr_candidate(
         existing_answer.visited = answer_request.visited
         existing_answer.time_spent = answer_request.time_spent
         existing_answer.bookmarked = answer_request.bookmarked
-        existing_answer.is_reviewed = answer_request.is_reviwed
+        existing_answer.is_reviewed = answer_request.is_reviewed
         session.add(existing_answer)
         session.commit()
         session.refresh(existing_answer)
@@ -456,7 +456,7 @@ def submit_answer_for_qr_candidate(
             visited=answer_request.visited,
             time_spent=answer_request.time_spent,
             bookmarked=answer_request.bookmarked,
-            is_reviewed=answer_request.is_reviwed,
+            is_reviewed=answer_request.is_reviewed,
         )
         session.add(candidate_test_answer)
         session.commit()
@@ -1390,9 +1390,15 @@ def get_review_feedback(
             detail="Post-submission feedback is not enabled for this test",
         )
 
-    question_ids_to_fetch = (
-        question_revision_ids or candidate_test.question_revision_ids
-    )
+    assigned_ids = set(candidate_test.question_revision_ids)
+    if question_revision_ids:
+        question_ids_to_fetch = [
+            question_revision_id
+            for question_revision_id in question_revision_ids
+            if question_revision_id in assigned_ids
+        ]
+    else:
+        question_ids_to_fetch = candidate_test.question_revision_ids
 
     submitted_answers = session.exec(
         select(CandidateTestAnswer).where(
