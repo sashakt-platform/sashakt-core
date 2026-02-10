@@ -1,7 +1,7 @@
 """Add omr Field to Test Model
 
 Revision ID: 1d236ebb6a4b
-Revises: 61e8fcf99159
+Revises: 303084e65c1e
 Create Date: 2026-01-09 12:44:05.880075
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '1d236ebb6a4b'
-down_revision = '2457a2835629'
+down_revision = '303084e65c1e'
 branch_labels = None
 depends_on = None
 

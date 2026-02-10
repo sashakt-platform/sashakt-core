@@ -131,6 +131,33 @@ def test_create_question(
     assert question_tags[0].tag_id == tag_id
 
 
+def test_create_subjective_question_with_options_should_fail(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    org_id = org_response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org_id,
+            "question_text": random_lower_string(),
+            "question_type": QuestionType.subjective,
+            "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+            "is_mandatory": True,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 422
+    assert "Subjective questions should not have options." in data["detail"][0]["msg"]
+
+
 def test_read_questions(
     client: TestClient,
     db: SessionDep,
@@ -1975,7 +2002,7 @@ def test_bulk_upload_questions(
 
     # Create a CSV file with test data - add an empty row to test skipping
     # Also includes duplicate tags to test tag cache
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Punjab
 What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Punjab
 What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Punjab
@@ -2019,7 +2046,9 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         assert response.status_code in [400, 500]
 
         # Test with headers-only CSV (line 1045)
-        headers_only_csv = "Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State\n"
+        headers_only_csv = (
+            "Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State\n"
+        )
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(headers_only_csv.encode("utf-8"))
             headers_only_csv_path = temp_file.name
@@ -2108,7 +2137,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
                 assert any(loc["state_name"] == "Punjab" for loc in locations)
 
         # Test with non-existent tag type
-        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,NonExistentType:Math,Punjab
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -2126,7 +2155,7 @@ What is a prime number?,A number only divisible by 1 and itself,An even number,A
         assert "Failed to create" in data["message"]
 
         # Test upload with non-existent state
-        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geography,NonExistentState
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -3365,7 +3394,7 @@ def test_bulk_upload_questions_response_format(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 4+4?,4,3,5,8,A,Response Model Type:Math,Punjab
 What is the capital of France?,Paris,London,Berlin,Madrid,A,Response Model Type:Geography,Punjab
 Water,Gold,Silver,Carbon,A,Response Model Type:Chemistry,Punjab
@@ -3499,7 +3528,7 @@ def test_bulk_upload_questions_without_tagtype(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 10+10?,20,10,30,40,A,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
 What is 5x5?,25,10,15,20,A,Subject:Multiplication,Punjab
@@ -3566,7 +3595,7 @@ def test_bulk_upload_questions_with_invalid_tagtype(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
     What is 10+10?,20,10,30,40,A,Math,Punjab
     What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
     What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
@@ -3955,7 +3984,7 @@ def test_bulk_upload_questions_with_duplicate(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
     What is 10+10?,20,10,30,40,A,Math,Punjab
      What is 10+10?,20,10,30,40,A,Math,Punjab
     What is PYTHON?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag,Punjab
@@ -4404,7 +4433,7 @@ def test_bulk_upload_questions_with_multiple_errors_report(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 10+10?,20,10,30,40,A,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
 What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
@@ -4625,7 +4654,7 @@ def test_bulk_upload_questions_without_state_column(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science
 What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication
 What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography
@@ -4671,7 +4700,7 @@ def test_bulk_upload_questions_with_extra_column(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Training Tags,State,ABCD
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Tags,State,ABCD
 What is 10+10?,20,10,30,40,A,ABCD,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,ABCD,Science,Punjab
 Which option is missing?,25,10,20,30,A,ABCD,Math,Punjab
@@ -5859,3 +5888,89 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
     data = delete_resp.json()
     assert data["delete_success_count"] == 2
     assert data["delete_failure_list"] is None
+
+
+def test_create_test_with_subjective_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = create_random_organization(db)
+    user = create_random_user(db, org.id)
+
+    q1 = Question(organization_id=org.id)
+    db.add(q1)
+    db.flush()
+    q1_rev = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        marking_scheme={"correct": 10, "wrong": -5, "skipped": 0},
+        correct_answer=[1],
+    )
+    db.add(q1_rev)
+    db.flush()
+    q1.last_revision_id = q1_rev.id
+
+    q2 = Question(organization_id=org.id)
+    db.add(q2)
+    db.flush()
+    q2_rev = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        marking_scheme={"correct": 15, "wrong": -2, "skipped": 0},
+        correct_answer=[1, 2],
+    )
+    db.add(q2_rev)
+    db.flush()
+    q2.last_revision_id = q2_rev.id
+
+    q3 = Question(organization_id=org.id)
+    db.add(q3)
+    db.flush()
+    q3_rev = QuestionRevision(
+        question_id=q3.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        correct_answer=random_lower_string(),
+    )
+    db.add(q3_rev)
+    db.flush()
+    q3.last_revision_id = q3_rev.id
+    db.commit()
+
+    payload = {
+        "name": random_lower_string(),
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "is_active": True,
+        "link": random_lower_string(),
+        "marks_level": "test",
+        "marking_scheme": {"correct": 5, "wrong": -1, "skipped": 1},
+        "question_revision_ids": [q1_rev.id, q2_rev.id, q3_rev.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    question_types = [
+        q.get("question_type") for q in data.get("question_revisions", [])
+    ]
+    assert QuestionType.subjective in question_types

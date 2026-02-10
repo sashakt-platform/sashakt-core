@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.utils import CorrectAnswerType
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
@@ -28,9 +29,14 @@ class CandidateTestAnswerBase(SQLModel):
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
-    response: str | None = Field(nullable=False, default=None)
+    response: str | None = Field(nullable=True, default=None)
     visited: bool = Field(nullable=False, default=False)
     time_spent: int = Field(nullable=True, default=0)
+    bookmarked: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Was this question bookmarked by test taker?",
+    )
 
 
 class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
@@ -57,12 +63,21 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    correct_answer: CorrectAnswerType = None
+
+
+class CandidateTestAnswerFeedback(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    correct_answer: CorrectAnswerType = None
 
 
 class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
     time_spent: int
+    bookmarked: bool | None = None
 
 
 # QR Code Candidate Request Models
@@ -73,6 +88,7 @@ class CandidateAnswerSubmitRequest(SQLModel):
     response: str | None = None
     visited: bool = False
     time_spent: int = 0
+    bookmarked: bool = False
 
 
 class BatchAnswerSubmitRequest(SQLModel):
@@ -87,6 +103,7 @@ class CandidateAnswerUpdateRequest(SQLModel):
     response: str | None = None
     visited: bool | None = None
     time_spent: int | None = None
+    bookmarked: bool = False
 
 
 # Linking Tables between Candidate and Test
@@ -101,6 +118,11 @@ class CandidateTestBase(SQLModel):
     start_time: datetime = Field(nullable=False)
     end_time: datetime | None = Field(nullable=True, default=None)
     is_submitted: bool = Field(default=False, nullable=False)
+    certificate_data: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSON),
+        description="Certificate data snapshot (token, candidate_name, test_name, score, completion_date)",
+    )
 
 
 class CandidateTest(CandidateTestBase, table=True):
@@ -142,6 +164,7 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):
@@ -245,6 +268,7 @@ class Result(SQLModel):
     total_questions: int
     marks_obtained: float | None
     marks_maximum: float | None
+    certificate_download_url: str | None = None
 
 
 class TestStatusSummary(SQLModel):
