@@ -60,6 +60,9 @@ services:
       - SENTRY_DSN=${SENTRY_DSN}
       - TIMEZONE=${TIMEZONE}
 
+    volumes:
+      - upload-data:/app/uploads
+
     healthcheck:
       test:
         [
@@ -91,6 +94,9 @@ services:
 
       # Enable redirection for HTTP and HTTPS
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=https-redirect
+
+volumes:
+  upload-data:
 
 networks:
   traefik-public:

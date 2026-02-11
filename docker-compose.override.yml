@@ -115,6 +115,7 @@ services:
     # TODO: remove once coverage is done locally
     volumes:
       - ./backend/htmlcov:/app/htmlcov
+      - ./backend/uploads:/app/uploads
 
   mailcatcher:
     image: schickling/mailcatcher

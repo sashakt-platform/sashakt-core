@@ -4,12 +4,22 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models.location import Country, State
+from app.models.location import Country, District, State
 from app.models.organization import Organization
-from app.models.question import Question, QuestionLocation, QuestionRevision
+from app.models.question import (
+    Question,
+    QuestionLocation,
+    QuestionRevision,
+    QuestionType,
+)
 from app.models.role import Role
 from app.models.test import Test, TestState
-from app.models.user import UserState
+from app.models.user import UserDistrict, UserState
+from app.tests.utils.files import (
+    create_large_test_image,
+    create_test_image,
+    create_text_file,
+)
 from app.tests.utils.organization import (
     create_random_organization,
 )
@@ -721,6 +731,184 @@ def test_aggregated_data_for_state_admin(
     assert data["total_users"] == 2
 
 
+def test_aggregated_data_for_state_admin_for_district(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    district_x1 = District(
+        name=random_lower_string(), state_id=state_x.id, is_active=True
+    )
+    district_x2 = District(
+        name=random_lower_string(), state_id=state_x.id, is_active=True
+    )
+    district_x3 = District(
+        name=random_lower_string(), state_id=state_x.id, is_active=True
+    )
+    district_y1 = District(
+        name=random_lower_string(), state_id=state_y.id, is_active=True
+    )
+
+    db.add_all([district_x1, district_x2, district_x3, district_y1])
+    db.commit()
+    db.refresh(district_x1)
+    db.refresh(district_x2)
+    db.refresh(district_x3)
+    db.refresh(district_y1)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": organization_id,
+        "state_ids": [state_x.id],
+        "district_ids": [
+            district_x1.id,
+            district_x2.id,
+        ],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_district_x12 = create_random_user(db, organization_id)
+    db.add(user_district_x12)
+    db.commit()
+    db.refresh(user_district_x12)
+    db.add(UserState(user_id=user_district_x12.id, state_id=state_x.id))
+    db.add(UserDistrict(user_id=user_district_x12.id, district_id=district_x1.id))
+    db.add(UserDistrict(user_id=user_district_x12.id, district_id=district_x2.id))
+
+    user_district_x3 = create_random_user(db, organization_id)
+    db.add(user_district_x3)
+    db.commit()
+    db.refresh(user_district_x3)
+    db.add(UserState(user_id=user_district_x3.id, state_id=state_x.id))
+    db.add(UserDistrict(user_id=user_district_x3.id, district_id=district_x3.id))
+
+    user_state_y = create_random_user(db, organization_id)
+    db.add(user_state_y)
+    db.commit()
+    db.refresh(user_state_y)
+    db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+
+    db.commit()
+
+    for _ in range(4):
+        response = client.post(
+            f"{settings.API_V1_STR}/questions/",
+            json={
+                "organization_id": organization_id,
+                "question_text": random_lower_string(),
+                "question_type": QuestionType.single_choice,
+                "options": [
+                    {"id": 1, "key": "A", "value": "Option 1"},
+                    {"id": 2, "key": "B", "value": "Option 2"},
+                ],
+                "correct_answer": [1],
+                "is_mandatory": True,
+                "state_ids": [state_x.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    for _ in range(2):
+        response = client.post(
+            f"{settings.API_V1_STR}/questions/",
+            json={
+                "organization_id": organization_id,
+                "question_text": random_lower_string(),
+                "question_type": QuestionType.single_choice,
+                "options": [
+                    {"id": 1, "key": "A", "value": "Option 1"},
+                    {"id": 2, "key": "B", "value": "Option 2"},
+                ],
+                "correct_answer": [1],
+                "is_mandatory": True,
+                "state_ids": [state_y.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    db.commit()
+
+    for _ in range(3):
+        response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={
+                "name": random_lower_string(),
+                "description": random_lower_string(),
+                "time_limit": 30,
+                "marks": 10,
+                "link": random_lower_string(),
+                "is_active": True,
+                "locale": "en-US",
+                "state_ids": [state_x.id],
+                "district_ids": [district_x1.id, district_x2.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    for _ in range(2):
+        response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={
+                "name": random_lower_string(),
+                "description": random_lower_string(),
+                "time_limit": 30,
+                "marks": 10,
+                "link": random_lower_string(),
+                "is_active": True,
+                "locale": "en-US",
+                "state_ids": [state_x.id],
+                "district_ids": [district_x3.id],
+            },
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/aggregated_data",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_questions"] == 4
+    assert data["total_tests"] == 3
+    assert data["total_users"] == 2
+
+
 def test_aggregated_data_for_state_admin_distinct_check(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
@@ -898,3 +1086,530 @@ def test_aggregated_data_for_state_admin_distinct_check(
     assert data["total_questions"] == 8
     assert data["total_tests"] == 7
     assert data["total_users"] == 2
+
+
+def test_get_current_organization(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    email_with_org = random_email()
+    role = db.exec(select(Role).where(Role.name == "candidate")).first()
+    assert role is not None
+
+    user_payload = {
+        "email": email_with_org,
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "organization_id": org.id,
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=user_payload,
+        headers=get_user_superadmin_token,
+    )
+    headers_with_org = authentication_token_from_email(
+        client=client, email=email_with_org, db=db
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/current", headers=headers_with_org
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["id"] == org.id
+    assert data["name"] == org.name
+    assert data["description"] == org.description
+
+
+def test_update_current_organization(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    new_name = random_lower_string()
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        data={
+            "name": new_name,
+        },
+        headers=headers,
+    )
+    data = response.json()
+
+    assert response.status_code == status.HTTP_200_OK
+    assert data["id"] == org.id
+    assert data["name"] == new_name
+
+
+def test_get_public_organization_by_shortcode_success(
+    client: TestClient, db: SessionDep
+) -> None:
+    logo_path = "/uploads/organizations/logos/test_logo.png"
+    org = Organization(
+        name=random_lower_string(),
+        logo=logo_path,
+        shortcode=random_lower_string(),
+        is_active=True,
+        is_deleted=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.get(f"{settings.API_V1_STR}/organization/public/{org.shortcode}")
+
+    data = response.json()
+
+    assert response.status_code == status.HTTP_200_OK
+    assert data["name"] == org.name
+    assert data["logo"].endswith(logo_path)
+    assert data["shortcode"] == org.shortcode
+
+
+def test_get_public_organization_by_shortcode_inactive(
+    client: TestClient, db: SessionDep
+) -> None:
+    org = Organization(
+        name=random_lower_string(),
+        logo=random_lower_string(),
+        shortcode=random_lower_string(),
+        is_active=False,
+        is_deleted=False,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.get(f"{settings.API_V1_STR}/organization/public/{org.shortcode}")
+
+    data = response.json()
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert data["detail"] == "Organization not found"
+
+
+def test_update_current_organization_with_logo(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test updating organization with valid logo upload."""
+
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create test image
+    logo_file = create_test_image(width=200, height=200, format="PNG")
+
+    # Update with logo
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        data={"name": "Updated Organization Name"},
+        files={"logo": ("test_logo.png", logo_file, "image/png")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["name"] == "Updated Organization Name"
+    assert data["logo"] is not None
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_update_current_organization_without_logo(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test updating organization fields without touching logo."""
+    org = create_random_organization(db)
+
+    # Set initial logo
+    org.logo = "/uploads/organizations/logos/org_1_existing.png"
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Update name without logo
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        data={"name": "Updated Name"},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["name"] == "Updated Name"
+    assert data["logo"].endswith("/uploads/organizations/logos/org_1_existing.png")
+
+
+def test_update_organization_logo_invalid_file_type(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test rejecting invalid file types (non-image files)."""
+
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Try to upload text file
+    text_file = create_text_file()
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("test.txt", text_file, "text/plain")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert (
+        "Invalid file type" in data["detail"]
+        or "Invalid file content" in data["detail"]
+    )
+
+
+def test_update_organization_logo_file_too_large(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test rejecting files larger than 2MB."""
+
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create large file (3MB)
+    large_file = create_large_test_image(size_mb=3)
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("large.jpg", large_file, "image/jpeg")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    # File can be rejected for either size or dimensions (both indicate file is too large)
+    assert (
+        "exceeds maximum allowed size" in data["detail"]
+        or "dimensions" in data["detail"]
+        and "too large" in data["detail"]
+    )
+
+
+def test_update_organization_logo_replaces_old(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that uploading new logo replaces old logo."""
+    from app.tests.utils.files import create_test_image
+
+    org = create_random_organization(db)
+
+    # Set initial logo
+    org.logo = "/uploads/organizations/logos/org_1_old.png"
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Upload new logo
+    new_logo = create_test_image(width=150, height=150, format="PNG")
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("new_logo.png", new_logo, "image/png")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert not data["logo"].endswith("/uploads/organizations/logos/org_1_old.png")
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_delete_current_organization_logo_success(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test successful logo deletion."""
+    org = create_random_organization(db)
+
+    # Set initial logo
+    org.logo = "/uploads/organizations/logos/org_1_test.png"
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Delete logo
+    response = client.delete(
+        f"{settings.API_V1_STR}/organization/current/logo",
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is None
+
+
+def test_delete_logo_when_none_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test deleting logo when none exists returns 404."""
+    org = create_random_organization(db)
+
+    # Ensure no logo
+    org.logo = None
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Try to delete non-existent logo
+    response = client.delete(
+        f"{settings.API_V1_STR}/organization/current/logo",
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert "has no logo to delete" in data["detail"]
+
+
+def test_update_organization_logo_empty_file(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test rejecting empty file upload."""
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Try to upload empty file
+    from io import BytesIO
+
+    empty_file = BytesIO(b"")
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("empty.png", empty_file, "image/png")},
+        headers=headers,
+    )
+
+    data = response.json()
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Empty file" in data["detail"]
+
+
+def test_update_organization_logo_no_filename(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test rejecting file upload with no filename."""
+    from app.tests.utils.files import create_test_image
+
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    assert role is not None
+
+    email = random_email()
+    password = random_lower_string()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": password,
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "organization_id": org.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Try to upload file with empty filename
+    logo_file = create_test_image(width=100, height=100, format="PNG")
+    response = client.patch(
+        f"{settings.API_V1_STR}/organization/current",
+        files={"logo": ("", logo_file, "image/png")},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

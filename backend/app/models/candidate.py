@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 from app.core.timezone import get_timezone_aware_now
+from app.models.utils import CorrectAnswerType
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
@@ -36,6 +37,11 @@ class CandidateTestAnswerBase(SQLModel):
         sa_column_kwargs={"server_default": "false"},
         description="Was this question bookmarked by test taker?",
     )
+    is_reviewed: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Has this answer been reviewed?",
+    )
 
 
 class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
@@ -64,11 +70,26 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     modified_date: datetime
 
 
+class CandidateTestAnswerFeedback(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    correct_answer: CorrectAnswerType = None
+
+
+class CandidateReviewResponse(SQLModel):
+    __test__ = False
+    question_revision_id: int
+    submitted_answer: str | None = None
+    correct_answer: CorrectAnswerType = None
+
+
 class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
     time_spent: int
     bookmarked: bool | None = None
+    is_reviewed: bool = False
 
 
 # QR Code Candidate Request Models
@@ -80,6 +101,7 @@ class CandidateAnswerSubmitRequest(SQLModel):
     visited: bool = False
     time_spent: int = 0
     bookmarked: bool = False
+    is_reviewed: bool = False
 
 
 class BatchAnswerSubmitRequest(SQLModel):
@@ -109,6 +131,11 @@ class CandidateTestBase(SQLModel):
     start_time: datetime = Field(nullable=False)
     end_time: datetime | None = Field(nullable=True, default=None)
     is_submitted: bool = Field(default=False, nullable=False)
+    certificate_data: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSON),
+        description="Certificate data snapshot (token, candidate_name, test_name, score, completion_date)",
+    )
 
 
 class CandidateTest(CandidateTestBase, table=True):
@@ -150,6 +177,7 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):
@@ -253,6 +281,7 @@ class Result(SQLModel):
     total_questions: int
     marks_obtained: float | None
     marks_maximum: float | None
+    certificate_download_url: str | None = None
 
 
 class TestStatusSummary(SQLModel):

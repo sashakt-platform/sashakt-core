@@ -20,6 +20,7 @@ from app.models.provider import (
     ProviderCreate,
     ProviderPublic,
     ProviderSyncStatus,
+    ProviderType,
     ProviderUpdate,
 )
 from app.services.data_sync import data_sync_service
@@ -180,14 +181,14 @@ def create_organization_provider(
 
     if org_provider_in.config_json:
         try:
-            # Ensure dataset_id includes organization suffix for isolation
             config_data = org_provider_in.config_json.copy()
-            dataset_id = config_data.get("dataset_id", "sashakt_data")
 
-            # Add organization suffix if not already present
-            org_suffix = f"_{organization_id}"
-            if not dataset_id.endswith(org_suffix):
-                config_data["dataset_id"] = f"{dataset_id}{org_suffix}"
+            # BigQuery-specific: Ensure dataset_id includes organization suffix for isolation
+            if provider.provider_type == ProviderType.BIGQUERY:
+                dataset_id = config_data.get("dataset_id", "sashakt_data")
+                org_suffix = f"_{organization_id}"
+                if not dataset_id.endswith(org_suffix):
+                    config_data["dataset_id"] = f"{dataset_id}{org_suffix}"
 
             encrypted_config = provider_config_service.prepare_config_for_storage(
                 provider.provider_type, config_data
@@ -236,14 +237,14 @@ def update_organization_provider(
 
     if "config_json" in update_dict and update_dict["config_json"]:
         try:
-            # Ensure dataset_id includes organization suffix for isolation
             config_data = update_dict["config_json"].copy()
-            dataset_id = config_data.get("dataset_id", "sashakt_data")
 
-            # Add organization suffix if not already present
-            org_suffix = f"_{organization_id}"
-            if not dataset_id.endswith(org_suffix):
-                config_data["dataset_id"] = f"{dataset_id}{org_suffix}"
+            # BigQuery-specific: Ensure dataset_id includes organization suffix for isolation
+            if org_provider.provider.provider_type == ProviderType.BIGQUERY:
+                dataset_id = config_data.get("dataset_id", "sashakt_data")
+                org_suffix = f"_{organization_id}"
+                if not dataset_id.endswith(org_suffix):
+                    config_data["dataset_id"] = f"{dataset_id}{org_suffix}"
 
             encrypted_config = provider_config_service.prepare_config_for_storage(
                 org_provider.provider.provider_type, config_data

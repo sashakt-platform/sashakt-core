@@ -17,6 +17,12 @@ class MarksLevelEnum(str, enum.Enum):
     TEST = "test"
 
 
+class OMRMode(str, enum.Enum):
+    NEVER = "NEVER"
+    ALWAYS = "ALWAYS"
+    OPTIONAL = "OPTIONAL"
+
+
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
@@ -25,6 +31,7 @@ if TYPE_CHECKING:
         TagPublic,
         User,
     )
+    from app.models.certificate import Certificate
     from app.models.location import Block, District, State
 
 
@@ -197,10 +204,34 @@ class TestBase(SQLModel):
             "server_default": DEFAULT_LOCALE,
         },
     )
+    omr: OMRMode = Field(
+        default=OMRMode.NEVER,
+        title="OMR Mode",
+        description="Defines OMR behavior for the test",
+        sa_column_kwargs={"server_default": OMRMode.NEVER},
+    )
     show_question_palette: bool = Field(
         default=False,
         sa_column_kwargs={"server_default": "false"},
         description="Whether question palette should be visible for test taker.",
+    )
+    certificate_id: int | None = Field(
+        default=None,
+        foreign_key="certificate.id",
+        nullable=True,
+        description="Certificate linked to this test",
+    )
+    show_feedback_on_completion: bool = Field(
+        default=False,
+        title="Show Feedback on Completion",
+        description="If enabled, candidates can review their answers, correct answers, explanations after submitting the test.",
+        sa_column_kwargs={"server_default": "false"},
+    )
+    show_feedback_immediately: bool = Field(
+        default=False,
+        title="Show Instant Feedback",
+        description="Show feedback to candidate immediately after each question",
+        sa_column_kwargs={"server_default": "false"},
     )
 
 
@@ -231,6 +262,8 @@ class Test(TestBase, table=True):
         title="Organization ID",
         description="ID of the organization to which the test belongs.",
     )
+
+    certificate: Optional["Certificate"] = Relationship(back_populates="tests")
 
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
@@ -301,6 +334,7 @@ class TestUpdate(TestBase):
 class EntityPublicLimited(SQLModel):
     id: int
     name: str
+    label: str
     state: Union["State", None] = None
     district: Union["District", None] = None
     block: Union["Block", None] = None

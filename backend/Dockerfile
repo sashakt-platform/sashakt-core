@@ -35,9 +35,10 @@ COPY ./pyproject.toml ./uv.lock ./alembic.ini /app/
 
 COPY ./app /app/app
 
-# Install tzdata for timezone support at runtime
+# Install tzdata for timezone support at runtime and also libmagic for file type detection
 RUN apt-get update && \
   apt-get install -y --no-install-recommends tzdata && \
+  apt-get install -y libmagic1 && \
   rm -rf /var/lib/apt/lists/*
 
 # Create timezone setup script that runs at container startup

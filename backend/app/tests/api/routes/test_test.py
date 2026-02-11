@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
+from app.models.certificate import Certificate
 from app.models.entity import Entity, EntityType
 from app.models.location import Block, District
 from app.models.question import QuestionType
@@ -5874,6 +5875,97 @@ def test_get_public_test_location_details(
             assert entity["block"]["id"] == block.id
 
 
+def test_get_public_test_location_details_with_profile_label(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+    )
+
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    db.add_all([entity_A, entity_B])
+    db.commit()
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    profile_list = data["profile_list"]
+
+    for entity in profile_list:
+        if entity["id"] == entity_A.id:
+            assert entity["label"] == entity_A.name
+
+        if entity["id"] == entity_B.id:
+            assert entity["label"] == f"{entity_B.name} - ({block.name})"
+
+
 def test_candidate_profile_lower_location_entity(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -6332,6 +6424,10 @@ def test_test_list_state_user(
     )
     data = response.json()
     assert response.status_code == 200
+    # state admin should see:
+    # - tests assigned to their state (3 + 2 = 5)
+    # - tests with no state assigned (2)
+    # Total: 7 tests
     assert data["total"] == 7
     assert len(data["items"]) == 7
 
@@ -6906,3 +7002,370 @@ def test_get_test_returns_show_question_palette(
     data = get_response.json()
     assert "show_question_palette" in data
     assert data["show_question_palette"] is True
+
+
+def test_create_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "certificate_id": certificate.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["certificate_id"] == certificate.id
+
+
+def test_update_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+    assert create_resp.json()["certificate_id"] is None
+
+    update_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "certificate_id": certificate.id,
+    }
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_resp.status_code == 200
+    data = update_resp.json()
+    assert data["certificate_id"] == certificate.id
+
+    update_payload["certificate_id"] = None
+    remove_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert remove_resp.status_code == 200
+    data_remove = remove_resp.json()
+    assert data_remove["certificate_id"] is None
+
+
+def test_district_user_cannot_modify_out_of_scope_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+
+    district_1 = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district_1)
+    db.commit()
+
+    district_2 = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district_2)
+    db.commit()
+
+    email = random_email()
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org,
+        "state_id": [state.id],
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_systemadmin_token,
+    )
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    assert response.status_code == 200
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state.id],
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+    test_id = data["id"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+        json=test_payload,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+
+    test_payload_district_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state.id],
+        "district_ids": [district_2.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload_district_2,
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+    test_id = data["id"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+        json=test_payload_district_2,
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "cannot modify/delete" in data["detail"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "cannot modify/delete" in data["detail"]
+
+
+def test_get_tests_by_district_user(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_1, state_2])
+    db.commit()
+    db.refresh(state_1)
+    db.refresh(state_2)
+
+    district_1 = District(
+        name=random_lower_string(), is_active=True, state_id=state_1.id
+    )
+    district_11 = District(
+        name=random_lower_string(), is_active=True, state_id=state_1.id
+    )
+    district_2 = District(
+        name=random_lower_string(), is_active=True, state_id=state_2.id
+    )
+    db.add_all([district_1, district_11, district_2])
+    db.commit()
+    db.refresh(district_1)
+    db.refresh(district_11)
+    db.refresh(district_2)
+
+    email = random_email()
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    state_admin_user_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_id": state_1.id,
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_user_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_1_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_1.id],
+        "district_ids": [district_1.id],
+    }
+
+    test_11_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_1.id],
+        "district_ids": [district_11.id],
+    }
+
+    test_2_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_2.id],
+        "district_ids": [district_2.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_1_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    test_1 = data["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_11_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_2_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == test_1

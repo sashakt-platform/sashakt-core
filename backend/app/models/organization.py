@@ -7,7 +7,7 @@ from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import Candidate
 
 if TYPE_CHECKING:
-    from app.models import EntityType, Question, Tag, TagType, Test, User
+    from app.models import Certificate, EntityType, Question, Tag, TagType, Test, User
     from app.models.provider import OrganizationProvider
 
 
@@ -19,6 +19,13 @@ class OrganizationBase(SQLModel):
         default=None, title="Description", description="Description of the organization"
     )
     is_active: bool = Field(default=True)
+    shortcode: str | None = Field(
+        default=None,
+        index=True,
+        unique=True,
+        description="Unique short code used to identify the organization",
+    )
+    logo: str | None = Field(default=None)
 
 
 class Organization(OrganizationBase, table=True):
@@ -35,6 +42,7 @@ class Organization(OrganizationBase, table=True):
     tag_types: list["TagType"] = Relationship(back_populates="organization")
     tags: list["Tag"] = Relationship(back_populates="organization")
     entity_types: list["EntityType"] = Relationship(back_populates="organization")
+    certificates: list["Certificate"] = Relationship(back_populates="organization")
     users: list["User"] = Relationship(back_populates="organization")
     question: list["Question"] = Relationship(back_populates="organization")
     organization_providers: list["OrganizationProvider"] = Relationship(
@@ -63,3 +71,9 @@ class AggregatedData(SQLModel):
     total_questions: int
     total_users: int
     total_tests: int
+
+
+class OrganizationPublicMinimal(SQLModel):
+    name: str
+    logo: str | None = None
+    shortcode: str
