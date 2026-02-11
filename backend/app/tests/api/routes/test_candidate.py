@@ -24,7 +24,7 @@ from app.models.location import Country, District, State
 from app.models.question import QuestionTag, QuestionType
 from app.models.role import Role
 from app.models.tag import Tag, TagType
-from app.models.test import TestDistrict, TestQuestion, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestQuestion, TestState, TestTag
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import (
@@ -1401,6 +1401,241 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     test_candidate_response = TestCandidatePublic.model_validate(data)
     assert test_candidate_response.id == test.id
     assert test_candidate_response.candidate_test.id == candidate_test_id
+
+
+def test_get_test_questions_omr_optional_yes(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        omr=OMRMode.OPTIONAL,
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    payload = {
+        "test_id": test.id,
+        "device_info": "Test Device",
+    }
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={
+            "candidate_uuid": start_data["candidate_uuid"],
+            "use_omr": True,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    question_data = data["question_revisions"][0]
+    assert question_data["question_text"] is None
+    for option in question_data["options"]:
+        assert "value" not in option
+
+
+def test_get_test_questions_omr_mode(client: TestClient, db: SessionDep) -> None:
+    """Test that OMR mode excludes question_text and option.value from response."""
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        omr=OMRMode.ALWAYS,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "question_revisions" in data
+    assert isinstance(data["question_revisions"], list)
+    assert len(data["question_revisions"]) > 0
+
+    question_data = data["question_revisions"][0]
+    assert question_data["question_text"] is None
+
+    assert "options" in question_data
+    assert question_data["options"] is not None
+    for option in question_data["options"]:
+        assert "id" in option
+        assert "key" in option
+
+    assert "id" in question_data
+    assert "question_type" in question_data
+    assert "is_mandatory" in question_data
+
+
+def test_get_test_questions_normal_mode(client: TestClient, db: SessionDep) -> None:
+    """Test that normal mode (omr=false) includes question_text and option.value."""
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 2+2?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        omr=OMRMode.NEVER,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert "question_revisions" in data
+    assert isinstance(data["question_revisions"], list)
+    assert len(data["question_revisions"]) > 0
+
+    question_data = data["question_revisions"][0]
+    assert question_data["question_text"] == "What is 2+2?"
+
+    assert "options" in question_data
+    assert question_data["options"] is not None
+    for option in question_data["options"]:
+        assert "id" in option
+        assert "key" in option
+        assert "value" in option
+
+        if option["key"] == "A":
+            assert option["value"] == "3"
+        elif option["key"] == "B":
+            assert option["value"] == "4"
+        elif option["key"] == "C":
+            assert option["value"] == "5"
 
 
 def test_get_test_questions_invalid_uuid(client: TestClient, db: SessionDep) -> None:

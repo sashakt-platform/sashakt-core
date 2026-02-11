@@ -45,7 +45,7 @@ from app.models.candidate import (
 )
 from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
-from app.models.test import TestDistrict, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -706,6 +706,9 @@ def get_test_questions(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
+    use_omr: bool = Query(
+        False, description="Applicable only when test OMR mode is OPTIONAL"
+    ),
 ) -> TestCandidatePublic:
     """
     Get test questions for a candidate test, verified by candidate UUID.
@@ -755,15 +758,33 @@ def get_test_questions(
     if test.marks_level == "test":
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
+    omr_mode = getattr(test, "omr", OMRMode.NEVER)
+
+    if omr_mode == OMRMode.NEVER:
+        hide_question_text = False
+
+    elif omr_mode == OMRMode.ALWAYS:
+        hide_question_text = True
+
+    elif omr_mode == OMRMode.OPTIONAL:
+        hide_question_text = bool(use_omr)
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(
             id=q.id,
-            question_text=q.question_text,
+            question_text=None if hide_question_text else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
-            options=q.options,
+            options=[
+                {
+                    "id": getattr(opt, "id", opt.get("id")),
+                    "key": getattr(opt, "key", opt.get("key")),
+                }
+                for opt in (q.options or [])
+            ]
+            if hide_question_text and q.options
+            else q.options,
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
             media=q.media,

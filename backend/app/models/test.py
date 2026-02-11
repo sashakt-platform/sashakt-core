@@ -17,6 +17,12 @@ class MarksLevelEnum(str, enum.Enum):
     TEST = "test"
 
 
+class OMRMode(str, enum.Enum):
+    NEVER = "NEVER"
+    ALWAYS = "ALWAYS"
+    OPTIONAL = "OPTIONAL"
+
+
 if TYPE_CHECKING:
     from app.models import (
         Candidate,
@@ -197,6 +203,12 @@ class TestBase(SQLModel):
         sa_column_kwargs={
             "server_default": DEFAULT_LOCALE,
         },
+    )
+    omr: OMRMode = Field(
+        default=OMRMode.NEVER,
+        title="OMR Mode",
+        description="Defines OMR behavior for the test",
+        sa_column_kwargs={"server_default": OMRMode.NEVER},
     )
     show_question_palette: bool = Field(
         default=False,
