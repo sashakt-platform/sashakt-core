@@ -29,6 +29,7 @@ class QuestionType(str, Enum):
     multi_choice = "multi-choice"
     subjective = "subjective"
     numerical_integer = "numerical-integer"
+    numerical_decimal = "numerical-decimal"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -176,6 +177,34 @@ class QuestionBase(SQLModel):
         elif question_type == QuestionType.subjective:
             if options is not None and len(options) > 0:
                 raise ValueError("Subjective questions should not have options.")
+
+        elif question_type in [
+            QuestionType.numerical_integer,
+            QuestionType.numerical_decimal,
+        ]:
+            if correct_answer is not None:
+                try:
+                    if not isinstance(correct_answer, (int | float)):
+                        raise TypeError
+
+                    value = float(correct_answer)
+
+                    if question_type == QuestionType.numerical_integer:
+                        if not value.is_integer():
+                            raise ValueError(
+                                "Numerical integer questions must have an integer correct answer."
+                            )
+                        self.correct_answer = int(value)
+                    else:
+                        self.correct_answer = value
+
+                except (ValueError, TypeError):
+                    msg = (
+                        "Numerical integer questions must have an integer correct answer. Examples: 5, 42, 0, -3"
+                        if question_type == QuestionType.numerical_integer
+                        else "Numerical decimal questions must have a decimal correct answer. Examples: 3.14, 0.75, -2.5, 5.0"
+                    )
+                    raise ValueError(msg)
 
         return self
 

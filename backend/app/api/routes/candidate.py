@@ -1236,6 +1236,18 @@ def get_test_result(
     marks_maximum = 0.0
     marking_scheme = None
 
+    def set_correct() -> None:
+        nonlocal correct, marks_obtained
+        correct += 1
+        if marking_scheme:
+            marks_obtained += marking_scheme["correct"]
+
+    def set_incorrect() -> None:
+        nonlocal incorrect, marks_obtained
+        incorrect += 1
+        if marking_scheme:
+            marks_obtained += marking_scheme["wrong"]
+
     for revision, answer in joined_data:
         if test.marks_level == "test":
             marking_scheme = test.marking_scheme
@@ -1256,25 +1268,46 @@ def get_test_result(
                 is_attempted = bool(answer.response)
 
                 if is_attempted:
-                    correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
+                    set_correct()
+
                 else:
-                    incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    set_incorrect()
             elif revision.question_type.value in ["single-choice", "multi-choice"]:
                 response_list = convert_to_list(answer.response)
                 correct_list = convert_to_list(revision.correct_answer)
 
                 if set(response_list) == set(correct_list):
-                    correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
+                    set_correct()
                 else:
-                    incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    set_incorrect()
+
+            elif revision.question_type.value in [
+                "numerical-integer",
+                "numerical-decimal",
+            ]:
+                try:
+                    user_value = float(answer.response)
+                except (TypeError, ValueError):
+                    set_incorrect()
+                    continue
+
+                if isinstance(revision.correct_answer, int | float):
+                    correct_value = float(revision.correct_answer)
+                else:
+                    continue
+
+                if revision.question_type.value == "numerical-integer":
+                    is_correct = user_value.is_integer() and int(user_value) == int(
+                        correct_value
+                    )
+                else:
+                    is_correct = abs(user_value - correct_value) <= 0.5
+
+                if is_correct:
+                    set_correct()
+                else:
+                    set_incorrect()
+
     total_questions = len(candidate_test.question_revision_ids)
 
     # Generate certificate download URL if test has a certificate assigned
