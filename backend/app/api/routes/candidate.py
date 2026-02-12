@@ -1236,13 +1236,13 @@ def get_test_result(
     marks_maximum = 0.0
     marking_scheme = None
 
-    def set_correct():
+    def set_correct() -> None:
         nonlocal correct, marks_obtained
         correct += 1
         if marking_scheme:
             marks_obtained += marking_scheme["correct"]
 
-    def set_incorrect():
+    def set_incorrect() -> None:
         nonlocal incorrect, marks_obtained
         incorrect += 1
         if marking_scheme:
