@@ -1448,7 +1448,7 @@ def test_question_validation_numerical_integer_valid_zero(
     assert data["correct_answer"] == 0
 
 
-def test_question_validation_numerical_integer_valid_string(
+def test_question_validation_numerical_integer_string_invalid(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     org = Organization(name=random_lower_string())
@@ -1469,10 +1469,12 @@ def test_question_validation_numerical_integer_valid_string(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     data = response.json()
-    assert data["question_type"] == "numerical-integer"
-    assert data["correct_answer"] == 5
+    assert (
+        "Numerical integer questions must have an integer correct answer"
+        in data["detail"][0]["msg"]
+    )
 
 
 def test_question_validation_numerical_integer_valid_float_whole_number(
@@ -1694,7 +1696,7 @@ def test_question_validation_numerical_decimal_valid_integer_as_decimal(
     assert data["correct_answer"] == 5
 
 
-def test_question_validation_numerical_decimal_valid_string(
+def test_question_validation_numerical_decimal_string_invalid(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     org = Organization(name=random_lower_string())
@@ -1715,10 +1717,10 @@ def test_question_validation_numerical_decimal_valid_string(
         headers=get_user_superadmin_token,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     data = response.json()
-    assert data["question_type"] == "numerical-decimal"
-    assert data["correct_answer"] == 0.75
+    print("Data is --->", data["detail"])
+    assert "Numerical decimal questions" in data["detail"][0]["msg"]
 
 
 def test_question_validation_numerical_decimal_valid_small_decimal(
