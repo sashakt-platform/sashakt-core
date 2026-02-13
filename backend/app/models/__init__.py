@@ -43,6 +43,20 @@ from .entity import (
     EntityTypeUpdate,
     EntityUpdate,
 )
+from .form import (
+    Form,
+    FormCreate,
+    FormField,
+    FormFieldCreate,
+    FormFieldPublic,
+    FormFieldReorder,
+    FormFieldType,
+    FormFieldUpdate,
+    FormPublic,
+    FormResponse,
+    FormResponsePublic,
+    FormUpdate,
+)
 from .location import (
     Block,
     BlockCreate,
@@ -270,6 +284,18 @@ __all__ = [
     "OrganizationProviderUpdate",
     "EntityPublicLimited",
     "TagRandomPublic",
+    "Form",
+    "FormCreate",
+    "FormField",
+    "FormFieldCreate",
+    "FormFieldPublic",
+    "FormFieldReorder",
+    "FormFieldType",
+    "FormFieldUpdate",
+    "FormPublic",
+    "FormResponse",
+    "FormResponsePublic",
+    "FormUpdate",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
@@ -280,3 +306,4 @@ TestPublic.model_rebuild()
 TestPublicLimited.model_rebuild()
 UserPublic.model_rebuild()
 UserPublicMe.model_rebuild()
+FormPublic.model_rebuild()

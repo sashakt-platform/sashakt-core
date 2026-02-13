@@ -8,6 +8,7 @@ from app.models.candidate import Candidate
 
 if TYPE_CHECKING:
     from app.models import Certificate, EntityType, Question, Tag, TagType, Test, User
+    from app.models.form import Form
     from app.models.provider import OrganizationProvider
 
 
@@ -50,6 +51,7 @@ class Organization(OrganizationBase, table=True):
     )
     tests: list["Test"] = Relationship(back_populates="organization")
     candidates: list["Candidate"] = Relationship(back_populates="organization")
+    forms: list["Form"] = Relationship(back_populates="organization")
 
 
 class OrganizationCreate(OrganizationBase):

@@ -73,17 +73,8 @@ def get_certificates(
     )
 
     if name:
-        # escape LIKE pattern special characters to prevent injection
-        #  TODO: may be able to use built-in escaping in SQLModel/SQLAlchemy in the future
-        safe_name = (
-            name.strip()
-            .lower()
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-        )
         query = query.where(
-            func.trim(func.lower(Certificate.name)).like(f"%{safe_name}%", escape="\\")
+            func.lower(Certificate.name).contains(name.strip().lower(), autoescape=True)
         )
 
     certificates: Page[CertificatePublic] = paginate(

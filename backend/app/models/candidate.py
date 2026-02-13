@@ -10,6 +10,7 @@ from app.models.utils import CorrectAnswerType
 
 if TYPE_CHECKING:
     from app.models import QuestionRevision, Test, User
+    from app.models.form import FormResponse
     from app.models.location import State
     from app.models.organization import Organization
     from app.models.question import QuestionCandidatePublic
@@ -155,6 +156,7 @@ class CandidateTest(CandidateTestBase, table=True):
     question_revision_ids: list[int] = Field(
         default_factory=list, sa_column=Column(JSON)
     )
+    form_responses: list["FormResponse"] = Relationship(back_populates="candidate_test")
 
 
 class CandidateTestProfile(SQLModel, table=True):
@@ -294,7 +296,8 @@ class TestStatusSummary(SQLModel):
 class StartTestRequest(SQLModel):
     test_id: int
     device_info: str | None = None
-    candidate_profile: CandidateProfile | None = None
+    candidate_profile: CandidateProfile | None = None  # Legacy support
+    form_responses: dict[str, Any] | None = None  # New form responses
 
 
 class StartTestResponse(SQLModel):

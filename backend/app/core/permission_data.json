@@ -655,5 +655,50 @@
     "state_admin": false,
     "test_admin": false,
     "candidate": false
+  },
+  {
+    "name": "create_form",
+    "description": "Create New Form",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
+  },
+  {
+    "name": "read_form",
+    "description": "Read Form Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
+  },
+  {
+    "name": "update_form",
+    "description": "Update Existing Form",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
+  },
+  {
+    "name": "delete_form",
+    "description": "Delete Existing Form",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
+  },
+  {
+    "name": "read_form_response",
+    "description": "Read Form Response Details",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": true,
+    "test_admin": true,
+    "candidate": false
   }
 ]

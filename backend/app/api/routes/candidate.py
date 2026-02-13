@@ -43,6 +43,7 @@ from app.models.candidate import (
     StartTestResponse,
     TestStatusSummary,
 )
+from app.models.form import FormResponse
 from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
@@ -356,11 +357,23 @@ def start_test_for_candidate(
         start_test_request.candidate_profile
         and start_test_request.candidate_profile.entity_id
     ):
+        # Legacy support: store entity_id in CandidateTestProfile
+        # TODO: May be remove this code at some point in future
         candidate_test_profile = CandidateTestProfile(
             candidate_test_id=candidate_test.id,
             entity_id=start_test_request.candidate_profile.entity_id,
         )
         session.add(candidate_test_profile)
+        session.commit()
+
+    # Handle new form responses
+    if start_test_request.form_responses and test.form_id:
+        form_response = FormResponse(
+            candidate_test_id=candidate_test.id,
+            form_id=test.form_id,
+            responses=start_test_request.form_responses,
+        )
+        session.add(form_response)
         session.commit()
 
     return StartTestResponse(
