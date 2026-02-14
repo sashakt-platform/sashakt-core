@@ -438,7 +438,7 @@ def test_get_district(
     db.refresh(ernakulam)
     db.refresh(thrissur)
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?size=100&state={kerala.id}",
+        f"{settings.API_V1_STR}/location/district/?size=100&state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -461,7 +461,7 @@ def test_get_district(
     assert_paginated_response(response, min_expected_total=10, min_expected_pages=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?state={kerala.id}",
+        f"{settings.API_V1_STR}/location/district/?state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -514,7 +514,7 @@ def test_get_district_by_state_ids_filter(
     assert tamil_nadu.id not in state_ids_in_response
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?state={tamil_nadu.id}",
+        f"{settings.API_V1_STR}/location/district/?state_ids={tamil_nadu.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -753,7 +753,7 @@ def test_get_block(
     assert any(item["district_id"] == kovil.district_id for item in data)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?district={thrissur.id}",
+        f"{settings.API_V1_STR}/location/block/?district_ids={thrissur.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
