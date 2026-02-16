@@ -31,6 +31,7 @@ from app.models import (
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.entity import EntityBulkUploadResponse
+from app.models.form import FormResponse
 from app.models.location import Block, District, State
 from app.models.user import User
 
@@ -432,10 +433,19 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    attempted_entity_exists = session.exec(
+    # Check form_response
+    form_response_ref = session.exec(
+        select(FormResponse).where(
+            FormResponse.responses["entity_id"].as_string() == str(entity.id)  # type: ignore[index]
+        )
+    ).first()
+
+    # Check legacy candidate_test_profile table
+    legacy_ref = session.exec(
         select(CandidateTestProfile).where(CandidateTestProfile.entity_id == entity.id)
     ).first()
-    if attempted_entity_exists:
+
+    if form_response_ref or legacy_ref:
         raise HTTPException(
             status_code=400,
             detail="Cannot delete entity because it is referenced in Candidate Profile",
