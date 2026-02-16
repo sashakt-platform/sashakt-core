@@ -35,6 +35,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidateReviewResponse,
     CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
@@ -45,7 +46,7 @@ from app.models.candidate import (
 from app.models.form import FormResponse
 from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
-from app.models.test import TestDistrict, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import TimeLeft
 
@@ -417,9 +418,7 @@ def submit_answer_for_qr_candidate(
     Returns the answer along with correct answer from question revision.
     """
     # Verify UUID access
-    candidate_test = verify_candidate_uuid_access(
-        session, candidate_test_id, candidate_uuid
-    )
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
     question_revision = session.get(
         QuestionRevision, answer_request.question_revision_id
     )
@@ -446,11 +445,17 @@ def submit_answer_for_qr_candidate(
     ).first()
 
     if existing_answer:
+        if existing_answer.is_reviewed:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot modify answer after it has been reviewed",
+            )
         # Update existing answer
         existing_answer.response = answer_request.response
         existing_answer.visited = answer_request.visited
         existing_answer.time_spent = answer_request.time_spent
         existing_answer.bookmarked = answer_request.bookmarked
+        existing_answer.is_reviewed = answer_request.is_reviewed
         session.add(existing_answer)
         session.commit()
         session.refresh(existing_answer)
@@ -464,21 +469,12 @@ def submit_answer_for_qr_candidate(
             visited=answer_request.visited,
             time_spent=answer_request.time_spent,
             bookmarked=answer_request.bookmarked,
+            is_reviewed=answer_request.is_reviewed,
         )
         session.add(candidate_test_answer)
         session.commit()
         session.refresh(candidate_test_answer)
         saved_answer = candidate_test_answer
-
-    test = session.get(Test, candidate_test.test_id)
-    show_feedback = test.show_feedback_immediately if test else False
-
-    correct_answer = None
-    if show_feedback:
-        question_revision = session.get(
-            QuestionRevision, answer_request.question_revision_id
-        )
-        correct_answer = question_revision.correct_answer if question_revision else None
 
     return CandidateTestAnswerPublic(
         id=saved_answer.id,
@@ -490,7 +486,6 @@ def submit_answer_for_qr_candidate(
         bookmarked=saved_answer.bookmarked,
         created_date=saved_answer.created_date,
         modified_date=saved_answer.modified_date,
-        correct_answer=correct_answer,
     )
 
 
@@ -512,9 +507,7 @@ def submit_batch_answers_for_qr_candidate(
     Returns answers along with correct answers from question revisions.
     """
     # Verify UUID access
-    candidate_test = verify_candidate_uuid_access(
-        session, candidate_test_id, candidate_uuid
-    )
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
 
     question_revision_ids = [
         answer.question_revision_id for answer in batch_request.answers
@@ -554,6 +547,11 @@ def submit_batch_answers_for_qr_candidate(
         ).first()
 
         if existing_answer:
+            if existing_answer.is_reviewed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Cannot modify answer for question {answer.question_revision_id} after it has been reviewed",
+                )
             # Update existing answer
             existing_answer.response = answer.response
             existing_answer.visited = answer.visited
@@ -581,22 +579,6 @@ def submit_batch_answers_for_qr_candidate(
     for result in results:
         session.refresh(result)
 
-    test = session.get(Test, candidate_test.test_id)
-    show_feedback = test.show_feedback_immediately if test else False
-
-    correct_answers_map = {}
-    if show_feedback:
-        question_revision_ids = [result.question_revision_id for result in results]
-        question_revisions = session.exec(
-            select(QuestionRevision).where(
-                col(QuestionRevision.id).in_(question_revision_ids)
-            )
-        ).all()
-        correct_answers_map = {
-            question_revision.id: question_revision.correct_answer
-            for question_revision in question_revisions
-        }
-
     response = []
     for result in results:
         response.append(
@@ -610,7 +592,6 @@ def submit_batch_answers_for_qr_candidate(
                 bookmarked=result.bookmarked,
                 created_date=result.created_date,
                 modified_date=result.modified_date,
-                correct_answer=correct_answers_map.get(result.question_revision_id),
             )
         )
 
@@ -738,6 +719,9 @@ def get_test_questions(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
+    use_omr: bool = Query(
+        False, description="Applicable only when test OMR mode is OPTIONAL"
+    ),
 ) -> TestCandidatePublic:
     """
     Get test questions for a candidate test, verified by candidate UUID.
@@ -787,15 +771,33 @@ def get_test_questions(
     if test.marks_level == "test":
         for q in ordered_questions:
             q.marking_scheme = test.marking_scheme
+    omr_mode = getattr(test, "omr", OMRMode.NEVER)
+
+    if omr_mode == OMRMode.NEVER:
+        hide_question_text = False
+
+    elif omr_mode == OMRMode.ALWAYS:
+        hide_question_text = True
+
+    elif omr_mode == OMRMode.OPTIONAL:
+        hide_question_text = bool(use_omr)
 
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(
             id=q.id,
-            question_text=q.question_text,
+            question_text=None if hide_question_text else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
-            options=q.options,
+            options=[
+                {
+                    "id": getattr(opt, "id", opt.get("id")),
+                    "key": getattr(opt, "key", opt.get("key")),
+                }
+                for opt in (q.options or [])
+            ]
+            if hide_question_text and q.options
+            else q.options,
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
             media=q.media,
@@ -1168,6 +1170,13 @@ def update_candidate_answer_test(
     if not candidate_test_answer:
         raise HTTPException(status_code=404, detail="No Answer found")
 
+    # Block update if answer has been reviewed
+    if candidate_test_answer.is_reviewed:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot modify answer after it has been reviewed",
+        )
+
     candidate_test_answer_data = updated_data.model_dump(exclude_unset=True)
     candidate_test_answer.sqlmodel_update(candidate_test_answer_data)
     session.add(candidate_test_answer)
@@ -1240,6 +1249,18 @@ def get_test_result(
     marks_maximum = 0.0
     marking_scheme = None
 
+    def set_correct() -> None:
+        nonlocal correct, marks_obtained
+        correct += 1
+        if marking_scheme:
+            marks_obtained += marking_scheme["correct"]
+
+    def set_incorrect() -> None:
+        nonlocal incorrect, marks_obtained
+        incorrect += 1
+        if marking_scheme:
+            marks_obtained += marking_scheme["wrong"]
+
     for revision, answer in joined_data:
         if test.marks_level == "test":
             marking_scheme = test.marking_scheme
@@ -1260,25 +1281,46 @@ def get_test_result(
                 is_attempted = bool(answer.response)
 
                 if is_attempted:
-                    correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
+                    set_correct()
+
                 else:
-                    incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    set_incorrect()
             elif revision.question_type.value in ["single-choice", "multi-choice"]:
                 response_list = convert_to_list(answer.response)
                 correct_list = convert_to_list(revision.correct_answer)
 
                 if set(response_list) == set(correct_list):
-                    correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
+                    set_correct()
                 else:
-                    incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    set_incorrect()
+
+            elif revision.question_type.value in [
+                "numerical-integer",
+                "numerical-decimal",
+            ]:
+                try:
+                    user_value = float(answer.response)
+                except (TypeError, ValueError):
+                    set_incorrect()
+                    continue
+
+                if isinstance(revision.correct_answer, int | float):
+                    correct_value = float(revision.correct_answer)
+                else:
+                    continue
+
+                if revision.question_type.value == "numerical-integer":
+                    is_correct = user_value.is_integer() and int(user_value) == int(
+                        correct_value
+                    )
+                else:
+                    is_correct = abs(user_value - correct_value) <= 0.5
+
+                if is_correct:
+                    set_correct()
+                else:
+                    set_incorrect()
+
     total_questions = len(candidate_test.question_revision_ids)
 
     # Generate certificate download URL if test has a certificate assigned
@@ -1376,3 +1418,94 @@ def get_time_left(
 
     time_left = int(final_time_left.total_seconds())
     return TimeLeft(time_left=time_left)
+
+
+@router.get(
+    "/{candidate_test_id}/review-feedback",
+    response_model=list[CandidateReviewResponse],
+)
+def get_review_feedback(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+    question_revision_ids: list[int] | None = Query(
+        None, description="Optional list of question revision IDs for feedback"
+    ),
+) -> list[CandidateReviewResponse]:
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    show_instant_feedback = test.show_feedback_immediately
+    show_feedback_on_completion = test.show_feedback_on_completion
+
+    if candidate_test.end_time is None and not show_instant_feedback:
+        raise HTTPException(
+            status_code=403,
+            detail="Feedback is not enabled for this test during attempt",
+        )
+
+    if candidate_test.end_time is not None and not show_feedback_on_completion:
+        raise HTTPException(
+            status_code=403,
+            detail="Post-submission feedback is not enabled for this test",
+        )
+
+    assigned_ids = set(candidate_test.question_revision_ids)
+    if question_revision_ids:
+        question_ids_to_fetch = [
+            question_revision_id
+            for question_revision_id in question_revision_ids
+            if question_revision_id in assigned_ids
+        ]
+    else:
+        question_ids_to_fetch = candidate_test.question_revision_ids
+
+    submitted_answers = session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id,
+            col(CandidateTestAnswer.question_revision_id).in_(question_ids_to_fetch),
+        )
+    ).all()
+
+    answers_by_question_id = {
+        ans.question_revision_id: ans for ans in submitted_answers
+    }
+
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(question_ids_to_fetch)
+        )
+    ).all()
+
+    revisions_by_id = {rev.id: rev for rev in question_revisions}
+
+    feedback_list: list[CandidateReviewResponse] = []
+
+    for question_id in question_ids_to_fetch:
+        if question_revision := revisions_by_id.get(question_id):
+            candidate_answer = answers_by_question_id.get(question_id)
+
+            if candidate_answer and not candidate_answer.is_reviewed:
+                candidate_answer.is_reviewed = True
+                session.add(candidate_answer)
+
+            feedback_list.append(
+                CandidateReviewResponse(
+                    question_revision_id=question_id,
+                    submitted_answer=(
+                        candidate_answer.response if candidate_answer else None
+                    ),
+                    correct_answer=question_revision.correct_answer,
+                )
+            )
+
+    session.commit()
+
+    return feedback_list

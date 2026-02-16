@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from pydantic import model_validator
 from sqlalchemy.orm import Mapped
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
@@ -29,6 +29,7 @@ class QuestionType(str, Enum):
     multi_choice = "multi-choice"
     subjective = "subjective"
     numerical_integer = "numerical-integer"
+    numerical_decimal = "numerical-decimal"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -68,7 +69,7 @@ class Option(TypedDict):
 
     id: int
     key: str
-    value: str
+    value: NotRequired[str]
 
 
 class FailedQuestion(TypedDict):
@@ -176,6 +177,34 @@ class QuestionBase(SQLModel):
         elif question_type == QuestionType.subjective:
             if options is not None and len(options) > 0:
                 raise ValueError("Subjective questions should not have options.")
+
+        elif question_type in [
+            QuestionType.numerical_integer,
+            QuestionType.numerical_decimal,
+        ]:
+            if correct_answer is not None:
+                try:
+                    if not isinstance(correct_answer, (int | float)):
+                        raise TypeError
+
+                    value = float(correct_answer)
+
+                    if question_type == QuestionType.numerical_integer:
+                        if not value.is_integer():
+                            raise ValueError(
+                                "Numerical integer questions must have an integer correct answer."
+                            )
+                        self.correct_answer = int(value)
+                    else:
+                        self.correct_answer = value
+
+                except (ValueError, TypeError):
+                    msg = (
+                        "Numerical integer questions must have an integer correct answer. Examples: 5, 42, 0, -3"
+                        if question_type == QuestionType.numerical_integer
+                        else "Numerical decimal questions must have a decimal correct answer. Examples: 3.14, 0.75, -2.5, 5.0"
+                    )
+                    raise ValueError(msg)
 
         return self
 
@@ -480,11 +509,13 @@ class QuestionCandidatePublic(SQLModel):
     """Candidate-safe representation of a question (no answers or solutions)"""
 
     id: int = Field(description="ID of the question")
-    question_text: str = Field(description="The question text")
+    question_text: str | None = Field(
+        default=None, description="The question text (excluded in OMR mode)"
+    )
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
     options: list[Option] | None = Field(
-        description="Available options for choice questions"
+        description="Available options for choice questions (option.value excluded in OMR mode)"
     )
     subjective_answer_limit: int | None = Field(
         description="Character limit for subjective answers"

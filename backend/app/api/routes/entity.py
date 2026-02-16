@@ -299,6 +299,7 @@ def get_entities(
     sorting: EntitySortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
+    entity_type_id: int | None = None,
 ) -> Page[EntityPublic]:
     query = (
         select(Entity)
@@ -319,6 +320,8 @@ def get_entities(
         query = query.where(
             func.lower(Entity.name).contains(name.strip().lower(), autoescape=True)
         )
+    if entity_type_id:
+        query = query.where(Entity.entity_type_id == entity_type_id)
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none("name", SortOrder.ASC)
