@@ -393,8 +393,7 @@ def test_delete_entitytype_with_associated_entities(
 
     assert response.status_code == 400
     assert (
-        "Cannot delete EntityType as it has associated Entities"
-        in response_data["detail"]
+        "Cannot delete Entity as it has associated records." in response_data["detail"]
     )
 
 
