@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi_pagination import Page
@@ -13,7 +13,7 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
-from app.api.routes.utils import get_current_time
+from app.api.routes.utils import get_current_time, get_current_user_location_ids
 from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     SortingParams,
@@ -38,6 +38,7 @@ from app.models import (
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.entity import Entity
 from app.models.location import District
+from app.models.role import Role
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
@@ -55,6 +56,113 @@ router = APIRouter(prefix="/test", tags=["Test"])
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
+
+
+def check_test_permission(
+    session: SessionDep,
+    current_user: CurrentUser,
+    test: Test,
+    *,
+    cached_user_location_ids: set[int] | None = None,
+    cached_user_location_level: Literal["state", "district"] | None = None,
+) -> None:
+    """Check if the current user has permission to modify the test.
+    A district level user can only modify tests of same district.
+    A state level user can only modify tests of same state."""
+
+    user_location_level: Literal["state", "district"] | None = None
+    user_location_ids: set[int] | None = None
+    exception_message = "State/test-admin cannot modify/delete general tests or tests outside their location."
+
+    if cached_user_location_level and cached_user_location_ids:
+        user_location_level = cached_user_location_level
+        user_location_ids = cached_user_location_ids
+    else:
+        user_location_level, user_location_ids = get_current_user_location_ids(
+            current_user
+        )
+    # If the user has no scoped locations, deny (matches “cannot modify general/out of scope”)
+    if not user_location_level or not user_location_ids:
+        raise HTTPException(
+            403,
+            exception_message,
+        )
+    test_district_ids: set[int] = set()
+
+    if user_location_level == "district":
+        district_rows = session.exec(
+            select(TestDistrict.district_id).where(TestDistrict.test_id == test.id)
+        ).all()
+        for row in district_rows:
+            district_id = row[0] if isinstance(row, tuple) else row
+            if district_id is not None:
+                test_district_ids.add(int(district_id))
+
+        district_out_of_scope = (not test_district_ids) or (
+            not test_district_ids.issubset(user_location_ids)
+        )
+        if district_out_of_scope:
+            raise HTTPException(
+                403,
+                exception_message,
+            )
+    else:
+        test_state_ids: set[int] = set()
+        state_rows = session.exec(
+            select(TestState.state_id).where(TestState.test_id == test.id)
+        ).all()
+        for row in state_rows:
+            state_id = row[0] if isinstance(row, tuple) else row
+            if state_id is not None:
+                test_state_ids.add(int(state_id))
+        # also include states derived from test districts
+        district_state_rows = session.exec(
+            select(District.state_id)
+            .join(TestDistrict)
+            .where(TestDistrict.district_id == District.id)
+            .where(TestDistrict.test_id == test.id)
+        ).all()
+        for row in district_state_rows:
+            district_state_id = row[0] if isinstance(row, tuple) else row
+            if district_state_id is not None:
+                test_state_ids.add(int(district_state_id))
+        state_out_of_scope = (not test_state_ids) or (
+            not test_state_ids.issubset(user_location_ids)
+        )
+        if state_out_of_scope:
+            raise HTTPException(
+                403,
+                exception_message,
+            )
+
+
+def add_test_to_failure_list(
+    session: SessionDep, test: Test, failure_list: list[TestPublic]
+) -> None:
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags = session.exec(tags_query).all()
+    question_revision_query = (
+        select(QuestionRevision)
+        .join(TestQuestion)
+        .where(TestQuestion.test_id == test.id)
+    )
+    question_revisions = session.exec(question_revision_query).all()
+    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+    states = session.exec(state_query).all()
+    district_query = (
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
+    )
+    districts = session.exec(district_query).all()
+
+    failure_list.append(
+        TestPublic(
+            **test.model_dump(),
+            tags=tags,
+            question_revisions=question_revisions,
+            states=states,
+            districts=districts,
+        )
+    )
 
 
 def check_linked_question(session: SessionDep, test_id: int) -> bool:
@@ -181,20 +289,58 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
 
         entities = session.exec(query).all()
 
-        profile_list = [
-            EntityPublicLimited(
-                id=entity.id,
-                name=entity.name,
-                state=session.get(State, entity.state_id) if entity.state_id else None,
-                district=(
-                    session.get(District, entity.district_id)
-                    if entity.district_id
-                    else None
-                ),
-                block=session.get(Block, entity.block_id) if entity.block_id else None,
+        entity_block_ids = {e.block_id for e in entities if e.block_id is not None}
+        entity_state_ids = {e.state_id for e in entities if e.state_id is not None}
+        entity_district_ids = {
+            e.district_id for e in entities if e.district_id is not None
+        }
+
+        blocks_by_id = (
+            {
+                b.id: b
+                for b in session.exec(
+                    select(Block).where(col(Block.id).in_(entity_block_ids))
+                ).all()
+            }
+            if entity_block_ids
+            else {}
+        )
+        states_by_id = (
+            {
+                s.id: s
+                for s in session.exec(
+                    select(State).where(col(State.id).in_(entity_state_ids))
+                ).all()
+            }
+            if entity_state_ids
+            else {}
+        )
+        districts_by_id = (
+            {
+                d.id: d
+                for d in session.exec(
+                    select(District).where(col(District.id).in_(entity_district_ids))
+                ).all()
+            }
+            if entity_district_ids
+            else {}
+        )
+
+        for entity in entities:
+            block = blocks_by_id.get(entity.block_id)
+            state = states_by_id.get(entity.state_id)
+            district = districts_by_id.get(entity.district_id)
+
+            profile_list.append(
+                EntityPublicLimited(
+                    id=entity.id,
+                    name=entity.name,
+                    label=f"{entity.name} - ({block.name})" if block else entity.name,
+                    state=state,
+                    district=district,
+                    block=block,
+                )
             )
-            for entity in entities
-        ]
 
     if (
         test.random_questions
@@ -393,16 +539,59 @@ def get_test(
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
-        current_user_state_ids = (
-            [state.id for state in current_user.states] if current_user.states else []
+        current_user_district_ids = (
+            [district.id for district in current_user.districts]
+            if current_user.districts
+            else []
         )
-        if current_user_state_ids:
-            query = query.outerjoin(TestState).where(
+        if current_user_district_ids:
+            # tests with no district AND no state assigned
+            no_location_assigned = ~exists(
+                select(TestDistrict.test_id).where(TestDistrict.test_id == Test.id)
+            ) & ~exists(select(TestState.test_id).where(TestState.test_id == Test.id))
+
+            # tests assigned to current users district
+            district_subquery = (
+                select(TestDistrict.test_id)
+                .where(col(TestDistrict.district_id).in_(current_user_district_ids))
+                .distinct()
+            )
+
+            # show unassigned tests OR tests matching users district
+            query = query.where(
                 or_(
-                    col(TestState.state_id).is_(None),
-                    col(TestState.state_id).in_(current_user_state_ids),
+                    no_location_assigned,
+                    col(Test.id).in_(district_subquery),
                 )
             )
+        else:
+            current_user_state_ids = (
+                [state.id for state in current_user.states]
+                if current_user.states
+                else []
+            )
+            if current_user_state_ids:
+                # tests with no state assigned
+                no_state_assigned = ~exists(
+                    select(TestState.test_id).where(TestState.test_id == Test.id)
+                )
+
+                # tests assigned to current users state
+                state_subquery = (
+                    select(TestState.test_id)
+                    .where(col(TestState.state_id).in_(current_user_state_ids))
+                    .distinct()
+                )
+
+                # show unassigned tests OR tests matching users state
+                query = query.where(
+                    or_(
+                        no_state_assigned,
+                        col(Test.id).in_(state_subquery),
+                    )
+                )
+
+        # if no district or state assigned, show all tests (no filter applied)
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
@@ -516,7 +705,7 @@ def get_test(
     # let's get the tests with custom transformer
     tests: Page[TestPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_tests_to_public(session, items),
     )
@@ -529,10 +718,17 @@ def get_test(
     response_model=TestPublic,
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
+def get_test_by_id(
+    test_id: int, session: SessionDep, current_user: CurrentUser
+) -> TestPublic:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+
+    # check location based access for state/district admins
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_test_permission(session, current_user, test)
 
     tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
     tags = session.exec(tags_query).all()
@@ -573,11 +769,16 @@ def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_test_permission(session, current_user, test)
+
     if (
         test_update.start_time is not None
         or test_update.end_time is not None
@@ -828,10 +1029,15 @@ def visibility_test(
     "/{test_id}",
     dependencies=[Depends(permission_dependency("delete_test"))],
 )
-def delete_test(test_id: int, session: SessionDep) -> Message:
+def delete_test(
+    test_id: int, session: SessionDep, current_user: CurrentUser
+) -> Message:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_test_permission(session, current_user, test)
 
     if check_linked_question(session, test_id):
         raise HTTPException(
@@ -873,39 +1079,33 @@ def bulk_delete_question(
             status_code=404, detail="Invalid Tests selected for deletion"
         )
 
+    role = session.get(Role, current_user.role_id)
+    admin_location_ids: set[int] | None = None
+    admin_location_level: Literal["state", "district"] | None = None
+
+    if role and role.name in (state_admin.name, test_admin.name):
+        admin_location_level, admin_location_ids = get_current_user_location_ids(
+            current_user
+        )
     for test in db_test:
-        if test.id is not None and check_linked_question(session, test.id):
-            tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-            tags = session.exec(tags_query).all()
-            question_revision_query = (
-                select(QuestionRevision)
-                .join(TestQuestion)
-                .where(TestQuestion.test_id == test.id)
-            )
-            question_revisions = session.exec(question_revision_query).all()
-            state_query = (
-                select(State).join(TestState).where(TestState.test_id == test.id)
-            )
-            states = session.exec(state_query).all()
-            district_query = (
-                select(District)
-                .join(TestDistrict)
-                .where(TestDistrict.test_id == test.id)
-            )
-            districts = session.exec(district_query).all()
-            if test:
-                failure_list.append(
-                    TestPublic(
-                        **test.model_dump(),
-                        tags=tags,
-                        question_revisions=question_revisions,
-                        states=states,
-                        districts=districts,
-                    )
+        try:
+            if admin_location_ids:
+                check_test_permission(
+                    session,
+                    current_user,
+                    test,
+                    cached_user_location_ids=admin_location_ids,
+                    cached_user_location_level=admin_location_level,
                 )
-        else:
-            session.delete(test)
-            success_count += 1
+
+            if test.id is not None and check_linked_question(session, test.id):
+                add_test_to_failure_list(session, test, failure_list)
+            else:
+                session.delete(test)
+                success_count += 1
+
+        except HTTPException:
+            add_test_to_failure_list(session, test, failure_list)
 
     session.commit()
     return DeleteTest(

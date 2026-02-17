@@ -14,7 +14,11 @@ from app.models.location import Block, Country, District, State
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import assert_paginated_response, random_lower_string
+from app.tests.utils.utils import (
+    assert_paginated_response,
+    random_email,
+    random_lower_string,
+)
 
 
 def test_create_entitytype(
@@ -22,12 +26,12 @@ def test_create_entitytype(
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
+    user_organization_id = user_data["organization_id"]
     user, organization = setup_user_organization(db)
 
     data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
-        "organization_id": organization.id,
     }
 
     response = client.post(
@@ -40,14 +44,13 @@ def test_create_entitytype(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
-    assert response_data["organization_id"] == data["organization_id"]
+    assert response_data["organization_id"] == user_organization_id
     assert response_data["created_by_id"] == user_id
     assert response_data["is_active"] is True
     assert "created_date" in response_data
     assert "modified_date" in response_data
     data = {
         "name": random_lower_string(),
-        "organization_id": organization.id,
     }
 
     response = client.post(
@@ -59,7 +62,7 @@ def test_create_entitytype(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] is None
-    assert response_data["organization_id"] == data["organization_id"]
+    assert response_data["organization_id"] == user_organization_id
     assert response_data["created_by_id"] == user_id
     assert response_data["is_active"] is True
     assert "created_date" in response_data
@@ -67,17 +70,16 @@ def test_create_entitytype(
 
 
 def test_prevent_duplicate_entitytype_creation(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
-    user, organization = setup_user_organization(db)
+    user_organization_id = user_data["organization_id"]
 
     name = "school"
     data = {
         "name": name,
         "description": random_lower_string(),
-        "organization_id": organization.id,
     }
 
     response = client.post(
@@ -88,12 +90,11 @@ def test_prevent_duplicate_entitytype_creation(
     assert response.status_code == 200
     response_data = response.json()
     assert response_data["name"] == name
-    assert response_data["organization_id"] == data["organization_id"]
+    assert response_data["organization_id"] == user_organization_id
 
     # Duplicate name in uppercase should fail
     data_upper = {
         "name": "SCHOOL",
-        "organization_id": organization.id,
     }
     response_upper = client.post(
         f"{settings.API_V1_STR}/entitytype/",
@@ -110,7 +111,6 @@ def test_prevent_duplicate_entitytype_creation(
     # Duplicate name with extra spaces should also fail
     data_spaces = {
         "name": "   school  ",
-        "organization_id": organization.id,
     }
     response_spaces = client.post(
         f"{settings.API_V1_STR}/entitytype/",
@@ -127,7 +127,6 @@ def test_prevent_duplicate_entitytype_creation(
     unique_name = "college"
     data_unique = {
         "name": unique_name,
-        "organization_id": organization.id,
         "description": random_lower_string(),
     }
     response_unique = client.post(
@@ -139,7 +138,7 @@ def test_prevent_duplicate_entitytype_creation(
     response_data_unique = response_unique.json()
     assert response_data_unique["name"] == unique_name
     assert response_data_unique["description"] == data_unique["description"]
-    assert response_data_unique["organization_id"] == organization.id
+    assert response_data_unique["organization_id"] == user_organization_id
     assert response_data_unique["created_by_id"] == user_id
 
 
@@ -248,14 +247,13 @@ def test_update_entitytype_by_id(
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
-    user, organization = setup_user_organization(db)
-    user_b, organization_b = setup_user_organization(db)
+    user_organization_id = user_data["organization_id"]
 
     entitytype = EntityType(
         name=random_lower_string(),
         description=random_lower_string(),
-        organization_id=organization.id,
         created_by_id=user_id,
+        organization_id=user_organization_id,
     )
     db.add(entitytype)
     db.commit()
@@ -263,13 +261,11 @@ def test_update_entitytype_by_id(
     data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
-        "organization_id": organization.id,
     }
 
     data_b = {
         "name": random_lower_string(),
         "description": random_lower_string(),
-        "organization_id": organization_b.id,
     }
 
     # First update
@@ -282,7 +278,7 @@ def test_update_entitytype_by_id(
     assert response.status_code == 200
     assert response_data["name"] == data["name"]
     assert response_data["description"] == data["description"]
-    assert response_data["organization_id"] == entitytype.organization_id
+    assert response_data["organization_id"] == user_organization_id
     assert response_data["created_by_id"] == user_id
     assert response_data["is_active"] is True
     assert "created_date" in response_data
@@ -298,7 +294,7 @@ def test_update_entitytype_by_id(
     assert response.status_code == 200
     assert response_data["name"] == data_b["name"]
     assert response_data["description"] == data_b["description"]
-    assert response_data["organization_id"] == data_b["organization_id"]
+    assert response_data["organization_id"] == user_organization_id
     assert response_data["created_by_id"] == user_id
     assert response_data["is_active"] is True
     assert "created_date" in response_data
@@ -1711,3 +1707,553 @@ Clf Kasauli 3,CLF,Testblock,{existing_district.name},{state.name}
     finally:
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
+
+def test_permission_check_entity(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+    )
+    assert response.status_code == 401
+
+
+def test_permission_check_entity_type(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+    )
+    assert response.status_code == 401
+
+
+def test_get_entities_filtered_by_organization(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
+    """
+    Test that users can only see entities belonging to entity types
+    from their own organization, even when entities from multiple
+    organizations exist in the database.
+    """
+    from sqlmodel import select
+
+    from app import crud
+    from app.models import Organization, Role, UserCreate
+
+    # Get super_admin role
+    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    if not super_admin_role:
+        raise Exception("super_admin role not found in database")
+
+    # Create organization 1 with super_admin user
+    org1 = Organization(name=random_lower_string(), description=random_lower_string())
+    db.add(org1)
+    db.commit()
+    db.refresh(org1)
+
+    user1_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        phone=random_lower_string(),
+        full_name=random_lower_string(),
+        role_id=super_admin_role.id,
+        organization_id=org1.id,
+    )
+    user1 = crud.create_user(session=db, user_create=user1_in)
+
+    # Create organization 2 with super_admin user
+    org2 = Organization(name=random_lower_string(), description=random_lower_string())
+    db.add(org2)
+    db.commit()
+    db.refresh(org2)
+
+    user2_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        phone=random_lower_string(),
+        full_name=random_lower_string(),
+        role_id=super_admin_role.id,
+        organization_id=org2.id,
+    )
+    user2 = crud.create_user(session=db, user_create=user2_in)
+
+    # Create entity types for each organization
+    entity_type_org1 = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org1.id,
+        created_by_id=user1.id,
+    )
+    entity_type_org2 = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org2.id,
+        created_by_id=user2.id,
+    )
+    db.add_all([entity_type_org1, entity_type_org2])
+    db.commit()
+    db.refresh(entity_type_org1)
+    db.refresh(entity_type_org2)
+
+    # Create entities for organization 1
+    entity_names_org_1 = [random_lower_string() for _ in range(2)]
+    entity_names_org_2 = [random_lower_string() for _ in range(2)]
+    entity1_org1 = Entity(
+        name=entity_names_org_1[0],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org1.id,
+        created_by_id=user1.id,
+    )
+    entity2_org1 = Entity(
+        name=entity_names_org_1[1],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org1.id,
+        created_by_id=user1.id,
+    )
+
+    # Create entities for organization 2
+    entity1_org2 = Entity(
+        name=entity_names_org_2[0],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org2.id,
+        created_by_id=user2.id,
+    )
+    entity2_org2 = Entity(
+        name=entity_names_org_2[1],
+        description=random_lower_string(),
+        entity_type_id=entity_type_org2.id,
+        created_by_id=user2.id,
+    )
+
+    db.add_all([entity1_org1, entity2_org1, entity1_org2, entity2_org2])
+    db.commit()
+    # Get authentication tokens for both users
+    user1_token = {"Authorization": f"Bearer {user1.token}"}
+    user2_token = {"Authorization": f"Bearer {user2.token}"}
+
+    # User1 should only see entities from org1
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=user1_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Verify user1 sees only org1 entities
+    assert entity_names_org_1[0] in entity_names
+    assert entity_names_org_1[1] in entity_names
+    assert entity_names_org_2[0] not in entity_names
+    assert entity_names_org_2[1] not in entity_names
+
+    # Verify entity types belong to org1
+    for entity in data["items"]:
+        if entity["entity_type"] is not None:
+            assert entity["entity_type"]["organization_id"] == org1.id
+
+    # User2 should only see entities from org2
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=user2_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Verify user2 sees only org2 entities
+    assert entity_names_org_2[0] in entity_names
+    assert entity_names_org_2[1] in entity_names
+    assert entity_names_org_1[0] not in entity_names
+    assert entity_names_org_1[1] not in entity_names
+
+    # Verify entity types belong to org2
+    for entity in data["items"]:
+        if entity["entity_type"] is not None:
+            assert entity["entity_type"]["organization_id"] == org2.id
+
+
+def test_entity_filter_by_entity_type(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """
+    Test filtering entities by entity_type_id parameter.
+    Should return only entities belonging to the specified entity type.
+    """
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id)
+
+    # Create multiple entity types
+    entity_type_1_name = random_lower_string()
+    entity_type_2_name = random_lower_string()
+    entity_type_3_name = random_lower_string()
+
+    entity_type_1 = EntityType(
+        name=entity_type_1_name,
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    entity_type_2 = EntityType(
+        name=entity_type_2_name,
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    entity_type_3 = EntityType(
+        name=entity_type_3_name,
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    db.add_all([entity_type_1, entity_type_2, entity_type_3])
+    db.commit()
+    db.refresh(entity_type_1)
+    db.refresh(entity_type_2)
+    db.refresh(entity_type_3)
+
+    # Create entities for entity_type_1
+    entity_1_name = random_lower_string()
+    entity_2_name = random_lower_string()
+    entity1 = Entity(
+        name=entity_1_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type_1.id,
+        created_by_id=user.id,
+    )
+    entity2 = Entity(
+        name=entity_2_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type_1.id,
+        created_by_id=user.id,
+    )
+
+    # Create entities for entity_type_2
+    entity_3_name = random_lower_string()
+    entity_4_name = random_lower_string()
+    entity3 = Entity(
+        name=entity_3_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type_2.id,
+        created_by_id=user.id,
+    )
+    entity4 = Entity(
+        name=entity_4_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type_2.id,
+        created_by_id=user.id,
+    )
+
+    # Create entities for entity_type_3
+    entity_5_name = random_lower_string()
+    entity5 = Entity(
+        name=entity_5_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type_3.id,
+        created_by_id=user.id,
+    )
+
+    db.add_all([entity1, entity2, entity3, entity4, entity5])
+    db.commit()
+
+    # Test 1: Filter by entity_type_1
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?entity_type_id={entity_type_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Should only return entity_type_1 entities
+    assert entity_1_name in entity_names
+    assert entity_2_name in entity_names
+    assert entity_3_name not in entity_names
+    assert entity_4_name not in entity_names
+    assert entity_5_name not in entity_names
+
+    # Verify all returned entities have the correct entity_type_id
+    for entity in data["items"]:
+        if entity["entity_type"] is not None:
+            assert entity["entity_type"]["id"] == entity_type_1.id
+            assert entity["entity_type"]["name"] == entity_type_1_name
+
+    # Test 2: Filter by entity_type_2
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?entity_type_id={entity_type_2.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Should only return entity_type_2 entities
+    assert entity_3_name in entity_names
+    assert entity_4_name in entity_names
+    assert entity_1_name not in entity_names
+    assert entity_2_name not in entity_names
+    assert entity_5_name not in entity_names
+
+    # Verify all returned entities have the correct entity_type_id
+    for entity in data["items"]:
+        if entity["entity_type"] is not None:
+            assert entity["entity_type"]["id"] == entity_type_2.id
+            assert entity["entity_type"]["name"] == entity_type_2_name
+
+    # Test 3: Filter by entity_type_3
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?entity_type_id={entity_type_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Should only return entity_type_3 entities
+    assert entity_5_name in entity_names
+    assert entity_1_name not in entity_names
+    assert entity_2_name not in entity_names
+    assert entity_3_name not in entity_names
+    assert entity_4_name not in entity_names
+
+    # Test 4: No filter - should return all entities
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    entity_names = [entity["name"] for entity in data["items"]]
+
+    # Should return all entities created in this test
+    assert entity_1_name in entity_names
+    assert entity_2_name in entity_names
+    assert entity_3_name in entity_names
+    assert entity_4_name in entity_names
+    assert entity_5_name in entity_names
+
+
+def test_sort_entity_by_state_district_block(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """
+    Test sorting entities by state, district, and block names.
+    Verifies that entities can be sorted by location hierarchy in both ASC and DESC order.
+    """
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id)
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    # Create states with names that will sort predictably (using alphabetical prefixes)
+    state_a_name = "A_" + random_lower_string()
+    state_b_name = "B_" + random_lower_string()
+    state_c_name = "C_" + random_lower_string()
+
+    state_a = State(name=state_a_name, country_id=country.id)
+    state_b = State(name=state_b_name, country_id=country.id)
+    state_c = State(name=state_c_name, country_id=country.id)
+    db.add_all([state_a, state_b, state_c])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+    db.refresh(state_c)
+
+    # Create districts with names that will sort predictably
+    district_a_name = "A_" + random_lower_string()
+    district_b_name = "B_" + random_lower_string()
+    district_c_name = "C_" + random_lower_string()
+
+    district_a = District(name=district_a_name, state_id=state_a.id)
+    district_b = District(name=district_b_name, state_id=state_b.id)
+    district_c = District(name=district_c_name, state_id=state_c.id)
+    db.add_all([district_a, district_b, district_c])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+    db.refresh(district_c)
+
+    # Create blocks with names that will sort predictably
+    block_a_name = "A_" + random_lower_string()
+    block_b_name = "B_" + random_lower_string()
+    block_c_name = "C_" + random_lower_string()
+
+    block_a = Block(name=block_a_name, district_id=district_a.id)
+    block_b = Block(name=block_b_name, district_id=district_b.id)
+    block_c = Block(name=block_c_name, district_id=district_c.id)
+    db.add_all([block_a, block_b, block_c])
+    db.commit()
+    db.refresh(block_a)
+    db.refresh(block_b)
+    db.refresh(block_c)
+
+    # Create entity type
+    entity_type = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user.id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    # Create entities with different states, districts, and blocks
+    entity_a_name = random_lower_string()
+    entity_b_name = random_lower_string()
+    entity_c_name = random_lower_string()
+
+    entity_a = Entity(
+        name=entity_a_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        state_id=state_a.id,
+        district_id=district_a.id,
+        block_id=block_a.id,
+        created_by_id=user.id,
+    )
+    entity_b = Entity(
+        name=entity_b_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        state_id=state_b.id,
+        district_id=district_b.id,
+        block_id=block_b.id,
+        created_by_id=user.id,
+    )
+    entity_c = Entity(
+        name=entity_c_name,
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        state_id=state_c.id,
+        district_id=district_c.id,
+        block_id=block_c.id,
+        created_by_id=user.id,
+    )
+    db.add_all([entity_a, entity_b, entity_c])
+    db.commit()
+
+    # Test 1: Sort by state ASC
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?sort_by=state&sort_order=asc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    state_names = [
+        entity["state"]["name"]
+        for entity in data["items"]
+        if entity["state"] is not None
+        and entity["state"]["name"] in [state_a_name, state_b_name, state_c_name]
+    ]
+    # Should be sorted alphabetically: A, B, C
+    assert state_names == sorted([state_a_name, state_b_name, state_c_name])
+
+    # Test 2: Sort by state DESC
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?sort_by=state&sort_order=desc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    state_names = [
+        entity["state"]["name"]
+        for entity in data["items"]
+        if entity["state"] is not None
+        and entity["state"]["name"] in [state_a_name, state_b_name, state_c_name]
+    ]
+    # Should be sorted reverse alphabetically: C, B, A
+    assert state_names == sorted(
+        [state_a_name, state_b_name, state_c_name], reverse=True
+    )
+
+    # Test 3: Sort by district ASC
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?sort_by=district&sort_order=asc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    district_names = [
+        entity["district"]["name"]
+        for entity in data["items"]
+        if entity["district"] is not None
+        and entity["district"]["name"]
+        in [district_a_name, district_b_name, district_c_name]
+    ]
+    # Should be sorted alphabetically: A, B, C
+    assert district_names == sorted([district_a_name, district_b_name, district_c_name])
+
+    # Test 4: Sort by district DESC
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?sort_by=district&sort_order=desc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    district_names = [
+        entity["district"]["name"]
+        for entity in data["items"]
+        if entity["district"] is not None
+        and entity["district"]["name"]
+        in [district_a_name, district_b_name, district_c_name]
+    ]
+    # Should be sorted reverse alphabetically: C, B, A
+    assert district_names == sorted(
+        [district_a_name, district_b_name, district_c_name], reverse=True
+    )
+
+    # Test 5: Sort by block ASC
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?sort_by=block&sort_order=asc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    block_names = [
+        entity["block"]["name"]
+        for entity in data["items"]
+        if entity["block"] is not None
+        and entity["block"]["name"] in [block_a_name, block_b_name, block_c_name]
+    ]
+    # Should be sorted alphabetically: A, B, C
+    assert block_names == sorted([block_a_name, block_b_name, block_c_name])
+
+    # Test 6: Sort by block DESC
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?sort_by=block&sort_order=desc",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    block_names = [
+        entity["block"]["name"]
+        for entity in data["items"]
+        if entity["block"] is not None
+        and entity["block"]["name"] in [block_a_name, block_b_name, block_c_name]
+    ]
+    # Should be sorted reverse alphabetically: C, B, A
+    assert block_names == sorted(
+        [block_a_name, block_b_name, block_c_name], reverse=True
+    )

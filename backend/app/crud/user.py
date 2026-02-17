@@ -6,8 +6,15 @@ from sqlmodel import Session, select
 from app.core.config import settings
 from app.core.roles import state_admin, test_admin
 from app.core.security import create_access_token, get_password_hash, verify_password
-from app.models import Permission, Role, RolePermission, State
-from app.models.user import User, UserCreate, UserPublic, UserState, UserUpdate
+from app.models import District, Permission, Role, RolePermission, State
+from app.models.user import (
+    User,
+    UserCreate,
+    UserDistrict,
+    UserPublic,
+    UserState,
+    UserUpdate,
+)
 
 
 def create_user(
@@ -56,6 +63,7 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
     role_label = role.label if role else "N/A"
 
     states = None
+    districts = None
     if role_name == state_admin.name or role_name == test_admin.name:
         state_query = (
             select(State)
@@ -64,6 +72,14 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
             .where(UserState.user_id == db_user.id)
         )
         states = session.exec(state_query).all()
+
+        districts_query = (
+            select(District)
+            .join(UserDistrict)
+            .where(District.id == UserDistrict.district_id)
+            .where(UserDistrict.user_id == db_user.id)
+        )
+        districts = session.exec(districts_query).all()
 
     user_public = UserPublic(
         id=db_user.id,
@@ -78,6 +94,7 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
         is_active=db_user.is_active,
         role_label=role_label,
         states=states or None,
+        districts=districts or None,
     )
     return user_public
 

@@ -39,6 +39,25 @@ class BigQueryConfig(BaseModel):
     )
 
 
+class GoogleSlidesConfig(BaseModel):
+    """
+    Google Slides configuration that accepts the service account JSON.
+    Uses same service account format as BigQuery for Google API access.
+    """
+
+    # Required service account fields
+    type: str = Field(..., description="Service account type")
+    project_id: str = Field(..., description="Google Cloud Project ID")
+    private_key_id: str = Field(..., description="Private key ID")
+    private_key: str = Field(..., description="Private key")
+    client_email: str = Field(..., description="Service account email")
+    client_id: str = Field(..., description="Client ID")
+    auth_uri: str = Field(..., description="Auth URI")
+    token_uri: str = Field(..., description="Token URI")
+    auth_provider_x509_cert_url: str = Field(..., description="Auth provider cert URL")
+    client_x509_cert_url: str = Field(..., description="Client cert URL")
+
+
 class ProviderConfigService:
     def __init__(self) -> None:
         self._encryption_key = self._get_or_generate_key()
@@ -80,8 +99,9 @@ class ProviderConfigService:
         self, provider_type: ProviderType, config: dict[str, Any]
     ) -> dict[str, Any]:
         if provider_type == ProviderType.BIGQUERY:
-            validated_config = BigQueryConfig(**config)
-            return validated_config.model_dump()
+            return BigQueryConfig(**config).model_dump()
+        elif provider_type == ProviderType.GOOGLE_SLIDES:
+            return GoogleSlidesConfig(**config).model_dump()
         else:
             raise ValueError(f"Unknown provider type: {provider_type}")
 

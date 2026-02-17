@@ -1,3 +1,5 @@
+import enum
+
 from sqlmodel import SQLModel
 from typing_extensions import NotRequired, TypedDict
 
@@ -5,6 +7,9 @@ from typing_extensions import NotRequired, TypedDict
 # Generic message
 class Message(SQLModel):
     message: str
+
+
+CorrectAnswerType = list[int] | list[str] | float | int | str | None
 
 
 class TimeLeft(TypedDict):
@@ -24,5 +29,14 @@ class MarkingScheme(TypedDict):
     correct: float
     wrong: float
     skipped: float
-
     partial: NotRequired[PartialMarkRule]
+
+
+class LocaleEnum(str, enum.Enum):
+    English = "en-US"
+    Hindi = "hi-IN"
+
+
+SUPPORTED_LOCALES = {loc.value: loc.name for loc in LocaleEnum}
+
+DEFAULT_LOCALE = LocaleEnum.English

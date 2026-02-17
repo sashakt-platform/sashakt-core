@@ -131,6 +131,33 @@ def test_create_question(
     assert question_tags[0].tag_id == tag_id
 
 
+def test_create_subjective_question_with_options_should_fail(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    org_id = org_response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org_id,
+            "question_text": random_lower_string(),
+            "question_type": QuestionType.subjective,
+            "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+            "is_mandatory": True,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 422
+    assert "Subjective questions should not have options." in data["detail"][0]["msg"]
+
+
 def test_read_questions(
     client: TestClient,
     db: SessionDep,
@@ -1094,6 +1121,7 @@ def test_question_tag_operations(
         json={
             "tag_ids": [tag1.id, tag2.id],  # Keep tag1, add tag2
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -1103,7 +1131,10 @@ def test_question_tag_operations(
     assert tag_ids == {tag1.id, tag2.id}
 
     # Get question tags to verify
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     tags = response.json()
 
     assert response.status_code == 200
@@ -1118,6 +1149,7 @@ def test_question_tag_operations(
         json={
             "tag_ids": [tag2.id],  # Keep only tag2, remove tag1
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -1126,7 +1158,10 @@ def test_question_tag_operations(
     assert updated_tags[0]["id"] == tag2.id
 
     # Verify tag was removed
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     tags = response.json()
 
     assert response.status_code == 200
@@ -1332,6 +1367,568 @@ def test_question_validation_valid_single_and_multi_choice(
     assert data["question_type"] == valid_multi_question["question_type"]
 
 
+def test_question_validation_numerical_integer_valid_positive(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": 42,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-integer"
+    assert data["correct_answer"] == 42
+
+
+def test_question_validation_numerical_integer_valid_negative(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": -3,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-integer"
+    assert data["correct_answer"] == -3
+
+
+def test_question_validation_numerical_integer_valid_zero(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": 0,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-integer"
+    assert data["correct_answer"] == 0
+
+
+def test_question_validation_numerical_integer_string_invalid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": "5",
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    data = response.json()
+    assert (
+        "Numerical integer questions must have an integer correct answer"
+        in data["detail"][0]["msg"]
+    )
+
+
+def test_question_validation_numerical_integer_valid_float_whole_number(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": 42.0,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-integer"
+    assert data["correct_answer"] == 42.0
+
+
+def test_question_validation_numerical_integer_invalid_decimal(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": 3.14,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Numerical integer questions must have an integer correct answer."
+        in response.text
+    )
+
+
+def test_question_validation_numerical_integer_invalid_string_decimal(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": "3.14",
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Numerical integer questions must have an integer correct answer."
+        in response.text
+    )
+
+
+def test_question_validation_numerical_integer_invalid_list(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": [5],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Numerical integer questions must have an integer correct answer."
+        in response.text
+    )
+
+
+def test_question_validation_numerical_decimal_valid_positive(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": 3.14,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-decimal"
+    assert data["correct_answer"] == 3.14
+
+
+def test_question_validation_numerical_decimal_valid_negative(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": -2.5,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-decimal"
+    assert data["correct_answer"] == -2.5
+
+
+def test_question_validation_numerical_decimal_valid_zero(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": 0.0,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-decimal"
+    assert data["correct_answer"] == 0.0
+
+
+def test_question_validation_numerical_decimal_valid_integer_as_decimal(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": 5,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-decimal"
+    assert data["correct_answer"] == 5
+
+
+def test_question_validation_numerical_decimal_string_invalid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": "0.75",
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    data = response.json()
+    print("Data is --->", data["detail"])
+    assert "Numerical decimal questions" in data["detail"][0]["msg"]
+
+
+def test_question_validation_numerical_decimal_valid_small_decimal(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": 0.001,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-decimal"
+    assert data["correct_answer"] == 0.001
+
+
+def test_question_validation_numerical_decimal_valid_large_decimal(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": 123456.789,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-decimal"
+    assert data["correct_answer"] == 123456.789
+
+
+def test_question_validation_numerical_integer_none_allowed(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": None,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "numerical-integer"
+    assert data["correct_answer"] is None
+
+
+def test_question_validation_numerical_integer_update_revision_valid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": "Initial Question",
+        "question_type": "numerical-integer",
+        "correct_answer": 5,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    question = create_response.json()
+    question_id = question["id"]
+
+    revision_payload = {
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": 42,
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 200
+    data = revision_response.json()
+    assert data["correct_answer"] == 42
+
+
+def test_question_validation_numerical_integer_update_revision_invalid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": "Initial Question",
+        "question_type": "numerical-integer",
+        "correct_answer": 5,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    question = create_response.json()
+    question_id = question["id"]
+
+    revision_payload = {
+        "question_text": random_lower_string(),
+        "question_type": "numerical-integer",
+        "correct_answer": 3.14,
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 422
+    assert (
+        "Numerical integer questions must have an integer correct answer."
+        in revision_response.text
+    )
+
+
+def test_question_validation_numerical_decimal_update_revision_valid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": "Initial Question",
+        "question_type": "numerical-decimal",
+        "correct_answer": 3.14,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    question = create_response.json()
+    question_id = question["id"]
+
+    revision_payload = {
+        "question_text": random_lower_string(),
+        "question_type": "numerical-decimal",
+        "correct_answer": 0.75,
+        "is_mandatory": True,
+        "is_active": True,
+    }
+    revision_response = client.post(
+        f"{settings.API_V1_STR}/questions/{question_id}/revisions",
+        json=revision_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert revision_response.status_code == 200
+    data = revision_response.json()
+    assert data["correct_answer"] == 0.75
+
+
 def test_question_location_operations(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -1415,6 +2012,7 @@ def test_question_location_operations(
                 },  # Add district
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1454,6 +2052,7 @@ def test_question_location_operations(
                 },  # Add block
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200, response.text
@@ -1483,6 +2082,7 @@ def test_question_location_operations(
                 },  # Keep block, remove district
             ]
         },
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
@@ -1964,7 +2564,7 @@ def test_bulk_upload_questions(
 
     # Create a CSV file with test data - add an empty row to test skipping
     # Also includes duplicate tags to test tag cache
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Punjab
 What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Punjab
 What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Punjab
@@ -2008,7 +2608,9 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         assert response.status_code in [400, 500]
 
         # Test with headers-only CSV (line 1045)
-        headers_only_csv = "Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State\n"
+        headers_only_csv = (
+            "Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State\n"
+        )
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(headers_only_csv.encode("utf-8"))
             headers_only_csv_path = temp_file.name
@@ -2097,7 +2699,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
                 assert any(loc["state_name"] == "Punjab" for loc in locations)
 
         # Test with non-existent tag type
-        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,NonExistentType:Math,Punjab
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -2115,7 +2717,7 @@ What is a prime number?,A number only divisible by 1 and itself,An even number,A
         assert "Failed to create" in data["message"]
 
         # Test upload with non-existent state
-        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geography,NonExistentState
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -2490,6 +3092,7 @@ def test_bulk_tag_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[0].id, tags[1].id, tags[2].id]},
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2512,6 +3115,7 @@ def test_bulk_tag_operations(
         json={
             "tag_ids": [tags[0].id, tags[3].id]
         },  # Keep tags[0], remove tags[1,2], add tags[3]
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2529,6 +3133,7 @@ def test_bulk_tag_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[3].id]},  # Keep only tags[3]
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2711,6 +3316,7 @@ def test_bulk_location_operations(
                 },
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2754,6 +3360,7 @@ def test_bulk_location_operations(
                 # Remove district and block entirely
             ]
         },
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2770,6 +3377,7 @@ def test_bulk_location_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/locations",
         json={"locations": []},
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2846,6 +3454,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[0].id]},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -2854,6 +3463,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[1].id, tags[2].id]},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 2
@@ -2869,6 +3479,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": [tags[0].id, tags[1].id, tags[2].id]},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
@@ -2876,6 +3487,7 @@ def test_mixed_single_and_bulk_operations(
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question_id}/tags",
         json={"tag_ids": []},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
@@ -2885,7 +3497,9 @@ def test_mixed_single_and_bulk_operations(
     assert len(current_tags) == 0
 
 
-def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
+def test_update_question_tags(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     """Test updating all tags for a question using PUT."""
     # Create organization, user, and initial tags
     org = Organization(name=random_lower_string())
@@ -2936,6 +3550,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -2949,6 +3564,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 4
@@ -2958,6 +3574,7 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -2968,12 +3585,15 @@ def test_update_question_tags(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/tags",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 0
 
 
-def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
+def test_update_question_locations(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create organization and user
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -3028,6 +3648,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/locations",
         json=update_payload,
+        headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
@@ -3044,6 +3665,7 @@ def test_update_question_locations(client: TestClient, db: SessionDep) -> None:
     response = client.put(
         f"{settings.API_V1_STR}/questions/{question.id}/locations",
         json={"locations": []},
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     assert len(response.json()) == 0
@@ -3334,7 +3956,7 @@ def test_bulk_upload_questions_response_format(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 4+4?,4,3,5,8,A,Response Model Type:Math,Punjab
 What is the capital of France?,Paris,London,Berlin,Madrid,A,Response Model Type:Geography,Punjab
 Water,Gold,Silver,Carbon,A,Response Model Type:Chemistry,Punjab
@@ -3468,7 +4090,7 @@ def test_bulk_upload_questions_without_tagtype(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 10+10?,20,10,30,40,A,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
 What is 5x5?,25,10,15,20,A,Subject:Multiplication,Punjab
@@ -3535,7 +4157,7 @@ def test_bulk_upload_questions_with_invalid_tagtype(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
     What is 10+10?,20,10,30,40,A,Math,Punjab
     What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
     What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
@@ -3924,7 +4546,7 @@ def test_bulk_upload_questions_with_duplicate(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
     What is 10+10?,20,10,30,40,A,Math,Punjab
      What is 10+10?,20,10,30,40,A,Math,Punjab
     What is PYTHON?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag,Punjab
@@ -4373,7 +4995,7 @@ def test_bulk_upload_questions_with_multiple_errors_report(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
 What is 10+10?,20,10,30,40,A,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
 What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
@@ -4594,7 +5216,7 @@ def test_bulk_upload_questions_without_state_column(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Training Tags,
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science
 What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication
 What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography
@@ -4640,7 +5262,7 @@ def test_bulk_upload_questions_with_extra_column(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Training Tags,State,ABCD
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Tags,State,ABCD
 What is 10+10?,20,10,30,40,A,ABCD,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,ABCD,Science,Punjab
 Which option is missing?,25,10,20,30,A,ABCD,Math,Punjab
@@ -4670,6 +5292,545 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Pu
 
         with suppress(FileNotFoundError):
             os.unlink(temp_file_path)
+
+
+def test_state_admin_cannot_delete_question_outside_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_x.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_delete_multi_state_question_without_full_access(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_b = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_a.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_a.id, state_b.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_delete_general_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_delete_question_same_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    question_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
+
+
+def test_state_admin_cannot_update_general_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [],
+    }
+    q_resp = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    q_id = q_resp.json()["id"]
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/questions/{q_id}",
+        json={"question_text": "Updated text"},
+        headers=token_headers,
+    )
+    assert update_resp.status_code == 403
+    assert "cannot modify" in update_resp.json()["detail"].lower()
+
+
+def test_state_admin_can_update_question_in_their_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state.id],
+    }
+    q_resp = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    q_id = q_resp.json()["id"]
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/questions/{q_id}",
+        json={"is_active": False},
+        headers=token_headers,
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["is_active"] is False
+
+
+def test_state_admin_cannot_update_question_outside_their_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    admin_state = State(
+        name=random_lower_string(), is_active=True, country_id=country.id
+    )
+    other_state = State(
+        name=random_lower_string(), is_active=True, country_id=country.id
+    )
+    db.add_all([admin_state, other_state])
+    db.commit()
+    db.refresh(admin_state)
+    db.refresh(other_state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [admin_state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [other_state.id],
+    }
+    q_resp = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=token_headers,
+    )
+    q_id = q_resp.json()["id"]
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/questions/{q_id}",
+        json={"question_text": "Updated text"},
+        headers=token_headers,
+    )
+    assert update_resp.status_code == 403
+    assert "cannot modify" in update_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_update_tags_for_general_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    user = create_random_user(db)
+    tag_type = TagType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag_type)
+    db.flush()
+    tag = Tag(
+        name=random_lower_string(),
+        tag_type_id=tag_type.id,
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(tag)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    admin_state = State(
+        name=random_lower_string(), is_active=True, country_id=country.id
+    )
+    other_state = State(
+        name=random_lower_string(), is_active=True, country_id=country.id
+    )
+    db.add_all([admin_state, other_state])
+    db.commit()
+    db.refresh(admin_state)
+    db.refresh(other_state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [admin_state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [{"id": 1, "key": "A", "value": "Option 1"}],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [other_state.id],
+    }
+    q_resp = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload,
+        headers=get_user_superadmin_token,
+    )
+    q_id = q_resp.json()["id"]
+
+    tag_payload = {"tag_ids": [tag.id]}
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/questions/{q_id}/tags",
+        json=tag_payload,
+        headers=token_headers,
+    )
+
+    assert update_resp.status_code == 403
+    assert "cannot modify/delete" in update_resp.json()["detail"].lower()
 
 
 def test_question_list_state_user(
@@ -4845,7 +6006,7 @@ def test_question_list_state_user(
     assert data["total"] == 8
     assert len(data["items"]) == 8
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert test_admin_role is not None
 
     email = random_email()
@@ -4915,7 +6076,6 @@ def test_update_question_locations_not_found(
     db.add(country)
     db.commit()
     db.refresh(country)
-
     state = State(name=random_lower_string(), country_id=country.id)
     db.add(state)
     db.commit()
@@ -4947,6 +6107,100 @@ def test_update_question_locations_not_found(
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "Question not found"
+
+
+def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload_1 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_x.id],
+    }
+
+    question_payload_2 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state_x.id],
+    }
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert response_1.status_code == 200
+    question_id_1 = response_1.json()["id"]
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert response_2.status_code == 200
+    question_id_2 = response_2.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id_1, question_id_2],
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
 
 
 def test_get_question_tags_not_found(
@@ -5012,3 +6266,273 @@ def test_create_question_revision_not_found(
     assert response.status_code == 404
     data = response.json()
     assert data["detail"] == "Question not found"
+
+
+def test_bulk_delete_state_admin_cannot_delete_general_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload_1 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [],
+    }
+
+    question_payload_2 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [],
+    }
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_1,
+        headers=token_headers,
+    )
+    assert response_1.status_code == 200
+    question_id_1 = response_1.json()["id"]
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_2,
+        headers=token_headers,
+    )
+    assert response_2.status_code == 200
+    question_id_2 = response_2.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id_1, question_id_2],
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_delete_questions_same_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    org = create_random_organization(db)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    question_payload_1 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state.id],
+    }
+
+    question_payload_2 = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": QuestionType.single_choice,
+        "options": [
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        "correct_answer": [1],
+        "is_mandatory": True,
+        "state_ids": [state.id],
+    }
+
+    response_1 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_1,
+        headers=token_headers,
+    )
+    assert response_1.status_code == 200
+    question_id_1 = response_1.json()["id"]
+
+    response_2 = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_payload_2,
+        headers=token_headers,
+    )
+    assert response_2.status_code == 200
+    question_id_2 = response_2.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/questions/",
+        json=[question_id_1, question_id_2],
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
+
+
+def test_create_test_with_subjective_question(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = create_random_organization(db)
+    user = create_random_user(db, org.id)
+
+    q1 = Question(organization_id=org.id)
+    db.add(q1)
+    db.flush()
+    q1_rev = QuestionRevision(
+        question_id=q1.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        marking_scheme={"correct": 10, "wrong": -5, "skipped": 0},
+        correct_answer=[1],
+    )
+    db.add(q1_rev)
+    db.flush()
+    q1.last_revision_id = q1_rev.id
+
+    q2 = Question(organization_id=org.id)
+    db.add(q2)
+    db.flush()
+    q2_rev = QuestionRevision(
+        question_id=q2.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+            {"id": 3, "key": "C", "value": "Option 3"},
+        ],
+        marking_scheme={"correct": 15, "wrong": -2, "skipped": 0},
+        correct_answer=[1, 2],
+    )
+    db.add(q2_rev)
+    db.flush()
+    q2.last_revision_id = q2_rev.id
+
+    q3 = Question(organization_id=org.id)
+    db.add(q3)
+    db.flush()
+    q3_rev = QuestionRevision(
+        question_id=q3.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        correct_answer=random_lower_string(),
+    )
+    db.add(q3_rev)
+    db.flush()
+    q3.last_revision_id = q3_rev.id
+    db.commit()
+
+    payload = {
+        "name": random_lower_string(),
+        "organization_id": org.id,
+        "created_by_id": user.id,
+        "is_active": True,
+        "link": random_lower_string(),
+        "marks_level": "test",
+        "marking_scheme": {"correct": 5, "wrong": -1, "skipped": 1},
+        "question_revision_ids": [q1_rev.id, q2_rev.id, q3_rev.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    question_types = [
+        q.get("question_type") for q in data.get("question_revisions", [])
+    ]
+    assert QuestionType.subjective in question_types

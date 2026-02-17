@@ -315,16 +315,12 @@ def get_district(
     name: str | None = None,
     is_active: bool | None = None,
     params: Pagination = Depends(),
-    state: int | None = None,
     state_ids: list[int] | None = Query(None),
 ) -> Page[DistrictPublic]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
         query = query.where(District.is_active == is_active)
-
-    if state is not None:
-        query = query.where(District.state_id == state)
 
     if state_ids is not None:
         query = query.where(col(District.state_id).in_(state_ids))
@@ -424,15 +420,15 @@ def get_block(
     session: SessionDep,
     params: Pagination = Depends(),
     is_active: bool | None = None,
-    district: int | None = None,
+    district_ids: list[int] | None = Query(None),
 ) -> Page[BlockPublic]:
     query = select(Block)
 
     if is_active is not None:
         query = query.where(Block.is_active == is_active)
 
-    if district is not None:
-        query = query.where(Block.district_id == district)
+    if district_ids is not None:
+        query = query.where(col(Block.district_id).in_(district_ids))
 
     blocks: Page[BlockPublic] = paginate(
         session,
