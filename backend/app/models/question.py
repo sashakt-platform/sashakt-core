@@ -33,23 +33,12 @@ class QuestionType(str, Enum):
 
 
 # Simple structure classes - no SQLModel inheritance
-class PartialMarkCondition(SQLModel):
-    num_correct_selected: int
-
-
-class PartialMarkRule(SQLModel):
-    conditions: list[PartialMarkCondition]
-    marks: int
-
-
-class MarkingSchemeBase(SQLModel):
+class MarkingSchemeBase:
     """Defines scoring rules for a question"""
 
     correct: float
     wrong: float
     skipped: float
-
-    partial: list[PartialMarkRule] | None = None
 
 
 class ImageBase:
