@@ -30,6 +30,7 @@ jobs:
           enable-cache: true
       - run: cp .env.example .env
       - run: docker compose down -v --remove-orphans
+      - run: docker compose build backend
       - run: docker compose up -d db mailcatcher backend
       - name: Wait for PostgreSQL
         run: |
