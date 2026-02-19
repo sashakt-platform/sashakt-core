@@ -1,7 +1,10 @@
+import uuid
+
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
 from app.core.config import settings
+from app.models.candidate import Candidate, CandidateTest
 from app.models.certificate import Certificate
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
@@ -357,3 +360,184 @@ def test_delete_certificate_with_associated_tests(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
+
+
+def test_download_certificate_invalid_token(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/download/nonexistent-token"
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Certificate not found"
+
+
+def test_download_certificate_no_certificate_on_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    token = str(uuid.uuid4())
+
+    test = Test(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        certificate_id=None,
+        created_by_id=user_id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=random_lower_string(),
+        consent=True,
+        start_time="2025-01-01T10:00:00",
+        certificate_data={"token": token},
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/certificate/download/{token}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No certificate for this test"
+
+
+def test_download_certificate_certificate_not_active(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    token = str(uuid.uuid4())
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+        is_active=False,
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        certificate_id=certificate.id,
+        created_by_id=user_id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=random_lower_string(),
+        consent=True,
+        start_time="2025-01-01T10:00:00",
+        certificate_data={
+            "token": token,
+            "candidate_name": random_lower_string(),
+            "test_name": test.name,
+            "score": "70%",
+            "completion_date": "2025-01-01",
+        },
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/certificate/download/{token}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Certificate not available"
+
+
+def test_download_certificate_no_provider_configured(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    token = str(uuid.uuid4())
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+        is_active=True,
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        certificate_id=certificate.id,
+        created_by_id=user_id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=random_lower_string(),
+        consent=True,
+        start_time="2025-01-01T10:00:00",
+        certificate_data={
+            "token": token,
+            "candidate_name": random_lower_string(),
+            "test_name": test.name,
+            "score": "80%",
+            "completion_date": "2025-01-01",
+        },
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/certificate/download/{token}")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Certificate generation service not configured"
