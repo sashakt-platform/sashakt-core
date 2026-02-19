@@ -1,14 +1,15 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import Self
+from typing_extensions import Self, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
-from app.models.utils import MarkingScheme
+from app.models.organization import Organization
+from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -16,9 +17,32 @@ class MarksLevelEnum(str, enum.Enum):
     TEST = "test"
 
 
+class OMRMode(str, enum.Enum):
+    NEVER = "NEVER"
+    ALWAYS = "ALWAYS"
+    OPTIONAL = "OPTIONAL"
+
+
 if TYPE_CHECKING:
-    from app.models import Candidate, District, QuestionRevision, State, User
-    from app.models.tag import Tag
+    from app.models import (
+        Candidate,
+        QuestionRevision,
+        Tag,
+        TagPublic,
+        User,
+    )
+    from app.models.certificate import Certificate
+    from app.models.location import Block, District, State
+
+
+class TagRandomCreate(TypedDict):
+    tag_id: int
+    count: int
+
+
+class TagRandomPublic(SQLModel):
+    tag: "TagPublic"
+    count: int
 
 
 class TestTag(SQLModel, table=True):
@@ -167,6 +191,48 @@ class TestBase(SQLModel):
         sa_type=JSON,
         description="Scoring rules for this test",
     )
+    candidate_profile: bool = Field(
+        default=False,
+        title="Candidate Profile",
+        description="Field to set whether candidate profile is to be filled before the test or not.",
+        sa_column_kwargs={"server_default": "false"},
+    )
+    locale: str = Field(
+        title="Set Language of Test",
+        description="Add a BCP-47 locale tag for language",
+        sa_column_kwargs={
+            "server_default": DEFAULT_LOCALE,
+        },
+    )
+    omr: OMRMode = Field(
+        default=OMRMode.NEVER,
+        title="OMR Mode",
+        description="Defines OMR behavior for the test",
+        sa_column_kwargs={"server_default": OMRMode.NEVER},
+    )
+    show_question_palette: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Whether question palette should be visible for test taker.",
+    )
+    certificate_id: int | None = Field(
+        default=None,
+        foreign_key="certificate.id",
+        nullable=True,
+        description="Certificate linked to this test",
+    )
+    show_feedback_on_completion: bool = Field(
+        default=False,
+        title="Show Feedback on Completion",
+        description="If enabled, candidates can review their answers, correct answers, explanations after submitting the test.",
+        sa_column_kwargs={"server_default": "false"},
+    )
+    show_feedback_immediately: bool = Field(
+        default=False,
+        title="Show Instant Feedback",
+        description="Show feedback to candidate immediately after each question",
+        sa_column_kwargs={"server_default": "false"},
+    )
 
 
 class Test(TestBase, table=True):
@@ -178,7 +244,27 @@ class Test(TestBase, table=True):
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
 
-    is_deleted: bool = Field(default=False, nullable=False)
+    random_tag_count: list[TagRandomCreate] | None = Field(
+        sa_type=JSON,
+        default=None,
+        title="Tag-based Randomization Configuration",
+        description="Specifies how many random questions to select for each tag. Each item includes a tag ID and the count of random questions to select from that tag.",
+    )
+
+    created_by_id: int = Field(
+        foreign_key="user.id",
+        title="User ID",
+        description="ID of the user who created the test.",
+    )
+
+    organization_id: int | None = Field(
+        foreign_key="organization.id",
+        title="Organization ID",
+        description="ID of the organization to which the test belongs.",
+    )
+
+    certificate: Optional["Certificate"] = Relationship(back_populates="tests")
+
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
     )
@@ -197,11 +283,8 @@ class Test(TestBase, table=True):
     candidates: list["Candidate"] | None = Relationship(
         back_populates="tests", link_model=CandidateTest
     )
-    created_by_id: int = Field(
-        foreign_key="user.id",
-        title="User ID",
-        description="ID of the user who created the test.",
-    )
+
+    organization: Optional["Organization"] = Relationship(back_populates="tests")
 
 
 class TestCreate(TestBase):
@@ -209,6 +292,8 @@ class TestCreate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
+    random_tag_count: list[TagRandomCreate] | None = None
+    locale: LocaleEnum = DEFAULT_LOCALE
 
     @model_validator(mode="after")
     def check_link_for_template(self) -> Self:
@@ -221,16 +306,19 @@ class TestPublic(TestBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
-    tags: list["Tag"]
+    tags: list["TagPublic"]
     question_revisions: list["QuestionRevision"]
     states: list["State"]
     districts: list["District"]
     total_questions: int | None = None
+    random_tag_counts: list[TagRandomPublic] | None = None
     created_by_id: int = Field(
-        foreign_key="user.id",
         title="User ID",
         description="ID of the user who created the test.",
+    )
+    organization_id: int | None = Field(
+        title="ID of the organization",
+        description="ID of the organization to which the test belongs.",
     )
 
 
@@ -239,6 +327,22 @@ class TestUpdate(TestBase):
     question_revision_ids: list[int] = []
     state_ids: list[int] = []
     district_ids: list[int] = []
+    random_tag_count: list[TagRandomCreate] | None = None
+    locale: LocaleEnum
+
+
+class EntityPublicLimited(SQLModel):
+    id: int
+    name: str
+    label: str
+    state: Union["State", None] = None
+    district: Union["District", None] = None
+    block: Union["Block", None] = None
+
+
+class DeleteTest(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TestPublic] | None = None
 
 
 class TestPublicLimited(TestBase):
@@ -246,3 +350,4 @@ class TestPublicLimited(TestBase):
 
     id: int
     total_questions: int
+    profile_list: list["EntityPublicLimited"] | None = None

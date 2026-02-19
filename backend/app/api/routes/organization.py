@@ -1,10 +1,24 @@
-from typing import cast
+from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi_pagination import Page, paginate
-from sqlmodel import col, func, not_, select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
+from sqlmodel import col, func, not_, or_, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    Pagination,
+    SessionDep,
+    get_current_user,
+    permission_dependency,
+)
+from app.core.files import (
+    delete_logo_file,
+    get_absolute_logo_url,
+    save_logo_file,
+    validate_logo_upload,
+)
+from app.core.roles import state_admin, test_admin
 from app.models import (
     AggregatedData,
     Message,
@@ -16,8 +30,130 @@ from app.models import (
     Test,
     User,
 )
+from app.models.organization import OrganizationPublicMinimal
+from app.models.question import QuestionLocation
+from app.models.test import TestDistrict, TestState
+from app.models.user import UserDistrict, UserState
 
 router = APIRouter(prefix="/organization", tags=["Organization"])
+
+
+def transform_organizations_to_public(
+    items: list[Organization] | Any,
+) -> list[OrganizationPublic]:
+    result: list[OrganizationPublic] = []
+    organization_list: list[Organization] = (
+        list(items) if not isinstance(items, list) else items
+    )
+
+    for organization in organization_list:
+        org_data = organization.model_dump()
+        org_data["logo"] = get_absolute_logo_url(org_data.get("logo"))
+        result.append(OrganizationPublic(**org_data))
+
+    return result
+
+
+@router.get(
+    "/current",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("read_organization"))],
+)
+def get_current_organization(
+    current_user: User = Depends(get_current_user),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    return transform_organizations_to_public([organization])[0]
+
+
+@router.patch(
+    "/current",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
+)
+async def update_current_organization(
+    *,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+    name: str | None = Form(None),
+    shortcode: str | None = Form(None),
+    logo: UploadFile | None = File(
+        None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
+    ),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    old_logo_path = organization.logo
+    new_logo_path = None
+
+    # Handle logo upload if provided
+    if logo is not None:
+        file_content, file_ext = await validate_logo_upload(logo)
+        if organization.id is None:
+            raise HTTPException(status_code=500, detail="Organization ID is missing")
+        new_logo_path = save_logo_file(organization.id, file_content, file_ext)
+
+    # Build update dictionary from non-None parameters
+    update_data = {}
+    if name is not None:
+        update_data["name"] = name
+    if shortcode is not None:
+        update_data["shortcode"] = shortcode
+    if new_logo_path is not None:
+        update_data["logo"] = new_logo_path
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No update data provided")
+
+    organization.sqlmodel_update(update_data)
+    session.add(organization)
+
+    # Commit to database and handle rollback if needed
+    try:
+        session.commit()
+        session.refresh(organization)
+    except Exception:
+        # Rollback the database transaction
+        session.rollback()
+        # Clean up the newly uploaded file if it was saved
+        if new_logo_path:
+            delete_logo_file(new_logo_path)
+        raise
+
+    # Clean up old logo file if replaced (only after successful DB commit)
+    if new_logo_path and old_logo_path and old_logo_path != new_logo_path:
+        delete_logo_file(old_logo_path)
+
+    return transform_organizations_to_public([organization])[0]
+
+
+@router.delete(
+    "/current/logo",
+    response_model=OrganizationPublic,
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
+)
+async def delete_current_organization_logo(
+    *,
+    session: SessionDep,
+    current_user: User = Depends(get_current_user),
+) -> OrganizationPublic:
+    organization = current_user.organization
+
+    if not organization.logo:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization has no logo to delete",
+        )
+
+    old_logo_path = organization.logo
+    organization.logo = None
+    session.add(organization)
+    session.commit()
+    session.refresh(organization)
+    delete_logo_file(old_logo_path)
+
+    return transform_organizations_to_public([organization])[0]
 
 
 # Create a Organization
@@ -60,8 +196,11 @@ def get_organization(
         description="Order by fields",
         examples=["-created_date", "name"],
     ),
-) -> Page[Organization]:
-    query = select(Organization).where(not_(Organization.is_deleted))
+) -> Page[OrganizationPublic]:
+    query = select(Organization).where(
+        not_(Organization.is_deleted),
+        Organization.is_active == True,  # noqa: E712
+    )
 
     if name:
         query = query.where(col(Organization.name).contains(name))
@@ -80,10 +219,14 @@ def get_organization(
             )
         query = query.order_by(column.desc() if is_desc else column)
 
-    # Execute query and get all organization
-    organization = session.exec(query).all()
+    organizations: Page[OrganizationPublic] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_organizations_to_public(items),
+    )
 
-    return cast(Page[Organization], paginate(organization, params))
+    return organizations
 
 
 @router.get(
@@ -97,33 +240,81 @@ def get_organization_aggregated_stats_for_current_user(
 ) -> AggregatedData:
     organization_id = current_user.organization_id
 
-    total_questions = session.exec(
-        select(func.count()).where(
-            not_(Question.is_deleted), Question.organization_id == organization_id
+    current_user_state_ids: list[int] = []
+    current_user_district_ids: list[int] = []
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states if state.id is not None]
+            if current_user.states
+            else []
         )
-    ).one()
 
-    total_users = session.exec(
-        select(func.count()).where(
-            User.organization_id == organization_id, not_(User.is_deleted)
+        current_user_district_ids = (
+            [
+                district.id
+                for district in current_user.districts
+                if district.id is not None
+            ]
+            if current_user.districts
+            else []
         )
-    ).one()
 
-    query = (
-        select(func.count())
-        .select_from(Test)
-        .join(User)
-        .where(
-            Test.created_by_id == User.id,
-            not_(Test.is_deleted),
-            not_(Test.is_template),
-        )
-        .where(
-            User.organization_id == current_user.organization_id,
-        )
+    questions_subquery = select(func.count(func.distinct(Question.id))).where(
+        Question.organization_id == organization_id
     )
 
-    total_tests = session.exec(query).one()
+    if current_user_state_ids:
+        questions_subquery = questions_subquery.outerjoin(QuestionLocation).where(
+            or_(
+                col(QuestionLocation.state_id).is_(None),
+                col(QuestionLocation.state_id).in_(current_user_state_ids),
+            )
+        )
+
+    users_subquery = select(func.count(func.distinct(User.id))).where(
+        User.organization_id == organization_id
+    )
+    if current_user_district_ids:
+        users_subquery = users_subquery.join(UserDistrict).where(
+            col(UserDistrict.district_id).in_(current_user_district_ids)
+        )
+    elif current_user_state_ids:
+        users_subquery = users_subquery.join(UserState).where(
+            col(UserState.state_id).in_(current_user_state_ids)
+        )
+
+    tests_subquery = select(func.count(func.distinct(Test.id))).where(
+        Test.organization_id == organization_id,
+        not_(Test.is_template),
+    )
+
+    if current_user_district_ids:
+        tests_subquery = tests_subquery.outerjoin(TestDistrict).where(
+            or_(
+                col(TestDistrict.district_id).is_(None),
+                col(TestDistrict.district_id).in_(current_user_district_ids),
+            )
+        )
+
+    elif current_user_state_ids:
+        tests_subquery = tests_subquery.outerjoin(TestState).where(
+            or_(
+                col(TestState.state_id).is_(None),
+                col(TestState.state_id).in_(current_user_state_ids),
+            )
+        )
+
+    query = select(
+        questions_subquery.scalar_subquery().label("total_questions"),
+        users_subquery.scalar_subquery().label("total_users"),
+        tests_subquery.scalar_subquery().label("total_tests"),
+    )
+    result = session.exec(query).one()
+
+    total_questions, total_users, total_tests = cast(tuple[int, int, int], result)
     return AggregatedData(
         total_questions=total_questions,
         total_users=total_users,
@@ -202,3 +393,32 @@ def delete_organization(organization_id: int, session: SessionDep) -> Message:
     session.refresh(organization)
 
     return Message(message="Organization deleted successfully")
+
+
+@router.get(
+    "/public/{org_shortcode}",
+    response_model=OrganizationPublicMinimal,
+)
+def get_public_organization_by_shortcode(
+    org_shortcode: str,
+    session: SessionDep,
+) -> OrganizationPublicMinimal:
+    organization = session.exec(
+        select(Organization).where(
+            Organization.shortcode == org_shortcode,
+            col(Organization.is_deleted).is_(False),
+            Organization.is_active,
+        )
+    ).first()
+
+    if not organization:
+        raise HTTPException(
+            status_code=404,
+            detail="Organization not found",
+        )
+
+    return OrganizationPublicMinimal(
+        name=organization.name,
+        logo=get_absolute_logo_url(organization.logo),
+        shortcode=organization.shortcode,
+    )

@@ -1,5 +1,8 @@
 name: Lint Backend
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -15,15 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
-          version: "0.4.15"
+          version: "0.9.x"
           enable-cache: true
+      - run: uv sync
+        working-directory: backend
       - run: uv run bash scripts/lint.sh
         working-directory: backend

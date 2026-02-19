@@ -3,7 +3,7 @@ import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Any, cast
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
@@ -14,15 +14,24 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi_pagination import Page, paginate
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
-from sqlmodel import col, not_, or_, select
+from sqlalchemy.orm import selectinload
+from sqlmodel import col, or_, select
 from typing_extensions import TypedDict
 
-from app.api.deps import CurrentUser, Pagination, SessionDep
+from app import crud
+from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.roles import state_admin, test_admin
+from app.core.sorting import (
+    QuestionSortConfig,
+    SortingParams,
+    SortOrder,
+    create_sorting_dependency,
+)
 from app.models import (
     CandidateTest,
-    Message,
     Organization,
     Question,
     QuestionCreate,
@@ -42,23 +51,99 @@ from app.models import (
     Test,
     User,
 )
-from app.models.question import BulkUploadQuestionsResponse, Option
+from app.models.question import (
+    BulkUploadQuestionsResponse,
+    DeleteQuestion,
+    Option,
+    QuestionRevisionInfo,
+)
+from app.models.role import Role
 from app.models.test import TestQuestion
-from app.models.utils import MarkingScheme
+from app.models.user import UserState
+from app.models.utils import MarkingScheme, Message
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
+
+# create sorting dependency
+QuestionSorting = create_sorting_dependency(QuestionSortConfig)
+QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
+
+
+def check_question_permission(
+    session: SessionDep,
+    current_user: CurrentUser,
+    question: Question,
+    *,
+    cached_user_state_ids: set[int] | None = None,
+) -> None:
+    locations = session.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question.id)
+    ).all()
+    question_state_ids = {loc.state_id for loc in locations if loc.state_id is not None}
+
+    if cached_user_state_ids is not None:
+        user_state_ids = cached_user_state_ids
+    else:
+        user_state_ids = {
+            state_id
+            for state_id in session.exec(
+                select(UserState.state_id).where(UserState.user_id == current_user.id)
+            ).all()
+            if state_id is not None
+        }
+    if not question_state_ids or not question_state_ids.issubset(user_state_ids):
+        raise HTTPException(
+            403,
+            "State/test-admin cannot modify/delete general questions or questions outside their location.",
+        )
+
+
+def add_question_to_failure_list(
+    session: SessionDep, question: Question, failure_list: list[QuestionPublic]
+) -> None:
+    revision = session.exec(
+        select(QuestionRevision).where(QuestionRevision.id == question.last_revision_id)
+    ).first()
+
+    locations = session.exec(
+        select(QuestionLocation).where(QuestionLocation.question_id == question.id)
+    ).all()
+
+    tags = session.exec(
+        select(Tag)
+        .join(QuestionTag)
+        .where(QuestionTag.tag_id == Tag.id)
+        .where(QuestionTag.question_id == question.id)
+    ).all()
+    tags_list: list[Tag] | None = list(tags) if tags else None
+
+    if revision:
+        failure_list.append(
+            build_question_response(question, revision, list(locations), tags_list)
+        )
+
+
+def check_linked_test(session: SessionDep, question_id: int) -> bool:
+    query = (
+        select(TestQuestion)
+        .join(QuestionRevision)
+        .where(QuestionRevision.id == TestQuestion.question_revision_id)
+        .where(QuestionRevision.question_id == question_id)
+    )
+    linked_tests = session.exec(query).first()
+
+    return bool(linked_tests)
 
 
 def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType | None:
     """Helper function to get TagType by ID."""
     tag_type = session.get(TagType, tag_type_id)
-    if not tag_type or tag_type.is_deleted:
+    if not tag_type:
         return None
     return tag_type
 
 
 def build_question_response(
-    session: SessionDep,
     question: Question,
     revision: QuestionRevision,
     locations: list[QuestionLocation],
@@ -69,13 +154,17 @@ def build_question_response(
     options_dict = None
     if revision.options:
         options_dict = [
-            opt
-            if isinstance(opt, dict)
-            else opt.dict()
-            if hasattr(opt, "dict") and callable(opt.dict)
-            else vars(opt)
-            if hasattr(opt, "__dict__")
-            else opt
+            (
+                opt
+                if isinstance(opt, dict)
+                else (
+                    opt.dict()
+                    if hasattr(opt, "dict") and callable(opt.dict)
+                    else vars(opt)
+                    if hasattr(opt, "__dict__")
+                    else opt
+                )
+            )
             for opt in revision.options
         ]
 
@@ -94,16 +183,13 @@ def build_question_response(
             TagPublic(
                 id=tag.id,
                 name=tag.name,
-                tag_type=get_tag_type_by_id(session, tag_type_id=tag.tag_type_id)
-                if tag.tag_type_id
-                else None,
+                tag_type=tag.tag_type,
                 description=tag.description,
                 created_by_id=tag.created_by_id,
                 organization_id=tag.organization_id,
                 created_date=tag.created_date,
                 modified_date=tag.modified_date,
                 is_active=tag.is_active,
-                is_deleted=tag.is_deleted,
             )
             for tag in tags
         ]
@@ -130,7 +216,6 @@ def build_question_response(
         created_date=question.created_date,
         modified_date=question.modified_date,
         is_active=question.is_active,
-        is_deleted=question.is_deleted,
         # Current revision data
         question_text=revision.question_text,
         instructions=revision.instructions,
@@ -158,13 +243,17 @@ def prepare_for_db(
     options: list[Option] | None = None
     if data.options:
         options = [
-            opt
-            if isinstance(opt, dict)
-            else opt.dict()
-            if hasattr(opt, "dict") and callable(opt.dict)
-            else vars(opt)
-            if hasattr(opt, "__dict__")
-            else opt
+            (
+                opt
+                if isinstance(opt, dict)
+                else (
+                    opt.dict()
+                    if hasattr(opt, "dict") and callable(opt.dict)
+                    else vars(opt)
+                    if hasattr(opt, "__dict__")
+                    else opt
+                )
+            )
             for opt in data.options
         ]
 
@@ -182,12 +271,15 @@ def prepare_for_db(
 
 
 def is_duplicate_question(
-    session: SessionDep, question_text: str, tag_ids: list[int] | None
+    session: SessionDep,
+    question_text: str,
+    tag_ids: list[int] | None,
+    organization_id: int,
 ) -> bool:
     normalized_text = re.sub(r"\s+", " ", question_text.strip().lower())
     existing_questions = session.exec(
         select(Question)
-        .where(not_(Question.is_deleted))
+        .where(Question.organization_id == organization_id)
         .join(QuestionRevision)
         .where(Question.last_revision_id == QuestionRevision.id)
         .where(
@@ -218,7 +310,10 @@ def create_question(
 ) -> QuestionPublic:
     """Create a new question with its initial revision, optional location, and tags."""
     if is_duplicate_question(
-        session, question_create.question_text, question_create.tag_ids
+        session,
+        question_create.question_text,
+        question_create.tag_ids,
+        current_user.organization_id,
     ):
         raise HTTPException(
             status_code=400,
@@ -311,17 +406,10 @@ def create_question(
     session.commit()
     # No need to set modified_date manually, as SQLModel will handle it via onupdate
 
-    return build_question_response(session, question, revision, locations, tags)
+    return build_question_response(question, revision, locations, tags)
 
 
 # TypedDict classes with all required fields
-class QuestionRevisionInfo(TypedDict):
-    id: int
-    created_date: datetime
-    text: str
-    type: str
-    is_current: bool
-    created_by_id: int
 
 
 class RevisionDetailDict(TypedDict):
@@ -330,7 +418,6 @@ class RevisionDetailDict(TypedDict):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
-    is_deleted: bool
     question_text: str
     instructions: str | None
     question_type: str
@@ -367,10 +454,41 @@ class CandidateTestInfoDict(TypedDict):
     is_submitted: bool
 
 
+def transform_questions_to_public(
+    items: list[tuple[Question, QuestionRevision]] | Any,
+) -> list[QuestionPublic]:
+    """
+    Transform a list of (Question, QuestionRevision) tuples to QuestionPublic objects.
+    """
+    result: list[QuestionPublic] = []
+
+    # cast to proper type since fastapi-pagination might return Sequence[Any]
+    item_list = list(items) if not isinstance(items, list) else items
+
+    for item in item_list:
+        question, revision = item
+
+        # skip questions without a valid last_revision_id
+        if question.last_revision_id is None:
+            continue
+
+        locations = question.locations  # includes state/district/block
+        tags = question.tags  # includes tag_type too
+
+        # build the response using existing helper
+        question_data = build_question_response(
+            question, revision, list(locations), list(tags)
+        )
+        result.append(question_data)
+
+    return result
+
+
 @router.get("/", response_model=Page[QuestionPublic])
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: QuestionSortingDep,
     params: Pagination = Depends(),
     question_text: str | None = None,
     state_ids: list[int] = Query(None),  # Support multiple states
@@ -380,131 +498,108 @@ def get_questions(
     tag_type_ids: list[int] = Query(None),  # Support multiple tag types
     created_by_id: int | None = None,
     is_active: bool | None = None,
-    is_deleted: bool = False,  # Default to showing non-deleted questions
 ) -> Page[QuestionPublic]:
-    """Get all questions with optional filtering."""
-    # Start with a basic query
-    empty_result = cast(Page[QuestionPublic], paginate([], params))
-    query = select(Question).where(
-        Question.organization_id == current_user.organization_id
+    """
+    Get all questions with optional filtering and sorting.
+    """
+    # fetch all related data including current revision
+    query = (
+        select(Question, QuestionRevision)
+        .join(QuestionRevision)
+        .where(Question.last_revision_id == QuestionRevision.id)
+        .options(
+            selectinload(Question.locations).selectinload(QuestionLocation.state),
+            selectinload(Question.locations).selectinload(QuestionLocation.district),
+            selectinload(Question.locations).selectinload(QuestionLocation.block),
+            selectinload(Question.tags).selectinload(Tag.tag_type),
+        )
+        .where(Question.organization_id == current_user.organization_id)
     )
-    if question_text:
-        query = query.join(QuestionRevision).where(
-            Question.last_revision_id == QuestionRevision.id
-        )
-        query = query.where(
-            func.lower(QuestionRevision.question_text).contains(question_text.lower())
-        )
 
-    # Apply filters only if they're provided
-    if is_deleted is not None:
-        query = query.where(Question.is_deleted == is_deleted)
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_state_ids = (
+            [state.id for state in current_user.states] if current_user.states else []
+        )
+        if current_user_state_ids:
+            query = query.outerjoin(QuestionLocation).where(
+                or_(
+                    col(QuestionLocation.state_id).is_(None),
+                    col(QuestionLocation.state_id).in_(current_user_state_ids),
+                )
+            )
+
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    query = sorting_with_default.apply_to_query(query, QuestionSortConfig)
 
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
 
-    # Handle tag-based filtering with multiple tags
-    if tag_ids:
-        tag_query = select(QuestionTag.question_id).where(
-            col(QuestionTag.tag_id).in_(tag_ids)
+    # used for search
+    if question_text is not None:
+        query = query.where(
+            func.lower(QuestionRevision.question_text).contains(question_text.lower())
         )
-        question_ids_with_tags = session.exec(tag_query).all()
-        if question_ids_with_tags:
-            query = query.where(col(Question.id).in_(question_ids_with_tags))
-        else:
-            return empty_result
 
+    if created_by_id is not None:
+        query = query.where(QuestionRevision.created_by_id == created_by_id)
+
+    if tag_ids:
+        tag_subquery = (
+            select(QuestionTag.question_id)
+            .where(col(QuestionTag.tag_id).in_(tag_ids))
+            .distinct()
+        )
+        query = query.where(col(Question.id).in_(tag_subquery))
     if tag_type_ids:
-        tag_type_query = (
+        tag_subquery = (
             select(QuestionTag.question_id)
             .join(Tag)
-            .where(Tag.id == QuestionTag.tag_id)
             .where(col(Tag.tag_type_id).in_(tag_type_ids))
+            .distinct()
         )
-        question_ids_with_tag_types = session.exec(tag_type_query).all()
-        if question_ids_with_tag_types:
-            query = query.where(col(Question.id).in_(question_ids_with_tag_types))
-        else:
-            return empty_result
+        query = query.where(col(Question.id).in_(tag_subquery))
 
-    # Handle creator-based filtering
-    if created_by_id is not None:
-        questions_by_creator: list[int] = []
-        all_questions = session.exec(query).all()
-
-        for q in all_questions:
-            if q.last_revision_id is not None:
-                revision = session.get(QuestionRevision, q.last_revision_id)
-                if revision is not None and revision.created_by_id == created_by_id:
-                    if q.id is not None:
-                        questions_by_creator.append(q.id)
-
-        if questions_by_creator:
-            query = select(Question).where(Question.id.in_(questions_by_creator))  # type: ignore
-        else:
-            return empty_result
-
-    # Handle location-based filtering with multiple locations
+    # handle location-based filtering
     if any([state_ids, district_ids, block_ids]):
-        location_query = select(QuestionLocation.question_id)
         location_filters = []
 
         if state_ids:
-            location_filters.append(QuestionLocation.state_id.in_(state_ids))  # type: ignore
+            location_filters.append(col(QuestionLocation.state_id).in_(state_ids))
         if district_ids:
-            location_filters.append(QuestionLocation.district_id.in_(district_ids))  # type: ignore
+            location_filters.append(col(QuestionLocation.district_id).in_(district_ids))
         if block_ids:
-            location_filters.append(QuestionLocation.block_id.in_(block_ids))  # type: ignore
+            location_filters.append(col(QuestionLocation.block_id).in_(block_ids))
 
         if location_filters:
-            # Use OR between different location types (any match is valid)
-            location_query = location_query.where(or_(*location_filters))
-            question_ids = session.exec(location_query).all()
-            if question_ids:  # Only apply filter if we found matching locations
-                query = query.where(Question.id.in_(question_ids))  # type: ignore
-            else:
-                return empty_result
+            location_subquery = (
+                select(QuestionLocation.question_id)
+                .where(or_(*location_filters))
+                .distinct()
+            )
+            query = query.where(col(Question.id).in_(location_subquery))
 
-    # Apply pagination
-    # query = query.offset(skip).limit(limit)
+    # get the questions with pagination and transform to QuestionPublic
+    questions: Page[QuestionPublic] = paginate(
+        session,
+        query,
+        params,
+        transformer=lambda items: transform_questions_to_public(items),
+    )
 
-    # Execute query and get all questions
-    questions = session.exec(query).all()
-
-    result: list[QuestionPublic] = []
-    for question in questions:
-        # Skip questions without a valid last_revision_id
-        if question.last_revision_id is None:
-            continue
-
-        latest_revision = session.get(QuestionRevision, question.last_revision_id)
-        if latest_revision is None:
-            raise HTTPException(status_code=404, detail="Question revision not found")
-            continue
-
-        locations_query = select(QuestionLocation).where(
-            QuestionLocation.question_id == question.id
-        )
-        locations = session.exec(locations_query).all()
-
-        tags_query = (
-            select(Tag).join(QuestionTag).where(QuestionTag.question_id == question.id)
-        )
-        tags = session.exec(tags_query).all()
-
-        question_data = build_question_response(
-            session, question, latest_revision, list(locations), list(tags)
-        )
-        result.append(question_data)
-
-    return cast(Page[QuestionPublic], paginate(result, params))
+    return questions
 
 
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])
 def get_question_tests(question_id: int, session: SessionDep) -> list[TestInfoDict]:
     """Get all tests that include this question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     test_info_dict_list: list[TestInfoDict] = []
@@ -541,7 +636,7 @@ def get_question_candidate_tests(
 ) -> list[CandidateTestInfoDict]:
     """Get all candidate tests that include this question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     candidate_test_info_list: list[CandidateTestInfoDict] = []
@@ -582,20 +677,22 @@ def get_question_candidate_tests(
     return candidate_test_info_list
 
 
-@router.delete("/{question_id}")
-def delete_question(question_id: int, session: SessionDep) -> Message:
-    """Soft delete a question."""
+@router.delete(
+    "/{question_id}", dependencies=[Depends(permission_dependency("delete_question"))]
+)
+def delete_question(
+    question_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Message:
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    query = (
-        select(TestQuestion)
-        .join(QuestionRevision)
-        .where(QuestionRevision.id == TestQuestion.question_revision_id)
-        .where(QuestionRevision.question_id == question_id)
-    )
-    linked_tests = session.exec(query).first()
-    if linked_tests:
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
+
+    if check_linked_test(session, question_id):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete question because it is linked to a test",
@@ -606,11 +703,72 @@ def delete_question(question_id: int, session: SessionDep) -> Message:
     return Message(message="Question deleted successfully")
 
 
+@router.delete(
+    "/",
+    response_model=DeleteQuestion,
+    dependencies=[Depends(permission_dependency("delete_question"))],
+)
+def bulk_delete_question(
+    session: SessionDep, current_user: CurrentUser, question_ids: list[int] = Body(...)
+) -> DeleteQuestion:
+    success_count = 0
+    failure_list: list[QuestionPublic] = []
+    db_questions = session.exec(
+        select(Question)
+        .where(col(Question.id).in_(question_ids))
+        .where(Question.organization_id == current_user.organization_id)
+    ).all()
+
+    found_ids = {q.id for q in db_questions}
+    missing_ids = set(question_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Questions selected for deletion"
+        )
+    role = session.get(Role, current_user.role_id)
+
+    if role and role.name in (state_admin.name, test_admin.name):
+        if current_user.states:
+            admin_state_ids = {
+                state.id for state in current_user.states if state.id is not None
+            }
+        else:
+            admin_state_ids = None
+    else:
+        admin_state_ids = None
+
+    for question in db_questions:
+        try:
+            if admin_state_ids:
+                check_question_permission(
+                    session,
+                    current_user,
+                    question,
+                    cached_user_state_ids=admin_state_ids,
+                )
+
+            if question.id is not None and check_linked_test(session, question.id):
+                add_question_to_failure_list(session, question, failure_list)
+            else:
+                session.delete(question)
+                session.commit()
+                success_count += 1
+
+        except HTTPException:
+            add_question_to_failure_list(session, question, failure_list)
+
+    session.commit()
+
+    return DeleteQuestion(
+        delete_success_count=success_count, delete_failure_list=failure_list or None
+    )
+
+
 @router.get("/{question_id}", response_model=QuestionPublic)
 def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     """Get a question by its ID."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     latest_revision = session.get(QuestionRevision, question.last_revision_id)
@@ -628,7 +786,7 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     tags = session.exec(tags_query).all()
 
     return build_question_response(
-        session, question, latest_revision, list(locations), list(tags)
+        question, latest_revision, list(locations), list(tags)
     )
 
 
@@ -636,12 +794,16 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
 def update_question(
     question_id: int,
     session: SessionDep,
-    updated_data: QuestionUpdate = Body(...),  # is_active, is_deleted
+    current_user: CurrentUser,
+    updated_data: QuestionUpdate = Body(...),  # is_active
 ) -> QuestionPublic:
     """Update question metadata (not content - use revisions for that)."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Update basic question attributes
     question_data = updated_data.model_dump(exclude_unset=True)
@@ -668,7 +830,7 @@ def update_question(
     tags = session.exec(tags_query).all()
 
     return build_question_response(
-        session, question, latest_revision, list(locations), list(tags)
+        question, latest_revision, list(locations), list(tags)
     )
 
 
@@ -681,8 +843,11 @@ def create_question_revision(
 ) -> QuestionPublic:
     """Create a new revision for an existing question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Prepare data for JSON serialization
     options, marking_scheme, media = prepare_for_db(revision_data)
@@ -723,9 +888,7 @@ def create_question_revision(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(
-        session, question, new_revision, list(locations), list(tags)
-    )
+    return build_question_response(question, new_revision, list(locations), list(tags))
 
 
 @router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])
@@ -734,7 +897,7 @@ def get_question_revisions(
 ) -> list[QuestionRevisionInfo]:
     """Get all revisions for a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     revisions_query = (
@@ -748,6 +911,11 @@ def get_question_revisions(
     for rev in revisions:
         # Ensure all fields have non-None values before creating TypedDict
         if rev.id is not None and rev.created_date is not None:
+            user = None
+            user = session.get(User, rev.created_by_id)
+            user_public = (
+                crud.get_user_public(db_user=user, session=session) if user else None
+            )
             result.append(
                 QuestionRevisionInfo(
                     id=rev.id,
@@ -755,7 +923,7 @@ def get_question_revisions(
                     text=rev.question_text,
                     type=rev.question_type,
                     is_current=(rev.id == question.last_revision_id),
-                    created_by_id=rev.created_by_id,
+                    created_by_id=user_public,
                 )
             )
 
@@ -782,7 +950,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
 
     # Check if parent question exists and is not deleted
     question = session.get(Question, revision.question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(
             status_code=404, detail="Parent question not found or deleted"
         )
@@ -791,13 +959,17 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     options_dict = None
     if revision.options:
         options_dict = [
-            opt
-            if isinstance(opt, dict)
-            else opt.dict()
-            if hasattr(opt, "dict") and callable(opt.dict)
-            else vars(opt)
-            if hasattr(opt, "__dict__")
-            else opt
+            (
+                opt
+                if isinstance(opt, dict)
+                else (
+                    opt.dict()
+                    if hasattr(opt, "dict") and callable(opt.dict)
+                    else vars(opt)
+                    if hasattr(opt, "__dict__")
+                    else opt
+                )
+            )
             for opt in revision.options
         ]
 
@@ -816,7 +988,6 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         created_date=revision.created_date,
         modified_date=revision.modified_date,
         is_active=revision.is_active,
-        is_deleted=revision.is_deleted,
         question_text=revision.question_text,
         instructions=revision.instructions,
         question_type=revision.question_type,
@@ -837,14 +1008,19 @@ def update_question_locations(
     question_id: int,
     location_data: QuestionLocationsUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> list[QuestionLocationPublic]:
     """
     Update all locations for a question by syncing the provided list.
     This will add new locations and remove any existing ones not in the list.
     """
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Get current locations
     current_locations_query = select(QuestionLocation).where(
@@ -904,7 +1080,7 @@ def update_question_locations(
 def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     """Get all tags associated with a question."""
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
     # Query all tags associated with this question
@@ -925,7 +1101,6 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
             created_date=tag.created_date,
             modified_date=tag.modified_date,
             is_active=tag.is_active,
-            is_deleted=tag.is_deleted,
         )
         for tag in tags
         if (tag_type := get_tag_type_by_id(session, tag_type_id=tag.tag_type_id))
@@ -939,14 +1114,18 @@ def update_question_tags(
     question_id: int,
     tag_data: QuestionTagsUpdate,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> list[TagPublic]:
     """
     Update all tags for a question by syncing the provided list of tag IDs.
     This will add new tags and remove any existing ones not in the list.
     """
     question = session.get(Question, question_id)
-    if not question or question.is_deleted:
+    if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+    role = current_user.role
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
 
     # Get current tags
     current_tags_query = select(QuestionTag).where(
@@ -1087,9 +1266,9 @@ async def upload_questions_csv(
                 # Process tags if present
                 tag_ids = []
                 tagtype_error = False
-                if "Training Tags" in row and row["Training Tags"].strip():
+                if "Tags" in row and row["Tags"].strip():
                     tag_entries = [
-                        t.strip() for t in row["Training Tags"].split("|") if t.strip()
+                        t.strip() for t in row["Tags"].split("|") if t.strip()
                     ]
 
                     for tag_entry in tag_entries:
@@ -1201,7 +1380,9 @@ async def upload_questions_csv(
                         }
                     )
                     continue
-                if is_duplicate_question(session, question_text, tag_ids):
+                if is_duplicate_question(
+                    session, question_text, tag_ids, organization_id
+                ):
                     raise ValueError("Questions Already Exist")
 
                 # Create QuestionCreate object

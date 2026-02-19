@@ -1,12 +1,22 @@
+import base64
+import csv
+import io
+import os
+import tempfile
+
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
+from app.models.role import Role
+from app.tests.utils.organization import create_random_organization
+from app.tests.utils.user import authentication_token_from_email
 from app.tests.utils.utils import assert_paginated_response
 
-from ...utils.utils import random_lower_string
+from ...utils.utils import random_email, random_lower_string
 
 
 def test_create_country(
@@ -89,7 +99,7 @@ def test_get_country(
 
     assert response.status_code == 200
     data = response.json()
-    assert_paginated_response(response, min_expected_total=12)
+    assert_paginated_response(response, min_expected_total=12, min_expected_pages=1)
 
     response = client.get(
         f"{settings.API_V1_STR}/location/country/?is_active=False",
@@ -98,7 +108,7 @@ def test_get_country(
 
     assert response.status_code == 200
     data = response.json()
-    assert_paginated_response(response, min_expected_total=2)
+    assert_paginated_response(response, min_expected_total=2, min_expected_pages=1)
 
 
 def test_get_country_by_id(
@@ -428,7 +438,7 @@ def test_get_district(
     db.refresh(ernakulam)
     db.refresh(thrissur)
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?size=100&state={kerala.id}",
+        f"{settings.API_V1_STR}/location/district/?size=100&state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -451,29 +461,68 @@ def test_get_district(
     assert_paginated_response(response, min_expected_total=10, min_expected_pages=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?state={kerala.id}",
+        f"{settings.API_V1_STR}/location/district/?state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
     assert len(data["items"]) == 2
 
-    district_a = District(
-        name=random_lower_string(), state_id=kerala.id, is_active=False
-    )
-    district_b = District(
-        name=random_lower_string(), state_id=kerala.id, is_active=False
-    )
-    db.add_all([district_a, district_b])
+
+def test_get_district_by_state_ids_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+
+    kerala = State(name=random_lower_string(), country_id=india.id)
+    karnataka = State(name=random_lower_string(), country_id=india.id)
+    tamil_nadu = State(name=random_lower_string(), country_id=india.id)
+    db.add_all([kerala, karnataka, tamil_nadu])
+    db.commit()
+    db.flush()
+
+    ernakulam = District(name=random_lower_string(), state_id=kerala.id)
+    thrissur = District(name=random_lower_string(), state_id=kerala.id)
+    bangalore = District(name=random_lower_string(), state_id=karnataka.id)
+    chennai = District(name=random_lower_string(), state_id=tamil_nadu.id)
+
+    db.add_all([ernakulam, thrissur, bangalore, chennai])
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?is_active=False",
+        f"{settings.API_V1_STR}/location/district/?state_ids={kerala.id}&state_ids={karnataka.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
 
-    assert len(data["items"]) == 2
+    assert response.status_code == 200
+    assert len(data["items"]) == 3
+
+    district_names = [item["name"] for item in data["items"]]
+    assert ernakulam.name in district_names
+    assert thrissur.name in district_names
+    assert bangalore.name in district_names
+    assert chennai.name not in district_names
+
+    state_ids_in_response = [item["state"]["id"] for item in data["items"]]
+    assert kerala.id in state_ids_in_response
+    assert karnataka.id in state_ids_in_response
+    assert tamil_nadu.id not in state_ids_in_response
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/?state_ids={tamil_nadu.id}",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == chennai.name
+    assert data["items"][0]["state"]["id"] == tamil_nadu.id
 
 
 def test_get_district_by_name_filter(
@@ -704,7 +753,7 @@ def test_get_block(
     assert any(item["district_id"] == kovil.district_id for item in data)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?district={thrissur.id}",
+        f"{settings.API_V1_STR}/location/block/?district_ids={thrissur.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1031,3 +1080,455 @@ def test_get_is_active_country(
     data = response.json()
     assert len(data["items"]) >= 10
     assert all(item["is_active"] is True for item in data["items"])
+
+
+def test_get_state_admin_state_list(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_2)
+    db.commit()
+    db.refresh(state_2)
+
+    state_3 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_3)
+    db.commit()
+    db.refresh(state_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) > 1
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_3.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == state_3.name
+    assert data["items"][0]["id"] == state_3.id
+
+    # ---Check test for test admin
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    test_admin_email = random_email()
+    test_admin_payload = {
+        "email": test_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": test_admin_role.id,
+        "organization_id": new_organization.id,
+    }
+    create_response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=test_admin_payload,
+    )
+    assert create_response.status_code == 200
+
+    # Get token for the newly created admin
+    new_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # Check districts available to the new admin
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/",
+        headers=new_admin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == state_3.name
+    assert data["items"][0]["id"] == state_3.id
+
+
+def test_filter_district_for_state_admin(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_2)
+    db.commit()
+    db.refresh(state_2)
+
+    district_1 = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    district_2 = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    district_3 = District(
+        name=random_lower_string(), is_active=True, state_id=state_2.id
+    )
+    db.add_all([district_1, district_2, district_3])
+    db.commit()
+    db.refresh(district_1)
+    db.refresh(district_2)
+    db.refresh(district_3)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/",
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) > 1
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    items = data["items"]
+    assert all(item["state"]["id"] == state.id for item in items)
+    district_ids = [item["id"] for item in data["items"]]
+    assert district_1.id in district_ids
+    assert district_2.id in district_ids
+    assert district_3.id not in district_ids
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    test_admin_email = random_email()
+    test_admin_payload = {
+        "email": test_admin_email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": test_admin_role.id,
+        "organization_id": new_organization.id,
+    }
+    create_response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token_headers,
+        json=test_admin_payload,
+    )
+    assert create_response.status_code == 200
+    created_admin = create_response.json()
+
+    # Get token for the newly created admin
+    new_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # Check districts available to the new admin
+    response = client.get(
+        f"{settings.API_V1_STR}/location/district/",
+        headers=new_admin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert len(data["items"]) == 2
+    items = data["items"]
+
+    # Verify all districts belong to the same state
+    assert all(item["state"]["id"] == state.id for item in items)
+
+    # Verify correct districts are present
+    district_ids = [item["id"] for item in items]
+    assert district_1.id in district_ids
+    assert district_2.id in district_ids
+
+    # Verify district from other state is NOT accessible
+    assert district_3.id not in district_ids
+
+    # Verify state association on created admin
+    assert created_admin["states"][0]["id"] == state.id
+    assert created_admin["states"][0]["name"] == state.name
+
+
+def test_import_blocks_csv_all_scenarios(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    india = Country(name=random_lower_string())
+    db.add(india)
+    db.commit()
+    state = State(name="state_a", country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name="district_a", state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    csv_content = """block_name,district_name,state_name
+Block A,district_a,state_a
+Block B,district_a,state_a
+,district_a,state_a
+Block D,NonExistentDistrict,state_a
+Block A,district_a,state_a
+Block E,district_a,state_a
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+        tmp_file.write(csv_content.encode("utf-8"))
+        tmp_file_path = tmp_file.name
+
+    try:
+        with open(tmp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/location/block/import",
+                files={"file": ("blocks_test.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["uploaded_blocks"] == 6
+        assert data["success_blocks"] == 3
+        assert data["failed_blocks"] == 3
+        assert "Missing districts" in data["message"]
+        assert "Duplicate blocks skipped" in data["message"]
+        assert data["error_log"] is not None
+        base64_csv = data["error_log"].split("base64,")[-1]
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        error_rows = list(csv_reader)
+        assert len(error_rows) == 3
+        expected_errors = {
+            4: "Missing required value(s)",
+            5: "District 'NonExistentDistrict' in state 'state_a' not found",
+            6: "Block already exists",
+        }
+        for row in error_rows:
+            row_num = int(row["row_number"])
+            assert expected_errors[row_num] in row["error"]
+
+    finally:
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+
+
+def test_import_blocks_reject_non_csv_file(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    file_content = b"This is not a CSV file"
+    non_csv_file = ("not_a_csv.txt", file_content, "text/plain")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/block/import",
+        files={"file": non_csv_file},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Only .csv files are allowed"
+
+
+def test_import_blocks_invalid_encoding(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    invalid_bytes = b"\xff\xfe\xfd\xfc"
+    invalid_file = ("invalid.csv", invalid_bytes, "text/csv")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/location/block/import",
+        files={"file": invalid_file},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["detail"] == "Invalid file encoding"
+
+
+def test_import_blocks_csv_missing_headers(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    csv_content = """block_name,district_name
+Block A,Anantapur
+Block B,Anantapur
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+        tmp_file.write(csv_content.encode("utf-8"))
+        tmp_file_path = tmp_file.name
+
+    try:
+        with open(tmp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/location/block/import",
+                files={"file": ("blocks_missing_headers.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "CSV must contain headers" in data["detail"]
+        assert "state_name" in data["detail"]
+
+    finally:
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+
+
+def test_import_blocks_csv_multiple_state_combinations(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+
+    state_andhra = State(name="Andhra Pradesh", country_id=country.id)
+    state_telangana = State(name="Telangana", country_id=country.id)
+    db.add_all([state_andhra, state_telangana])
+    db.commit()
+    db.refresh(state_andhra)
+    db.refresh(state_telangana)
+
+    district_anantapur = District(name="district_aa", state_id=state_andhra.id)
+    district_kurnool = District(name="district_bb", state_id=state_andhra.id)
+    district_hyderabad = District(name="district_cc", state_id=state_telangana.id)
+
+    db.add_all([district_anantapur, district_kurnool, district_hyderabad])
+    db.commit()
+    db.refresh(district_anantapur)
+    db.refresh(district_kurnool)
+    db.refresh(district_hyderabad)
+
+    csv_content = """block_name,district_name,state_name
+Block A,district_aa,Andhra Pradesh
+Block B,district_bb,Andhra Pradesh
+Block C,district_cc,Telangana
+Block D,NonExistentDistrict,Telangana
+,district_cc,Telangana
+Block A,district_aa,Andhra Pradesh
+Block X,district_cc,Andhra Pradesh
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temporary_file:
+        temporary_file.write(csv_content.encode("utf-8"))
+        temporary_file_path = temporary_file.name
+
+    try:
+        with open(temporary_file_path, "rb") as file_object:
+            response = client.post(
+                f"{settings.API_V1_STR}/location/block/import",
+                files={"file": ("blocks_states_test.csv", file_object, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+
+        assert data["uploaded_blocks"] == 7
+        assert data["success_blocks"] == 3
+        assert data["failed_blocks"] == 4
+
+        assert "Missing districts" in data["message"]
+        assert "Duplicate blocks skipped" in data["message"]
+        assert data["error_log"] is not None
+
+        base64_csv = data["error_log"].split("base64,")[-1]
+        csv_bytes = base64.b64decode(base64_csv)
+        csv_text = csv_bytes.decode("utf-8")
+
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        error_rows = list(csv_reader)
+
+        assert len(error_rows) == 4
+
+        expected_errors = {
+            5: "District 'NonExistentDistrict' in state 'Telangana' not found",
+            6: "Missing required value(s)",
+            7: "Block already exists",
+            8: "District 'district_cc' in state 'Andhra Pradesh' not found",
+        }
+
+        for row in error_rows:
+            row_number = int(row["row_number"])
+            assert expected_errors[row_number] in row["error"]
+
+    finally:
+        if os.path.exists(temporary_file_path):
+            os.unlink(temporary_file_path)

@@ -25,17 +25,29 @@ from app.models import (
     User,
 )
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
-from app.models.location import District
+from app.models.certificate import Certificate
+from app.models.entity import Entity, EntityType
+from app.models.location import Block, District
 from app.models.question import QuestionType
+from app.models.role import Role
 from app.models.test import TestDistrict
+from app.models.user import UserState
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
     create_random_organization,
 )
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
-from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import assert_paginated_response, random_lower_string
+from app.tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+    get_current_user_data,
+)
+from app.tests.utils.utils import (
+    assert_paginated_response,
+    random_email,
+    random_lower_string,
+)
 
 
 def setup_data(
@@ -217,6 +229,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["created_by_id"] == user_id
+    assert data["locale"] == "en-US"
     assert len(data["districts"]) == 1
     assert "id" in data
     assert "created_date" in data
@@ -277,6 +290,7 @@ def test_create_test(
         "random_questions": False,
         "no_of_random_questions": 4,
         "question_pagination": 1,
+        "locale": "hi-IN",
         "is_template": False,
         "template_id": sample_test.id,
         "tag_ids": [tag_hindi.id, tag_marathi.id],
@@ -305,6 +319,7 @@ def test_create_test(
     assert data["question_pagination"] == payload["question_pagination"]
     assert data["is_template"] == payload["is_template"]
     assert data["template_id"] == payload["template_id"]
+    assert data["locale"] == payload["locale"]
     assert data["created_by_id"] == user_id
     assert "id" in data
     assert "created_date" in data
@@ -387,6 +402,39 @@ def test_create_test(
     ).all()
 
     assert test_question_link == []
+
+
+def test_create_test_with_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    tag1 = create_random_tag(db)
+    tag2 = create_random_tag(db)
+
+    payload = {
+        "name": random_lower_string(),
+        "created_by_id": user.id,
+        "link": random_lower_string(),
+        "random_tag_count": [
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag1.id
+    assert data["random_tag_counts"][1]["count"] == 2
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
 
 
 def test_create_test_random_question_field(
@@ -571,6 +619,7 @@ def test_get_tests(
         question_pagination=1,
         is_template=True,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
     db.add(test)
     db.commit()
@@ -616,7 +665,10 @@ def test_get_tests(
     assert any(item["created_by_id"] == test.created_by_id for item in data)
 
     assert any(
-        len(item["tags"]) == 1 and item["tags"][0]["id"] == tag_a.id for item in data
+        len(item["tags"]) == 1
+        and item["tags"][0]["id"] == tag_a.id
+        and item["tags"][0].get("tag_type", {}).get("name") == tag_type.name
+        for item in data
     )
     assert any(
         len(item["states"]) == 1 and item["states"][0]["id"] == state_a.id
@@ -626,6 +678,77 @@ def test_get_tests(
         len(item["districts"]) == 1 and item["districts"][0]["id"] == district.id
         for item in data
     )
+
+
+def test_get_tests_with_tag_random_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        state_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    district = District(name=random_lower_string(), state_id=state_a.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=5,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        marks_level=None,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        question_pagination=1,
+        is_template=True,
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+        random_tag_count=[
+            {"tag_id": tag_a.id, "count": 3},
+            {"tag_id": tag_b.id, "count": 2},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestTag(test_id=test.id, tag_id=tag_a.id))
+    db.commit()
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/test/?name={test.name}",
+        headers=get_user_superadmin_token,
+    )
+    response = get_response.json()
+    data = response["items"]
+    assert any(item["name"] == test.name for item in data)
+    assert any(item["description"] == test.description for item in data)
+    assert any(item["time_limit"] == test.time_limit for item in data)
+
+    test_data = data[0]
+    assert len(test_data["random_tag_counts"]) == 2
+    first_random_tag = test_data["random_tag_counts"][0]
+    assert first_random_tag["count"] == 3
+    assert first_random_tag["tag"]["id"] == tag_a.id
+    assert first_random_tag["tag"]["name"] == tag_a.name
+    second_random_tag = test_data["random_tag_counts"][1]
+    assert second_random_tag["count"] == 2
+    assert second_random_tag["tag"]["id"] == tag_b.id
+    assert second_random_tag["tag"]["name"] == tag_b.name
 
 
 def test_get_test_by_filter_name(
@@ -641,6 +764,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -648,6 +772,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -655,6 +780,7 @@ def test_get_test_by_filter_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -701,6 +827,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -709,6 +836,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -717,6 +845,7 @@ def test_get_test_by_filter_description(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -761,6 +890,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 25, 10, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -769,6 +899,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -777,6 +908,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -786,6 +918,7 @@ def test_get_test_by_filter_start_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_time=datetime(2025, 7, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -861,6 +994,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 25, 10, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -869,6 +1003,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -877,6 +1012,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -886,6 +1022,7 @@ def test_get_test_by_filter_end_time(
         link=random_lower_string(),
         no_of_random_questions=1,
         end_time=datetime(2025, 7, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -957,6 +1094,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 24, 10, 30),
         end_time=datetime(2025, 4, 25, 11, 30),
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -966,6 +1104,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 26, 10, 30),
         end_time=datetime(2025, 4, 27, 12, 30),
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -975,6 +1114,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 14, 30),
         end_time=datetime(2025, 4, 28, 15, 30),
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -985,6 +1125,7 @@ def test_get_test_by_filter_start_end_time(
         no_of_random_questions=1,
         start_time=datetime(2025, 4, 28, 19, 10),
         end_time=datetime(2025, 4, 28, 19, 30),
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1018,6 +1159,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=30,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1026,6 +1168,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=40,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1034,6 +1177,7 @@ def test_get_test_by_filter_time_limit(
         link=random_lower_string(),
         no_of_random_questions=1,
         time_limit=45,
+        organization_id=org_id,
     )
 
     test_4 = Test(
@@ -1042,6 +1186,7 @@ def test_get_test_by_filter_time_limit(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
@@ -1083,6 +1228,7 @@ def test_get_test_by_filter_completion_message(
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_lower_string() + random_text_1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -1093,6 +1239,7 @@ def test_get_test_by_filter_completion_message(
         completion_message=random_lower_string()
         + random_text_1
         + random_lower_string(),
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1101,6 +1248,7 @@ def test_get_test_by_filter_completion_message(
         link=random_lower_string(),
         no_of_random_questions=1,
         completion_message=random_text_2,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1148,6 +1296,7 @@ def test_get_test_by_filter_start_instructions(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_lower_string() + random_text_1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -1158,6 +1307,7 @@ def test_get_test_by_filter_start_instructions(
         start_instructions=random_lower_string()
         + random_text_1
         + random_lower_string(),
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1166,6 +1316,7 @@ def test_get_test_by_filter_start_instructions(
         link=random_lower_string(),
         no_of_random_questions=1,
         start_instructions=random_text_2,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1209,6 +1360,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1216,6 +1368,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=2,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1223,6 +1376,7 @@ def test_get_test_by_filter_no_of_attempts(
         link=random_lower_string(),
         no_of_random_questions=1,
         no_of_attempts=3,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -1271,6 +1425,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1278,6 +1433,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1286,6 +1442,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=True,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
@@ -1293,6 +1450,7 @@ def test_get_test_by_filter_shuffle(
         link=random_lower_string(),
         no_of_random_questions=1,
         shuffle=False,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3, test_4])
@@ -1326,6 +1484,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1333,6 +1492,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1341,6 +1501,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=True,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
@@ -1348,6 +1509,7 @@ def test_get_test_by_filter_random_questions(
         link=random_lower_string(),
         no_of_random_questions=1,
         random_questions=False,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3, test_4])
@@ -1382,18 +1544,21 @@ def test_get_test_by_filter_no_random_questions(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=20,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=10,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=45,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1435,6 +1600,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1442,6 +1608,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=2,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1449,6 +1616,7 @@ def test_get_test_by_filter_question_pagination(
         link=random_lower_string(),
         no_of_random_questions=1,
         question_pagination=0,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1484,6 +1652,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1491,6 +1660,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=False,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -1499,6 +1669,7 @@ def test_get_test_by_filter_is_template(
         link=random_lower_string(),
         no_of_random_questions=1,
         is_template=True,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1533,18 +1704,21 @@ def test_get_test_by_filter_created_by(
         created_by_id=user_1.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user_1.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user_2.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1566,6 +1740,7 @@ def test_get_test_by_filter_created_by(
 def test_get_test_order_by(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
+    """Test the generic sorting system with sort_by and sort_order parameters"""
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
     user = create_random_user(db, organization_id=org_id)
@@ -1575,6 +1750,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -1582,6 +1758,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -1589,6 +1766,7 @@ def test_get_test_order_by(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -1596,7 +1774,7 @@ def test_get_test_order_by(
     test_names = sorted([test_1.name, test_2.name, test_3.name], key=str.lower)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?order_by=name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?sort_by=name&sort_order=asc&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1608,7 +1786,7 @@ def test_get_test_order_by(
     assert data[2]["name"] == test_names[2]
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?order_by=-name&created_by={user.id}",
+        f"{settings.API_V1_STR}/test/?sort_by=name&sort_order=desc&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -1620,6 +1798,7 @@ def test_get_test_order_by(
     assert data[1]["name"] == test_names[1]
     assert data[2]["name"] == test_names[0]
 
+    # Test default sorting, i.e modified_date DESC
     response = client.get(
         f"{settings.API_V1_STR}/test/?created_by={user.id}",
         headers=get_user_superadmin_token,
@@ -1628,14 +1807,13 @@ def test_get_test_order_by(
     data = response.json()
     data = data["items"]
 
-    test_created_date = [item["created_date"] for item in data]
+    test_modified_dates = [item["modified_date"] for item in data]
 
-    sorted_test_created_date = sorted(test_created_date)
-
-    assert sorted_test_created_date == test_created_date
+    sorted_test_modified_dates_desc = sorted(test_modified_dates, reverse=True)
+    assert sorted_test_modified_dates_desc == test_modified_dates
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-created_date",
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&sort_by=created_date&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1644,24 +1822,20 @@ def test_get_test_order_by(
     test_created_date = [item["created_date"] for item in data]
 
     sorted_test_created_date = sorted(test_created_date, reverse=True)
-
     assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&order_by=-name&order_by=created_date",
+        f"{settings.API_V1_STR}/test/?created_by={user.id}&sort_by=created_date&sort_order=asc",
         headers=get_user_superadmin_token,
     )
 
     data = response.json()
     data = data["items"]
-    test_name_date = [
-        {"created_date": item["created_date"], "name": item["name"]} for item in data
-    ]
+    test_created_dates = [item["created_date"] for item in data]
 
-    sort_by_date = sorted(test_name_date, key=lambda x: x["created_date"])
-    sorted_array = sorted(sort_by_date, key=lambda x: x["name"].lower(), reverse=True)
-
-    assert sorted_array == test_name_date
+    # should be sorted by created_date in ascending order
+    sorted_by_created_date = sorted(test_created_dates)
+    assert sorted_by_created_date == test_created_dates
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/?order_by=-setting",
@@ -1680,6 +1854,61 @@ def test_get_test_order_by(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "invalid" in data["detail"].lower()
+
+
+def test_get_test_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    tag1 = Tag(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+
+    tag2 = Tag(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+
+    db.add_all([tag1, tag2])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        link="test-link",
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+        organization_id=org_id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    random_tag_counts = data["random_tag_counts"]
+
+    assert len(random_tag_counts) == 2
+    assert random_tag_counts[0]["count"] == 3
+    assert random_tag_counts[0]["tag"]["id"] == tag1.id
+    assert random_tag_counts[0]["tag"]["name"] == tag1.name
+    assert random_tag_counts[1]["count"] == 2
+    assert random_tag_counts[1]["tag"]["id"] == tag2.id
+    assert random_tag_counts[1]["tag"]["name"] == tag2.name
 
 
 def test_get_test_by_id(
@@ -1720,6 +1949,7 @@ def test_get_test_by_id(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
 
     db.add(test)
@@ -1836,6 +2066,7 @@ def test_get_test_by_id(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=user.organization_id,
     )
 
     db.add(test_2)
@@ -1902,6 +2133,7 @@ def test_update_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        locale="hi-IN",
     )
     db.add(test)
     db.commit()
@@ -1960,6 +2192,7 @@ def test_update_test(
         "question_revision_ids": [question_revision_one.id],
         "state_ids": [stata_a.id, state_b.id],
         "district_ids": [district_a.id],
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -1976,6 +2209,7 @@ def test_update_test(
     assert data["end_time"] == payload["end_time"]
     assert data["time_limit"] == payload["time_limit"]
     assert data["marks_level"] == payload["marks_level"]
+    assert data["locale"] == payload["locale"]
 
     assert data["marks"] == payload["marks"]
     assert data["completion_message"] == payload["completion_message"]
@@ -2067,6 +2301,81 @@ def test_visibility_test(
     assert data["is_active"] is False
 
 
+def test_visibility_test_with_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    tag1 = create_random_tag(db)
+    tag2 = create_random_tag(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        marks=5,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=False,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+        random_tag_count=[
+            {"tag_id": tag1.id, "count": 3},
+            {"tag_id": tag2.id, "count": 2},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["is_active"] is True
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag1.id
+    assert data["random_tag_counts"][1]["count"] == 2
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag1.id
+    assert data["random_tag_counts"][1]["count"] == 2
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag2.id
+
+
+def test_visibility_test_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_test_id = -9999
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        params={"is_active": True},
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
 def test_delete_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2121,6 +2430,63 @@ def test_delete_test(
     assert "id" not in data
 
 
+def test_bulk_delete_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        no_of_random_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    test2 = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        link=random_lower_string(),
+        no_of_attempts=1,
+        no_of_random_questions=1,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user.id,
+    )
+    db.add(test2)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test.id, test2.id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None or len(data["delete_failure_list"]) == 0
+
+
 def test_get_public_test_info(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2150,7 +2516,6 @@ def test_get_public_test_info(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
     )
     db.add(test)
     db.commit()
@@ -2179,6 +2544,155 @@ def test_get_public_test_info(
     assert data["total_questions"] == 2  # We added 2 questions
 
 
+def test_get_public_test_info_with_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    # Create a test
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        random_tag_count=[{"tag_id": 1, "count": 3}, {"tag_id": 2, "count": 2}],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["start_instructions"] == test.start_instructions
+    assert data["total_questions"] == 7
+
+
+def test_get_public_test_info_with_random_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        random_questions=True,
+        no_of_random_questions=1,
+        random_tag_count=[{"tag_id": 1, "count": 3}, {"tag_id": 2, "count": 2}],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_question_one = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_one.id
+    )
+    test_question_two = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision_two.id
+    )
+    db.add_all([test_question_one, test_question_two])
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    assert data["time_limit"] == test.time_limit
+    assert data["total_questions"] == 6
+
+
+def test_get_public_test_info_with_tag_count_only(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test public test endpoint with only tag-based random questions (no fixed questions, random_questions=False)."""
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        time_limit=30,
+        marks=50,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        random_tag_count=[{"tag_id": 1, "count": 4}, {"tag_id": 2, "count": 3}],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["total_questions"] == 7
+
+
 def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> None:
     """Test that inactive tests are not accessible via public endpoint."""
     user = create_random_user(db)
@@ -2188,7 +2702,6 @@ def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> No
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=False,  # Inactive test
-        is_deleted=False,
         link=random_lower_string(),
     )
     db.add(test)
@@ -2208,10 +2721,11 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=True,  # Deleted test
         link=random_lower_string(),
     )
     db.add(test)
+    db.commit()
+    db.delete(test)
     db.commit()
 
     response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
@@ -2229,7 +2743,6 @@ def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -
             name="Public Start Timer Test",
             link="public-test-uuid",
             is_active=True,
-            is_deleted=False,
             start_time=future_start_time,
             created_by_id=create_random_user(db).id,
         )
@@ -2256,7 +2769,6 @@ def test_public_timer_when_test_already_started(
             name="Public Start Timer Test",
             link="public-test-uuid1",
             is_active=True,
-            is_deleted=False,
             start_time=datetime(2024, 5, 24, 9, 0, 0),
             end_time=fake_current_time + timedelta(days=1),
             created_by_id=create_random_user(db).id,
@@ -2291,10 +2803,11 @@ def test_public_timer_test_not_found_or_not_active(
             end_time=fake_current_time + timedelta(hours=2),
             time_limit=60,
             is_active=True,
-            is_deleted=True,  # Marked as deleted
             created_by_id=user.id,
         )
         db.add(deleted_test)
+        db.commit()
+        db.delete(deleted_test)
         db.commit()
         response = client.get(
             f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
@@ -2310,7 +2823,6 @@ def test_public_timer_returns_zero_if_start_time_none(
         name="Test with no start time",
         link="test-no-start-time",
         is_active=True,
-        is_deleted=False,
         start_time=None,  # This is the key for this test
         created_by_id=create_random_user(db).id,
     )
@@ -2458,6 +2970,331 @@ def test_clone_test(
     assert district.id in district_ids
 
 
+def test_bulk_delete_state_admin_cannot_delete_general_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create 2 general tests (no states)
+    test_payload_1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [],
+    }
+    test_payload_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [],
+    }
+
+    create_response_one = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_one.status_code == 200
+    created_test_id_one = create_response_one.json()["id"]
+
+    create_response_two = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_two.status_code == 200
+    created_test_id_two = create_response_two.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[created_test_id_one, created_test_id_two],
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state_y.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create 2 tests in state_x
+    test_payload_1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_x.id],
+    }
+    test_payload_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_x.id],
+    }
+
+    create_response_one = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_one.status_code == 200
+    created_test_id_one = create_response_one.json()["id"]
+
+    create_response_two = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_two.status_code == 200
+    created_test_id_two = create_response_two.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[created_test_id_one, created_test_id_two],
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 0
+    assert len(data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_state_admin_delete_tests_same_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    # Create 2 tests in same state
+    test_payload_1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state.id],
+    }
+    test_payload_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state.id],
+    }
+
+    create_response_one = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_1,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_one.status_code == 200
+    created_test_id_one = create_response_one.json()["id"]
+
+    create_response_two = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload_2,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response_two.status_code == 200
+    created_test_id_two = create_response_two.json()["id"]
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[created_test_id_one, created_test_id_two],
+        headers=token_headers,
+    )
+    data = delete_resp.json()
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
+
+
+def test_clone_test_with_random_tag(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    user1 = create_random_user(db)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        marks=10,
+        completion_message=random_lower_string(),
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        no_of_attempts=1,
+        shuffle=True,
+        random_questions=True,
+        no_of_random_questions=2,
+        question_pagination=1,
+        is_template=False,
+        created_by_id=user1.id,
+        random_tag_count=[
+            {"tag_id": tag_hindi.id, "count": 5},
+            {"tag_id": tag_marathi.id, "count": 3},
+        ],
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Clone the test
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["id"] != test.id
+    assert data["name"].startswith("Copy of ")
+    assert data["description"] == test.description
+
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["count"] == 5
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag_hindi.id
+    assert data["random_tag_counts"][1]["count"] == 3
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag_marathi.id
+
+
 def test_clone_soft_deleted_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2477,11 +3314,12 @@ def test_clone_soft_deleted_test(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
-        is_deleted=True,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
+    db.delete(test)
+    db.commit()
     response = client.post(
         f"{settings.API_V1_STR}/test/{test.id}/clone",
         headers=get_user_superadmin_token,
@@ -2546,6 +3384,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_2 = Test(
@@ -2553,6 +3392,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     test_3 = Test(
@@ -2560,6 +3400,7 @@ def test_get_test_by_filter_case_insensitive_name(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
 
     db.add_all([test_1, test_2, test_3])
@@ -2636,36 +3477,44 @@ def test_get_tests_by_tags_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_5 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4, test_5])
     db.commit()
     db.refresh(test_1)
     db.refresh(test_2)
     db.refresh(test_3)
+    db.refresh(test_4)
+    db.refresh(test_5)
+
     test_tag_link_1 = TestTag(test_id=test_1.id, tag_id=tag_1.id)
     test_tag_link_2 = TestTag(test_id=test_2.id, tag_id=tag_2.id)
     test_tag_link_3 = TestTag(test_id=test_3.id, tag_id=tag_3.id)
@@ -2711,6 +3560,15 @@ def test_get_tests_by_tags_filter(
     items = data["items"]
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_3.id, test_5.id}
+    assert_paginated_response(response, expected_total=2)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}&tag_ids={tag_2.id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert_paginated_response(response, expected_total=4)
+
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
@@ -2777,36 +3635,42 @@ def test_get_tests_by_tags_type_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_4 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_5 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_6 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3, test_4, test_5, test_6])
     db.commit()
@@ -2859,6 +3723,7 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 5
+    assert data["total"] == 5
     assert test_6.id not in (test["id"] for test in data["items"])
     response = client.get(
         f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
@@ -2867,6 +3732,24 @@ def test_get_tests_by_tags_type_filter(
     assert response.status_code == 200
     data = response.json()
     assert data["items"] == []
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_3.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert data["total"] == 2
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_1.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 0
+    assert data["total"] == 0
 
 
 def test_get_tests_by_state_filter(
@@ -2891,18 +3774,21 @@ def test_get_tests_by_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -2941,6 +3827,7 @@ def test_get_tests_by_state_filter(
     data = response.json()
     items = data["items"]
     assert len(items) == 3
+    assert data["total"] == 3
     assert {test["id"] for test in items} == {test_1.id, test_2.id, test_3.id}
 
 
@@ -2982,6 +3869,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add(test_1)
     db.commit()
@@ -2998,6 +3886,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add(test_2)
     db.commit()
@@ -3027,6 +3916,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_2 = Test(
         name=random_lower_string(),
@@ -3034,6 +3924,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     test_3 = Test(
         name=random_lower_string(),
@@ -3041,6 +3932,7 @@ def test_get_tests_by_case_insensitive_description_filter(
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
+        organization_id=org_id,
     )
     db.add_all([test_1, test_2, test_3])
     db.commit()
@@ -3126,15 +4018,15 @@ def test_get_all_tests_includes_active_and_inactive(
     active_test = Test(
         name="Active Test",
         is_active=True,
-        is_deleted=False,
         created_by_id=user_id,
+        organization_id=user_data["organization_id"],
     )
     db.add(active_test)
     inactive_test = Test(
         name="Inactive Test",
         is_active=False,
-        is_deleted=False,
         created_by_id=user_id,
+        organization_id=user_data["organization_id"],
     )
     db.add(inactive_test)
     db.commit()
@@ -3233,6 +4125,7 @@ def test_update_test_time_limit_exceeds_duration(
         start_time="2025-07-19T10:00:00Z",
         end_time="2025-07-19T10:30:00Z",
         time_limit=30,
+        locale="en-US",
     )
     db.add(test)
     db.commit()
@@ -3242,6 +4135,7 @@ def test_update_test_time_limit_exceeds_duration(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "time_limit": 60,
+        "locale": "en-US",
     }
     response = client.put(
         f"{settings.API_V1_STR}/test/{test.id}",
@@ -3251,6 +4145,49 @@ def test_update_test_time_limit_exceeds_duration(
     assert response.status_code == 400
     data = response.json()
     assert "Time limit cannot be more than the duration" in data["detail"]
+
+
+def test_update_test_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    non_existent_test_id = -9999
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 5,
+        "locale": "en-US",
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
+
+
+def test_get_test_by_id_not_available(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test fetching a test that does not exist should return 404."""
+
+    non_existent_test_id = -9999
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    data = response.json()
+    assert data["detail"] == "Test is not available"
 
 
 def test_update_test_end_time_before_start_time(
@@ -3275,6 +4212,7 @@ def test_update_test_end_time_before_start_time(
         "start_time": "2025-07-20T10:00:00Z",
         "end_time": "2025-07-19T10:00:00Z",
         "time_limit": 10,
+        "locale": "en-US",
     }
     response = client.put(
         f"{settings.API_V1_STR}/test/{test.id}",
@@ -3283,6 +4221,91 @@ def test_update_test_end_time_before_start_time(
     )
     assert response.status_code == 400
     assert "End time cannot be earlier than start time" in response.json()["detail"]
+
+
+def test_test_check_unsupported_language(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 5,
+        "locale": "xx",
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+
+    assert response.status_code == 422
+    assert data["detail"][0]["msg"] == "Input should be 'en-US' or 'hi-IN'"
+
+    payload["locale"] = "en-US"
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["locale"] == "en-US"
+
+    payload = {
+        "name": random_lower_string(),
+        "locale": "xx",
+        "start_time": "2025-07-19T10:00:00Z",
+        "end_time": "2025-07-19T11:00:00Z",
+        "time_limit": 60,
+    }
+
+    test_id = data["id"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 422
+    assert data["detail"][0]["msg"] == "Input should be 'en-US' or 'hi-IN'"
+
+    payload["locale"] = "hi-IN"
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["locale"] == "hi-IN"
+
+
+def test_localization_default_language(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    payload = {
+        "name": random_lower_string(),
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["locale"] == "en-US"
 
 
 def test_create_test_start_and_end_time_same(
@@ -3354,7 +4377,6 @@ def test_get_public_test_info_expire_test(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         start_time=get_current_time() - timedelta(hours=1),
         end_time=get_current_time() - timedelta(minutes=10),
     )
@@ -3524,6 +4546,7 @@ def test_update_test_random_question_validation_fails(
         "no_of_random_questions": 5,
         "tag_ids": [tag_a.id],
         "state_ids": [state_a.id],
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -3585,6 +4608,7 @@ def test_update_test_random_question_success(
         "tag_ids": [tag_a.id, tag_b.id],
         "state_ids": [state_a.id, state_b.id],
         "question_revision_ids": [question_revision_one.id, question_revision_two.id],
+        "locale": "en-US",
     }
 
     response = client.put(
@@ -3626,7 +4650,6 @@ def test_get_public_test(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        is_deleted=False,
         random_questions=True,
         no_of_random_questions=4,
     )
@@ -3640,7 +4663,6 @@ def test_get_public_test(
             created_by_id=user.id,
             organization_id=user.organization_id,
             is_active=True,
-            is_deleted=False,
         )
         db.add(question)
         db.flush()
@@ -3953,6 +4975,7 @@ def test_mapping_test_with_district(
         "created_by_id": user.id,
         "tag_ids": [],
         "district_ids": [district_1.id, district_2.id],
+        "locale": "en-US",
     }
 
     response = client.post(
@@ -4117,6 +5140,7 @@ def test_get_tests_by_district_filter(
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 3
+    assert data["total"] == 3
     assert any(test_data_1["id"] == item["id"] for item in data["items"])
     assert any(test_data_2["id"] == item["id"] for item in data["items"])
     assert any(test_data_3["id"] == item["id"] for item in data["items"])
@@ -4156,7 +5180,6 @@ def test_delete_test_with_attempted_candidate_should_fail(
         correct_answer=[2],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -4241,6 +5264,185 @@ def test_delete_test_with_attempted_candidate_should_fail(
     assert response.status_code == 200
 
 
+def test_bulk_delete_test_with_attempted_candidate_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+    tag = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=org_id,
+    )
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+        "tag_ids": [tag.id],
+        "state_ids": [state.id],
+        "district_ids": [district.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test_id,
+        candidate_id=candidate.id,
+        device="device 1",
+        consent=True,
+        start_time="2025-01-01T10:00:00Z",
+        is_submitted=True,
+    )
+
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response=[2],
+            visited=True,
+            time_spent=15,
+        )
+    )
+    db.commit()
+
+    test_payload1 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload1,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    test_id2 = response.json()["id"]
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test_id, test_id2],
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert data["delete_success_count"] == 1
+    assert len(data["delete_failure_list"]) == 1
+
+    assert response.status_code == 200
+
+
+def test_bulk_delete_multiple_tenant(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_a_id = create_random_user(db, organization_id=org_id).id
+    user_b_id = create_random_user(db).id
+
+    test_a = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        is_active=True,
+        created_by_id=user_a_id,
+    )
+    test_b = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=30,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        is_active=True,
+        created_by_id=user_b_id,
+    )
+    db.add_all([test_a, test_b])
+    db.commit()
+    db.refresh(test_a)
+    db.refresh(test_b)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test_a.id, test_b.id],
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+
+    assert "invalid" in data["detail"].lower()
+
+    assert response.status_code == 404
+
+
 def test_delete_test_with_no_attempted_candidates_should_pass(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -4287,7 +5489,6 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
         correct_answer=[1],
         is_mandatory=True,
         is_active=True,
-        is_deleted=False,
     )
     db.add(revision)
     db.commit()
@@ -4362,3 +5563,1809 @@ def test_delete_test_with_no_attempted_candidates_should_pass(
         select(TestDistrict).where(TestDistrict.test_id == test_id)
     ).all()
     assert len(test_district_links) == 0
+
+
+def test_get_list_of_entities_test_public(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+    entity_C = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+    entity_D = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+    db.add_all([entity_A, entity_B, entity_C, entity_D])
+    db.commit()
+
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+    db.refresh(entity_C)
+    db.refresh(entity_D)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+    db.refresh(test_district)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    profile_list = data["profile_list"]
+    returned_ids = {entity["id"] for entity in profile_list}
+
+    expected_ids = {entity_A.id, entity_B.id, entity_C.id, entity_D.id}
+    assert expected_ids.issubset(returned_ids)
+
+
+def test_get_public_test_empty_profile_list(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+    )
+
+    db.add_all([entity_A, entity_B])
+    db.commit()
+
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+    db.refresh(test_district)
+
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    profile_list = data["profile_list"]
+    assert profile_list == []
+
+
+def test_get_public_test_location_details(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+    )
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    entity_C = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    db.add_all([entity_A, entity_B, entity_C])
+    db.commit()
+
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+    db.refresh(entity_C)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+    db.refresh(test_district)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    profile_list = data["profile_list"]
+    returned_ids = {entity["id"] for entity in profile_list}
+
+    expected_ids = {
+        entity_A.id,
+        entity_B.id,
+        entity_C.id,
+    }
+    assert expected_ids.issubset(returned_ids)
+    # Check that entities have the correct state and district names
+
+    for entity in data["profile_list"]:
+        if entity["name"] == entity_A.name:
+            assert entity["state"]["name"] == state.name
+            assert entity["state"]["id"] == state.id
+            assert entity["district"]["name"] == district.name
+            assert entity["district"]["id"] == district.id
+
+        if entity["name"] == entity_B.name:
+            assert entity["district"]["name"] == district.name
+            assert entity["district"]["id"] == district.id
+            assert entity["block"]["name"] == block.name
+            assert entity["block"]["id"] == block.id
+
+        if entity["name"] == entity_C.name:
+            assert entity["state"]["name"] == state.name
+            assert entity["state"]["id"] == state.id
+            assert entity["district"]["name"] == district.name
+            assert entity["district"]["id"] == district.id
+            assert entity["block"]["name"] == block.name
+            assert entity["block"]["id"] == block.id
+
+
+def test_get_public_test_location_details_with_profile_label(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+    )
+
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    db.add_all([entity_A, entity_B])
+    db.commit()
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    profile_list = data["profile_list"]
+
+    for entity in profile_list:
+        if entity["id"] == entity_A.id:
+            assert entity["label"] == entity_A.name
+
+        if entity["id"] == entity_B.id:
+            assert entity["label"] == f"{entity_B.name} - ({block.name})"
+
+
+def test_candidate_profile_lower_location_entity(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    district_2 = District(name=random_lower_string(), state_id=state.id)
+    db.add(district_2)
+    db.commit()
+    db.refresh(district_2)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+    )
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    entity_C = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=None,
+        block_id=None,
+    )
+
+    entity_D = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district_2.id,
+        state_id=state.id,
+        block_id=None,
+    )
+
+    db.add_all([entity_A, entity_B, entity_C, entity_D])
+    db.commit()
+
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+    db.refresh(entity_C)
+    db.refresh(entity_D)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_state = TestState(test_id=test.id, state_id=state.id)
+    db.add(test_state)
+    db.commit()
+    db.refresh(test_state)
+
+    test_district = TestDistrict(test_id=test.id, district_id=district.id)
+    db.add(test_district)
+    db.commit()
+    db.refresh(test_district)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    profile_list = data["profile_list"]
+    returned_ids = {entity["id"] for entity in profile_list}
+    expected_ids = {
+        entity_A.id,
+        entity_B.id,
+    }
+    assert expected_ids.issubset(returned_ids)
+    assert entity_C.id not in returned_ids
+    assert entity_D.id not in returned_ids
+
+
+def test_candidate_profile_higher_location_entity(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    user_organization = user_data["organization_id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=user_organization,
+    )
+
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    district_2 = District(name=random_lower_string(), state_id=state.id)
+    db.add(district_2)
+    db.commit()
+    db.refresh(district_2)
+
+    block = Block(name=random_lower_string(), district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    entity_A = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=district.id,
+    )
+    entity_B = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district.id,
+        block_id=block.id,
+    )
+
+    entity_C = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        state_id=state.id,
+        district_id=None,
+        block_id=None,
+    )
+
+    entity_D = Entity(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        district_id=district_2.id,
+        state_id=state.id,
+        block_id=None,
+    )
+
+    db.add_all([entity_A, entity_B, entity_C, entity_D])
+    db.commit()
+
+    db.refresh(entity_A)
+    db.refresh(entity_B)
+    db.refresh(entity_C)
+    db.refresh(entity_D)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=45,
+        marks=100,
+        start_instructions="Test instructions",
+        link=random_lower_string(),
+        created_by_id=user_id,
+        candidate_profile=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_state = TestState(test_id=test.id, state_id=state.id)
+    db.add(test_state)
+    db.commit()
+    db.refresh(test_state)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+    assert response.status_code == 200
+    assert data["id"] == test.id
+    assert data["name"] == test.name
+    assert data["description"] == test.description
+    profile_list = data["profile_list"]
+    returned_ids = {entity["id"] for entity in profile_list}
+    expected_ids = {entity_A.id, entity_C.id, entity_D.id}
+    assert expected_ids.issubset(returned_ids)
+    assert entity_B.id not in returned_ids
+
+
+def test_create_test_with_organization_id(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        headers=get_user_superadmin_token,
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "time_limit": 30,
+            "marks": 100,
+            "start_instructions": random_lower_string(),
+            "link": random_lower_string(),
+            "is_active": True,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created_by_id"] is not None
+    assert data["organization_id"] is not None
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    assert data["organization_id"] == user_data["organization_id"]
+    assert data["created_by_id"] == user_data["id"]
+
+
+def test_clone_test_with_organization_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+    db.refresh(user)
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "3"},
+            {"id": 2, "key": "B", "value": "4"},
+            {"id": 3, "key": "C", "value": "5"},
+        ],
+        correct_answer=[2],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 100,
+        "start_instructions": random_lower_string(),
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [revision.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test_id}/clone",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created_by_id"] is not None
+    assert data["organization_id"] is not None
+    assert data["id"] != test_id
+    assert data["name"] == f"Copy of {test_payload['name']}"
+    assert data["description"] == test_payload["description"]
+    assert data["time_limit"] == test_payload["time_limit"]
+    assert data["marks"] == test_payload["marks"]
+    assert data["start_instructions"] == test_payload["start_instructions"]
+    assert data["link"] != test_payload["link"]
+    assert data["is_active"] == test_payload["is_active"]
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    assert data["organization_id"] == user_data["organization_id"]
+    assert data["created_by_id"] == user_data["id"]
+
+
+def test_test_list_state_user(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    user_state_x = create_random_user(db, new_organization.id)
+    db.add(user_state_x)
+    db.commit()
+    db.refresh(user_state_x)
+    db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
+
+    user_state_y = create_random_user(db, new_organization.id)
+    db.add(user_state_y)
+    db.commit()
+    db.refresh(user_state_y)
+    db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
+
+    another_user = create_random_user(db, new_organization.id)
+    db.add(another_user)
+    db.commit()
+    db.refresh(another_user)
+
+    db.commit()
+
+    for i in range(3):
+        t = Test(
+            name=f"Test X {i + 1}",
+            created_by_id=user_state_x.id,
+            organization_id=new_organization.id,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_x.id))
+
+    for i in range(2):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_y.id))
+        db.add(TestState(test_id=t.id, state_id=state_x.id))
+
+    for i in range(3):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+        db.add(TestState(test_id=t.id, state_id=state_y.id))
+
+    db.commit()
+
+    for i in range(2):
+        t = Test(
+            name=f"Test Y {i + 1}",
+            created_by_id=user_state_y.id,
+            organization_id=new_organization.id,
+            is_template=False,
+        )
+        db.add(t)
+        db.flush()
+        db.refresh(t)
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test",
+        headers=token_headers,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    # state admin should see:
+    # - tests assigned to their state (3 + 2 = 5)
+    # - tests with no state assigned (2)
+    # Total: 7 tests
+    assert data["total"] == 7
+    assert len(data["items"]) == 7
+
+
+def test_state_admin_cannot_delete_general_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 200
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_can_delete_test_in_their_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
+
+
+def test_state_admin_cannot_delete_test_outside_their_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_y = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_y])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_y)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_y.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_x.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_cannot_delete_multi_state_test_without_full_access(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_b = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_a.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_revision_ids": [],
+        "tag_ids": [],
+        "state_ids": [state_a.id, state_b.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_state_admin_can_delete_test_connected_via_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(
+        name=random_lower_string(),
+        state_id=state.id,
+    )
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "district_ids": [district.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
+
+
+def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_matches(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = create_random_organization(db)
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), country_id=country.id)
+    state_b = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    district_a = District(
+        name=random_lower_string(),
+        is_active=True,
+        state_id=state_a.id,
+    )
+    district_b = District(
+        name=random_lower_string(),
+        is_active=True,
+        state_id=state_b.id,
+    )
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org.id,
+        "state_ids": [state_a.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "district_ids": [district_a.id, district_b.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+    test_id = response.json()["id"]
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+
+    assert delete_resp.status_code == 403
+    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+
+
+def test_localization_list(
+    client: TestClient, get_user_testadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/languages/",
+        headers=get_user_testadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), dict)
+    data = response.json()
+    assert len(data) == 2
+
+    # Check if the expected dictionaries exist in the response
+    expected_items = [
+        {"en-US": "English"},
+        {"hi-IN": "Hindi"},
+    ]
+
+    for expected_item in expected_items:
+        # Check if expected_item is a subset of data
+        assert expected_item.items() <= data.items(), (
+            f"Expected items {expected_item} not found in response data {data}"
+        )
+
+
+def test_create_test_with_show_question_palette_true(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_question_palette set to True."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_question_palette": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_question_palette"] is True
+
+
+def test_create_test_with_show_question_palette_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_question_palette set to False."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_question_palette": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_question_palette"] is False
+
+
+def test_create_test_show_question_palette_defaults_to_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that show_question_palette defaults to False when not specified."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_question_palette"] is False
+
+
+def test_update_test_show_question_palette(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test updating show_question_palette from False to True."""
+    # Create test with show_question_palette=False
+    test_name = random_lower_string()
+    test_description = random_lower_string()
+    test_link = random_lower_string()
+    create_payload = {
+        "name": test_name,
+        "description": test_description,
+        "time_limit": 30,
+        "marks": 10,
+        "link": test_link,
+        "is_active": True,
+        "show_question_palette": False,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=create_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    test_id = create_response.json()["id"]
+
+    # Update to show_question_palette=True using PUT
+    update_payload = {
+        "name": test_name,
+        "description": test_description,
+        "time_limit": 30,
+        "marks": 10,
+        "link": test_link,
+        "is_active": True,
+        "show_question_palette": True,
+        "locale": "en-US",
+    }
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_response.status_code == 200
+    data = update_response.json()
+    assert data["show_question_palette"] is True
+
+
+def test_get_test_returns_show_question_palette(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that getting a test returns the show_question_palette field."""
+    # Create test with show_question_palette=True
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_question_palette": True,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    test_id = create_response.json()["id"]
+
+    # Get test by ID
+    get_response = client.get(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert get_response.status_code == 200
+    data = get_response.json()
+    assert "show_question_palette" in data
+    assert data["show_question_palette"] is True
+
+
+def test_create_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "certificate_id": certificate.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["certificate_id"] == certificate.id
+
+
+def test_update_test_with_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    organization = create_random_organization(db)
+    db.add(organization)
+    db.commit()
+    user = create_random_user(db, organization.id)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+    assert create_resp.json()["certificate_id"] is None
+
+    update_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "certificate_id": certificate.id,
+    }
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_resp.status_code == 200
+    data = update_resp.json()
+    assert data["certificate_id"] == certificate.id
+
+    update_payload["certificate_id"] = None
+    remove_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert remove_resp.status_code == 200
+    data_remove = remove_resp.json()
+    assert data_remove["certificate_id"] is None
+
+
+def test_district_user_cannot_modify_out_of_scope_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+
+    district_1 = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district_1)
+    db.commit()
+
+    district_2 = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district_2)
+    db.commit()
+
+    email = random_email()
+
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org,
+        "state_id": [state.id],
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_systemadmin_token,
+    )
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    assert response.status_code == 200
+
+    test_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state.id],
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload,
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+    test_id = data["id"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+        json=test_payload,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+
+    test_payload_district_2 = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state.id],
+        "district_ids": [district_2.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_payload_district_2,
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["districts"] is not None
+    test_id = data["id"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+        json=test_payload_district_2,
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "cannot modify/delete" in data["detail"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=token_headers,
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "cannot modify/delete" in data["detail"]
+
+
+def test_get_tests_by_district_user(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    country = Country(name="India", is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+    state_1 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_2 = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_1, state_2])
+    db.commit()
+    db.refresh(state_1)
+    db.refresh(state_2)
+
+    district_1 = District(
+        name=random_lower_string(), is_active=True, state_id=state_1.id
+    )
+    district_11 = District(
+        name=random_lower_string(), is_active=True, state_id=state_1.id
+    )
+    district_2 = District(
+        name=random_lower_string(), is_active=True, state_id=state_2.id
+    )
+    db.add_all([district_1, district_11, district_2])
+    db.commit()
+    db.refresh(district_1)
+    db.refresh(district_11)
+    db.refresh(district_2)
+
+    email = random_email()
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+    state_admin_user_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": org_id,
+        "state_id": state_1.id,
+        "district_ids": [district_1.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_user_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    test_1_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_1.id],
+        "district_ids": [district_1.id],
+    }
+
+    test_11_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_1.id],
+        "district_ids": [district_11.id],
+    }
+
+    test_2_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_2.id],
+        "district_ids": [district_2.id],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_1_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    test_1 = data["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_11_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_2_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == test_1

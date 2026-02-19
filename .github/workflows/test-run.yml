@@ -1,5 +1,8 @@
 name: Run tests
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -15,15 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
-          version: "0.4.15"
+          version: "0.9.x"
           enable-cache: true
       - run: cp .env.example .env
       - run: docker compose down -v --remove-orphans
@@ -36,7 +39,13 @@ jobs:
             sleep 2
           done
       - name: Migrate DB
-        run: docker compose exec backend bash scripts/prestart.sh
+        timeout-minutes: 10
+        run: |
+          docker compose exec backend bash scripts/prestart.sh || {
+            echo "Migration failed, checking logs..."
+            docker compose logs backend
+            exit 1
+          }
       - name: Run tests
         run: docker compose exec backend bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         # the generated xml is pushed to codecov

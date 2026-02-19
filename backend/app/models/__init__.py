@@ -11,9 +11,11 @@ from .candidate import (
     CandidateAnswerUpdateRequest,
     CandidateCreate,
     CandidatePublic,
+    CandidateReviewResponse,
     CandidateTest,
     CandidateTestAnswer,
     CandidateTestAnswerCreate,
+    CandidateTestAnswerFeedback,
     CandidateTestAnswerPublic,
     CandidateTestAnswerUpdate,
     CandidateTestBase,
@@ -22,6 +24,24 @@ from .candidate import (
     CandidateTestUpdate,
     CandidateUpdate,
     TestCandidatePublic,
+)
+from .certificate import (
+    Certificate,
+    CertificateCreate,
+    CertificatePublic,
+    CertificateUpdate,
+)
+from .entity import (
+    Entity,
+    EntityBase,
+    EntityCreate,
+    EntityPublic,
+    EntityType,
+    EntityTypeBase,
+    EntityTypeCreate,
+    EntityTypePublic,
+    EntityTypeUpdate,
+    EntityUpdate,
 )
 from .location import (
     Block,
@@ -55,6 +75,18 @@ from .permission import (
     PermissionsPublic,
     PermissionUpdate,
 )
+from .provider import (
+    OrganizationProvider,
+    OrganizationProviderCreate,
+    OrganizationProviderPublic,
+    OrganizationProviderUpdate,
+    Provider,
+    ProviderCreate,
+    ProviderPublic,
+    ProviderSyncStatus,
+    ProviderType,
+    ProviderUpdate,
+)
 from .question import (
     Option,
     Question,
@@ -84,6 +116,8 @@ from .tag import (
     TagUpdate,
 )
 from .test import (
+    EntityPublicLimited,
+    TagRandomPublic,
     Test,
     TestCreate,
     TestDistrict,
@@ -99,6 +133,7 @@ from .user import (
     User,
     UserCreate,
     UserPublic,
+    UserPublicMe,
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
@@ -107,6 +142,10 @@ from .utils import Message
 
 __all__ = [
     "NewPassword",
+    "Certificate",
+    "CertificateCreate",
+    "CertificatePublic",
+    "CertificateUpdate",
     "RefreshTokenRequest",
     "Token",
     "TokenPayload",
@@ -185,7 +224,9 @@ __all__ = [
     "CandidateTestPublic",
     "CandidateTestUpdate",
     "CandidateTestAnswer",
+    "CandidateTestAnswerFeedback",
     "CandidateTestAnswerPublic",
+    "CandidateReviewResponse",
     "CandidateTestAnswerUpdate",
     "CandidateTestAnswerCreate",
     "TestCandidatePublic",
@@ -206,9 +247,36 @@ __all__ = [
     "QuestionLocationsUpdate",
     "QuestionTagsUpdate",
     "TestDistrict",
+    "UserPublicMe",
+    "Entity",
+    "EntityBase",
+    "EntityCreate",
+    "EntityPublic",
+    "EntityType",
+    "EntityTypeBase",
+    "EntityTypeCreate",
+    "EntityTypePublic",
+    "EntityTypeUpdate",
+    "EntityUpdate",
+    "Provider",
+    "ProviderCreate",
+    "ProviderPublic",
+    "ProviderUpdate",
+    "ProviderType",
+    "ProviderSyncStatus",
+    "OrganizationProvider",
+    "OrganizationProviderCreate",
+    "OrganizationProviderPublic",
+    "OrganizationProviderUpdate",
+    "EntityPublicLimited",
+    "TagRandomPublic",
 ]
 
 # Rebuild models to resolve forward references after all imports are complete
+EntityPublicLimited.model_rebuild()
+TagRandomPublic.model_rebuild()
 TestCandidatePublic.model_rebuild()
 TestPublic.model_rebuild()
+TestPublicLimited.model_rebuild()
 UserPublic.model_rebuild()
+UserPublicMe.model_rebuild()

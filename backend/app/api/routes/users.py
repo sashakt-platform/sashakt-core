@@ -1,8 +1,9 @@
-from typing import Any, cast
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi_pagination import Page, paginate
-from sqlmodel import col, select
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlmodel import paginate
+from sqlmodel import col, func, or_, select
 
 from app import crud
 from app.api.deps import (
@@ -12,10 +13,20 @@ from app.api.deps import (
     get_current_active_superuser,
     permission_dependency,
 )
+from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
+from app.core.roles import can_assign_role, state_admin, test_admin
 from app.core.security import get_password_hash, verify_password
+from app.core.sorting import (
+    SortingParams,
+    SortOrder,
+    UserSortConfig,
+    create_sorting_dependency,
+)
 from app.models import (
+    District,
     Message,
+    State,
     UpdatePassword,
     User,
     UserCreate,
@@ -23,12 +34,85 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
-from app.models.location import State
 from app.models.role import Role
-from app.models.user import UserState
+from app.models.user import UserDistrict, UserPublicMe, UserState
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+# create sorting dependency
+UserSorting = create_sorting_dependency(UserSortConfig)
+UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
+
+
+def check_user_permission(
+    session: SessionDep, current_user: CurrentUser, target_user: User
+) -> None:
+    """Check if the current user has permission to modify the user.
+    A district level user can only modify users of same district.
+    A state level user can only modify users of same state."""
+
+    user_location_level: Literal["state", "district"] | None = None
+    user_location_ids: set[int] | None = None
+    exception_message = "State/test-admin cannot modify/delete general users or users outside their location."
+
+    user_location_level, user_location_ids = get_current_user_location_ids(current_user)
+
+    # If the user has no scoped locations, deny (matches “cannot modify general/out of scope”)
+    if not user_location_level or not user_location_ids:
+        raise HTTPException(
+            403,
+            exception_message,
+        )
+    user_district_ids: set[int] = set()
+
+    if user_location_level == "district":
+        district_rows = session.exec(
+            select(UserDistrict.district_id).where(
+                UserDistrict.user_id == target_user.id
+            )
+        ).all()
+        for row in district_rows:
+            district_id = row[0] if isinstance(row, tuple) else row
+            if district_id is not None:
+                user_district_ids.add(int(district_id))
+
+        # target user must have districts
+        if not user_district_ids:
+            raise HTTPException(403, exception_message)
+
+        # allow if they share at least one district
+        in_same_district = bool(user_location_ids & user_district_ids)
+        if not in_same_district:
+            raise HTTPException(403, exception_message)
+    else:
+        user_state_ids: set[int] = set()
+        state_rows = session.exec(
+            select(UserState.state_id).where(UserState.user_id == target_user.id)
+        ).all()
+        for row in state_rows:
+            state_id = row[0] if isinstance(row, tuple) else row
+            if state_id is not None:
+                user_state_ids.add(int(state_id))
+        # also include states derived from user districts
+        district_state_rows = session.exec(
+            select(District.state_id)
+            .join(UserDistrict)
+            .where(UserDistrict.district_id == District.id)
+            .where(UserDistrict.user_id == target_user.id)
+        ).all()
+        for row in district_state_rows:
+            district_state_id = row[0] if isinstance(row, tuple) else row
+            if district_state_id is not None:
+                user_state_ids.add(int(district_state_id))
+        state_out_of_scope = (not user_state_ids) or (
+            not user_state_ids.issubset(user_location_ids)
+        )
+        if state_out_of_scope:
+            raise HTTPException(
+                403,
+                exception_message,
+            )
 
 
 @router.get(
@@ -39,7 +123,9 @@ router = APIRouter(prefix="/users", tags=["users"])
 def read_users(
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: UserSortingDep,
     param: Pagination = Depends(),
+    search: str | None = None,
 ) -> Page[UserPublic]:
     """
     Retrieve users.
@@ -47,9 +133,124 @@ def read_users(
     current_user_organization_id = current_user.organization_id
 
     statement = select(User).where(User.organization_id == current_user_organization_id)
-    users = session.exec(statement).all()
 
-    return cast(Page[UserPublic], paginate(users, params=param))
+    # apply role-based filtering
+    if (
+        current_user.role.name == state_admin.name
+        or current_user.role.name == test_admin.name
+    ):
+        current_user_district_ids = (
+            [district.id for district in current_user.districts]
+            if current_user.districts
+            else []
+        )
+        if current_user_district_ids:
+            # get all users with districts matching current users districts
+            subquery = (
+                select(UserDistrict.user_id)
+                .where(col(UserDistrict.district_id).in_(current_user_district_ids))
+                .distinct()
+            )
+            statement = statement.where(col(User.id).in_(subquery))
+
+        else:
+            current_user_state_ids = (
+                [state.id for state in current_user.states]
+                if current_user.states
+                else []
+            )
+            if current_user_state_ids:
+                state_subquery = (
+                    select(UserState.user_id)
+                    .where(col(UserState.state_id).in_(current_user_state_ids))
+                    .distinct()
+                )
+                statement = statement.where(col(User.id).in_(state_subquery))
+
+    # apply search filter if search parameter is provided
+    if search:
+        search_filter = or_(
+            func.lower(User.full_name).like(f"%{search.lower()}%"),
+            func.lower(User.email).like(f"%{search.lower()}%"),
+            func.lower(User.phone).like(f"%{search.lower()}%"),
+        )
+        statement = statement.where(search_filter)
+
+    # apply default sorting if no sorting was specified
+    sorting_with_default = sorting.apply_default_if_none(
+        "modified_date", SortOrder.DESC
+    )
+    statement = sorting_with_default.apply_to_query(statement, UserSortConfig)
+
+    users: Page[UserPublic] = paginate(
+        session,
+        statement,
+        param,
+        transformer=lambda items: [
+            crud.get_user_public(db_user=user, session=session)
+            for user in (list(items) if not isinstance(items, list) else items)
+        ],
+    )
+
+    return users
+
+
+def validate_user_return_role(
+    session: SessionDep, user_in: UserCreate | UserUpdate, current_user: User
+) -> Role:
+    role = session.get(Role, user_in.role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Invalid Role")
+
+    # validate role hierarchy - check if current user can assign this role
+    if not can_assign_role(current_user.role.name, role.name):
+        raise HTTPException(
+            status_code=403,
+            detail=f"You do not have permission to assign the role '{role.label}'. "
+            f"Your role '{current_user.role.label}' can only assign roles at or below your level.",
+        )
+
+    if role and (role.name == state_admin.name or role.name == test_admin.name):
+        if user_in.state_ids and len(user_in.state_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="A user can be linked to only one state.",
+            )
+
+        if role.name == state_admin.name and (
+            (user_in.state_ids is None or len(user_in.state_ids) != 1)
+            and (user_in.district_ids is None or len(user_in.district_ids) != 1)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="A user with 'State Admin' role must be associated with a state or a district.",
+            )
+
+        # Validate state exists
+        if user_in.state_ids is not None:
+            matched_states = list(
+                session.exec(
+                    select(State).where(col(State.id).in_(user_in.state_ids))
+                ).all()
+            )
+            if len(matched_states) != len(set(user_in.state_ids or [])):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid State Details",
+                )
+        # Validate district exists
+        if user_in.district_ids is not None:
+            matched_districts = list(
+                session.exec(
+                    select(District).where(col(District.id).in_(user_in.district_ids))
+                ).all()
+            )
+            if len(matched_districts) != len(set(user_in.district_ids or [])):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid District Details",
+                )
+    return role
 
 
 @router.post(
@@ -72,23 +273,62 @@ def create_user(
             status_code=400,
             detail="The user with this email already exists in the system.",
         )
+    if not user_in.organization_id:
+        user_in.organization_id = current_user.organization_id
+
+    role = validate_user_return_role(
+        session=session, user_in=user_in, current_user=current_user
+    )
 
     user = crud.create_user(
-        session=session, user_create=user_in, created_by_id=current_user.id
+        session=session,
+        user_create=user_in,
+        created_by_id=current_user.id,
     )
-    states = None
-    role = session.exec(select(Role).where(Role.id == user.role_id)).first()
 
-    if role and role.name == "state_admin" and user_in.state_ids:
-        existing_states = session.exec(
-            select(State).where(col(State.id).in_(user_in.state_ids))
-        ).all()
-        user_states = [
-            UserState(user_id=user.id, state_id=state.id) for state in existing_states
-        ]
-        session.add_all(user_states)
-        state_query = select(State).join(UserState).where(UserState.user_id == user.id)
-        states = session.exec(state_query).all()
+    if role and role.name == state_admin.name:
+        if user_in.state_ids:
+            user_states = [
+                UserState(user_id=user.id, state_id=state_id)
+                for state_id in user_in.state_ids
+            ]
+            session.add_all(user_states)
+        if user_in.district_ids:
+            user_districts = [
+                UserDistrict(user_id=user.id, district_id=district_id)
+                for district_id in user_in.district_ids
+            ]
+            session.add_all(user_districts)
+
+    elif role and role.name == test_admin.name:
+        current_role = session.get(Role, current_user.role_id)
+        if current_role and current_role.name == state_admin.name:
+            if current_user.states:
+                creator_states = current_user.states
+                session.add_all(
+                    UserState(user_id=user.id, state_id=creator_state.id)
+                    for creator_state in creator_states
+                )
+            if current_user.districts:
+                creator_districts = current_user.districts
+                session.add_all(
+                    UserDistrict(user_id=user.id, district_id=creator_district.id)
+                    for creator_district in creator_districts
+                )
+
+        elif user_in.state_ids:
+            user_states = [
+                UserState(user_id=user.id, state_id=state_id)
+                for state_id in user_in.state_ids
+            ]
+            session.add_all(user_states)
+
+        elif user_in.district_ids:
+            user_districts = [
+                UserDistrict(user_id=user.id, district_id=district_id)
+                for district_id in user_in.district_ids
+            ]
+            session.add_all(user_districts)
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -100,13 +340,13 @@ def create_user(
             html_content=email_data.html_content,
         )
     session.commit()
-    user_data = UserPublic.model_validate(user)
-    return user_data.model_copy(update={"states": states})
+    user_public = crud.get_user_public(db_user=user, session=session)
+    return user_public
 
 
 @router.patch(
     "/me",
-    response_model=UserPublic,
+    response_model=UserPublicMe,
     dependencies=[Depends(permission_dependency("update_user_me"))],
 )
 def update_user_me(
@@ -127,7 +367,11 @@ def update_user_me(
     session.add(current_user)
     session.commit()
     session.refresh(current_user)
-    return current_user
+
+    user_public = crud.get_user_public(db_user=current_user, session=session)
+    permissions = crud.get_user_permissions(session=session, user=current_user)
+    user_public_me = UserPublicMe(**user_public.model_dump(), permissions=permissions)
+    return user_public_me
 
 
 @router.patch(
@@ -156,14 +400,20 @@ def update_password_me(
 
 @router.get(
     "/me",
-    response_model=UserPublic,
+    response_model=UserPublicMe,
     dependencies=[Depends(permission_dependency("read_user"))],
 )
-def read_user_me(current_user: CurrentUser) -> Any:
+def read_user_me(
+    current_user: CurrentUser,
+    session: SessionDep,
+) -> Any:
     """
     Get current user.
     """
-    return current_user
+    user_public = crud.get_user_public(db_user=current_user, session=session)
+    permissions = crud.get_user_permissions(session=session, user=current_user)
+    user_public_me = UserPublicMe(**user_public.model_dump(), permissions=permissions)
+    return user_public_me
 
 
 @router.delete(
@@ -201,7 +451,8 @@ def register_user(session: SessionDep, user_in: UserCreate) -> Any:
         )
     user_create = UserCreate.model_validate(user_in)
     user = crud.create_user(session=session, user_create=user_create)
-    return user
+    user_public = crud.get_user_public(db_user=user, session=session)
+    return user_public
 
 
 @router.get(
@@ -216,14 +467,18 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
-    if (
-        not user
-        or user.is_deleted
-        or user.organization_id != current_user.organization_id
-    ):
+    if not user or user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="User not found")
-    _ = user.states
-    return user
+
+    # check location based access for state/district admins
+    # skip check if user is reading their own profile
+    if user_id != current_user.id:
+        role = session.get(Role, current_user.role_id)
+        if role and role.name in (state_admin.name, test_admin.name):
+            check_user_permission(session, current_user, user)
+
+    user_public = crud.get_user_public(db_user=user, session=session)
+    return user_public
 
 
 @router.patch(
@@ -232,10 +487,7 @@ def read_user_by_id(
     response_model=UserPublic,
 )
 def update_user(
-    *,
-    session: SessionDep,
-    user_id: int,
-    user_in: UserUpdate,
+    *, session: SessionDep, user_id: int, user_in: UserUpdate, current_user: CurrentUser
 ) -> Any:
     """
     Update a user.
@@ -247,6 +499,10 @@ def update_user(
             status_code=404,
             detail="The user with this id does not exist in the system",
         )
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_user_permission(session, current_user, db_user)
+
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
@@ -254,29 +510,73 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
-    final_role_id = user_in.role_id or db_user.role_id
-    final_role = session.get(Role, final_role_id)
+    role = validate_user_return_role(
+        session=session, user_in=user_in, current_user=current_user
+    )
 
-    if not final_role:
-        raise HTTPException(status_code=400, detail="Invalid role ID provided.")
-
-    is_state_admin = final_role.name == "state_admin"
-
-    if is_state_admin and user_in.state_ids is not None:
-        if user_in.state_ids == []:
-            db_user.states = []
-
-        else:
+    if role.name == state_admin.name:
+        if user_in.state_ids:
             db_user.states = list(
                 session.exec(
                     select(State).where(col(State.id).in_(user_in.state_ids))
                 ).all()
             )
+        if user_in.district_ids:
+            db_user.districts = list(
+                session.exec(
+                    select(District).where(col(District.id).in_(user_in.district_ids))
+                ).all()
+            )
+
+    elif role.name == test_admin.name:
+        creator_role = session.get(Role, current_user.role_id)
+        if creator_role and creator_role.name == state_admin.name:
+            creator_states = list(
+                session.exec(
+                    select(State)
+                    .join(UserState)
+                    .where(UserState.user_id == current_user.id)
+                ).all()
+            )
+            db_user.states = creator_states
+            creator_districts = list(
+                session.exec(
+                    select(District)
+                    .join(UserDistrict)
+                    .where(UserDistrict.user_id == current_user.id)
+                ).all()
+            )
+            db_user.districts = creator_districts
+        else:
+            if not user_in.state_ids:
+                db_user.states = []
+            else:
+                if len(user_in.state_ids) != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="A test-admin may be linked to at most one state.",
+                    )
+                db_user.states = list(
+                    session.exec(
+                        select(State).where(col(State.id).in_(user_in.state_ids))
+                    ).all()
+                )
+            if not user_in.district_ids:
+                db_user.districts = []
+            else:
+                db_user.districts = list(
+                    session.exec(
+                        select(District).where(
+                            col(District.id).in_(user_in.district_ids)
+                        )
+                    ).all()
+                )
 
     updated_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
-    states = db_user.states if is_state_admin else None
 
-    return UserPublic(**updated_user.model_dump(), states=states)
+    user_public = crud.get_user_public(db_user=updated_user, session=session)
+
+    return user_public
 
 
 @router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
@@ -289,6 +589,9 @@ def delete_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in ("state_admin", "test_admin"):
+        check_user_permission(session, current_user, user)
     if user == current_user:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"

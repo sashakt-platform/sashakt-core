@@ -4,10 +4,11 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
-from app.models.test import Test, TestDistrict, TestState
-from app.models.user import User, UserState
+from app.models.test import Test, TestDistrict, TestPublicLimited, TestState
+from app.models.user import User, UserDistrict, UserState
 
 if TYPE_CHECKING:
+    from app.models.entity import Entity
     from app.models.question import QuestionLocation
 
 
@@ -69,6 +70,7 @@ class State(StateBase, table=True):
     users: list["User"] | None = Relationship(
         back_populates="states", link_model=UserState
     )
+    entities: list["Entity"] | None = Relationship(back_populates="state")
 
 
 class StatePublic(StateBase):
@@ -113,6 +115,10 @@ class District(DistrictBase, table=True):
     tests: list["Test"] | None = Relationship(
         back_populates="districts", link_model=TestDistrict
     )
+    entities: list["Entity"] | None = Relationship(back_populates="district")
+    users: list["User"] | None = Relationship(
+        back_populates="districts", link_model=UserDistrict
+    )
 
 
 class DistrictPublic(DistrictBase):
@@ -153,6 +159,7 @@ class Block(BlockBase, table=True):
     )
     district: District | None = Relationship(back_populates="blocks")
     question_locations: list["QuestionLocation"] = Relationship(back_populates="block")
+    entities: list["Entity"] | None = Relationship(back_populates="block")
 
 
 class BlockPublic(BlockBase):
@@ -169,4 +176,15 @@ class BlockUpdate(BlockBase):
     pass
 
 
+class BlockBulkUploadResponse(SQLModel):
+    message: str
+    uploaded_blocks: int
+    success_blocks: int
+    failed_blocks: int
+    error_log: str | None
+
+
 # -----Models for Block-----
+
+# -----Rebuild models to resolve circular imports-----
+TestPublicLimited.model_rebuild()

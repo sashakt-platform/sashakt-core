@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # 60 minutes * 24 hours * 30 days = 30 days
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
     FRONTEND_HOST: str = "http://localhost:5173"
+    DOMAIN: str = "localhost"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
     BACKEND_CORS_ORIGINS: Annotated[
@@ -98,6 +99,9 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_FULLNAME: str = "First Super User"
     FIRST_SUPERUSER_MOBILE: str = "1234567890"
 
+    # Provider encryption settings
+    PROVIDER_ENCRYPTION_KEY: str | None = None
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
@@ -116,6 +120,10 @@ class Settings(BaseSettings):
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )
+        if self.PROVIDER_ENCRYPTION_KEY:
+            self._check_default_secret(
+                "PROVIDER_ENCRYPTION_KEY", self.PROVIDER_ENCRYPTION_KEY
+            )
 
         return self
 

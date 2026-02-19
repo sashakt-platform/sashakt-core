@@ -3,13 +3,15 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import model_validator
+from sqlalchemy.orm import Mapped
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
-from app.models.utils import MarkingScheme
+from app.models.user import UserPublic
+from app.models.utils import CorrectAnswerType, MarkingScheme
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -27,6 +29,7 @@ class QuestionType(str, Enum):
     multi_choice = "multi-choice"
     subjective = "subjective"
     numerical_integer = "numerical-integer"
+    numerical_decimal = "numerical-decimal"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -66,7 +69,7 @@ class Option(TypedDict):
 
     id: int
     key: str
-    value: str
+    value: NotRequired[str]
 
 
 class FailedQuestion(TypedDict):
@@ -79,7 +82,15 @@ class FailedQuestion(TypedDict):
 OptionDict = dict[str, Any]  # Consider using dict[str, Union[str, ImageDict]] later
 MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
-CorrectAnswerType = list[int] | list[str] | float | int | None
+
+
+class QuestionRevisionInfo(SQLModel):
+    id: int
+    created_date: datetime
+    text: str
+    type: str
+    is_current: bool
+    created_by_id: UserPublic
 
 
 class QuestionBase(SQLModel):
@@ -163,6 +174,37 @@ class QuestionBase(SQLModel):
                     raise ValueError(
                         "Multi-choice questions must have at least one correct answer."
                     )
+        elif question_type == QuestionType.subjective:
+            if options is not None and len(options) > 0:
+                raise ValueError("Subjective questions should not have options.")
+
+        elif question_type in [
+            QuestionType.numerical_integer,
+            QuestionType.numerical_decimal,
+        ]:
+            if correct_answer is not None:
+                try:
+                    if not isinstance(correct_answer, (int | float)):
+                        raise TypeError
+
+                    value = float(correct_answer)
+
+                    if question_type == QuestionType.numerical_integer:
+                        if not value.is_integer():
+                            raise ValueError(
+                                "Numerical integer questions must have an integer correct answer."
+                            )
+                        self.correct_answer = int(value)
+                    else:
+                        self.correct_answer = value
+
+                except (ValueError, TypeError):
+                    msg = (
+                        "Numerical integer questions must have an integer correct answer. Examples: 5, 42, 0, -3"
+                        if question_type == QuestionType.numerical_integer
+                        else "Numerical decimal questions must have a decimal correct answer. Examples: 3.14, 0.75, -2.5, 5.0"
+                    )
+                    raise ValueError(msg)
 
         return self
 
@@ -222,22 +264,18 @@ class Question(SQLModel, table=True):
         description="When this question was last modified",
     )
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool = Field(
-        default=False,
-        nullable=False,
-        sa_column_kwargs={"server_default": "false"},
-        description="Whether this question is marked as deleted",
-    )
 
     # Relationships
     # All revisions of this question
-    revisions: list["QuestionRevision"] = Relationship(
+    revisions: Mapped[list["QuestionRevision"]] = Relationship(
         back_populates="question", cascade_delete=True
     )
     # Geographic locations associated with this question
-    locations: list["QuestionLocation"] = Relationship(back_populates="question")
+    locations: Mapped[list["QuestionLocation"]] = Relationship(
+        back_populates="question", cascade_delete=True
+    )
     # Tags associated with this question
-    tags: list["Tag"] = Relationship(
+    tags: Mapped[list["Tag"]] = Relationship(
         back_populates="questions",
         link_model=QuestionTag,
     )
@@ -275,12 +313,6 @@ class QuestionRevision(QuestionBase, table=True):
         description="When this revision was last modified",
     )
 
-    is_deleted: bool = Field(
-        default=False,
-        nullable=False,
-        sa_column_kwargs={"server_default": "false"},
-        description="Whether this revision is marked as deleted",
-    )
     # Relationships
     # Parent question for this revision
     question: Question = Relationship(back_populates="revisions")
@@ -352,13 +384,15 @@ class QuestionLocation(SQLModel, table=True):
 
     # Relationships
     # Question associated with this location
-    question: Question = Relationship(back_populates="locations")
+    question: Mapped[Question] = Relationship(back_populates="locations")
     # State associated with this location
-    state: Optional["State"] = Relationship(back_populates="question_locations")
+    state: Mapped[Optional["State"]] = Relationship(back_populates="question_locations")
     # District associated with this location
-    district: Optional["District"] = Relationship(back_populates="question_locations")
+    district: Mapped[Optional["District"]] = Relationship(
+        back_populates="question_locations"
+    )
     # Block associated with this location
-    block: Optional["Block"] = Relationship(back_populates="question_locations")
+    block: Mapped[Optional["Block"]] = Relationship(back_populates="question_locations")
 
 
 # Use inheritance to avoid field duplication
@@ -442,9 +476,6 @@ class QuestionPublic(SQLModel):
     created_date: datetime = Field(description="When this question was created")
     modified_date: datetime = Field(description="When this question was last modified")
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool = Field(
-        default=False, description="Whether this question is marked as deleted"
-    )
 
     # Current revision data
     question_text: str = Field(description="The question text")
@@ -478,11 +509,13 @@ class QuestionCandidatePublic(SQLModel):
     """Candidate-safe representation of a question (no answers or solutions)"""
 
     id: int = Field(description="ID of the question")
-    question_text: str = Field(description="The question text")
+    question_text: str | None = Field(
+        default=None, description="The question text (excluded in OMR mode)"
+    )
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
     options: list[Option] | None = Field(
-        description="Available options for choice questions"
+        description="Available options for choice questions (option.value excluded in OMR mode)"
     )
     subjective_answer_limit: int | None = Field(
         description="Character limit for subjective answers"
@@ -496,9 +529,6 @@ class QuestionUpdate(SQLModel):
     """Fields that can be updated on the question entity itself"""
 
     is_active: bool = Field(default=True, description="Whether this question is active")
-    is_deleted: bool = Field(
-        default=False, description="Whether this question is marked as deleted"
-    )
 
 
 class BulkUploadQuestionsResponse(SQLModel):
@@ -507,6 +537,11 @@ class BulkUploadQuestionsResponse(SQLModel):
     success_questions: int
     failed_questions: int
     error_log: str | None
+
+
+class DeleteQuestion(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[QuestionPublic] | None = None
 
 
 # Force model rebuild to handle forward references

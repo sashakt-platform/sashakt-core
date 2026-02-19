@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.timezone import get_timezone_aware_now
@@ -31,7 +32,6 @@ class TagType(TagTypeBase, table=True):
         default_factory=get_timezone_aware_now,
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
-    is_deleted: bool = Field(default=False, nullable=False)
     tags: list["Tag"] = Relationship(back_populates="tag_type")
     created_by: "User" = Relationship(back_populates="tag_types")
     organization: "Organization" = Relationship(back_populates="tag_types")
@@ -50,7 +50,6 @@ class TagTypePublic(TagTypeBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
     created_by_id: int = Field(
         description="ID of the user who created the current revision"
     )
@@ -81,8 +80,7 @@ class Tag(TagBase, table=True):
         description="ID of the Tag Type to which the Tag should belong to",
     )
 
-    is_deleted: bool = Field(default=False, nullable=False)
-    tag_type: "TagType" = Relationship(back_populates="tags")
+    tag_type: Mapped["TagType"] = Relationship(back_populates="tags")
     tests: list["Test"] = Relationship(back_populates="tags", link_model=TestTag)
     questions: list["Question"] = Relationship(
         back_populates="tags", link_model=QuestionTag
@@ -109,7 +107,6 @@ class TagPublic(TagBase):
     id: int
     created_date: datetime
     modified_date: datetime
-    is_deleted: bool
     tag_type: TagType | None = None
     organization_id: int
     created_by_id: int
@@ -117,6 +114,16 @@ class TagPublic(TagBase):
 
 class TagUpdate(TagBase):
     tag_type_id: int | None = None
+
+
+class DeleteTagtype(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TagTypePublic] | None = None
+
+
+class DeleteTag(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[TagPublic] | None = None
 
 
 # Rebuild the models to ensure the database schema is up to date
