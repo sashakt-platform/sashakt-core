@@ -100,32 +100,37 @@ def is_candidate_test_expired(
 def validate_question_response_format(
     response: Any, question_type: QuestionType
 ) -> Any:
-    response = json.loads(response)
+    if response is None:
+        return None
 
+    if question_type not in (QuestionType.single_choice, QuestionType.multi_choice):
+        return response
+
+    parsed = json.loads(response)
     if question_type == QuestionType.single_choice:
         if (
-            not isinstance(response, list)
-            or len(response) != 1
-            or not all(isinstance(x, int) for x in response)
+            not isinstance(parsed, list)
+            or len(parsed) != 1
+            or not all(isinstance(x, int) for x in parsed)
         ):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid Response Format. Kindly submit _Single-choice question_ as list of length 1 (e.g., [1])",
             )
 
-        return response
+        return json.dumps(parsed)
     elif question_type == QuestionType.multi_choice:
         if (
-            not isinstance(response, list)
-            or not all(isinstance(x, int) for x in response)
-            or len(response) < 1
+            not isinstance(parsed, list)
+            or not all(isinstance(x, int) for x in parsed)
+            or len(parsed) < 1
         ):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])",
             )
 
-        return json.dumps(response)
+        return json.dumps(parsed)
 
 
 def get_score_and_time(

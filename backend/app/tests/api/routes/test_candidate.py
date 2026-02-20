@@ -1969,7 +1969,7 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
 
     assert response.status_code == 200
     data = response.json()
-    assert data["response"] == "{8}"
+    assert data["response"] == "[8]"
     assert data["time_spent"] == 45
     assert data["visited"] is True
 
@@ -1980,7 +1980,7 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).first()
     assert answer is not None
-    assert answer.response == "{8}"
+    assert answer.response == "[8]"
     assert answer.time_spent == 45
 
 
@@ -2458,7 +2458,7 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
 
     assert response2.status_code == 200
     assert response2.json()["id"] == first_answer_id  # Same answer ID
-    assert response2.json()["response"] == "{10}"  # Updated response
+    assert response2.json()["response"] == "[10]"  # Updated response
     assert response2.json()["time_spent"] == 40  # Updated time
 
     # Verify only one answer exists in database
@@ -2468,7 +2468,7 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).all()
     assert len(answers) == 1
-    assert answers[0].response == "{10}"
+    assert answers[0].response == "[10]"
 
 
 def test_get_test_result(
@@ -4942,13 +4942,13 @@ def test_submit_batch_answers_for_qr_candidate(
 
     # Verify first answer
     assert data[0]["question_revision_id"] == question_revision.id
-    assert data[0]["response"] == "{4}"
+    assert data[0]["response"] == "[4]"
     assert data[0]["visited"] is True
     assert data[0]["time_spent"] == 30
 
     # Verify second answer
     assert data[1]["question_revision_id"] == second_question_revision.id
-    assert data[1]["response"] == "{1}"
+    assert data[1]["response"] == "[1]"
     assert data[1]["visited"] is True
     assert data[1]["time_spent"] == 45
 
@@ -4959,8 +4959,8 @@ def test_submit_batch_answers_for_qr_candidate(
         .order_by("question_revision_id")
     ).all()
     assert len(answers) == 2
-    assert answers[0].response == "{4}"
-    assert answers[1].response == "{1}"
+    assert answers[0].response == "[4]"
+    assert answers[1].response == "[1]"
 
 
 def test_submit_batch_answers_for_qr_candidate_with_subjective(
@@ -5034,7 +5034,7 @@ def test_submit_batch_answers_for_qr_candidate_with_subjective(
         "answers": [
             {
                 "question_revision_id": qr_1.id,
-                "response": "4",
+                "response": "[4]",
                 "visited": True,
                 "time_spent": 30,
             },
@@ -5060,7 +5060,7 @@ def test_submit_batch_answers_for_qr_candidate_with_subjective(
     data.sort(key=lambda x: x["question_revision_id"])
 
     assert data[0]["question_revision_id"] == qr_1.id
-    assert data[0]["response"] == "4"
+    assert data[0]["response"] == "[4]"
     assert data[0]["visited"] is True
     assert data[0]["time_spent"] == 30
 
@@ -5142,7 +5142,7 @@ def test_submit_batch_answers_for_qr_candidate_subjective_exceeds_limit(
         "answers": [
             {
                 "question_revision_id": qr_1.id,
-                "response": "4",
+                "response": "[2]",
                 "visited": True,
                 "time_spent": 30,
             },
@@ -5315,12 +5315,12 @@ def test_submit_batch_answers_update_existing(
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
-    assert data[0]["response"] == "{4}"
+    assert data[0]["response"] == "[4]"
     assert data[0]["time_spent"] == 30
 
     # Verify answer was updated in database
     db.refresh(initial_answer)
-    assert initial_answer.response == "{4}"
+    assert initial_answer.response == "[4]"
     assert initial_answer.time_spent == 30
 
 
@@ -8899,7 +8899,7 @@ def test_submit_answer_with_bookmark(client: TestClient, db: SessionDep) -> None
     # Submit answer with bookmarked=True
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "4",
+        "response": "[4]",
         "visited": True,
         "time_spent": 25,
         "bookmarked": True,
@@ -8915,7 +8915,7 @@ def test_submit_answer_with_bookmark(client: TestClient, db: SessionDep) -> None
     data = response.json()
     assert data["candidate_test_id"] == candidate_test_id
     assert data["question_revision_id"] == question_revision.id
-    assert data["response"] == "4"
+    assert data["response"] == "[4]"
     assert data["visited"] is True
     assert data["time_spent"] == 25
     assert data["bookmarked"] is True
@@ -8985,7 +8985,7 @@ def test_submit_answer_bookmark_default_false(
     # Submit answer without bookmark field
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "6",
+        "response": "[2]",
         "visited": True,
         "time_spent": 15,
     }
@@ -9063,7 +9063,7 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     # Submit first answer without bookmark
     first_answer = {
         "question_revision_id": question_revision.id,
-        "response": "7",
+        "response": "[1]",
         "visited": True,
         "time_spent": 10,
         "bookmarked": False,
@@ -9081,7 +9081,7 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     # Update answer with bookmark set to True
     second_answer = {
         "question_revision_id": question_revision.id,
-        "response": "8",
+        "response": "[2]",
         "visited": True,
         "time_spent": 20,
         "bookmarked": True,
@@ -9096,7 +9096,7 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     assert response2.status_code == 200
     assert response2.json()["id"] == answer_id  # Same answer ID (updated)
     assert response2.json()["bookmarked"] is True
-    assert response2.json()["response"] == "8"
+    assert response2.json()["response"] == "[2]"
 
 
 def test_batch_submit_answers_with_bookmark(client: TestClient, db: SessionDep) -> None:
@@ -9179,14 +9179,14 @@ def test_batch_submit_answers_with_bookmark(client: TestClient, db: SessionDep) 
         "answers": [
             {
                 "question_revision_id": question_revision1.id,
-                "response": "A",
+                "response": "[1]",
                 "visited": True,
                 "time_spent": 10,
                 "bookmarked": True,
             },
             {
                 "question_revision_id": question_revision2.id,
-                "response": "Y",
+                "response": "[2]",
                 "visited": True,
                 "time_spent": 15,
                 "bookmarked": False,
@@ -9844,7 +9844,7 @@ def test_submit_answer_blocks_update_when_reviewed(
 
     updated_answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "2",
+        "response": "[2]",
         "visited": True,
         "time_spent": 45,
     }
@@ -10027,7 +10027,7 @@ def test_submit_answer_saves_is_reviewed_field(
 
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "Option 1",
+        "response": "[1]",
         "visited": True,
         "time_spent": 30,
         "is_reviewed": True,
@@ -10924,7 +10924,7 @@ def test_answer_cannot_be_modified_after_review_feedback(
     # Submit an answer
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "Option 1",
+        "response": "[1]",
         "visited": True,
         "time_spent": 30,
     }
@@ -10943,7 +10943,7 @@ def test_answer_cannot_be_modified_after_review_feedback(
 
     updated_answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "2",
+        "response": "[2]",
         "visited": True,
         "time_spent": 45,
     }
