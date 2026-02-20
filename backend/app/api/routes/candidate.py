@@ -550,16 +550,11 @@ def submit_batch_answers_for_qr_candidate(
 
     results = []
     for answer in batch_request.answers:
-        question_revision = session.exec(
-            select(QuestionRevision).where(
-                QuestionRevision.id == answer.question_revision_id
-            )
-        ).first()
+        question_revision = question_revision_map.get(answer.question_revision_id)
         if question_revision:
             answer.response = validate_question_response_format(
                 answer.response, question_revision.question_type
             )
-        question_revision = question_revision_map.get(answer.question_revision_id)
         if not question_revision:
             raise HTTPException(
                 status_code=404,
