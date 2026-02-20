@@ -217,7 +217,7 @@ def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
     if has_active_entities:
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete EntityType as it has associated Entities",
+            detail="Cannot delete Entity as it has associated records.",
         )
 
     session.delete(entitytype)
