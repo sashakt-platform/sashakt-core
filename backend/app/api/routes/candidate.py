@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
@@ -436,7 +436,7 @@ def submit_answer_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTestAnswerPublic | Response:
+) -> CandidateTestAnswerPublic:
     """
     Submit answer for QR code candidates using UUID authentication.
     Creates new answer or updates existing one.
