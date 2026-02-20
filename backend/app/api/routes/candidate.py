@@ -1236,29 +1236,22 @@ def get_test_result(
     marks_maximum = 0.0
     marking_scheme = None
 
-    def set_correct() -> None:
-        nonlocal correct, marks_obtained
-        correct += 1
-        if marking_scheme:
-            marks_obtained += marking_scheme["correct"]
-
-    def set_incorrect() -> None:
-        nonlocal incorrect, marks_obtained
-        incorrect += 1
-        if marking_scheme:
-            marks_obtained += marking_scheme["wrong"]
-
     for revision, answer in joined_data:
         if test.marks_level == "test":
             marking_scheme = test.marking_scheme
         elif test.marks_level == "question":
             marking_scheme = revision.marking_scheme
+        else:
+            marking_scheme = None
 
-        if marking_scheme:
-            marks_maximum += marking_scheme["correct"]
+        correct_mark = marking_scheme["correct"] if marking_scheme else 0
+        wrong_mark = marking_scheme["wrong"] if marking_scheme else 0
+        skipped_mark = marking_scheme["skipped"] if marking_scheme else 0
+
+        marks_maximum += correct_mark
+
         if answer is None or not answer.response:
-            if marking_scheme:
-                marks_obtained += marking_scheme["skipped"]
+            marks_obtained += skipped_mark
             if revision.is_mandatory:
                 mandatory_not_attempted += 1
             else:
@@ -1266,20 +1259,58 @@ def get_test_result(
         else:
             if revision.question_type == QuestionType.subjective:
                 is_attempted = bool(answer.response)
-
                 if is_attempted:
-                    set_correct()
-
+                    correct += 1
+                    marks_obtained += correct_mark
                 else:
-                    set_incorrect()
-            elif revision.question_type.value in ["single-choice", "multi-choice"]:
-                response_list = convert_to_list(answer.response)
-                correct_list = convert_to_list(revision.correct_answer)
+                    incorrect += 1
+                    marks_obtained += wrong_mark
 
-                if set(response_list) == set(correct_list):
-                    set_correct()
+            elif revision.question_type is QuestionType.single_choice:
+                response_set = set(convert_to_list(answer.response))
+                correct_set = set(convert_to_list(revision.correct_answer))
+                if response_set == correct_set:
+                    marks_obtained += correct_mark
+                    correct += 1
                 else:
-                    set_incorrect()
+                    marks_obtained += wrong_mark
+                    incorrect += 1
+
+            elif revision.question_type.value == "multi-choice":
+                response_set = set(convert_to_list(answer.response))
+                correct_set = set(convert_to_list(revision.correct_answer))
+                selected_correct = len(response_set & correct_set)
+                selected_wrong = len(response_set - correct_set)
+
+                whole_correct = (
+                    selected_correct == len(correct_set) and selected_wrong == 0
+                )
+                if whole_correct:
+                    marks_obtained += correct_mark
+                    correct += 1
+                else:
+                    if marking_scheme and marking_scheme.get("partial"):
+                        partial_rule = marking_scheme["partial"]
+
+                        if selected_wrong == 0 and selected_correct > 0:
+                            partial = 0.0
+
+                            for condition in partial_rule["correct_answers"]:
+                                if (
+                                    condition["num_correct_selected"]
+                                    == selected_correct
+                                ):
+                                    partial = condition["marks"]
+                                    break
+
+                            marks_obtained += partial
+                            correct += 1
+                        else:
+                            marks_obtained += wrong_mark
+                            incorrect += 1
+                    else:
+                        marks_obtained += wrong_mark
+                        incorrect += 1
 
             elif revision.question_type.value in [
                 "numerical-integer",
@@ -1288,7 +1319,8 @@ def get_test_result(
                 try:
                     user_value = float(answer.response)
                 except (TypeError, ValueError):
-                    set_incorrect()
+                    incorrect += 1
+                    marks_obtained += wrong_mark
                     continue
 
                 if isinstance(revision.correct_answer, int | float):
@@ -1304,9 +1336,11 @@ def get_test_result(
                     is_correct = abs(user_value - correct_value) <= 0.5
 
                 if is_correct:
-                    set_correct()
+                    correct += 1
+                    marks_obtained += correct_mark
                 else:
-                    set_incorrect()
+                    incorrect += 1
+                    marks_obtained += wrong_mark
 
     total_questions = len(candidate_test.question_revision_ids)
 
