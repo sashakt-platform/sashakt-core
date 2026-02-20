@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     )
     from app.models.certificate import Certificate
     from app.models.form import Form, FormPublic
-    from app.models.location import Block, District, State
+    from app.models.location import District, State
 
 
 class TagRandomCreate(TypedDict):
@@ -339,15 +339,6 @@ class TestUpdate(TestBase):
     locale: LocaleEnum
 
 
-class EntityPublicLimited(SQLModel):
-    id: int
-    name: str
-    label: str
-    state: Union["State", None] = None
-    district: Union["District", None] = None
-    block: Union["Block", None] = None
-
-
 class DeleteTest(SQLModel):
     delete_success_count: int
     delete_failure_list: list[TestPublic] | None = None
@@ -358,5 +349,4 @@ class TestPublicLimited(TestBase):
 
     id: int
     total_questions: int
-    profile_list: list["EntityPublicLimited"] | None = None
     form: "FormPublic | None" = None

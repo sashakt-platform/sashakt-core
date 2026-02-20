@@ -500,14 +500,13 @@ def test_public_test_includes_form(
         headers=get_user_superadmin_token,
     )
 
-    # Create a test with candidate_profile enabled and form_id
+    # Create a test with form_id
     import uuid
 
     test_uuid = str(uuid.uuid4())
     test = Test(
         name=random_lower_string(),
         link=test_uuid,
-        candidate_profile=True,
         form_id=form_id,
         organization_id=user_data["organization_id"],
         created_by_id=user_data["id"],
@@ -521,7 +520,6 @@ def test_public_test_includes_form(
 
     assert response.status_code == 200
     response_data = response.json()
-    assert response_data["candidate_profile"] is True
     assert response_data["form"] is not None
     assert response_data["form"]["id"] == form_id
     assert len(response_data["form"]["fields"]) == 1
@@ -562,7 +560,6 @@ def test_start_test_with_form_responses(
     test = Test(
         name=random_lower_string(),
         link=test_uuid,
-        candidate_profile=True,
         form_id=form_id,
         organization_id=user_data["organization_id"],
         created_by_id=user_data["id"],

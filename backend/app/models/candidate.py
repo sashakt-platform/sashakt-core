@@ -20,10 +20,6 @@ if TYPE_CHECKING:
 # Storing Answers for a question in a test by a candidate
 
 
-class CandidateProfile(SQLModel):
-    entity_id: int
-
-
 class CandidateTestAnswerBase(SQLModel):
     __test__ = False
     candidate_test_id: int = Field(foreign_key="candidate_test.id", ondelete="CASCADE")
@@ -296,8 +292,7 @@ class TestStatusSummary(SQLModel):
 class StartTestRequest(SQLModel):
     test_id: int
     device_info: str | None = None
-    candidate_profile: CandidateProfile | None = None  # Legacy support
-    form_responses: dict[str, Any] | None = None  # New form responses
+    form_responses: dict[str, Any] | None = None
 
 
 class StartTestResponse(SQLModel):

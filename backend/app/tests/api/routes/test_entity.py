@@ -10,6 +10,7 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.candidate import Candidate, CandidateTest
 from app.models.entity import Entity, EntityType
+from app.models.form import Form, FormField
 from app.models.location import Block, Country, District, State
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
@@ -1309,6 +1310,26 @@ def test_delete_linked_entity_should_fail(
     db.commit()
     db.refresh(entity)
 
+    # Create a form with an entity field
+    form = Form(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    form_field = FormField(
+        form_id=form.id,
+        field_type="entity",
+        label="Entity",
+        name="entity_id",
+        order=1,
+    )
+    db.add(form_field)
+    db.commit()
+
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -1317,6 +1338,7 @@ def test_delete_linked_entity_should_fail(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
+        form_id=form.id,
     )
     db.add(test)
     db.commit()
@@ -1325,7 +1347,7 @@ def test_delete_linked_entity_should_fail(
     payload = {
         "test_id": test.id,
         "device_info": "example",
-        "candidate_profile": {"entity_id": entity.id},
+        "form_responses": {"entity_id": entity.id},
     }
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)

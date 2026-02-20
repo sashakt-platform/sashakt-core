@@ -36,7 +36,6 @@ from app.models import (
 )
 from app.models.candidate import (
     CandidateReviewResponse,
-    CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -353,20 +352,8 @@ def start_test_for_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
-    if (
-        start_test_request.candidate_profile
-        and start_test_request.candidate_profile.entity_id
-    ):
-        # Legacy support: store entity_id in CandidateTestProfile
-        # TODO: May be remove this code at some point in future
-        candidate_test_profile = CandidateTestProfile(
-            candidate_test_id=candidate_test.id,
-            entity_id=start_test_request.candidate_profile.entity_id,
-        )
-        session.add(candidate_test_profile)
-        session.commit()
 
-    # Handle new form responses
+    # Handle form responses
     if start_test_request.form_responses and test.form_id:
         form_response = FormResponse(
             candidate_test_id=candidate_test.id,
@@ -789,15 +776,17 @@ def get_test_questions(
             question_text=None if hide_question_text else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
-            options=[
-                {
-                    "id": getattr(opt, "id", opt.get("id")),
-                    "key": getattr(opt, "key", opt.get("key")),
-                }
-                for opt in (q.options or [])
-            ]
-            if hide_question_text and q.options
-            else q.options,
+            options=(
+                [
+                    {
+                        "id": getattr(opt, "id", opt.get("id")),
+                        "key": getattr(opt, "key", opt.get("key")),
+                    }
+                    for opt in (q.options or [])
+                ]
+                if hide_question_text and q.options
+                else q.options
+            ),
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
             media=q.media,
