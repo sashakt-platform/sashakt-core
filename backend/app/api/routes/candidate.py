@@ -1261,12 +1261,10 @@ def get_test_result(
                 is_attempted = bool(answer.response)
                 if is_attempted:
                     correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
+                    marks_obtained += correct_mark
                 else:
                     incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    marks_obtained += wrong_mark
 
             elif revision.question_type is QuestionType.single_choice:
                 response_set = set(convert_to_list(answer.response))
@@ -1308,7 +1306,7 @@ def get_test_result(
                             marks_obtained += partial
                             correct += 1
                         else:
-                            marks_obtained += marking_scheme["wrong"]
+                            marks_obtained += wrong_mark
                             incorrect += 1
                     else:
                         marks_obtained += wrong_mark
@@ -1322,8 +1320,7 @@ def get_test_result(
                     user_value = float(answer.response)
                 except (TypeError, ValueError):
                     incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    marks_obtained += wrong_mark
                     continue
 
                 if isinstance(revision.correct_answer, int | float):
@@ -1340,12 +1337,10 @@ def get_test_result(
 
                 if is_correct:
                     correct += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["correct"]
+                    marks_obtained += correct_mark
                 else:
                     incorrect += 1
-                    if marking_scheme:
-                        marks_obtained += marking_scheme["wrong"]
+                    marks_obtained += wrong_mark
 
     total_questions = len(candidate_test.question_revision_ids)
 
