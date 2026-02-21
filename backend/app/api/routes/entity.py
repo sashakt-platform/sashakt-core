@@ -3,14 +3,20 @@ import csv
 from io import StringIO
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
 from sqlmodel import and_, col, func, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
-from app.api.routes.utils import clean_value
+from app.api.deps import (
+    CurrentUser,
+    OptionalCurrentUser,
+    Pagination,
+    SessionDep,
+    permission_dependency,
+)
+from app.api.routes.utils import clean_value, get_test_location_scope
 from app.core.sorting import (
     EntitySortConfig,
     SortingParams,
@@ -28,6 +34,7 @@ from app.models import (
     EntityUpdate,
     Message,
     Organization,
+    Test,
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.entity import EntityBulkUploadResponse
@@ -63,18 +70,22 @@ def transform_entity_types_to_public(
 
 
 def transform_entities_to_public(
-    entities: list[Entity] | Any, current_user: CurrentUser
+    entities: list[Entity] | Any,
+    current_user: OptionalCurrentUser,
+    organization_id: int | None = None,
 ) -> list[EntityPublic]:
     result: list[EntityPublic] = []
     entity_list: list[Entity] = (
         entities if isinstance(entities, list) else list(entities)
     )
+    org_id = current_user.organization_id if current_user else organization_id
 
     for entity in entity_list:
         entity_type: EntityType | None = (
             entity.entity_type
             if entity.entity_type
-            and entity.entity_type.organization_id == current_user.organization_id
+            and org_id
+            and entity.entity_type.organization_id == org_id
             else None
         )
 
@@ -292,21 +303,35 @@ def create_entity(
 @router_entity.get(
     "/",
     response_model=Page[EntityPublic],
-    dependencies=[Depends(permission_dependency("read_entity"))],
 )
 def get_entities(
     session: SessionDep,
-    current_user: CurrentUser,
+    current_user: OptionalCurrentUser,
     sorting: EntitySortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
     entity_type_id: int | None = None,
+    test_id: int | None = Query(None),
 ) -> Page[EntityPublic]:
+    # Determine organization scope
+    org_id: int | None = None
+    if current_user:
+        org_id = current_user.organization_id
+    elif test_id is not None:
+        test = session.get(Test, test_id)
+        if test:
+            org_id = test.organization_id
+    if org_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required or test_id must be provided",
+        )
+
     query = (
         select(Entity)
         .where(
             Entity.entity_type.has(  # type: ignore[attr-defined]
-                EntityType.organization_id == current_user.organization_id
+                EntityType.organization_id == org_id
             )
         )
         .options(
@@ -324,6 +349,14 @@ def get_entities(
     if entity_type_id:
         query = query.where(Entity.entity_type_id == entity_type_id)
 
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        if test_district_ids:
+            query = query.where(col(Entity.district_id).in_(test_district_ids))
+        elif test_state_ids:
+            query = query.where(col(Entity.state_id).in_(test_state_ids))
+
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none("name", SortOrder.ASC)
     query = sorting_with_default.apply_to_query(query, EntitySortConfig)
@@ -332,7 +365,9 @@ def get_entities(
         session,
         query,
         params,
-        transformer=lambda items: transform_entities_to_public(items, current_user),
+        transformer=lambda items: transform_entities_to_public(
+            items, current_user, organization_id=org_id
+        ),
     )
 
     return entities

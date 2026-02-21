@@ -14,7 +14,7 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
-from app.api.routes.utils import clean_value
+from app.api.routes.utils import clean_value, get_test_location_scope
 from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
@@ -210,6 +210,7 @@ def get_state(
     params: Pagination = Depends(),
     is_active: bool | None = None,
     country: int | None = None,
+    test_id: int | None = Query(None),
 ) -> Page[StatePublic]:
     query = select(State)
 
@@ -223,6 +224,23 @@ def get_state(
         query = query.where(
             func.lower(State.name).contains(name.strip().lower(), autoescape=True)
         )
+
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        all_state_ids = set(test_state_ids)
+        if test_district_ids:
+            # Derive states from assigned districts
+            district_state_ids = list(
+                session.exec(
+                    select(District.state_id).where(
+                        col(District.id).in_(test_district_ids)
+                    )
+                ).all()
+            )
+            all_state_ids.update(district_state_ids)
+        if all_state_ids:
+            query = query.where(col(State.id).in_(list(all_state_ids)))
 
     # Apply role-based filtering only if user is authenticated
     if current_user and (
@@ -319,6 +337,7 @@ def get_district(
     is_active: bool | None = None,
     params: Pagination = Depends(),
     state_ids: list[int] | None = Query(None),
+    test_id: int | None = Query(None),
 ) -> Page[DistrictPublic]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
@@ -332,6 +351,14 @@ def get_district(
         query = query.where(
             func.lower(District.name).contains(name.strip().lower(), autoescape=True)
         )
+
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        if test_district_ids:
+            query = query.where(col(District.id).in_(test_district_ids))
+        elif test_state_ids:
+            query = query.where(col(District.state_id).in_(test_state_ids))
 
     # Apply role-based filtering only if user is authenticated
     if current_user and (
@@ -425,6 +452,7 @@ def get_block(
     params: Pagination = Depends(),
     is_active: bool | None = None,
     district_ids: list[int] | None = Query(None),
+    test_id: int | None = Query(None),
 ) -> Page[BlockPublic]:
     query = select(Block)
 
@@ -433,6 +461,22 @@ def get_block(
 
     if district_ids is not None:
         query = query.where(col(Block.district_id).in_(district_ids))
+
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        if test_district_ids:
+            query = query.where(col(Block.district_id).in_(test_district_ids))
+        elif test_state_ids:
+            derived_district_ids = list(
+                session.exec(
+                    select(District.id).where(
+                        col(District.state_id).in_(test_state_ids)
+                    )
+                ).all()
+            )
+            if derived_district_ids:
+                query = query.where(col(Block.district_id).in_(derived_district_ids))
 
     blocks: Page[BlockPublic] = paginate(
         session,
