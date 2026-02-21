@@ -471,7 +471,7 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
     # Check form_response
     form_response_ref = session.exec(
         select(FormResponse).where(
-            FormResponse.responses["entity_id"].as_string() == str(entity.id)  # type: ignore[index]
+            FormResponse.responses["entity_id"].as_string() == str(entity.id)
         )
     ).first()
 
