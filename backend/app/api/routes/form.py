@@ -76,6 +76,12 @@ def create_form(
     # Use current user's organization if not specified
     organization_id = form_create.organization_id or current_user.organization_id
 
+    if organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to create forms in another organization.",
+        )
+
     # Check for duplicate form name within organization
     normalized_name = form_create.name.strip().lower()
     existing = session.exec(
