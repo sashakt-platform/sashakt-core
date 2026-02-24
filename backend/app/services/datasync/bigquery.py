@@ -567,6 +567,23 @@ class BigQueryService:
                 partition_field="created_date",
                 clustering_fields=["organization_id", "candidate_test_id", "entity_id"],
             ),
+            "form_responses": TableSchema(
+                table_name=self.get_table_name("form_responses"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {
+                        "name": "candidate_test_id",
+                        "type": "INTEGER",
+                        "mode": "REQUIRED",
+                    },
+                    {"name": "form_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "responses", "type": "JSON", "mode": "NULLABLE"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id", "candidate_test_id", "form_id"],
+            ),
             "test_questions": TableSchema(
                 table_name=self.get_table_name("test_questions"),
                 columns=[

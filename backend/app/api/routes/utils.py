@@ -3,10 +3,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic.networks import EmailStr
+from sqlmodel import select
 
-from app.api.deps import CurrentUser, get_current_active_superuser
+from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core.timezone import get_timezone_aware_now
 from app.models import Message
+from app.models.test import TestDistrict, TestState
 from app.utils import generate_test_email, send_email
 
 router = APIRouter(prefix="/utils", tags=["utils"])
@@ -67,3 +69,20 @@ def get_current_user_location_ids(
         }
 
     return user_location_level, user_location_ids
+
+
+def get_test_location_scope(
+    session: SessionDep, test_id: int
+) -> tuple[list[int], list[int]]:
+    """Returns (state_ids, district_ids) assigned to a test."""
+    state_ids = list(
+        session.exec(
+            select(TestState.state_id).where(TestState.test_id == test_id)
+        ).all()
+    )
+    district_ids = list(
+        session.exec(
+            select(TestDistrict.district_id).where(TestDistrict.test_id == test_id)
+        ).all()
+    )
+    return state_ids, district_ids

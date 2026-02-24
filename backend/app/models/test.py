@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
@@ -32,7 +32,8 @@ if TYPE_CHECKING:
         User,
     )
     from app.models.certificate import Certificate
-    from app.models.location import Block, District, State
+    from app.models.form import Form, FormPublic
+    from app.models.location import District, State
 
 
 class TagRandomCreate(TypedDict):
@@ -233,6 +234,12 @@ class TestBase(SQLModel):
         description="Show feedback to candidate immediately after each question",
         sa_column_kwargs={"server_default": "false"},
     )
+    form_id: int | None = Field(
+        default=None,
+        foreign_key="form.id",
+        nullable=True,
+        description="Form to be filled when candidate_profile is enabled",
+    )
 
 
 class Test(TestBase, table=True):
@@ -264,6 +271,7 @@ class Test(TestBase, table=True):
     )
 
     certificate: Optional["Certificate"] = Relationship(back_populates="tests")
+    form: Optional["Form"] = Relationship(back_populates="tests")
 
     template: Optional["Test"] = Relationship(
         back_populates="tests", sa_relationship_kwargs={"remote_side": "Test.id"}
@@ -331,15 +339,6 @@ class TestUpdate(TestBase):
     locale: LocaleEnum
 
 
-class EntityPublicLimited(SQLModel):
-    id: int
-    name: str
-    label: str
-    state: Union["State", None] = None
-    district: Union["District", None] = None
-    block: Union["Block", None] = None
-
-
 class DeleteTest(SQLModel):
     delete_success_count: int
     delete_failure_list: list[TestPublic] | None = None
@@ -350,4 +349,4 @@ class TestPublicLimited(TestBase):
 
     id: int
     total_questions: int
-    profile_list: list["EntityPublicLimited"] | None = None
+    form: "FormPublic | None" = None

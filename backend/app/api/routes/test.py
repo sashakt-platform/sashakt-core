@@ -22,7 +22,6 @@ from app.core.sorting import (
     create_sorting_dependency,
 )
 from app.models import (
-    Block,
     Message,
     QuestionRevision,
     State,
@@ -36,13 +35,12 @@ from app.models import (
     TestUpdate,
 )
 from app.models.candidate import CandidateTest, CandidateTestAnswer
-from app.models.entity import Entity
+from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
 from app.models.role import Role
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
-    EntityPublicLimited,
     MarksLevelEnum,
     TagRandomCreate,
     TagRandomPublic,
@@ -271,76 +269,6 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     current_time = get_current_time()
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
-    profile_list: list[EntityPublicLimited] = []
-    if test.candidate_profile:
-        query = select(Entity).where(col(Entity.is_active).is_(True))
-        district_query = select(TestDistrict.district_id).where(
-            TestDistrict.test_id == test.id
-        )
-        district_ids = session.exec(district_query).all()
-
-        if district_ids:
-            query = query.where(col(Entity.district_id).in_(district_ids))
-        else:
-            state_query = select(TestState.state_id).where(TestState.test_id == test.id)
-            state_ids = session.exec(state_query).all()
-            if state_ids:
-                query = query.where(col(Entity.state_id).in_(state_ids))
-
-        entities = session.exec(query).all()
-
-        entity_block_ids = {e.block_id for e in entities if e.block_id is not None}
-        entity_state_ids = {e.state_id for e in entities if e.state_id is not None}
-        entity_district_ids = {
-            e.district_id for e in entities if e.district_id is not None
-        }
-
-        blocks_by_id = (
-            {
-                b.id: b
-                for b in session.exec(
-                    select(Block).where(col(Block.id).in_(entity_block_ids))
-                ).all()
-            }
-            if entity_block_ids
-            else {}
-        )
-        states_by_id = (
-            {
-                s.id: s
-                for s in session.exec(
-                    select(State).where(col(State.id).in_(entity_state_ids))
-                ).all()
-            }
-            if entity_state_ids
-            else {}
-        )
-        districts_by_id = (
-            {
-                d.id: d
-                for d in session.exec(
-                    select(District).where(col(District.id).in_(entity_district_ids))
-                ).all()
-            }
-            if entity_district_ids
-            else {}
-        )
-
-        for entity in entities:
-            block = blocks_by_id.get(entity.block_id)
-            state = states_by_id.get(entity.state_id)
-            district = districts_by_id.get(entity.district_id)
-
-            profile_list.append(
-                EntityPublicLimited(
-                    id=entity.id,
-                    name=entity.name,
-                    label=f"{entity.name} - ({block.name})" if block else entity.name,
-                    state=state,
-                    district=district,
-                    block=block,
-                )
-            )
 
     if (
         test.random_questions
@@ -362,8 +290,28 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
             tag_rule.get("count", 0) for tag_rule in test.random_tag_count
         )
 
+    # Include form structure if form_id is set
+    form_public: FormPublic | None = None
+    if test.form_id:
+        form = session.exec(
+            select(Form)
+            .options(selectinload(Form.fields))  # type: ignore[arg-type]
+            .where(Form.id == test.form_id)
+        ).first()
+        if form:
+            fields_public = [
+                FormFieldPublic(**field.model_dump())
+                for field in sorted(form.fields or [], key=lambda f: f.order)
+            ]
+            form_public = FormPublic(
+                **form.model_dump(exclude={"fields"}),
+                fields=fields_public,
+            )
+
     return TestPublicLimited(
-        **test.model_dump(), total_questions=total_questions, profile_list=profile_list
+        **test.model_dump(),
+        total_questions=total_questions,
+        form=form_public,
     )
 
 
@@ -604,11 +552,15 @@ def get_test(
         query = query.where(Test.is_active == is_active)
 
     if name is not None:
-        query = query.where(func.lower(Test.name).like(f"%{name.lower()}%"))
+        query = query.where(
+            func.lower(Test.name).contains(name.strip().lower(), autoescape=True)
+        )
 
     if description is not None:
         query = query.where(
-            func.lower(Test.description).like(f"%{description.lower()}%")
+            func.lower(Test.description).contains(
+                description.strip().lower(), autoescape=True
+            )
         )
 
     if completion_message is not None:
