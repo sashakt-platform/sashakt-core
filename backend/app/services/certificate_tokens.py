@@ -1,16 +1,16 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.models.form import FormField
 
 # Fixed tokens that are always available (independent of form fields)
-FIXED_TOKENS = [
+FIXED_TOKENS: list[dict[str, str]] = [
     {"token": "test_name", "label": "Test Name"},
     {"token": "completion_date", "label": "Completion Date"},
     {"token": "score", "label": "Score"},
 ]
 
 
-def get_available_tokens(form_id: int | None, session: Session) -> list[dict]:
+def get_available_tokens(form_id: int | None, session: Session) -> list[dict[str, str]]:
     """
     Get all available certificate tokens.
 
@@ -29,7 +29,7 @@ def get_available_tokens(form_id: int | None, session: Session) -> list[dict]:
         form_fields = session.exec(
             select(FormField)
             .where(FormField.form_id == form_id)
-            .order_by(FormField.order)
+            .order_by(col(FormField.order))
         ).all()
 
         for field in form_fields:

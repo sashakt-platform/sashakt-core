@@ -2,6 +2,7 @@ import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, outerjoin, select
@@ -1373,7 +1374,7 @@ def get_test_result(
             )
 
             # Get form response values if available
-            form_response_data: dict = {}
+            form_response_data: dict[str, Any] = {}
             if test.form_id:
                 form_response = session.exec(
                     select(FormResponse).where(

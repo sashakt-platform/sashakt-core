@@ -95,7 +95,7 @@ def get_certificates(
 def get_certificate_tokens(
     session: SessionDep,
     form_id: int | None = None,
-) -> dict:
+) -> dict[str, list[dict[str, str]]]:
     """
     Get available certificate tokens.
 
