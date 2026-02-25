@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 class UserState(SQLModel, table=True):
-    __tablename__ = "userstate"
+    __tablename__ = "user_state"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
@@ -35,7 +35,7 @@ class UserState(SQLModel, table=True):
 
 
 class UserDistrict(SQLModel, table=True):
-    __tablename__ = "userdistrict"
+    __tablename__ = "user_district"
     __test__ = False
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)

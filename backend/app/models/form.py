@@ -176,7 +176,7 @@ class FormFieldBase(SQLModel):
     )
     entity_type_id: int | None = Field(
         default=None,
-        foreign_key="entitytype.id",
+        foreign_key="entity_type.id",
         nullable=True,
         description="Entity type to filter entities for entity field type",
     )

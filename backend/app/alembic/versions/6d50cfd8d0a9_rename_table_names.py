@@ -1,7 +1,7 @@
 """rename table names
 
 Revision ID: 6d50cfd8d0a9
-Revises: 69cec3bb0d87
+Revises: 74063156ae27
 Create Date: 2026-02-24 13:59:31.080298
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '6d50cfd8d0a9'
-down_revision = '69cec3bb0d87'
+down_revision = '74063156ae27'
 branch_labels = None
 depends_on = None
 
