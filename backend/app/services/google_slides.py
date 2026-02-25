@@ -96,10 +96,7 @@ class GoogleSlidesService:
     def generate_certificate_image(
         self,
         template_url: str,
-        candidate_name: str,
-        test_name: str,
-        completion_date: str,
-        score: str,
+        token_values: dict[str, Any],
         size: str = "LARGE",
     ) -> tuple[bytes, dict[str, str]]:
         """
@@ -112,10 +109,8 @@ class GoogleSlidesService:
 
         Args:
             template_url: Google Slides URL of the template
-            candidate_name: Name to replace {{candidate_name}}
-            test_name: Name to replace {{test_name}}
-            completion_date: Date to replace {{completion_date}}
-            score: Score to replace {{score}}
+            token_values: Dictionary of token names to values (e.g., {"test_name": "Math Test"})
+                         Each key will be wrapped as {{key}} for replacement
             size: Image size - SMALL (200px), MEDIUM (800px), or LARGE (1600px)
 
         Returns:
@@ -135,11 +130,12 @@ class GoogleSlidesService:
         new_page_id = f"cert_{uuid.uuid4().hex[:12]}"
 
         # Build combined requests: duplicate + all replacements
+        # Convert token_values dict to {{token}}: value format
+        # Skip the "token" key as it's the certificate access token, not a placeholder
         replacements = {
-            "{{candidate_name}}": candidate_name,
-            "{{test_name}}": test_name,
-            "{{completion_date}}": completion_date,
-            "{{score}}": score,
+            f"{{{{{key}}}}}": str(value) if value is not None else ""
+            for key, value in token_values.items()
+            if key != "token"
         }
 
         requests: list[dict[str, Any]] = [
