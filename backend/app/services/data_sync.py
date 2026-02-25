@@ -30,6 +30,7 @@ from app.models import (
     User,
 )
 from app.models.candidate import CandidateTestProfile
+from app.models.form import Form, FormResponse
 from app.models.provider import ProviderType
 from app.models.test import MarksLevelEnum, TestDistrict, TestQuestion, TestTag
 from app.models.user import UserState
@@ -302,6 +303,9 @@ class DataSyncService:
                 self._extract_candidate_test_profiles_data(
                     session, organization_id, incremental
                 )
+            )
+            data["form_responses"] = self._extract_form_responses_data(
+                session, organization_id, incremental
             )
             data["states"] = self._extract_states_data(
                 session, organization_id, incremental
@@ -646,6 +650,28 @@ class DataSyncService:
             self._serialize_candidate_test_profile(profile, org_id)
             for profile, org_id in results
         ]
+
+    def _extract_form_responses_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter form_responses by organization through form.organization_id
+        statement = (
+            select(FormResponse, Form.organization_id)
+            .join(Form, FormResponse.form_id == Form.id)  # type: ignore[arg-type]
+            .where(Form.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "form_responses"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(
+                    FormResponse.created_date > table_last_sync  # type: ignore[operator]
+                )
+
+        results = session.exec(statement).all()
+        return [self._serialize_form_response(fr, org_id) for fr, org_id in results]
 
     def _extract_test_questions_data(
         self, session: Session, organization_id: int, incremental: bool
@@ -1024,6 +1050,22 @@ class DataSyncService:
             "organization_id": organization_id,
             "created_date": (
                 profile.created_date.isoformat() if profile.created_date else None
+            ),
+        }
+
+    def _serialize_form_response(
+        self, form_response: FormResponse, organization_id: int | None
+    ) -> dict[str, Any]:
+        return {
+            "id": form_response.id,
+            "candidate_test_id": form_response.candidate_test_id,
+            "form_id": form_response.form_id,
+            "responses": form_response.responses,
+            "organization_id": organization_id,
+            "created_date": (
+                form_response.created_date.isoformat()
+                if form_response.created_date
+                else None
             ),
         }
 

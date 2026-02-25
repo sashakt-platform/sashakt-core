@@ -36,13 +36,13 @@ from app.models import (
 )
 from app.models.candidate import (
     CandidateReviewResponse,
-    CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
     StartTestResponse,
     TestStatusSummary,
 )
+from app.models.form import FormResponse
 from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
@@ -352,15 +352,15 @@ def start_test_for_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
-    if (
-        start_test_request.candidate_profile
-        and start_test_request.candidate_profile.entity_id
-    ):
-        candidate_test_profile = CandidateTestProfile(
+
+    # Handle form responses
+    if start_test_request.form_responses and test.form_id:
+        form_response = FormResponse(
             candidate_test_id=candidate_test.id,
-            entity_id=start_test_request.candidate_profile.entity_id,
+            form_id=test.form_id,
+            responses=start_test_request.form_responses,
         )
-        session.add(candidate_test_profile)
+        session.add(form_response)
         session.commit()
 
     return StartTestResponse(
@@ -776,15 +776,17 @@ def get_test_questions(
             question_text=None if hide_question_text else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
-            options=[
-                {
-                    "id": getattr(opt, "id", opt.get("id")),
-                    "key": getattr(opt, "key", opt.get("key")),
-                }
-                for opt in (q.options or [])
-            ]
-            if hide_question_text and q.options
-            else q.options,
+            options=(
+                [
+                    {
+                        "id": getattr(opt, "id", opt.get("id")),
+                        "key": getattr(opt, "key", opt.get("key")),
+                    }
+                    for opt in (q.options or [])
+                ]
+                if hide_question_text and q.options
+                else q.options
+            ),
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
             media=q.media,

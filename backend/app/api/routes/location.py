@@ -8,8 +8,13 @@ from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
-from app.api.routes.utils import clean_value
+from app.api.deps import (
+    OptionalCurrentUser,
+    Pagination,
+    SessionDep,
+    permission_dependency,
+)
+from app.api.routes.utils import clean_value, get_test_location_scope
 from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
@@ -197,15 +202,15 @@ def create_state(
 @state_router.get(
     "/",
     response_model=Page[StatePublic],
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state(
     session: SessionDep,
-    current_user: CurrentUser,
+    current_user: OptionalCurrentUser,
     name: str | None = None,
     params: Pagination = Depends(),
     is_active: bool | None = None,
     country: int | None = None,
+    test_id: int | None = Query(None),
 ) -> Page[StatePublic]:
     query = select(State)
 
@@ -217,10 +222,28 @@ def get_state(
 
     if name:
         query = query.where(
-            func.lower(func.trim(State.name)).like(f"%{name.strip().lower()}%")
+            func.lower(State.name).contains(name.strip().lower(), autoescape=True)
         )
 
-    if (
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        all_state_ids = set(test_state_ids)
+        if test_district_ids:
+            # Derive states from assigned districts
+            district_state_ids = list(
+                session.exec(
+                    select(District.state_id).where(
+                        col(District.id).in_(test_district_ids)
+                    )
+                ).all()
+            )
+            all_state_ids.update(district_state_ids)
+        if all_state_ids:
+            query = query.where(col(State.id).in_(list(all_state_ids)))
+
+    # Apply role-based filtering only if user is authenticated
+    if current_user and (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
@@ -247,7 +270,6 @@ def get_state(
 @state_router.get(
     "/{state_id}",
     response_model=StatePublic,
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_state_by_id(
     state_id: int,
@@ -307,15 +329,15 @@ def create_district(
 @district_router.get(
     "/",
     response_model=Page[DistrictPublic],
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district(
     session: SessionDep,
-    current_user: CurrentUser,
+    current_user: OptionalCurrentUser,
     name: str | None = None,
     is_active: bool | None = None,
     params: Pagination = Depends(),
     state_ids: list[int] | None = Query(None),
+    test_id: int | None = Query(None),
 ) -> Page[DistrictPublic]:
     query = select(District, State).join(State).where(District.state_id == State.id)
 
@@ -326,9 +348,20 @@ def get_district(
         query = query.where(col(District.state_id).in_(state_ids))
 
     if name:
-        query = query.where(func.lower(District.name).like(f"%{name.strip().lower()}%"))
+        query = query.where(
+            func.lower(District.name).contains(name.strip().lower(), autoescape=True)
+        )
 
-    if (
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        if test_district_ids:
+            query = query.where(col(District.id).in_(test_district_ids))
+        elif test_state_ids:
+            query = query.where(col(District.state_id).in_(test_state_ids))
+
+    # Apply role-based filtering only if user is authenticated
+    if current_user and (
         current_user.role.name == state_admin.name
         or current_user.role.name == test_admin.name
     ):
@@ -354,7 +387,6 @@ def get_district(
 @district_router.get(
     "/{district_id}",
     response_model=DistrictPublic,
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_district_by_id(
     district_id: int,
@@ -414,13 +446,13 @@ def create_block(
 @block_router.get(
     "/",
     response_model=Page[BlockPublic],
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block(
     session: SessionDep,
     params: Pagination = Depends(),
     is_active: bool | None = None,
     district_ids: list[int] | None = Query(None),
+    test_id: int | None = Query(None),
 ) -> Page[BlockPublic]:
     query = select(Block)
 
@@ -429,6 +461,22 @@ def get_block(
 
     if district_ids is not None:
         query = query.where(col(Block.district_id).in_(district_ids))
+
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        if test_district_ids:
+            query = query.where(col(Block.district_id).in_(test_district_ids))
+        elif test_state_ids:
+            derived_district_ids = list(
+                session.exec(
+                    select(District.id).where(
+                        col(District.state_id).in_(test_state_ids)
+                    )
+                ).all()
+            )
+            if derived_district_ids:
+                query = query.where(col(Block.district_id).in_(derived_district_ids))
 
     blocks: Page[BlockPublic] = paginate(
         session,
@@ -444,7 +492,6 @@ def get_block(
 @block_router.get(
     "/{block_id}",
     response_model=BlockPublic,
-    dependencies=[Depends(permission_dependency("read_location"))],
 )
 def get_block_by_id(
     block_id: int,
