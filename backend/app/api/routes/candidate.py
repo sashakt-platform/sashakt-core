@@ -1358,14 +1358,6 @@ def get_test_result(
             # Generate new token and save certificate data snapshot
             token = generate_certificate_token()
 
-            # Get candidate for name
-            candidate = session.get(Candidate, candidate_test.candidate_id)
-
-            # Since all users are anonymous, use partial UUID
-            candidate_name = (
-                f"Candidate {str(candidate.identity)[:8]}" if candidate else "Candidate"
-            )
-
             # Format score string from already-calculated values
             if marks_maximum > 0:
                 score_percentage = marks_obtained / marks_maximum * 100
@@ -1380,13 +1372,27 @@ def get_test_result(
                 else "N/A"
             )
 
-            # Save certificate data snapshot
+            # Get form response values if available
+            form_response_data: dict = {}
+            if test.form_id:
+                form_response = session.exec(
+                    select(FormResponse).where(
+                        FormResponse.candidate_test_id == candidate_test.id,
+                        FormResponse.form_id == test.form_id,
+                    )
+                ).first()
+                if form_response and form_response.responses:
+                    form_response_data = form_response.responses
+
+            # Save certificate data snapshot (fixed tokens + form field values)
             candidate_test.certificate_data = {
                 "token": token,
-                "candidate_name": candidate_name,
+                # Fixed tokens
                 "test_name": test.name,
                 "score": score_str,
                 "completion_date": completion_date,
+                # Dynamic tokens from form response
+                **form_response_data,
             }
             session.add(candidate_test)
             session.commit()

@@ -17,6 +17,7 @@ from app.models.certificate import (
 )
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.test import Test
+from app.services.certificate_tokens import get_available_tokens
 from app.services.google_slides import GoogleSlidesService
 
 router = APIRouter(prefix="/certificate", tags=["Certificate"])
@@ -85,6 +86,24 @@ def get_certificates(
     )
 
     return certificates
+
+
+@router.get(
+    "/tokens",
+    dependencies=[Depends(permission_dependency("read_certificate"))],
+)
+def get_certificate_tokens(
+    session: SessionDep,
+    form_id: int | None = None,
+) -> dict:
+    """
+    Get available certificate tokens.
+
+    Returns fixed tokens (test_name, completion_date, score) plus
+    dynamic tokens from form fields if a form_id is provided.
+    """
+    tokens = get_available_tokens(form_id, session)
+    return {"tokens": tokens}
 
 
 @router.get(
@@ -227,20 +246,12 @@ def download_certificate(
             detail="Certificate generation service unavailable",
         )
 
-    # Use data from snapshot
-    candidate_name = cert_data.get("candidate_name", "Candidate")
-    test_name = cert_data.get("test_name", test.name)
-    score_str = cert_data.get("score", "N/A")
-    completion_date = cert_data.get("completion_date", "N/A")
-
     # Generate certificate image using getThumbnail API
+    # Pass all certificate data (fixed tokens + form field values) for replacement
     try:
         image_bytes, cleanup_info = slides_service.generate_certificate_image(
             template_url=certificate.url,
-            candidate_name=candidate_name,
-            test_name=test_name,
-            completion_date=completion_date,
-            score=score_str,
+            token_values=cert_data,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
