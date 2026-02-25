@@ -357,3 +357,117 @@ def test_delete_certificate_with_associated_tests(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
+
+
+# ============== Certificate Tokens Tests ==============
+
+
+def test_get_certificate_tokens_fixed_only(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test getting certificate tokens without a form returns only fixed tokens."""
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/tokens",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "tokens" in data
+
+    tokens = data["tokens"]
+    assert len(tokens) == 3
+
+    # Check fixed tokens
+    token_names = [t["token"] for t in tokens]
+    assert "test_name" in token_names
+    assert "completion_date" in token_names
+    assert "score" in token_names
+
+    # Verify structure
+    for token in tokens:
+        assert "token" in token
+        assert "label" in token
+
+
+def test_get_certificate_tokens_with_form(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test getting certificate tokens with a form returns fixed + form field tokens."""
+    setup_user_organization(db)
+
+    # Create a form
+    form_data = {"name": random_lower_string()}
+    form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json=form_data,
+        headers=get_user_superadmin_token,
+    )
+    assert form_response.status_code == 200
+    form_id = form_response.json()["id"]
+
+    # Add form fields
+    client.post(
+        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        json={"field_type": "text", "label": "Full Name", "name": "full_name"},
+        headers=get_user_superadmin_token,
+    )
+    client.post(
+        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        json={"field_type": "email", "label": "Email Address", "name": "email"},
+        headers=get_user_superadmin_token,
+    )
+
+    # Get tokens with form_id
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/tokens?form_id={form_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    tokens = data["tokens"]
+
+    # Should have 3 fixed + 2 form fields = 5 tokens
+    assert len(tokens) == 5
+
+    token_names = [t["token"] for t in tokens]
+    # Fixed tokens
+    assert "test_name" in token_names
+    assert "completion_date" in token_names
+    assert "score" in token_names
+    # Form field tokens
+    assert "full_name" in token_names
+    assert "email" in token_names
+
+
+def test_get_certificate_tokens_with_nonexistent_form(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test getting certificate tokens with non-existent form_id returns only fixed tokens."""
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/tokens?form_id=99999",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    tokens = data["tokens"]
+
+    # Should only have fixed tokens
+    assert len(tokens) == 3
+
+
+def test_get_certificate_tokens_unauthorized(
+    client: TestClient,
+) -> None:
+    """Test getting certificate tokens without auth fails."""
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/tokens",
+    )
+
+    assert response.status_code == 401
