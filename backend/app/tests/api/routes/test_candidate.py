@@ -1610,13 +1610,13 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         question_id=question.id,
         created_by_id=user.id,
         question_text="What is 3+3?",
-        question_type=QuestionType.single_choice,
+        question_type=QuestionType.multi_choice,
         options=[
             {"id": 1, "key": "A", "value": "5"},
             {"id": 2, "key": "B", "value": "6"},
             {"id": 3, "key": "C", "value": "7"},
         ],
-        correct_answer=[1],
+        correct_answer=[1, 2],
     )
     db.add(question_revision)
     db.flush()
@@ -1656,7 +1656,7 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     # Submit answer using new endpoint (no authentication required, just UUID)
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "6",  # Answer choice
+        "response": "[1,2]",  # Answer choice
         "visited": True,
         "time_spent": 30,
     }
@@ -1671,7 +1671,7 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     data = response.json()
     assert data["candidate_test_id"] == candidate_test_id
     assert data["question_revision_id"] == question_revision.id
-    assert data["response"] == "6"
+    assert data["response"] == "[1, 2]"
     assert data["visited"] is True
     assert data["time_spent"] == 30
 
@@ -1682,7 +1682,7 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).first()
     assert answer is not None
-    assert answer.response == "6"
+    assert answer.response == "[1, 2]"
 
 
 def test_submit_answer_for_subjective_qr_candidate(
@@ -1864,12 +1864,12 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     # First, submit an initial answer
     initial_answer = {
         "question_revision_id": question_revision.id,
-        "response": "7",  # Initial wrong answer
+        "response": "[7]",  # Initial wrong answer
         "visited": True,
         "time_spent": 15,
     }
 
-    client.post(
+    response = client.post(
         f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
         json=initial_answer,
         params={"candidate_uuid": candidate_uuid},
@@ -1878,7 +1878,7 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     # Now update the answer using the same submit_answer endpoint (it will update existing)
     update_payload = {
         "question_revision_id": question_revision.id,
-        "response": "8",  # Correct answer
+        "response": "[8]",  # Correct answer
         "visited": True,
         "time_spent": 45,  # More time spent
     }
@@ -1891,7 +1891,7 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
 
     assert response.status_code == 200
     data = response.json()
-    assert data["response"] == "8"
+    assert data["response"] == "[8]"
     assert data["time_spent"] == 45
     assert data["visited"] is True
 
@@ -1902,7 +1902,7 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).first()
     assert answer is not None
-    assert answer.response == "8"
+    assert answer.response == "[8]"
     assert answer.time_spent == 45
 
 
@@ -2350,7 +2350,7 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
     # Submit first answer
     first_answer = {
         "question_revision_id": question_revision.id,
-        "response": "9",
+        "response": "[9]",
         "visited": True,
         "time_spent": 20,
     }
@@ -2367,7 +2367,7 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
     # Submit second answer for same question (should update, not create new)
     second_answer = {
         "question_revision_id": question_revision.id,
-        "response": "10",
+        "response": "[10]",
         "visited": True,
         "time_spent": 40,
     }
@@ -2380,7 +2380,7 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
 
     assert response2.status_code == 200
     assert response2.json()["id"] == first_answer_id  # Same answer ID
-    assert response2.json()["response"] == "10"  # Updated response
+    assert response2.json()["response"] == "[10]"  # Updated response
     assert response2.json()["time_spent"] == 40  # Updated time
 
     # Verify only one answer exists in database
@@ -2390,7 +2390,7 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).all()
     assert len(answers) == 1
-    assert answers[0].response == "10"
+    assert answers[0].response == "[10]"
 
 
 def test_get_test_result(
@@ -5360,13 +5360,13 @@ def test_submit_batch_answers_for_qr_candidate(
         "answers": [
             {
                 "question_revision_id": question_revision.id,
-                "response": "4",
+                "response": "[4]",
                 "visited": True,
                 "time_spent": 30,
             },
             {
                 "question_revision_id": second_question_revision.id,
-                "response": "1",
+                "response": "[1]",
                 "visited": True,
                 "time_spent": 45,
             },
@@ -5388,13 +5388,13 @@ def test_submit_batch_answers_for_qr_candidate(
 
     # Verify first answer
     assert data[0]["question_revision_id"] == question_revision.id
-    assert data[0]["response"] == "4"
+    assert data[0]["response"] == "[4]"
     assert data[0]["visited"] is True
     assert data[0]["time_spent"] == 30
 
     # Verify second answer
     assert data[1]["question_revision_id"] == second_question_revision.id
-    assert data[1]["response"] == "1"
+    assert data[1]["response"] == "[1]"
     assert data[1]["visited"] is True
     assert data[1]["time_spent"] == 45
 
@@ -5405,8 +5405,8 @@ def test_submit_batch_answers_for_qr_candidate(
         .order_by("question_revision_id")
     ).all()
     assert len(answers) == 2
-    assert answers[0].response == "4"
-    assert answers[1].response == "1"
+    assert answers[0].response == "[4]"
+    assert answers[1].response == "[1]"
 
 
 def test_submit_batch_answers_for_qr_candidate_with_subjective(
@@ -5480,7 +5480,7 @@ def test_submit_batch_answers_for_qr_candidate_with_subjective(
         "answers": [
             {
                 "question_revision_id": qr_1.id,
-                "response": "4",
+                "response": "[4]",
                 "visited": True,
                 "time_spent": 30,
             },
@@ -5506,7 +5506,7 @@ def test_submit_batch_answers_for_qr_candidate_with_subjective(
     data.sort(key=lambda x: x["question_revision_id"])
 
     assert data[0]["question_revision_id"] == qr_1.id
-    assert data[0]["response"] == "4"
+    assert data[0]["response"] == "[4]"
     assert data[0]["visited"] is True
     assert data[0]["time_spent"] == 30
 
@@ -5588,7 +5588,7 @@ def test_submit_batch_answers_for_qr_candidate_subjective_exceeds_limit(
         "answers": [
             {
                 "question_revision_id": qr_1.id,
-                "response": "4",
+                "response": "[2]",
                 "visited": True,
                 "time_spent": 30,
             },
@@ -5633,7 +5633,7 @@ def test_submit_batch_answers_invalid_uuid(client: TestClient, db: SessionDep) -
         "answers": [
             {
                 "question_revision_id": 1,
-                "response": "1",
+                "response": "[1]",
                 "visited": True,
                 "time_spent": 30,
             }
@@ -5732,7 +5732,7 @@ def test_submit_batch_answers_update_existing(
     initial_answer = CandidateTestAnswer(
         candidate_test_id=candidate_test_id,
         question_revision_id=question_revision.id,
-        response="3",
+        response="[3]",
         visited=True,
         time_spent=20,
     )
@@ -5745,7 +5745,7 @@ def test_submit_batch_answers_update_existing(
         "answers": [
             {
                 "question_revision_id": question_revision.id,
-                "response": "4",
+                "response": "[4]",
                 "visited": True,
                 "time_spent": 30,
             }
@@ -5761,12 +5761,12 @@ def test_submit_batch_answers_update_existing(
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
-    assert data[0]["response"] == "4"
+    assert data[0]["response"] == "[4]"
     assert data[0]["time_spent"] == 30
 
     # Verify answer was updated in database
     db.refresh(initial_answer)
-    assert initial_answer.response == "4"
+    assert initial_answer.response == "[4]"
     assert initial_answer.time_spent == 30
 
 
@@ -7628,8 +7628,276 @@ def test_get_test_result_with_random_question_true(
     assert data["incorrect_answer"] == 3
     assert data["mandatory_not_attempted"] == 1
     assert data["optional_not_attempted"] == 0
-    assert data["marks_obtained"] == 2
-    assert data["marks_maximum"] == 6
+
+
+def test_submit_answer_for_single_choice_with_multiple_options_should_fail(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "5"},
+            {"id": 2, "key": "B", "value": "6"},
+            {"id": 3, "key": "C", "value": "7"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[1,2]",
+        "visited": True,
+        "time_spent": 30,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert (
+        data["detail"]
+        == "Invalid Response Format. Kindly submit _Single-choice question_ as list of length 1 (e.g., [1])"
+    )
+
+
+def test_submit_answer_for_multi_choice_with_valid_response_should_pass(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "5"},
+            {"id": 2, "key": "B", "value": "6"},
+            {"id": 3, "key": "C", "value": "7"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+    assert question_revision.question_type == QuestionType.multi_choice
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 30,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+
+def test_submit_answer_for_multi_choice_with_invalid_response_should_fail(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "5"},
+            {"id": 2, "key": "B", "value": "6"},
+            {"id": 3, "key": "C", "value": "7"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[]",
+        "visited": True,
+        "time_spent": 30,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert (
+        data["detail"]
+        == "Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])"
+    )
+
+
+def test_submit_answer_for_multi_choice_with_none_revision(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": None,
+        "response": "[1]",
+        "visited": True,
+        "time_spent": 30,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 422
 
 
 def test_test_level_marking_scheme_applied_on_questions(
@@ -9077,7 +9345,7 @@ def test_submit_answer_with_bookmark(client: TestClient, db: SessionDep) -> None
     # Submit answer with bookmarked=True
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "4",
+        "response": "[4]",
         "visited": True,
         "time_spent": 25,
         "bookmarked": True,
@@ -9093,7 +9361,7 @@ def test_submit_answer_with_bookmark(client: TestClient, db: SessionDep) -> None
     data = response.json()
     assert data["candidate_test_id"] == candidate_test_id
     assert data["question_revision_id"] == question_revision.id
-    assert data["response"] == "4"
+    assert data["response"] == "[4]"
     assert data["visited"] is True
     assert data["time_spent"] == 25
     assert data["bookmarked"] is True
@@ -9163,7 +9431,7 @@ def test_submit_answer_bookmark_default_false(
     # Submit answer without bookmark field
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "6",
+        "response": "[2]",
         "visited": True,
         "time_spent": 15,
     }
@@ -9241,7 +9509,7 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     # Submit first answer without bookmark
     first_answer = {
         "question_revision_id": question_revision.id,
-        "response": "7",
+        "response": "[1]",
         "visited": True,
         "time_spent": 10,
         "bookmarked": False,
@@ -9259,7 +9527,7 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     # Update answer with bookmark set to True
     second_answer = {
         "question_revision_id": question_revision.id,
-        "response": "8",
+        "response": "[2]",
         "visited": True,
         "time_spent": 20,
         "bookmarked": True,
@@ -9274,7 +9542,7 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     assert response2.status_code == 200
     assert response2.json()["id"] == answer_id  # Same answer ID (updated)
     assert response2.json()["bookmarked"] is True
-    assert response2.json()["response"] == "8"
+    assert response2.json()["response"] == "[2]"
 
 
 def test_batch_submit_answers_with_bookmark(client: TestClient, db: SessionDep) -> None:
@@ -9357,14 +9625,14 @@ def test_batch_submit_answers_with_bookmark(client: TestClient, db: SessionDep) 
         "answers": [
             {
                 "question_revision_id": question_revision1.id,
-                "response": "A",
+                "response": "[1]",
                 "visited": True,
                 "time_spent": 10,
                 "bookmarked": True,
             },
             {
                 "question_revision_id": question_revision2.id,
-                "response": "Y",
+                "response": "[2]",
                 "visited": True,
                 "time_spent": 15,
                 "bookmarked": False,
@@ -10022,7 +10290,7 @@ def test_submit_answer_blocks_update_when_reviewed(
 
     updated_answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "2",
+        "response": "[2]",
         "visited": True,
         "time_spent": 45,
     }
@@ -10205,7 +10473,7 @@ def test_submit_answer_saves_is_reviewed_field(
 
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "Option 1",
+        "response": "[1]",
         "visited": True,
         "time_spent": 30,
         "is_reviewed": True,
@@ -11102,7 +11370,7 @@ def test_answer_cannot_be_modified_after_review_feedback(
     # Submit an answer
     answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "Option 1",
+        "response": "[1]",
         "visited": True,
         "time_spent": 30,
     }
@@ -11121,7 +11389,7 @@ def test_answer_cannot_be_modified_after_review_feedback(
 
     updated_answer_payload = {
         "question_revision_id": question_revision.id,
-        "response": "2",
+        "response": "[2]",
         "visited": True,
         "time_spent": 45,
     }

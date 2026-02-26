@@ -1,7 +1,9 @@
+import json
 import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, outerjoin, select
@@ -93,6 +95,42 @@ def is_candidate_test_expired(
         return True
 
     return False
+
+
+def validate_question_response_format(
+    response: Any, question_type: QuestionType
+) -> Any:
+    if response is None:
+        return None
+
+    if question_type not in (QuestionType.single_choice, QuestionType.multi_choice):
+        return response
+
+    parsed = json.loads(response)
+    if question_type == QuestionType.single_choice:
+        if (
+            not isinstance(parsed, list)
+            or len(parsed) != 1
+            or not all(isinstance(x, int) for x in parsed)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Response Format. Kindly submit _Single-choice question_ as list of length 1 (e.g., [1])",
+            )
+
+        return json.dumps(parsed)
+    elif question_type == QuestionType.multi_choice:
+        if (
+            not isinstance(parsed, list)
+            or not all(isinstance(x, int) for x in parsed)
+            or len(parsed) < 1
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])",
+            )
+
+        return json.dumps(parsed)
 
 
 def get_score_and_time(
@@ -421,6 +459,10 @@ def submit_answer_for_qr_candidate(
             response=answer_request.response,
         )
 
+    if question_revision:
+        answer_request.response = validate_question_response_format(
+            answer_request.response, question_revision.question_type
+        )
     # Check if answer already exists for this question
     existing_answer = session.exec(
         select(CandidateTestAnswer)
@@ -509,6 +551,10 @@ def submit_batch_answers_for_qr_candidate(
     results = []
     for answer in batch_request.answers:
         question_revision = question_revision_map.get(answer.question_revision_id)
+        if question_revision:
+            answer.response = validate_question_response_format(
+                answer.response, question_revision.question_type
+            )
         if not question_revision:
             raise HTTPException(
                 status_code=404,
