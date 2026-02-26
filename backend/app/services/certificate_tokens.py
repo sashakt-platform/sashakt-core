@@ -133,7 +133,9 @@ def resolve_form_response_values(
         elif field.field_type == FormFieldType.MULTI_SELECT:
             if isinstance(value, list) and field.options:
                 option_map = {opt["value"]: opt["label"] for opt in field.options}
-                resolved[field_name] = ", ".join(option_map.get(v, v) for v in value)
+                resolved[field_name] = ", ".join(
+                    str(option_map.get(v, v)) for v in value
+                )
             else:
                 resolved[field_name] = value
         else:

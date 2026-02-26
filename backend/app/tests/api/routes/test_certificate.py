@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
@@ -481,7 +483,7 @@ def test_get_certificate_tokens_unauthorized(
 
 
 def _create_form_with_fields(
-    db: SessionDep, organization_id: int, user_id: int, fields: list[dict]
+    db: SessionDep, organization_id: int, user_id: int, fields: list[dict[str, Any]]
 ) -> tuple[Form, list[FormField]]:
     """Helper to create a form with fields directly in DB."""
     form = Form(
@@ -513,6 +515,8 @@ def test_resolve_entity_field(
 ) -> None:
     """Test that entity field IDs are resolved to entity names."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     entity_type = EntityType(
         name="School",
@@ -545,6 +549,7 @@ def test_resolve_entity_field(
             },
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
@@ -560,6 +565,8 @@ def test_resolve_location_fields(
 ) -> None:
     """Test that state/district/block IDs are resolved to names."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     country = Country(name="India")
     db.add(country)
@@ -595,6 +602,7 @@ def test_resolve_location_fields(
             {"field_type": FormFieldType.BLOCK, "label": "Block", "name": "block"},
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
@@ -616,6 +624,8 @@ def test_resolve_select_radio_fields(
 ) -> None:
     """Test that select/radio option values are resolved to labels."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     form, _ = _create_form_with_fields(
         db,
@@ -642,6 +652,7 @@ def test_resolve_select_radio_fields(
             },
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
@@ -658,6 +669,8 @@ def test_resolve_multi_select_field(
 ) -> None:
     """Test that multi-select values are resolved to comma-joined labels."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     form, _ = _create_form_with_fields(
         db,
@@ -676,6 +689,7 @@ def test_resolve_multi_select_field(
             },
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
@@ -691,6 +705,8 @@ def test_resolve_text_fields_unchanged(
 ) -> None:
     """Test that text/email/phone fields pass through unchanged."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     form, _ = _create_form_with_fields(
         db,
@@ -714,6 +730,7 @@ def test_resolve_text_fields_unchanged(
             },
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
@@ -735,6 +752,8 @@ def test_resolve_missing_entity_graceful(
 ) -> None:
     """Test that a missing entity ID resolves to empty string."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     form, _ = _create_form_with_fields(
         db,
@@ -748,6 +767,7 @@ def test_resolve_missing_entity_graceful(
             },
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
@@ -763,6 +783,8 @@ def test_resolve_empty_responses(
 ) -> None:
     """Test that empty responses return empty dict."""
     user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
 
     form, _ = _create_form_with_fields(
         db,
@@ -776,6 +798,7 @@ def test_resolve_empty_responses(
             },
         ],
     )
+    assert form.id is not None
 
     resolved = resolve_form_response_values(
         form_id=form.id,
