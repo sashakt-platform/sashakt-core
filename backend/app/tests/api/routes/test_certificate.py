@@ -3,7 +3,11 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.certificate import Certificate
+from app.models.entity import Entity, EntityType
+from app.models.form import Form, FormField, FormFieldType
+from app.models.location import Block, Country, District, State
 from app.models.test import Test
+from app.services.certificate_tokens import resolve_form_response_values
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import get_current_user_data
 from app.tests.utils.utils import assert_paginated_response, random_lower_string
@@ -471,3 +475,312 @@ def test_get_certificate_tokens_unauthorized(
     )
 
     assert response.status_code == 401
+
+
+# ============== Token Resolution Tests ==============
+
+
+def _create_form_with_fields(
+    db: SessionDep, organization_id: int, user_id: int, fields: list[dict]
+) -> tuple[Form, list[FormField]]:
+    """Helper to create a form with fields directly in DB."""
+    form = Form(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    created_fields = []
+    for i, field_data in enumerate(fields):
+        field = FormField(
+            form_id=form.id,
+            order=i,
+            **field_data,
+        )
+        db.add(field)
+        db.commit()
+        db.refresh(field)
+        created_fields.append(field)
+
+    return form, created_fields
+
+
+def test_resolve_entity_field(
+    db: SessionDep,
+) -> None:
+    """Test that entity field IDs are resolved to entity names."""
+    user, organization = setup_user_organization(db)
+
+    entity_type = EntityType(
+        name="School",
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name="ABC Public School",
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.ENTITY,
+                "label": "School",
+                "name": "school",
+                "entity_type_id": entity_type.id,
+            },
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={"school": entity.id},
+        session=db,
+    )
+
+    assert resolved["school"] == "ABC Public School"
+
+
+def test_resolve_location_fields(
+    db: SessionDep,
+) -> None:
+    """Test that state/district/block IDs are resolved to names."""
+    user, organization = setup_user_organization(db)
+
+    country = Country(name="India")
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name="Maharashtra", country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name="Mumbai", state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    block = Block(name="Andheri", district_id=district.id)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {"field_type": FormFieldType.STATE, "label": "State", "name": "state"},
+            {
+                "field_type": FormFieldType.DISTRICT,
+                "label": "District",
+                "name": "district",
+            },
+            {"field_type": FormFieldType.BLOCK, "label": "Block", "name": "block"},
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={
+            "state": state.id,
+            "district": district.id,
+            "block": block.id,
+        },
+        session=db,
+    )
+
+    assert resolved["state"] == "Maharashtra"
+    assert resolved["district"] == "Mumbai"
+    assert resolved["block"] == "Andheri"
+
+
+def test_resolve_select_radio_fields(
+    db: SessionDep,
+) -> None:
+    """Test that select/radio option values are resolved to labels."""
+    user, organization = setup_user_organization(db)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.SELECT,
+                "label": "Gender",
+                "name": "gender",
+                "options": [
+                    {"id": 1, "label": "Male", "value": "male"},
+                    {"id": 2, "label": "Female", "value": "female"},
+                ],
+            },
+            {
+                "field_type": FormFieldType.RADIO,
+                "label": "Experience",
+                "name": "experience",
+                "options": [
+                    {"id": 1, "label": "0-2 Years", "value": "junior"},
+                    {"id": 2, "label": "3-5 Years", "value": "mid"},
+                ],
+            },
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={"gender": "male", "experience": "mid"},
+        session=db,
+    )
+
+    assert resolved["gender"] == "Male"
+    assert resolved["experience"] == "3-5 Years"
+
+
+def test_resolve_multi_select_field(
+    db: SessionDep,
+) -> None:
+    """Test that multi-select values are resolved to comma-joined labels."""
+    user, organization = setup_user_organization(db)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.MULTI_SELECT,
+                "label": "Subjects",
+                "name": "subjects",
+                "options": [
+                    {"id": 1, "label": "Mathematics", "value": "math"},
+                    {"id": 2, "label": "Science", "value": "science"},
+                    {"id": 3, "label": "English", "value": "english"},
+                ],
+            },
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={"subjects": ["math", "english"]},
+        session=db,
+    )
+
+    assert resolved["subjects"] == "Mathematics, English"
+
+
+def test_resolve_text_fields_unchanged(
+    db: SessionDep,
+) -> None:
+    """Test that text/email/phone fields pass through unchanged."""
+    user, organization = setup_user_organization(db)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.FULL_NAME,
+                "label": "Full Name",
+                "name": "full_name",
+            },
+            {
+                "field_type": FormFieldType.EMAIL,
+                "label": "Email",
+                "name": "email",
+            },
+            {
+                "field_type": FormFieldType.TEXT,
+                "label": "Notes",
+                "name": "notes",
+            },
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={
+            "full_name": "John Doe",
+            "email": "john@example.com",
+            "notes": "Some notes",
+        },
+        session=db,
+    )
+
+    assert resolved["full_name"] == "John Doe"
+    assert resolved["email"] == "john@example.com"
+    assert resolved["notes"] == "Some notes"
+
+
+def test_resolve_missing_entity_graceful(
+    db: SessionDep,
+) -> None:
+    """Test that a missing entity ID resolves to empty string."""
+    user, organization = setup_user_organization(db)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.ENTITY,
+                "label": "School",
+                "name": "school",
+            },
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={"school": 99999},
+        session=db,
+    )
+
+    assert resolved["school"] == ""
+
+
+def test_resolve_empty_responses(
+    db: SessionDep,
+) -> None:
+    """Test that empty responses return empty dict."""
+    user, organization = setup_user_organization(db)
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.TEXT,
+                "label": "Name",
+                "name": "name",
+            },
+        ],
+    )
+
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={},
+        session=db,
+    )
+
+    assert resolved == {}
