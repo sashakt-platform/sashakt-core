@@ -49,6 +49,7 @@ from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.certificate_tokens import resolve_form_response_values
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -1383,7 +1384,11 @@ def get_test_result(
                     )
                 ).first()
                 if form_response and form_response.responses:
-                    form_response_data = form_response.responses
+                    form_response_data = resolve_form_response_values(
+                        form_id=test.form_id,
+                        responses=form_response.responses,
+                        session=session,
+                    )
 
             # Save certificate data snapshot (fixed tokens + form field values)
             candidate_test.certificate_data = {
