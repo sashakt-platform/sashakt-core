@@ -775,7 +775,7 @@ def test_resolve_missing_entity_graceful(
         session=db,
     )
 
-    assert resolved["school"] == ""
+    assert resolved["school"] == "N/A"
 
 
 def test_resolve_empty_responses(
@@ -806,4 +806,49 @@ def test_resolve_empty_responses(
         session=db,
     )
 
-    assert resolved == {}
+    # Missing fields default to empty string so {{name}} doesn't appear on certificate
+    assert resolved == {"name": "N/A"}
+
+
+def test_resolve_unanswered_fields_default_to_empty(
+    db: SessionDep,
+) -> None:
+    """Test that form fields not present in responses default to empty string."""
+    user, organization = setup_user_organization(db)
+    assert user.id is not None
+    assert organization.id is not None
+
+    form, _ = _create_form_with_fields(
+        db,
+        organization.id,
+        user.id,
+        [
+            {
+                "field_type": FormFieldType.FULL_NAME,
+                "label": "Full Name",
+                "name": "full_name",
+            },
+            {
+                "field_type": FormFieldType.EMAIL,
+                "label": "Email",
+                "name": "email",
+            },
+            {
+                "field_type": FormFieldType.TEXT,
+                "label": "Phone",
+                "name": "phone",
+            },
+        ],
+    )
+    assert form.id is not None
+
+    # User only filled in full_name, skipped email and phone
+    resolved = resolve_form_response_values(
+        form_id=form.id,
+        responses={"full_name": "John Doe"},
+        session=db,
+    )
+
+    assert resolved["full_name"] == "John Doe"
+    assert resolved["email"] == "N/A"
+    assert resolved["phone"] == "N/A"

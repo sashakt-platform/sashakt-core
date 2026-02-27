@@ -59,10 +59,9 @@ def resolve_form_response_values(
     For select/radio fields, resolves option values to labels.
     For multi_select fields, resolves values to comma-joined labels.
     Other field types are passed through unchanged.
+    Fields not present in responses default to empty string so that
+    unreplaced {{token}} placeholders don't appear on certificates.
     """
-    if not responses:
-        return {}
-
     # Fetch form fields to determine field types
     form_fields = session.exec(
         select(FormField).where(FormField.form_id == form_id)
@@ -107,8 +106,8 @@ def resolve_form_response_values(
         ).all()
         name_lookups[field_type] = {row[0]: row[1] for row in rows}
 
-    # Build resolved dict
-    resolved: dict[str, Any] = {}
+    # Build resolved dict, defaulting all form fields to "N/A"
+    resolved: dict[str, Any] = {field.name: "N/A" for field in form_fields}
     for field_name, value in responses.items():
         field = field_map.get(field_name)
         if not field:
@@ -119,7 +118,7 @@ def resolve_form_response_values(
         lookup = name_lookups.get(field.field_type)
         if lookup is not None:
             try:
-                resolved[field_name] = lookup.get(int(value), "")
+                resolved[field_name] = lookup.get(int(value), "N/A")
             except (TypeError, ValueError):
                 resolved[field_name] = value
         # Select/radio: resolve option value to label
