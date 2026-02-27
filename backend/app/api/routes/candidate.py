@@ -1377,6 +1377,7 @@ def get_test_result(
             # Get form response values if available
             form_response_data: dict[str, Any] = {}
             if test.form_id:
+                raw_responses: dict[str, Any] = {}
                 form_response = session.exec(
                     select(FormResponse).where(
                         FormResponse.candidate_test_id == candidate_test.id,
@@ -1384,11 +1385,13 @@ def get_test_result(
                     )
                 ).first()
                 if form_response and form_response.responses:
-                    form_response_data = resolve_form_response_values(
-                        form_id=test.form_id,
-                        responses=form_response.responses,
-                        session=session,
-                    )
+                    raw_responses = form_response.responses
+                # Always resolve so unanswered fields default to "N/A"
+                form_response_data = resolve_form_response_values(
+                    form_id=test.form_id,
+                    responses=raw_responses,
+                    session=session,
+                )
 
             # Save certificate data snapshot (fixed tokens + form field values)
             candidate_test.certificate_data = {
