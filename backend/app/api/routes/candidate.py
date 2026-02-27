@@ -50,6 +50,7 @@ from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.certificate_tokens import resolve_form_response_values
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
 router_candidate_test = APIRouter(prefix="/candidate_test", tags=["Candidate Test"])
@@ -1404,14 +1405,6 @@ def get_test_result(
             # Generate new token and save certificate data snapshot
             token = generate_certificate_token()
 
-            # Get candidate for name
-            candidate = session.get(Candidate, candidate_test.candidate_id)
-
-            # Since all users are anonymous, use partial UUID
-            candidate_name = (
-                f"Candidate {str(candidate.identity)[:8]}" if candidate else "Candidate"
-            )
-
             # Format score string from already-calculated values
             if marks_maximum > 0:
                 score_percentage = marks_obtained / marks_maximum * 100
@@ -1426,13 +1419,34 @@ def get_test_result(
                 else "N/A"
             )
 
-            # Save certificate data snapshot
+            # Get form response values if available
+            form_response_data: dict[str, Any] = {}
+            if test.form_id:
+                raw_responses: dict[str, Any] = {}
+                form_response = session.exec(
+                    select(FormResponse).where(
+                        FormResponse.candidate_test_id == candidate_test.id,
+                        FormResponse.form_id == test.form_id,
+                    )
+                ).first()
+                if form_response and form_response.responses:
+                    raw_responses = form_response.responses
+                # Always resolve so unanswered fields default to "N/A"
+                form_response_data = resolve_form_response_values(
+                    form_id=test.form_id,
+                    responses=raw_responses,
+                    session=session,
+                )
+
+            # Save certificate data snapshot (fixed tokens + form field values)
             candidate_test.certificate_data = {
                 "token": token,
-                "candidate_name": candidate_name,
+                # Fixed tokens
                 "test_name": test.name,
                 "score": score_str,
                 "completion_date": completion_date,
+                # Dynamic tokens from form response
+                **form_response_data,
             }
             session.add(candidate_test)
             session.commit()
