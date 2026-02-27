@@ -3,14 +3,20 @@ import csv
 from io import StringIO
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
 from sqlmodel import and_, col, func, select
 
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
-from app.api.routes.utils import clean_value
+from app.api.deps import (
+    CurrentUser,
+    OptionalCurrentUser,
+    Pagination,
+    SessionDep,
+    permission_dependency,
+)
+from app.api.routes.utils import clean_value, get_test_location_scope
 from app.core.sorting import (
     EntitySortConfig,
     SortingParams,
@@ -28,9 +34,11 @@ from app.models import (
     EntityUpdate,
     Message,
     Organization,
+    Test,
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.entity import EntityBulkUploadResponse
+from app.models.form import FormResponse
 from app.models.location import Block, District, State
 from app.models.user import User
 
@@ -62,18 +70,22 @@ def transform_entity_types_to_public(
 
 
 def transform_entities_to_public(
-    entities: list[Entity] | Any, current_user: CurrentUser
+    entities: list[Entity] | Any,
+    current_user: OptionalCurrentUser,
+    organization_id: int | None = None,
 ) -> list[EntityPublic]:
     result: list[EntityPublic] = []
     entity_list: list[Entity] = (
         entities if isinstance(entities, list) else list(entities)
     )
+    org_id = current_user.organization_id if current_user else organization_id
 
     for entity in entity_list:
         entity_type: EntityType | None = (
             entity.entity_type
             if entity.entity_type
-            and entity.entity_type.organization_id == current_user.organization_id
+            and org_id
+            and entity.entity_type.organization_id == org_id
             else None
         )
 
@@ -146,7 +158,7 @@ def get_entitytype(
     )
     if name:
         query = query.where(
-            func.trim(func.lower(EntityType.name)).like(f"%{name.strip().lower()}%")
+            func.lower(EntityType.name).contains(name.strip().lower(), autoescape=True)
         )
 
     entity_types: Page[EntityTypePublic] = paginate(
@@ -217,7 +229,7 @@ def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
     if has_active_entities:
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete EntityType as it has associated Entities",
+            detail="Cannot delete Entity as it has associated records.",
         )
 
     session.delete(entitytype)
@@ -291,21 +303,35 @@ def create_entity(
 @router_entity.get(
     "/",
     response_model=Page[EntityPublic],
-    dependencies=[Depends(permission_dependency("read_entity"))],
 )
 def get_entities(
     session: SessionDep,
-    current_user: CurrentUser,
+    current_user: OptionalCurrentUser,
     sorting: EntitySortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
     entity_type_id: int | None = None,
+    test_id: int | None = Query(None),
 ) -> Page[EntityPublic]:
+    # Determine organization scope
+    org_id: int | None = None
+    if current_user:
+        org_id = current_user.organization_id
+    elif test_id is not None:
+        test = session.get(Test, test_id)
+        if test:
+            org_id = test.organization_id
+    if org_id is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required or test_id must be provided",
+        )
+
     query = (
         select(Entity)
         .where(
             Entity.entity_type.has(  # type: ignore[attr-defined]
-                EntityType.organization_id == current_user.organization_id
+                EntityType.organization_id == org_id
             )
         )
         .options(
@@ -318,10 +344,18 @@ def get_entities(
 
     if name:
         query = query.where(
-            func.trim(func.lower(Entity.name)).like(f"%{name.strip().lower()}%")
+            func.lower(Entity.name).contains(name.strip().lower(), autoescape=True)
         )
     if entity_type_id:
         query = query.where(Entity.entity_type_id == entity_type_id)
+
+    # Filter by test location scope
+    if test_id is not None:
+        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
+        if test_district_ids:
+            query = query.where(col(Entity.district_id).in_(test_district_ids))
+        elif test_state_ids:
+            query = query.where(col(Entity.state_id).in_(test_state_ids))
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none("name", SortOrder.ASC)
@@ -331,7 +365,9 @@ def get_entities(
         session,
         query,
         params,
-        transformer=lambda items: transform_entities_to_public(items, current_user),
+        transformer=lambda items: transform_entities_to_public(
+            items, current_user, organization_id=org_id
+        ),
     )
 
     return entities
@@ -432,10 +468,19 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    attempted_entity_exists = session.exec(
+    # Check form_response
+    form_response_ref = session.exec(
+        select(FormResponse).where(
+            FormResponse.responses["entity_id"].as_string() == str(entity.id)
+        )
+    ).first()
+
+    # Check legacy candidate_test_profile table
+    legacy_ref = session.exec(
         select(CandidateTestProfile).where(CandidateTestProfile.entity_id == entity.id)
     ).first()
-    if attempted_entity_exists:
+
+    if form_response_ref or legacy_ref:
         raise HTTPException(
             status_code=400,
             detail="Cannot delete entity because it is referenced in Candidate Profile",

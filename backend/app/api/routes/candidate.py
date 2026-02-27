@@ -1,7 +1,9 @@
+import json
 import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, outerjoin, select
@@ -36,13 +38,13 @@ from app.models import (
 )
 from app.models.candidate import (
     CandidateReviewResponse,
-    CandidateTestProfile,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
     StartTestResponse,
     TestStatusSummary,
 )
+from app.models.form import FormResponse
 from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
@@ -93,6 +95,42 @@ def is_candidate_test_expired(
         return True
 
     return False
+
+
+def validate_question_response_format(
+    response: Any, question_type: QuestionType
+) -> Any:
+    if response is None:
+        return None
+
+    if question_type not in (QuestionType.single_choice, QuestionType.multi_choice):
+        return response
+
+    parsed = json.loads(response)
+    if question_type == QuestionType.single_choice:
+        if (
+            not isinstance(parsed, list)
+            or len(parsed) != 1
+            or not all(isinstance(x, int) for x in parsed)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Response Format. Kindly submit _Single-choice question_ as list of length 1 (e.g., [1])",
+            )
+
+        return json.dumps(parsed)
+    elif question_type == QuestionType.multi_choice:
+        if (
+            not isinstance(parsed, list)
+            or not all(isinstance(x, int) for x in parsed)
+            or len(parsed) < 1
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid Response Format. Kindly submit _Multi-choice question_ as a list (e.g., [1, 2])",
+            )
+
+        return json.dumps(parsed)
 
 
 def get_score_and_time(
@@ -352,15 +390,15 @@ def start_test_for_candidate(
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
-    if (
-        start_test_request.candidate_profile
-        and start_test_request.candidate_profile.entity_id
-    ):
-        candidate_test_profile = CandidateTestProfile(
+
+    # Handle form responses
+    if start_test_request.form_responses and test.form_id:
+        form_response = FormResponse(
             candidate_test_id=candidate_test.id,
-            entity_id=start_test_request.candidate_profile.entity_id,
+            form_id=test.form_id,
+            responses=start_test_request.form_responses,
         )
-        session.add(candidate_test_profile)
+        session.add(form_response)
         session.commit()
 
     return StartTestResponse(
@@ -421,6 +459,10 @@ def submit_answer_for_qr_candidate(
             response=answer_request.response,
         )
 
+    if question_revision:
+        answer_request.response = validate_question_response_format(
+            answer_request.response, question_revision.question_type
+        )
     # Check if answer already exists for this question
     existing_answer = session.exec(
         select(CandidateTestAnswer)
@@ -509,6 +551,10 @@ def submit_batch_answers_for_qr_candidate(
     results = []
     for answer in batch_request.answers:
         question_revision = question_revision_map.get(answer.question_revision_id)
+        if question_revision:
+            answer.response = validate_question_response_format(
+                answer.response, question_revision.question_type
+            )
         if not question_revision:
             raise HTTPException(
                 status_code=404,
@@ -776,15 +822,17 @@ def get_test_questions(
             question_text=None if hide_question_text else q.question_text,
             instructions=q.instructions,
             question_type=q.question_type,
-            options=[
-                {
-                    "id": getattr(opt, "id", opt.get("id")),
-                    "key": getattr(opt, "key", opt.get("key")),
-                }
-                for opt in (q.options or [])
-            ]
-            if hide_question_text and q.options
-            else q.options,
+            options=(
+                [
+                    {
+                        "id": getattr(opt, "id", opt.get("id")),
+                        "key": getattr(opt, "key", opt.get("key")),
+                    }
+                    for opt in (q.options or [])
+                ]
+                if hide_question_text and q.options
+                else q.options
+            ),
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
             media=q.media,
@@ -1236,29 +1284,22 @@ def get_test_result(
     marks_maximum = 0.0
     marking_scheme = None
 
-    def set_correct() -> None:
-        nonlocal correct, marks_obtained
-        correct += 1
-        if marking_scheme:
-            marks_obtained += marking_scheme["correct"]
-
-    def set_incorrect() -> None:
-        nonlocal incorrect, marks_obtained
-        incorrect += 1
-        if marking_scheme:
-            marks_obtained += marking_scheme["wrong"]
-
     for revision, answer in joined_data:
         if test.marks_level == "test":
             marking_scheme = test.marking_scheme
         elif test.marks_level == "question":
             marking_scheme = revision.marking_scheme
+        else:
+            marking_scheme = None
 
-        if marking_scheme:
-            marks_maximum += marking_scheme["correct"]
+        correct_mark = marking_scheme["correct"] if marking_scheme else 0
+        wrong_mark = marking_scheme["wrong"] if marking_scheme else 0
+        skipped_mark = marking_scheme["skipped"] if marking_scheme else 0
+
+        marks_maximum += correct_mark
+
         if answer is None or not answer.response:
-            if marking_scheme:
-                marks_obtained += marking_scheme["skipped"]
+            marks_obtained += skipped_mark
             if revision.is_mandatory:
                 mandatory_not_attempted += 1
             else:
@@ -1266,20 +1307,58 @@ def get_test_result(
         else:
             if revision.question_type == QuestionType.subjective:
                 is_attempted = bool(answer.response)
-
                 if is_attempted:
-                    set_correct()
-
+                    correct += 1
+                    marks_obtained += correct_mark
                 else:
-                    set_incorrect()
-            elif revision.question_type.value in ["single-choice", "multi-choice"]:
-                response_list = convert_to_list(answer.response)
-                correct_list = convert_to_list(revision.correct_answer)
+                    incorrect += 1
+                    marks_obtained += wrong_mark
 
-                if set(response_list) == set(correct_list):
-                    set_correct()
+            elif revision.question_type is QuestionType.single_choice:
+                response_set = set(convert_to_list(answer.response))
+                correct_set = set(convert_to_list(revision.correct_answer))
+                if response_set == correct_set:
+                    marks_obtained += correct_mark
+                    correct += 1
                 else:
-                    set_incorrect()
+                    marks_obtained += wrong_mark
+                    incorrect += 1
+
+            elif revision.question_type.value == "multi-choice":
+                response_set = set(convert_to_list(answer.response))
+                correct_set = set(convert_to_list(revision.correct_answer))
+                selected_correct = len(response_set & correct_set)
+                selected_wrong = len(response_set - correct_set)
+
+                whole_correct = (
+                    selected_correct == len(correct_set) and selected_wrong == 0
+                )
+                if whole_correct:
+                    marks_obtained += correct_mark
+                    correct += 1
+                else:
+                    if marking_scheme and marking_scheme.get("partial"):
+                        partial_rule = marking_scheme["partial"]
+
+                        if selected_wrong == 0 and selected_correct > 0:
+                            partial = 0.0
+
+                            for condition in partial_rule["correct_answers"]:
+                                if (
+                                    condition["num_correct_selected"]
+                                    == selected_correct
+                                ):
+                                    partial = condition["marks"]
+                                    break
+
+                            marks_obtained += partial
+                            correct += 1
+                        else:
+                            marks_obtained += wrong_mark
+                            incorrect += 1
+                    else:
+                        marks_obtained += wrong_mark
+                        incorrect += 1
 
             elif revision.question_type.value in [
                 "numerical-integer",
@@ -1288,7 +1367,8 @@ def get_test_result(
                 try:
                     user_value = float(answer.response)
                 except (TypeError, ValueError):
-                    set_incorrect()
+                    incorrect += 1
+                    marks_obtained += wrong_mark
                     continue
 
                 if isinstance(revision.correct_answer, int | float):
@@ -1304,9 +1384,11 @@ def get_test_result(
                     is_correct = abs(user_value - correct_value) <= 0.5
 
                 if is_correct:
-                    set_correct()
+                    correct += 1
+                    marks_obtained += correct_mark
                 else:
-                    set_incorrect()
+                    incorrect += 1
+                    marks_obtained += wrong_mark
 
     total_questions = len(candidate_test.question_revision_ids)
 

@@ -10,8 +10,9 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.candidate import Candidate, CandidateTest
 from app.models.entity import Entity, EntityType
+from app.models.form import Form, FormField
 from app.models.location import Block, Country, District, State
-from app.models.test import Test
+from app.models.test import Test, TestDistrict
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import (
@@ -393,8 +394,7 @@ def test_delete_entitytype_with_associated_entities(
 
     assert response.status_code == 400
     assert (
-        "Cannot delete EntityType as it has associated Entities"
-        in response_data["detail"]
+        "Cannot delete Entity as it has associated records." in response_data["detail"]
     )
 
 
@@ -1309,6 +1309,26 @@ def test_delete_linked_entity_should_fail(
     db.commit()
     db.refresh(entity)
 
+    # Create a form with an entity field
+    form = Form(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    form_field = FormField(
+        form_id=form.id,
+        field_type="entity",
+        label="Entity",
+        name="entity_id",
+        order=1,
+    )
+    db.add(form_field)
+    db.commit()
+
     test = Test(
         name=random_lower_string(),
         description=random_lower_string(),
@@ -1317,6 +1337,7 @@ def test_delete_linked_entity_should_fail(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
+        form_id=form.id,
     )
     db.add(test)
     db.commit()
@@ -1325,7 +1346,7 @@ def test_delete_linked_entity_should_fail(
     payload = {
         "test_id": test.id,
         "device_info": "example",
-        "candidate_profile": {"entity_id": entity.id},
+        "form_responses": {"entity_id": entity.id},
     }
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
@@ -2257,3 +2278,139 @@ def test_sort_entity_by_state_district_block(
     assert block_names == sorted(
         [block_a_name, block_b_name, block_c_name], reverse=True
     )
+
+
+def test_get_entities_filtered_by_test_id(client: TestClient, db: SessionDep) -> None:
+    """Entities are filtered by test's district assignments."""
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), state_id=state.id)
+    district_b = District(name=random_lower_string(), state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity_a = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+        district_id=district_a.id,
+    )
+    entity_b = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+        district_id=district_b.id,
+    )
+    db.add_all([entity_a, entity_b])
+    db.commit()
+    db.refresh(entity_a)
+    db.refresh(entity_b)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?test_id={test.id}",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert entity_a.id in returned_ids
+    assert entity_b.id not in returned_ids
+
+
+def test_get_entities_by_test_id_no_auth(client: TestClient, db: SessionDep) -> None:
+    """Entity endpoint works without auth when test_id is provided."""
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+        district_id=district.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestDistrict(test_id=test.id, district_id=district.id))
+    db.commit()
+
+    # Call without auth headers
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_id={test.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert any(item["id"] == entity.id for item in data["items"])
+
+
+def test_get_entities_no_auth_no_test_id(
+    client: TestClient,
+) -> None:
+    """Entity endpoint returns 401 without auth and without test_id."""
+    response = client.get(f"{settings.API_V1_STR}/entity/")
+    assert response.status_code == 401

@@ -12,8 +12,9 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
 from app.models.role import Role
+from app.models.test import Test, TestDistrict, TestState
 from app.tests.utils.organization import create_random_organization
-from app.tests.utils.user import authentication_token_from_email
+from app.tests.utils.user import authentication_token_from_email, create_random_user
 from app.tests.utils.utils import assert_paginated_response
 
 from ...utils.utils import random_email, random_lower_string
@@ -1532,3 +1533,221 @@ Block X,district_cc,Andhra Pradesh
     finally:
         if os.path.exists(temporary_file_path):
             os.unlink(temporary_file_path)
+
+
+def test_get_states_filtered_by_test_id(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), country_id=country.id)
+    state_b = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Assign only state_a to the test
+    db.add(TestState(test_id=test.id, state_id=state_a.id))
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?test_id={test.id}&country={country.id}"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert state_a.id in returned_ids
+    assert state_b.id not in returned_ids
+
+
+def test_get_states_filtered_by_test_districts(
+    client: TestClient, db: SessionDep
+) -> None:
+    """When test has districts but no states, derive states from districts."""
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), country_id=country.id)
+    state_b = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    district_a = District(name=random_lower_string(), state_id=state_a.id)
+    db.add(district_a)
+    db.commit()
+    db.refresh(district_a)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Assign district in state_a to test (no explicit state assignment)
+    db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/location/state/?test_id={test.id}&country={country.id}"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert state_a.id in returned_ids
+    assert state_b.id not in returned_ids
+
+
+def test_get_districts_filtered_by_test_id(client: TestClient, db: SessionDep) -> None:
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), state_id=state.id)
+    district_b = District(name=random_lower_string(), state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/location/district/?test_id={test.id}")
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert district_a.id in returned_ids
+    assert district_b.id not in returned_ids
+
+
+def test_get_districts_filtered_by_test_state(
+    client: TestClient, db: SessionDep
+) -> None:
+    """When test has states only, return districts within those states."""
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), country_id=country.id)
+    state_b = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    district_a = District(name=random_lower_string(), state_id=state_a.id)
+    district_b = District(name=random_lower_string(), state_id=state_b.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestState(test_id=test.id, state_id=state_a.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/location/district/?test_id={test.id}")
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert district_a.id in returned_ids
+    assert district_b.id not in returned_ids
+
+
+def test_get_blocks_filtered_by_test_districts(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), state_id=state.id)
+    district_b = District(name=random_lower_string(), state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    block_a = Block(name=random_lower_string(), district_id=district_a.id)
+    block_b = Block(name=random_lower_string(), district_id=district_b.id)
+    db.add_all([block_a, block_b])
+    db.commit()
+    db.refresh(block_a)
+    db.refresh(block_b)
+
+    test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/location/block/?test_id={test.id}")
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert block_a.id in returned_ids
+    assert block_b.id not in returned_ids
