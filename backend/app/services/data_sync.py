@@ -197,7 +197,8 @@ class DataSyncService:
         self, organization_id: int
     ) -> dict[str, dict[str, dict[str, list[str]]]]:
         """Upgrade BigQuery schemas for an organization's providers.
-        Returns dict of provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}."""
+        Returns dict of provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}.
+        """
         org_providers = self.get_organization_providers(organization_id)
         results: dict[str, dict[str, dict[str, list[str]]]] = {}
 
@@ -208,11 +209,15 @@ class DataSyncService:
                 continue
 
             provider_key = f"org_{organization_id}_{org_provider.provider.name}"
-            decrypted_config = provider_config_service.get_config_for_use(
-                org_provider.config_json
-            )
-            bigquery_service = BigQueryService(organization_id, decrypted_config)
-            results[provider_key] = bigquery_service.upgrade_schemas()
+            try:
+                decrypted_config = provider_config_service.get_config_for_use(
+                    org_provider.config_json
+                )
+                bigquery_service = BigQueryService(organization_id, decrypted_config)
+                results[provider_key] = bigquery_service.upgrade_schemas()
+            except Exception as e:
+                logger.error(f"Schema upgrade failed for {provider_key}: {e}")
+                results[provider_key] = {"error": {"message": [str(e)]}}
 
         return results
 
@@ -220,7 +225,8 @@ class DataSyncService:
         self,
     ) -> dict[int, dict[str, dict[str, dict[str, list[str]]]]]:
         """Upgrade BigQuery schemas for all organizations.
-        Returns dict of org_id -> {provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}}."""
+        Returns dict of org_id -> {provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}}.
+        """
         results: dict[int, dict[str, dict[str, dict[str, list[str]]]]] = {}
 
         with Session(engine) as session:

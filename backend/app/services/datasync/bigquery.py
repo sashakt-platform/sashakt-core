@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
@@ -730,7 +731,7 @@ class BigQueryService:
             # Check if the table exists
             try:
                 bq_table = client.get_table(table_ref)
-            except Exception:
+            except NotFound:
                 # Table doesn't exist yet — it will be created on next sync
                 continue
 
@@ -749,7 +750,7 @@ class BigQueryService:
                     # Add missing column
                     alter_sql = (
                         f"ALTER TABLE `{dataset_id}.{table_name}` "
-                        f"ADD COLUMN {col_name} {col_type}"
+                        f"ADD COLUMN `{col_name}` {col_type}"
                     )
                     query_job = client.query(alter_sql)
                     query_job.result()
@@ -761,7 +762,7 @@ class BigQueryService:
                     # Relax REQUIRED -> NULLABLE
                     alter_sql = (
                         f"ALTER TABLE `{dataset_id}.{table_name}` "
-                        f"ALTER COLUMN {col_name} DROP NOT NULL"
+                        f"ALTER COLUMN `{col_name}` DROP NOT NULL"
                     )
                     query_job = client.query(alter_sql)
                     query_job.result()
