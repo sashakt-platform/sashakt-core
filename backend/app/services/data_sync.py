@@ -30,7 +30,7 @@ from app.models import (
     User,
 )
 from app.models.candidate import CandidateTestProfile
-from app.models.form import Form, FormResponse
+from app.models.form import Form, FormField, FormResponse
 from app.models.provider import ProviderType
 from app.models.test import MarksLevelEnum, TestDistrict, TestQuestion, TestTag
 from app.models.user import UserState
@@ -305,6 +305,12 @@ class DataSyncService:
                 )
             )
             data["form_responses"] = self._extract_form_responses_data(
+                session, organization_id, incremental
+            )
+            data["forms"] = self._extract_forms_data(
+                session, organization_id, incremental
+            )
+            data["form_fields"] = self._extract_form_fields_data(
                 session, organization_id, incremental
             )
             data["states"] = self._extract_states_data(
@@ -672,6 +678,43 @@ class DataSyncService:
 
         results = session.exec(statement).all()
         return [self._serialize_form_response(fr, org_id) for fr, org_id in results]
+
+    def _extract_forms_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        statement = select(Form).where(Form.organization_id == organization_id)
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "forms"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(Form.modified_date > table_last_sync)  # type: ignore[operator]
+
+        forms = session.exec(statement).all()
+        return [self._serialize_form(form) for form in forms]
+
+    def _extract_form_fields_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter form_fields by organization through form.organization_id
+        statement = (
+            select(FormField)
+            .join(Form, FormField.form_id == Form.id)  # type: ignore[arg-type]
+            .where(Form.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "form_fields"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(
+                    FormField.modified_date > table_last_sync  # type: ignore[operator]
+                )
+
+        form_fields = session.exec(statement).all()
+        return [self._serialize_form_field(ff) for ff in form_fields]
 
     def _extract_test_questions_data(
         self, session: Session, organization_id: int, incremental: bool
@@ -1065,6 +1108,49 @@ class DataSyncService:
             "created_date": (
                 form_response.created_date.isoformat()
                 if form_response.created_date
+                else None
+            ),
+        }
+
+    def _serialize_form(self, form: Form) -> dict[str, Any]:
+        return {
+            "id": form.id,
+            "name": form.name,
+            "description": form.description,
+            "is_active": form.is_active,
+            "organization_id": form.organization_id,
+            "created_by_id": form.created_by_id,
+            "created_date": (
+                form.created_date.isoformat() if form.created_date else None
+            ),
+            "modified_date": (
+                form.modified_date.isoformat() if form.modified_date else None
+            ),
+        }
+
+    def _serialize_form_field(self, form_field: FormField) -> dict[str, Any]:
+        return {
+            "id": form_field.id,
+            "form_id": form_field.form_id,
+            "field_type": (
+                form_field.field_type.value if form_field.field_type else None
+            ),
+            "label": form_field.label,
+            "name": form_field.name,
+            "placeholder": form_field.placeholder,
+            "help_text": form_field.help_text,
+            "is_required": form_field.is_required,
+            "order": form_field.order,
+            "options": form_field.options,
+            "validation": form_field.validation,
+            "default_value": form_field.default_value,
+            "entity_type_id": form_field.entity_type_id,
+            "created_date": (
+                form_field.created_date.isoformat() if form_field.created_date else None
+            ),
+            "modified_date": (
+                form_field.modified_date.isoformat()
+                if form_field.modified_date
                 else None
             ),
         }
