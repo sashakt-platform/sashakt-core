@@ -4,11 +4,14 @@ BigQuery Data Export Script
 
 This script exports data from PostgreSQL to BigQuery for one or all organizations.
 It can perform full or incremental syncs based on the options provided.
+It also supports upgrading BigQuery table schemas to add missing columns.
 
 Usage:
     python export_bigquery.py --org-id 1 --incremental
     python export_bigquery.py --all-orgs --full-sync
     python export_bigquery.py --test-connections
+    python export_bigquery.py --upgrade-schema --org-id 1
+    python export_bigquery.py --upgrade-schema --all-orgs
 """
 
 import argparse
@@ -321,6 +324,35 @@ def print_export_summary(results: dict[str, Any]) -> None:
         print(f"Sync Time: {result.sync_timestamp}")
 
 
+def _log_upgrade_results(
+    results: dict[int, dict[str, dict[str, dict[str, list[str]]]]],
+) -> None:
+    """Log the results of a schema upgrade."""
+    if not results:
+        logger.info("No schema changes needed for any organization.")
+        return
+
+    for org_id, provider_results in results.items():
+        for provider_key, table_changes in provider_results.items():
+            if not table_changes:
+                logger.info(
+                    f"Organization {org_id} ({provider_key}): all schemas up to date"
+                )
+            else:
+                for table_name, change_details in table_changes.items():
+                    added = change_details.get("added", [])
+                    relaxed = change_details.get("relaxed", [])
+                    parts = []
+                    if added:
+                        parts.append(f"added columns: {', '.join(added)}")
+                    if relaxed:
+                        parts.append(f"relaxed to NULLABLE: {', '.join(relaxed)}")
+                    logger.info(
+                        f"Organization {org_id} ({provider_key}): "
+                        f"{table_name} - {'; '.join(parts)}"
+                    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Export Sashakt data to BigQuery",
@@ -330,6 +362,8 @@ Examples:
   python export_bigquery.py --org-id 1 --incremental
   python export_bigquery.py --all-orgs --full-sync
   python export_bigquery.py --test-connections
+  python export_bigquery.py --upgrade-schema --org-id 1
+  python export_bigquery.py --upgrade-schema --all-orgs
         """,
     )
 
@@ -357,6 +391,13 @@ Examples:
         "--full-sync", action="store_true", help="Perform full sync (replaces all data)"
     )
 
+    # Schema upgrade option
+    parser.add_argument(
+        "--upgrade-schema",
+        action="store_true",
+        help="Upgrade BigQuery table schemas (add missing columns, relax REQUIRED to NULLABLE) instead of syncing data",
+    )
+
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
@@ -369,6 +410,20 @@ Examples:
     # Handle different execution modes
     if args.test_connections:
         test_all_connections()
+    elif args.upgrade_schema:
+        if args.org_id:
+            logger.info(f"Upgrading BigQuery schemas for organization {args.org_id}...")
+            upgrade_results = data_sync_service.upgrade_organization_schemas(
+                args.org_id
+            )
+            _log_upgrade_results({args.org_id: upgrade_results})
+        elif args.all_orgs:
+            logger.info("Upgrading BigQuery schemas for all organizations...")
+            upgrade_results = data_sync_service.upgrade_all_organizations_schemas()
+            _log_upgrade_results(upgrade_results)
+        else:
+            logger.error("--upgrade-schema requires --org-id or --all-orgs")
+            sys.exit(1)
     elif args.org_id:
         incremental = not args.full_sync
         results, table_counts = export_organization_data(args.org_id, incremental)

@@ -193,6 +193,56 @@ class DataSyncService:
 
         return results
 
+    def upgrade_organization_schemas(
+        self, organization_id: int
+    ) -> dict[str, dict[str, dict[str, list[str]]]]:
+        """Upgrade BigQuery schemas for an organization's providers.
+        Returns dict of provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}."""
+        org_providers = self.get_organization_providers(organization_id)
+        results: dict[str, dict[str, dict[str, list[str]]]] = {}
+
+        for org_provider in org_providers:
+            if org_provider.provider.provider_type != ProviderType.BIGQUERY:
+                continue
+            if org_provider.config_json is None:
+                continue
+
+            provider_key = f"org_{organization_id}_{org_provider.provider.name}"
+            decrypted_config = provider_config_service.get_config_for_use(
+                org_provider.config_json
+            )
+            bigquery_service = BigQueryService(organization_id, decrypted_config)
+            results[provider_key] = bigquery_service.upgrade_schemas()
+
+        return results
+
+    def upgrade_all_organizations_schemas(
+        self,
+    ) -> dict[int, dict[str, dict[str, dict[str, list[str]]]]]:
+        """Upgrade BigQuery schemas for all organizations.
+        Returns dict of org_id -> {provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}}."""
+        results: dict[int, dict[str, dict[str, dict[str, list[str]]]]] = {}
+
+        with Session(engine) as session:
+            organizations = session.exec(
+                select(Organization).where(
+                    Organization.is_active,
+                    ~Organization.is_deleted,  # type: ignore[arg-type]
+                )
+            ).all()
+
+            for org in organizations:
+                if org.id is None:
+                    continue
+                try:
+                    org_results = self.upgrade_organization_schemas(org.id)
+                    if org_results:
+                        results[org.id] = org_results
+                except Exception as e:
+                    logger.error(f"Schema upgrade failed for org {org.id}: {e}")
+
+        return results
+
     def _get_table_specific_last_sync(
         self, organization_id: int, table_name: str
     ) -> datetime | None:
@@ -841,6 +891,7 @@ class DataSyncService:
             "marking_scheme": test.marking_scheme,
             "created_by_id": test.created_by_id,
             "organization_id": test.organization_id,
+            "form_id": test.form_id,
             "created_date": (
                 test.created_date.isoformat() if test.created_date else None
             ),

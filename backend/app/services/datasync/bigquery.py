@@ -326,6 +326,7 @@ class BigQueryService:
                     {"name": "marking_scheme", "type": "JSON", "mode": "NULLABLE"},
                     {"name": "created_by_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "form_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
@@ -486,7 +487,7 @@ class BigQueryService:
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "name", "type": "STRING", "mode": "REQUIRED"},
                     {"name": "description", "type": "STRING", "mode": "NULLABLE"},
-                    {"name": "tag_type_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "tag_type_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "organization_id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
                     {"name": "created_by_id", "type": "INTEGER", "mode": "NULLABLE"},
@@ -682,6 +683,99 @@ class BigQueryService:
             raise ValueError(f"Unknown table schema: {table_name}")
 
         return schemas[table_name]
+
+    def upgrade_schemas(self) -> dict[str, dict[str, list[str]]]:
+        """Compare local schemas against BigQuery and apply missing columns
+        and column mode changes (e.g. REQUIRED -> NULLABLE).
+
+        Returns dict of table_name -> {"added": [...], "relaxed": [...]}."""
+        client = self.initialize_client()
+        dataset_id = self.config["dataset_id"]
+        changes: dict[str, dict[str, list[str]]] = {}
+
+        # Get all table names from local schema definitions
+        schemas = {
+            name: self._get_table_schema(name)
+            for name in [
+                "users",
+                "tests",
+                "questions",
+                "candidates",
+                "candidate_test_answers",
+                "candidate_tests",
+                "states",
+                "districts",
+                "blocks",
+                "entities",
+                "entity_types",
+                "tags",
+                "tag_types",
+                "question_tags",
+                "question_revisions",
+                "candidate_test_profiles",
+                "forms",
+                "form_fields",
+                "form_responses",
+                "test_questions",
+                "test_tags",
+                "test_districts",
+                "user_states",
+            ]
+        }
+
+        for schema in schemas.values():
+            table_name = schema.table_name
+            table_ref = client.dataset(dataset_id).table(table_name)
+
+            # Check if the table exists
+            try:
+                bq_table = client.get_table(table_ref)
+            except Exception:
+                # Table doesn't exist yet — it will be created on next sync
+                continue
+
+            # Build lookup of existing BigQuery columns: name -> SchemaField
+            existing_fields = {field.name: field for field in bq_table.schema}
+
+            added: list[str] = []
+            relaxed: list[str] = []
+
+            for column in schema.columns:
+                col_name = column["name"]
+                col_type = column["type"]
+                local_mode = column.get("mode", "NULLABLE")
+
+                if col_name not in existing_fields:
+                    # Add missing column
+                    alter_sql = (
+                        f"ALTER TABLE `{dataset_id}.{table_name}` "
+                        f"ADD COLUMN {col_name} {col_type}"
+                    )
+                    query_job = client.query(alter_sql)
+                    query_job.result()
+                    added.append(col_name)
+                elif (
+                    existing_fields[col_name].mode == "REQUIRED"
+                    and local_mode == "NULLABLE"
+                ):
+                    # Relax REQUIRED -> NULLABLE
+                    alter_sql = (
+                        f"ALTER TABLE `{dataset_id}.{table_name}` "
+                        f"ALTER COLUMN {col_name} DROP NOT NULL"
+                    )
+                    query_job = client.query(alter_sql)
+                    query_job.result()
+                    relaxed.append(col_name)
+
+            table_changes: dict[str, list[str]] = {}
+            if added:
+                table_changes["added"] = added
+            if relaxed:
+                table_changes["relaxed"] = relaxed
+            if table_changes:
+                changes[table_name] = table_changes
+
+        return changes
 
     def execute_full_sync(self, export_data: dict[str, Any]) -> SyncResult:
         """Execute a full data synchronization (replace mode)"""
