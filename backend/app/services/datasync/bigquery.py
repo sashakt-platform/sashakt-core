@@ -506,7 +506,6 @@ class BigQueryService:
                     {"name": "description", "type": "STRING", "mode": "NULLABLE"},
                     {"name": "organization_id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
-                    {"name": "is_deleted", "type": "BOOLEAN", "mode": "REQUIRED"},
                     {"name": "created_by_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
@@ -546,7 +545,6 @@ class BigQueryService:
                     {"name": "marking_scheme", "type": "JSON", "mode": "NULLABLE"},
                     {"name": "solution", "type": "STRING", "mode": "NULLABLE"},
                     {"name": "media", "type": "JSON", "mode": "NULLABLE"},
-                    {"name": "is_deleted", "type": "BOOLEAN", "mode": "REQUIRED"},
                     {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                     {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
                 ],
@@ -678,6 +676,45 @@ class BigQueryService:
                 partition_field="created_date",
                 clustering_fields=["user_id", "state_id"],
             ),
+            "certificates": TableSchema(
+                table_name=self.get_table_name("certificates"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "name", "type": "STRING", "mode": "REQUIRED"},
+                    {"name": "description", "type": "STRING", "mode": "NULLABLE"},
+                    {"name": "url", "type": "STRING", "mode": "REQUIRED"},
+                    {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_by_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                    {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id"],
+            ),
+            "test_states": TableSchema(
+                table_name=self.get_table_name("test_states"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "state_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id", "test_id", "state_id"],
+            ),
+            "user_districts": TableSchema(
+                table_name=self.get_table_name("user_districts"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "user_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "district_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["user_id", "district_id"],
+            ),
         }
 
         if table_name not in schemas:
@@ -721,6 +758,9 @@ class BigQueryService:
                 "test_tags",
                 "test_districts",
                 "user_states",
+                "certificates",
+                "test_states",
+                "user_districts",
             ]
         }
 
