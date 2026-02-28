@@ -217,7 +217,7 @@ class DataSyncService:
                 results[provider_key] = bigquery_service.upgrade_schemas()
             except Exception as e:
                 logger.error(f"Schema upgrade failed for {provider_key}: {e}")
-                results[provider_key] = {"error": {"message": [str(e)]}}
+                results[provider_key] = {"_error": {"errors": [str(e)]}}
 
         return results
 
@@ -246,6 +246,7 @@ class DataSyncService:
                         results[org.id] = org_results
                 except Exception as e:
                     logger.error(f"Schema upgrade failed for org {org.id}: {e}")
+                    results[org.id] = {"_error": {"_error": {"errors": [str(e)]}}}
 
         return results
 

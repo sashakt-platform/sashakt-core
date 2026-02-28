@@ -334,7 +334,13 @@ def _log_upgrade_results(
 
     for org_id, provider_results in results.items():
         for provider_key, table_changes in provider_results.items():
-            if not table_changes:
+            if "_error" in table_changes:
+                errors = table_changes["_error"].get("errors", [])
+                logger.error(
+                    f"Organization {org_id} ({provider_key}): "
+                    f"upgrade failed - {'; '.join(errors)}"
+                )
+            elif not table_changes:
                 logger.info(
                     f"Organization {org_id} ({provider_key}): all schemas up to date"
                 )
