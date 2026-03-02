@@ -30,10 +30,16 @@ from app.models import (
     User,
 )
 from app.models.candidate import CandidateTestProfile
-from app.models.form import Form, FormResponse
+from app.models.form import Form, FormField, FormResponse
 from app.models.provider import ProviderType
-from app.models.test import MarksLevelEnum, TestDistrict, TestQuestion, TestTag
-from app.models.user import UserState
+from app.models.test import (
+    MarksLevelEnum,
+    TestDistrict,
+    TestQuestion,
+    TestState,
+    TestTag,
+)
+from app.models.user import UserDistrict, UserState
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
 from app.services.google_slides import GoogleSlidesService
@@ -193,6 +199,63 @@ class DataSyncService:
 
         return results
 
+    def upgrade_organization_schemas(
+        self, organization_id: int
+    ) -> dict[str, dict[str, dict[str, list[str]]]]:
+        """Upgrade BigQuery schemas for an organization's providers.
+        Returns dict of provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}.
+        """
+        org_providers = self.get_organization_providers(organization_id)
+        results: dict[str, dict[str, dict[str, list[str]]]] = {}
+
+        for org_provider in org_providers:
+            if org_provider.provider.provider_type != ProviderType.BIGQUERY:
+                continue
+            if org_provider.config_json is None:
+                continue
+
+            provider_key = f"org_{organization_id}_{org_provider.provider.name}"
+            try:
+                decrypted_config = provider_config_service.get_config_for_use(
+                    org_provider.config_json
+                )
+                bigquery_service = BigQueryService(organization_id, decrypted_config)
+                results[provider_key] = bigquery_service.upgrade_schemas()
+            except Exception as e:
+                logger.error(f"Schema upgrade failed for {provider_key}: {e}")
+                results[provider_key] = {"_error": {"errors": [str(e)]}}
+
+        return results
+
+    def upgrade_all_organizations_schemas(
+        self,
+    ) -> dict[int, dict[str, dict[str, dict[str, list[str]]]]]:
+        """Upgrade BigQuery schemas for all organizations.
+        Returns dict of org_id -> {provider_key -> {table_name -> {"added": [...], "relaxed": [...]}}}.
+        """
+        results: dict[int, dict[str, dict[str, dict[str, list[str]]]]] = {}
+
+        with Session(engine) as session:
+            organizations = session.exec(
+                select(Organization).where(
+                    Organization.is_active,
+                    ~Organization.is_deleted,  # type: ignore[arg-type]
+                )
+            ).all()
+
+            for org in organizations:
+                if org.id is None:
+                    continue
+                try:
+                    org_results = self.upgrade_organization_schemas(org.id)
+                    if org_results:
+                        results[org.id] = org_results
+                except Exception as e:
+                    logger.error(f"Schema upgrade failed for org {org.id}: {e}")
+                    results[org.id] = {"_error": {"_error": {"errors": [str(e)]}}}
+
+        return results
+
     def _get_table_specific_last_sync(
         self, organization_id: int, table_name: str
     ) -> datetime | None:
@@ -307,6 +370,12 @@ class DataSyncService:
             data["form_responses"] = self._extract_form_responses_data(
                 session, organization_id, incremental
             )
+            data["forms"] = self._extract_forms_data(
+                session, organization_id, incremental
+            )
+            data["form_fields"] = self._extract_form_fields_data(
+                session, organization_id, incremental
+            )
             data["states"] = self._extract_states_data(
                 session, organization_id, incremental
             )
@@ -341,6 +410,15 @@ class DataSyncService:
                 session, organization_id, incremental
             )
             data["user_states"] = self._extract_user_states_data(
+                session, organization_id, incremental
+            )
+            data["certificates"] = self._extract_certificates_data(
+                session, organization_id, incremental
+            )
+            data["test_states"] = self._extract_test_states_data(
+                session, organization_id, incremental
+            )
+            data["user_districts"] = self._extract_user_districts_data(
                 session, organization_id, incremental
             )
 
@@ -673,6 +751,43 @@ class DataSyncService:
         results = session.exec(statement).all()
         return [self._serialize_form_response(fr, org_id) for fr, org_id in results]
 
+    def _extract_forms_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        statement = select(Form).where(Form.organization_id == organization_id)
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "forms"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(Form.modified_date > table_last_sync)  # type: ignore[operator]
+
+        forms = session.exec(statement).all()
+        return [self._serialize_form(form) for form in forms]
+
+    def _extract_form_fields_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter form_fields by organization through form.organization_id
+        statement = (
+            select(FormField)
+            .join(Form, FormField.form_id == Form.id)  # type: ignore[arg-type]
+            .where(Form.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "form_fields"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(
+                    FormField.modified_date > table_last_sync  # type: ignore[operator]
+                )
+
+        form_fields = session.exec(statement).all()
+        return [self._serialize_form_field(ff) for ff in form_fields]
+
     def _extract_test_questions_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
@@ -761,6 +876,66 @@ class DataSyncService:
         user_states = session.exec(statement).all()
         return [self._serialize_user_state(us) for us in user_states]
 
+    def _extract_certificates_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        statement = select(Certificate).where(
+            Certificate.organization_id == organization_id
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "certificates"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(Certificate.modified_date > table_last_sync)  # type: ignore[operator]
+
+        certificates = session.exec(statement).all()
+        return [self._serialize_certificate(cert) for cert in certificates]
+
+    def _extract_test_states_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter test_states through test.organization_id
+        statement = (
+            select(TestState, Test.organization_id)
+            .join(Test, TestState.test_id == Test.id)  # type: ignore[arg-type]
+            .where(Test.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "test_states"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(TestState.created_date > table_last_sync)  # type: ignore[operator]
+
+        results = session.exec(statement).all()
+        return [
+            self._serialize_test_state(test_state, org_id)
+            for test_state, org_id in results
+        ]
+
+    def _extract_user_districts_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter user_districts through user -> organization
+        statement = (
+            select(UserDistrict)
+            .join(User, UserDistrict.user_id == User.id)  # type: ignore[arg-type]
+            .where(User.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "user_districts"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(UserDistrict.created_date > table_last_sync)  # type: ignore[operator]
+
+        user_districts = session.exec(statement).all()
+        return [self._serialize_user_district(ud) for ud in user_districts]
+
     def _serialize_user(self, user: User) -> dict[str, Any]:
         return {
             "id": user.id,
@@ -798,6 +973,7 @@ class DataSyncService:
             "marking_scheme": test.marking_scheme,
             "created_by_id": test.created_by_id,
             "organization_id": test.organization_id,
+            "form_id": test.form_id,
             "created_date": (
                 test.created_date.isoformat() if test.created_date else None
             ),
@@ -1069,6 +1245,49 @@ class DataSyncService:
             ),
         }
 
+    def _serialize_form(self, form: Form) -> dict[str, Any]:
+        return {
+            "id": form.id,
+            "name": form.name,
+            "description": form.description,
+            "is_active": form.is_active,
+            "organization_id": form.organization_id,
+            "created_by_id": form.created_by_id,
+            "created_date": (
+                form.created_date.isoformat() if form.created_date else None
+            ),
+            "modified_date": (
+                form.modified_date.isoformat() if form.modified_date else None
+            ),
+        }
+
+    def _serialize_form_field(self, form_field: FormField) -> dict[str, Any]:
+        return {
+            "id": form_field.id,
+            "form_id": form_field.form_id,
+            "field_type": (
+                form_field.field_type.value if form_field.field_type else None
+            ),
+            "label": form_field.label,
+            "name": form_field.name,
+            "placeholder": form_field.placeholder,
+            "help_text": form_field.help_text,
+            "is_required": form_field.is_required,
+            "order": form_field.order,
+            "options": form_field.options,
+            "validation": form_field.validation,
+            "default_value": form_field.default_value,
+            "entity_type_id": form_field.entity_type_id,
+            "created_date": (
+                form_field.created_date.isoformat() if form_field.created_date else None
+            ),
+            "modified_date": (
+                form_field.modified_date.isoformat()
+                if form_field.modified_date
+                else None
+            ),
+        }
+
     def _serialize_test_question(
         self, test_question: TestQuestion, organization_id: int | None
     ) -> dict[str, Any]:
@@ -1119,6 +1338,52 @@ class DataSyncService:
             "state_id": user_state.state_id,
             "created_date": (
                 user_state.created_date.isoformat() if user_state.created_date else None
+            ),
+        }
+
+    def _serialize_certificate(self, certificate: Certificate) -> dict[str, Any]:
+        return {
+            "id": certificate.id,
+            "name": certificate.name,
+            "description": certificate.description,
+            "url": certificate.url,
+            "is_active": certificate.is_active,
+            "organization_id": certificate.organization_id,
+            "created_by_id": certificate.created_by_id,
+            "created_date": (
+                certificate.created_date.isoformat()
+                if certificate.created_date
+                else None
+            ),
+            "modified_date": (
+                certificate.modified_date.isoformat()
+                if certificate.modified_date
+                else None
+            ),
+        }
+
+    def _serialize_test_state(
+        self, test_state: TestState, organization_id: int | None
+    ) -> dict[str, Any]:
+        return {
+            "id": test_state.id,
+            "test_id": test_state.test_id,
+            "state_id": test_state.state_id,
+            "organization_id": organization_id,
+            "created_date": (
+                test_state.created_date.isoformat() if test_state.created_date else None
+            ),
+        }
+
+    def _serialize_user_district(self, user_district: UserDistrict) -> dict[str, Any]:
+        return {
+            "id": user_district.id,
+            "user_id": user_district.user_id,
+            "district_id": user_district.district_id,
+            "created_date": (
+                user_district.created_date.isoformat()
+                if user_district.created_date
+                else None
             ),
         }
 
