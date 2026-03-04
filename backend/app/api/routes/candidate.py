@@ -1382,7 +1382,7 @@ def get_test_result(
                         correct_value
                     )
                 else:
-                    is_correct = abs(user_value - correct_value) <= 0.5
+                    is_correct = abs(user_value - correct_value) <= 0.05
 
                 if is_correct:
                     correct += 1
