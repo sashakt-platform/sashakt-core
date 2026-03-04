@@ -130,5 +130,7 @@ class Settings(BaseSettings):
 
 PAGINATION_SIZE: int = 25
 
+TOLERANCE: float = 0.05
+
 
 settings = Settings()  # type: ignore
