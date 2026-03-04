@@ -11,6 +11,7 @@ from sqlmodel import and_, col, not_, outerjoin, select
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.utils import get_current_time
 from app.core.certificate_token import generate_certificate_token
+from app.core.config import TOLERANCE
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
@@ -1382,7 +1383,7 @@ def get_test_result(
                         correct_value
                     )
                 else:
-                    is_correct = abs(user_value - correct_value) <= 0.05
+                    is_correct = abs(user_value - correct_value) <= TOLERANCE
 
                 if is_correct:
                     correct += 1
