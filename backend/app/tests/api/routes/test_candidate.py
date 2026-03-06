@@ -10383,14 +10383,14 @@ def test_get_test_result_with_numerical_decimal_tolerance(
         CandidateTestAnswer(
             candidate_test_id=candidate_test_id,
             question_revision_id=decimal_q1.id,
-            response=1.8,
+            response=1.54,
             visited=True,
             time_spent=20,
         ),
         CandidateTestAnswer(
             candidate_test_id=candidate_test_id,
             question_revision_id=decimal_q2.id,
-            response=2.7,
+            response=2.06,
             visited=True,
             time_spent=20,
         ),
