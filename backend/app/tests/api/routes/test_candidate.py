@@ -11405,9 +11405,6 @@ def test_answer_cannot_be_modified_after_review_feedback(
     assert "Cannot modify answer after it has been reviewed" in data["detail"]
 
 
-# ===== Certificate Download URL in Test Result Tests =====
-
-
 def test_result_includes_certificate_download_url(
     client: TestClient,
     db: SessionDep,
@@ -11561,7 +11558,6 @@ def test_result_no_certificate_download_url_when_test_has_no_certificate(
     )
     assert response.status_code == 200
     data = response.json()
-    print("here is not url", data)
 
     assert data["certificate_download_url"] is None
 
