@@ -4,6 +4,7 @@ import io
 import re
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import magic
 from fastapi import HTTPException, UploadFile
@@ -218,7 +219,7 @@ def validate_external_media_url(url: str) -> ExternalMedia:
         )
 
     # SoundCloud
-    if "soundcloud.com" in url:
+    if _is_soundcloud_url(url):
         return ExternalMedia(
             type="audio",
             provider="soundcloud",
@@ -280,6 +281,17 @@ def _extract_spotify_info(url: str) -> dict[str, str] | None:
             "embed_url": f"https://open.spotify.com/embed/{content_type}/{content_id}"
         }
     return None
+
+
+def _is_soundcloud_url(url: str) -> bool:
+    """Check if URL is a valid SoundCloud URL by verifying the host."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        # Must be exactly soundcloud.com or a subdomain like m.soundcloud.com
+        return host == "soundcloud.com" or host.endswith(".soundcloud.com")
+    except Exception:
+        return False
 
 
 # Helper functions for building media JSON

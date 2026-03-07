@@ -4,7 +4,7 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from google.cloud import storage  # type: ignore[import-untyped]
+from google.cloud.storage import Bucket, Client  # type: ignore[import-untyped]
 from google.oauth2 import service_account
 
 
@@ -18,10 +18,10 @@ class GCSStorageService:
     def __init__(self, organization_id: int, config: dict[str, Any]):
         self.organization_id = organization_id
         self.config = config
-        self._client: storage.Client | None = None
-        self._bucket: storage.Bucket | None = None
+        self._client: Client | None = None
+        self._bucket: Bucket | None = None
 
-    def initialize_client(self) -> storage.Client:
+    def initialize_client(self) -> Client:
         """Lazy initialization of GCS client from config."""
         if self._client is None:
             credentials_info = {
@@ -41,12 +41,12 @@ class GCSStorageService:
             credentials = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
                 credentials_info
             )
-            self._client = storage.Client(
+            self._client = Client(
                 project=self.config["project_id"], credentials=credentials
             )
         return self._client
 
-    def _get_bucket(self) -> storage.Bucket:
+    def _get_bucket(self) -> Bucket:
         """Get the configured GCS bucket."""
         if self._bucket is None:
             client = self.initialize_client()
