@@ -23,6 +23,7 @@ from typing_extensions import TypedDict
 
 from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.core.provider_config import provider_config_service
 from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     QuestionSortConfig,
@@ -51,6 +52,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
     BulkUploadQuestionsResponse,
     DeleteQuestion,
@@ -61,6 +63,7 @@ from app.models.role import Role
 from app.models.test import TestQuestion
 from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
+from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -143,30 +146,105 @@ def get_tag_type_by_id(session: SessionDep, tag_type_id: int | None) -> TagType 
     return tag_type
 
 
+def get_gcs_service_for_org(
+    session: SessionDep, organization_id: int
+) -> GCSStorageService | None:
+    """Get GCS service for an organization if configured."""
+    statement = (
+        select(OrganizationProvider)
+        .join(Provider)
+        .where(
+            OrganizationProvider.organization_id == organization_id,
+            OrganizationProvider.is_enabled == True,  # noqa: E712
+            Provider.provider_type == ProviderType.GCS,
+            Provider.is_active == True,  # noqa: E712
+        )
+    )
+    org_provider = session.exec(statement).first()
+
+    if not org_provider or not org_provider.config_json:
+        return None
+
+    config = provider_config_service.get_config_for_use(org_provider.config_json)
+    return GCSStorageService(organization_id, config)
+
+
+def enrich_media_with_signed_urls(
+    media: dict[str, Any] | None, gcs_service: GCSStorageService | None
+) -> dict[str, Any] | None:
+    """Add signed URLs to media objects containing GCS paths."""
+    if not media or not gcs_service:
+        return media
+
+    result = dict(media)
+
+    # Handle question-level image
+    if "image" in result and isinstance(result["image"], dict):
+        gcs_path = result["image"].get("gcs_path")
+        if gcs_path:
+            try:
+                result["image"]["url"] = gcs_service.generate_signed_url(gcs_path)
+            except Exception:
+                pass  # GCS error - leave without URL
+
+    return result
+
+
+def enrich_options_with_signed_urls(
+    options: list[dict[str, Any]] | None, gcs_service: GCSStorageService | None
+) -> list[dict[str, Any]] | None:
+    """Add signed URLs to option media objects."""
+    if not options or not gcs_service:
+        return options
+
+    result = []
+    for opt in options:
+        opt_copy = dict(opt)
+        if "media" in opt_copy and isinstance(opt_copy["media"], dict):
+            opt_copy["media"] = enrich_media_with_signed_urls(
+                opt_copy["media"], gcs_service
+            )
+        result.append(opt_copy)
+
+    return result
+
+
 def build_question_response(
     question: Question,
     revision: QuestionRevision,
     locations: list[QuestionLocation],
     tags: list[Tag] | None = None,
+    gcs_service: GCSStorageService | None = None,
 ) -> QuestionPublic:
-    """Build a standardized QuestionPublic response."""
+    """Build a standardized QuestionPublic response.
+
+    Args:
+        question: The question object
+        revision: The question revision
+        locations: List of question locations
+        tags: Optional list of tags
+        gcs_service: Optional GCS service for generating signed URLs for media
+    """
     # Convert complex types to dictionaries for JSON serialization
-    options_dict = None
+    options_dict: list[dict[str, Any]] | None = None
     if revision.options:
-        options_dict = [
-            (
-                opt
-                if isinstance(opt, dict)
-                else (
-                    opt.dict()
-                    if hasattr(opt, "dict") and callable(opt.dict)
-                    else vars(opt)
-                    if hasattr(opt, "__dict__")
-                    else opt
-                )
-            )
-            for opt in revision.options
-        ]
+        converted_options: list[dict[str, Any]] = []
+        for opt in revision.options:
+            if isinstance(opt, dict):
+                converted_options.append(dict(opt))
+            elif hasattr(opt, "dict") and callable(opt.dict):
+                converted_options.append(opt.dict())
+            elif hasattr(opt, "__dict__"):
+                converted_options.append(vars(opt))
+            else:
+                converted_options.append(dict(opt))
+        options_dict = converted_options
+
+    # Enrich options with signed URLs if GCS service is available
+    if options_dict and gcs_service:
+        enriched = enrich_options_with_signed_urls(options_dict, gcs_service)
+        if enriched:
+            options_dict = enriched
 
     marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
@@ -175,6 +253,10 @@ def build_question_response(
         if revision.media and hasattr(revision.media, "dict")
         else revision.media
     )
+
+    # Enrich media with signed URLs if GCS service is available
+    if media_dict and gcs_service:
+        media_dict = enrich_media_with_signed_urls(media_dict, gcs_service)
 
     # Prepare tag information
     tag_list: list[TagPublic] = []
