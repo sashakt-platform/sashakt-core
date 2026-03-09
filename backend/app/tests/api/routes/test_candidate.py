@@ -19,6 +19,7 @@ from app.models import (
     TestCandidatePublic,
 )
 from app.models.certificate import Certificate
+from app.models.form import Form, FormField, FormFieldType, FormResponse
 from app.models.location import Country, District, State
 from app.models.question import QuestionTag, QuestionType
 from app.models.role import Role
@@ -11652,3 +11653,635 @@ def test_result_certificate_token_reused_on_repeated_calls(
 
     assert url1 is not None
     assert url1 == url2
+
+
+def test_result_certificate_data_snapshot_persisted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Certificate data snapshot is saved to candidate_test after first result call."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert "token" in candidate_test.certificate_data
+    assert candidate_test.certificate_data["test_name"] == test.name
+    assert "score" in candidate_test.certificate_data
+    assert "completion_date" in candidate_test.certificate_data
+
+
+def test_result_certificate_score_formatted_with_marks(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Score in certificate_data is formatted as 'X.X/Y.Y (Z.Z%)' when marking scheme exists."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    marking_scheme = {"correct": 4, "wrong": -1, "skipped": 0}
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+        marks_level="test",
+        marking_scheme=marking_scheme,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    client.post(
+        f"{settings.API_V1_STR}/candidate/answer/{candidate_test_id}/{revision.id}",
+        json={"response": "[1]"},
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    score = candidate_test.certificate_data["score"]
+
+    assert "/" in score
+    assert "%" in score
+    assert "(" in score
+
+
+def test_result_certificate_score_na_when_no_questions(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Score in certificate_data is 'N/A' when test has no questions (marks_maximum stays 0)."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert candidate_test.certificate_data["score"] == "N/A"
+
+
+def test_result_certificate_completion_date_formatted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Completion date in certificate_data is formatted as 'Month DD, YYYY' when end_time is set."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    end_time = datetime(2025, 6, 15, 10, 30, 0)
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.end_time = end_time
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert candidate_test.certificate_data["completion_date"] == "June 15, 2025"
+
+
+def test_result_certificate_data_includes_form_response_fields(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Form response fields are resolved and included in certificate_data when test has a form."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    field = FormField(
+        form_id=form.id,
+        field_type=FormFieldType.TEXT,
+        label="Full Name",
+        name="full_name",
+        order=0,
+    )
+    db.add(field)
+    db.commit()
+    db.refresh(field)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    form_response = FormResponse(
+        candidate_test_id=candidate_test_id,
+        form_id=form.id,
+        responses={"full_name": "Jane Doe"},
+    )
+    db.add(form_response)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert "full_name" in candidate_test.certificate_data
+    assert candidate_test.certificate_data["full_name"] == "Jane Doe"
+
+
+def test_result_certificate_data_form_fields_default_na_when_no_form_response(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Form fields default to 'N/A' in certificate_data when no form response exists."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    field = FormField(
+        form_id=form.id,
+        field_type=FormFieldType.TEXT,
+        label="City",
+        name="city",
+        order=0,
+    )
+    db.add(field)
+    db.commit()
+    db.refresh(field)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert "city" in candidate_test.certificate_data
+    assert candidate_test.certificate_data["city"] == "N/A"
+
+
+def test_result_certificate_data_not_set_when_no_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """certificate_data remains None when test has no certificate assigned."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=None,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is None
