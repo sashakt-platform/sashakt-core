@@ -234,6 +234,12 @@ class TestBase(SQLModel):
         description="Show feedback to candidate immediately after each question",
         sa_column_kwargs={"server_default": "false"},
     )
+    show_mark_for_review: bool = Field(
+        default=True,
+        title="Mark for Review",
+        description="Whether the 'Mark for Review' option is enabled for all questions in this test.",
+        sa_column_kwargs={"server_default": "true"},
+    )
     form_id: int | None = Field(
         default=None,
         foreign_key="form.id",
