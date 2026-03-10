@@ -73,6 +73,16 @@ class Option(TypedDict):
     value: NotRequired[str]
 
 
+class MatrixColumn(TypedDict):
+    label: str
+    items: list[Option]
+
+
+class MatrixMatchOptions(TypedDict):
+    rows: MatrixColumn
+    columns: MatrixColumn
+
+
 class FailedQuestion(TypedDict):
     row_number: int
     question_text: str
