@@ -509,7 +509,7 @@
     "super_admin": true,
     "system_admin": true,
     "state_admin": true,
-    "test_admin": false,
+    "test_admin": true,
     "candidate": false
   },
   {
