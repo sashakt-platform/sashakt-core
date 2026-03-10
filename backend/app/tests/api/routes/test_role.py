@@ -463,7 +463,7 @@ def test_read_roles_test_admin_filtered(client: TestClient, db: Session) -> None
 
     role_names = [role["name"] for role in content["data"]]
 
-    # State admin should see these roles
+    # Test admin should see these roles
     assert "test_admin" in role_names
     assert "candidate" in role_names
 
