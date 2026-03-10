@@ -3562,7 +3562,3 @@ def test_get_users_by_district_user(
     assert len(items) == 2
     assert any(user_1 == item["id"] for item in items)
     assert any(state_admin_user_id == item["id"] for item in items)
-
-
-def test_state_admin_creates_test_admin_district_level():
-    """State admin should be able to create district-level test admin users"""
