@@ -448,8 +448,8 @@ def test_read_roles_state_admin_filtered(client: TestClient, db: Session) -> Non
     assert "system_admin" not in role_names
 
 
-def test_read_roles_test_admin_no_access(client: TestClient, db: Session) -> None:
-    """Test that test_admin has no access to roles endpoint."""
+def test_read_roles_test_admin_filtered(client: TestClient, db: Session) -> None:
+    """Test that test_admin sees only Test Admin and below."""
 
     # get auth headers for test admin user
     headers = get_user_token(db=db, role="test_admin")
@@ -458,10 +458,19 @@ def test_read_roles_test_admin_no_access(client: TestClient, db: Session) -> Non
         f"{settings.API_V1_STR}/roles/",
         headers=headers,
     )
+    assert response.status_code == 200
+    content = response.json()
 
-    # Test admin should not have read_role permission
-    # 401 due to token issue or 403 for permission error
-    assert response.status_code in [401, 403]
+    role_names = [role["name"] for role in content["data"]]
+
+    # State admin should see these roles
+    assert "test_admin" in role_names
+    assert "candidate" in role_names
+
+    # they should not see higher level roles
+    assert "super_admin" not in role_names
+    assert "system_admin" not in role_names
+    assert "state_admin" not in role_names
 
 
 def test_read_roles_candidate_no_access(client: TestClient, db: Session) -> None:
