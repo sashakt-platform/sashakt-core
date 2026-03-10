@@ -303,7 +303,21 @@ def create_user(
 
     elif role and role.name == test_admin.name:
         current_role = session.get(Role, current_user.role_id)
-        if current_role and current_role.name == state_admin.name:
+
+        if user_in.state_ids or user_in.district_ids:
+            if user_in.state_ids:
+                user_states = [
+                    UserState(user_id=user.id, state_id=state_id)
+                    for state_id in user_in.state_ids
+                ]
+                session.add_all(user_states)
+            if user_in.district_ids:
+                user_districts = [
+                    UserDistrict(user_id=user.id, district_id=district_id)
+                    for district_id in user_in.district_ids
+                ]
+                session.add_all(user_districts)
+        elif current_role and current_role.name == state_admin.name:
             if current_user.states:
                 creator_states = current_user.states
                 session.add_all(
@@ -316,20 +330,6 @@ def create_user(
                     UserDistrict(user_id=user.id, district_id=creator_district.id)
                     for creator_district in creator_districts
                 )
-
-        elif user_in.state_ids:
-            user_states = [
-                UserState(user_id=user.id, state_id=state_id)
-                for state_id in user_in.state_ids
-            ]
-            session.add_all(user_states)
-
-        elif user_in.district_ids:
-            user_districts = [
-                UserDistrict(user_id=user.id, district_id=district_id)
-                for district_id in user_in.district_ids
-            ]
-            session.add_all(user_districts)
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
