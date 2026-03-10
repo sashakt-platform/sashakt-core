@@ -300,6 +300,10 @@ def create_user(
         user_create=user_in,
         created_by_id=current_user.id,
     )
+    if user.id is None:
+        raise HTTPException(
+            status_code=500, detail="User creation failed: no ID assigned"
+        )
 
     if role and role.name == state_admin.name:
         _assign_locations(session, user.id, user_in.state_ids, user_in.district_ids)
@@ -309,10 +313,12 @@ def create_user(
 
         if creator_role and creator_role.name in (state_admin.name, test_admin.name):
             creator_state_ids = (
-                [s.id for s in current_user.states] if current_user.states else None
+                [s.id for s in current_user.states if s.id is not None]
+                if current_user.states
+                else None
             )
             creator_district_ids = (
-                [d.id for d in current_user.districts]
+                [d.id for d in current_user.districts if d.id is not None]
                 if current_user.districts
                 else None
             )
