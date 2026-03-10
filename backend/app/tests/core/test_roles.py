@@ -70,7 +70,7 @@ class TestRoleHierarchy:
         assert set(valid_roles) == {"state_admin", "test_admin", "candidate"}
 
     def test_get_valid_roles_test_admin(self) -> None:
-        """Test get_valid_roles for test_admin (should return empty)."""
+        """Test get_valid_roles for test_admin"""
         valid_roles = get_valid_roles("test_admin")
         assert len(valid_roles) == 2
         assert valid_roles == ["test_admin", "candidate"]
