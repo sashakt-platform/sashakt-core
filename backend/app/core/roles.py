@@ -142,6 +142,7 @@ def get_role_hierarchy() -> dict[str, list[str]]:
         ],
         "system_admin": ["system_admin", "state_admin", "test_admin", "candidate"],
         "state_admin": ["state_admin", "test_admin", "candidate"],
+        "test_admin": ["test_admin", "candidate"],
     }
 
 
