@@ -1,7 +1,7 @@
 """added question type matric match
 
 Revision ID: dd491959bf1f
-Revises: 594fa4e77a5d
+Revises: ce223bd3d892
 Create Date: 2026-03-10 14:43:20.276766
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = 'dd491959bf1f'
-down_revision = '594fa4e77a5d'
+down_revision = 'ce223bd3d892'
 branch_labels = None
 depends_on = None
 
