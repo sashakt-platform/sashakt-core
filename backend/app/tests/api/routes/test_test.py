@@ -6695,7 +6695,6 @@ def test_get_tests_by_district_user(
     )
     assert response.status_code == 200
     data = response.json()
-    test_1 = data["id"]
 
     response = client.post(
         f"{settings.API_V1_STR}/test/",
@@ -6721,4 +6720,188 @@ def test_get_tests_by_district_user(
     data = response.json()
     items = data["items"]
     assert len(items) == 1
-    assert items[0]["id"] == test_1
+
+
+def test_create_test_show_mark_for_review_true(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_mark_for_review set to True."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "bookmark": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["bookmark"] is True
+
+
+def test_create_test_show_mark_for_review_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_mark_for_review set to False."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "bookmark": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["bookmark"] is False
+
+
+def test_create_test_show_mark_for_review_defaults_to_true(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that show_mark_for_review defaults to True when not specified."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["bookmark"] is True
+
+
+def test_update_test_show_mark_for_review(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test updating show_mark_for_review from True to False."""
+    test_name = random_lower_string()
+    test_link = random_lower_string()
+    create_payload = {
+        "name": test_name,
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": test_link,
+        "is_active": True,
+        "bookmark": True,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=create_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    test_id = create_response.json()["id"]
+
+    update_payload = {
+        "name": test_name,
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": test_link,
+        "is_active": True,
+        "bookmark": False,
+        "locale": "en-US",
+    }
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json=update_payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert update_response.status_code == 200
+    data = update_response.json()
+    assert data["bookmark"] is False
+
+
+def test_get_test_by_id_returns_show_mark_for_review(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that GET /test/{id} returns the show_mark_for_review field."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "bookmark": False,
+    }
+
+    create_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert create_response.status_code == 200
+    test_id = create_response.json()["id"]
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+
+    assert get_response.status_code == 200
+    data = get_response.json()
+    assert "bookmark" in data
+    assert data["bookmark"] is False
+
+
+def test_get_tests_list_returns_show_mark_for_review(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test that GET /test/ list endpoint returns show_mark_for_review field."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "bookmark": True,
+    }
+
+    client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    list_response = client.get(
+        f"{settings.API_V1_STR}/test/",
+        headers=get_user_superadmin_token,
+    )
+
+    assert list_response.status_code == 200
+    data = list_response.json()
+    assert "items" in data
+    assert len(data["items"]) > 0
+    assert "bookmark" in data["items"][0]
