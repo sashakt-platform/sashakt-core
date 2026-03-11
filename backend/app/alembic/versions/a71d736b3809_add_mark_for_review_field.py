@@ -1,7 +1,7 @@
 """Add Mark For Review Field
 
 Revision ID: a71d736b3809
-Revises: 6d50cfd8d0a9
+Revises: 594fa4e77a5d
 Create Date: 2026-03-09 13:46:19.918225
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = 'a71d736b3809'
-down_revision = '6d50cfd8d0a9'
+down_revision = '594fa4e77a5d'
 branch_labels = None
 depends_on = None
 
