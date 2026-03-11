@@ -70,10 +70,10 @@ class TestRoleHierarchy:
         assert set(valid_roles) == {"state_admin", "test_admin", "candidate"}
 
     def test_get_valid_roles_test_admin(self) -> None:
-        """Test get_valid_roles for test_admin (should return empty)."""
+        """Test get_valid_roles for test_admin"""
         valid_roles = get_valid_roles("test_admin")
-
-        assert valid_roles == []
+        assert len(valid_roles) == 2
+        assert valid_roles == ["test_admin", "candidate"]
 
     def test_get_valid_roles_candidate(self) -> None:
         """Test get_valid_roles for candidate (should return empty)."""
@@ -116,12 +116,12 @@ class TestRoleHierarchy:
 
     def test_can_assign_role_test_admin(self) -> None:
         """Test can_assign_role for test_admin."""
-        # Test admin cannot assign any roles
+        # Test admin can only assign Test admin
         assert can_assign_role("test_admin", "super_admin") is False
         assert can_assign_role("test_admin", "system_admin") is False
         assert can_assign_role("test_admin", "state_admin") is False
-        assert can_assign_role("test_admin", "test_admin") is False
-        assert can_assign_role("test_admin", "candidate") is False
+        assert can_assign_role("test_admin", "test_admin") is True
+        assert can_assign_role("test_admin", "candidate") is True
 
     def test_can_assign_role_candidate(self) -> None:
         """Test can_assign_role for candidate."""

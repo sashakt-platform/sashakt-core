@@ -45,6 +45,20 @@ UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 
 
+def _assign_locations(
+    session: SessionDep,
+    user_id: int,
+    state_ids: list[int] | None,
+    district_ids: list[int] | None,
+) -> None:
+    if state_ids:
+        session.add_all([UserState(user_id=user_id, state_id=sid) for sid in state_ids])
+    if district_ids:
+        session.add_all(
+            [UserDistrict(user_id=user_id, district_id=did) for did in district_ids]
+        )
+
+
 def check_user_permission(
     session: SessionDep, current_user: CurrentUser, target_user: User
 ) -> None:
@@ -286,50 +300,44 @@ def create_user(
         user_create=user_in,
         created_by_id=current_user.id,
     )
+    if user.id is None:
+        raise HTTPException(
+            status_code=500, detail="User creation failed: no ID assigned"
+        )
 
     if role and role.name == state_admin.name:
-        if user_in.state_ids:
-            user_states = [
-                UserState(user_id=user.id, state_id=state_id)
-                for state_id in user_in.state_ids
-            ]
-            session.add_all(user_states)
-        if user_in.district_ids:
-            user_districts = [
-                UserDistrict(user_id=user.id, district_id=district_id)
-                for district_id in user_in.district_ids
-            ]
-            session.add_all(user_districts)
+        _assign_locations(session, user.id, user_in.state_ids, user_in.district_ids)
 
     elif role and role.name == test_admin.name:
-        current_role = session.get(Role, current_user.role_id)
-        if current_role and current_role.name == state_admin.name:
-            if current_user.states:
-                creator_states = current_user.states
-                session.add_all(
-                    UserState(user_id=user.id, state_id=creator_state.id)
-                    for creator_state in creator_states
-                )
-            if current_user.districts:
-                creator_districts = current_user.districts
-                session.add_all(
-                    UserDistrict(user_id=user.id, district_id=creator_district.id)
-                    for creator_district in creator_districts
-                )
+        creator_role = current_user.role
 
-        elif user_in.state_ids:
-            user_states = [
-                UserState(user_id=user.id, state_id=state_id)
-                for state_id in user_in.state_ids
-            ]
-            session.add_all(user_states)
+        if creator_role and creator_role.name in (state_admin.name, test_admin.name):
+            creator_state_ids = (
+                [s.id for s in current_user.states if s.id is not None]
+                if current_user.states
+                else None
+            )
+            creator_district_ids = (
+                [d.id for d in current_user.districts if d.id is not None]
+                if current_user.districts
+                else None
+            )
 
-        elif user_in.district_ids:
-            user_districts = [
-                UserDistrict(user_id=user.id, district_id=district_id)
-                for district_id in user_in.district_ids
-            ]
-            session.add_all(user_districts)
+            # State-admin scoping test_admin to a specific district within their state
+            if (
+                creator_role.name == state_admin.name
+                and not creator_district_ids
+                and user_in.district_ids
+            ):
+                _assign_locations(
+                    session, user.id, creator_state_ids, user_in.district_ids
+                )
+            else:
+                _assign_locations(
+                    session, user.id, creator_state_ids, creator_district_ids
+                )
+        else:
+            _assign_locations(session, user.id, user_in.state_ids, user_in.district_ids)
 
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
