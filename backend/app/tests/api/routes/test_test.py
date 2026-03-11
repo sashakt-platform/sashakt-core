@@ -6733,7 +6733,7 @@ def test_create_test_show_mark_for_review_true(
         "marks": 10,
         "link": random_lower_string(),
         "is_active": True,
-        "show_mark_for_review": True,
+        "bookmark": True,
     }
 
     response = client.post(
@@ -6744,7 +6744,7 @@ def test_create_test_show_mark_for_review_true(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["show_mark_for_review"] is True
+    assert data["bookmark"] is True
 
 
 def test_create_test_show_mark_for_review_false(
@@ -6758,7 +6758,7 @@ def test_create_test_show_mark_for_review_false(
         "marks": 10,
         "link": random_lower_string(),
         "is_active": True,
-        "show_mark_for_review": False,
+        "bookmark": False,
     }
 
     response = client.post(
@@ -6769,7 +6769,7 @@ def test_create_test_show_mark_for_review_false(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["show_mark_for_review"] is False
+    assert data["bookmark"] is False
 
 
 def test_create_test_show_mark_for_review_defaults_to_true(
@@ -6793,7 +6793,7 @@ def test_create_test_show_mark_for_review_defaults_to_true(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["show_mark_for_review"] is True
+    assert data["bookmark"] is True
 
 
 def test_update_test_show_mark_for_review(
@@ -6809,7 +6809,7 @@ def test_update_test_show_mark_for_review(
         "marks": 10,
         "link": test_link,
         "is_active": True,
-        "show_mark_for_review": True,
+        "bookmark": True,
     }
 
     create_response = client.post(
@@ -6827,7 +6827,7 @@ def test_update_test_show_mark_for_review(
         "marks": 10,
         "link": test_link,
         "is_active": True,
-        "show_mark_for_review": False,
+        "bookmark": False,
         "locale": "en-US",
     }
 
@@ -6839,7 +6839,7 @@ def test_update_test_show_mark_for_review(
 
     assert update_response.status_code == 200
     data = update_response.json()
-    assert data["show_mark_for_review"] is False
+    assert data["bookmark"] is False
 
 
 def test_get_test_by_id_returns_show_mark_for_review(
@@ -6853,7 +6853,7 @@ def test_get_test_by_id_returns_show_mark_for_review(
         "marks": 10,
         "link": random_lower_string(),
         "is_active": True,
-        "show_mark_for_review": False,
+        "bookmark": False,
     }
 
     create_response = client.post(
@@ -6871,8 +6871,8 @@ def test_get_test_by_id_returns_show_mark_for_review(
 
     assert get_response.status_code == 200
     data = get_response.json()
-    assert "show_mark_for_review" in data
-    assert data["show_mark_for_review"] is False
+    assert "bookmark" in data
+    assert data["bookmark"] is False
 
 
 def test_get_tests_list_returns_show_mark_for_review(
@@ -6886,7 +6886,7 @@ def test_get_tests_list_returns_show_mark_for_review(
         "marks": 10,
         "link": random_lower_string(),
         "is_active": True,
-        "show_mark_for_review": True,
+        "bookmark": True,
     }
 
     client.post(
@@ -6904,4 +6904,4 @@ def test_get_tests_list_returns_show_mark_for_review(
     data = list_response.json()
     assert "items" in data
     assert len(data["items"]) > 0
-    assert "show_mark_for_review" in data["items"][0]
+    assert "bookmark" in data["items"][0]
