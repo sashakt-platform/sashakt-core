@@ -54,6 +54,7 @@ from app.models import (
 from app.models.question import (
     BulkUploadQuestionsResponse,
     DeleteQuestion,
+    MatrixMatchOptions,
     Option,
     QuestionRevisionInfo,
 )
@@ -151,22 +152,25 @@ def build_question_response(
 ) -> QuestionPublic:
     """Build a standardized QuestionPublic response."""
     # Convert complex types to dictionaries for JSON serialization
-    options_dict = None
+    options_dict: MatrixMatchOptions | list[Option] | None = None
     if revision.options:
-        options_dict = [
-            (
-                opt
-                if isinstance(opt, dict)
-                else (
-                    opt.dict()
-                    if hasattr(opt, "dict") and callable(opt.dict)
-                    else vars(opt)
-                    if hasattr(opt, "__dict__")
-                    else opt
+        if isinstance(revision.options, dict):
+            options_dict = revision.options
+        else:
+            options_dict = [
+                (
+                    opt
+                    if isinstance(opt, dict)
+                    else (
+                        opt.dict()
+                        if hasattr(opt, "dict") and callable(opt.dict)
+                        else vars(opt)
+                        if hasattr(opt, "__dict__")
+                        else opt
+                    )
                 )
-            )
-            for opt in revision.options
-        ]
+                for opt in revision.options
+            ]
 
     marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
@@ -237,25 +241,32 @@ def build_question_response(
 
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
-) -> tuple[list[Option] | None, MarkingScheme | None, dict[str, Any] | None]:
+) -> tuple[
+    list[Option] | MatrixMatchOptions | None,
+    MarkingScheme | None,
+    dict[str, Any] | None,
+]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[Option] | None = None
+    options: list[Option] | MatrixMatchOptions | None = None
     if data.options:
-        options = [
-            (
-                opt
-                if isinstance(opt, dict)
-                else (
-                    opt.dict()
-                    if hasattr(opt, "dict") and callable(opt.dict)
-                    else vars(opt)
-                    if hasattr(opt, "__dict__")
-                    else opt
+        if isinstance(data.options, dict):
+            options = data.options
+        else:
+            options = [
+                (
+                    opt
+                    if isinstance(opt, dict)
+                    else (
+                        opt.dict()
+                        if hasattr(opt, "dict") and callable(opt.dict)
+                        else vars(opt)
+                        if hasattr(opt, "__dict__")
+                        else opt
+                    )
                 )
-            )
-            for opt in data.options
-        ]
+                for opt in data.options
+            ]
 
     marking_scheme: MarkingScheme | None = None
     marking_scheme = data.marking_scheme if data.marking_scheme else None
@@ -421,7 +432,7 @@ class RevisionDetailDict(TypedDict):
     question_text: str
     instructions: str | None
     question_type: str
-    options: list[Option] | None
+    options: list[Option] | MatrixMatchOptions | None
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool
@@ -956,22 +967,25 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         )
 
     # Convert complex objects to dicts for serialization
-    options_dict = None
+    options_dict: list[Option] | MatrixMatchOptions | None = None
     if revision.options:
-        options_dict = [
-            (
-                opt
-                if isinstance(opt, dict)
-                else (
-                    opt.dict()
-                    if hasattr(opt, "dict") and callable(opt.dict)
-                    else vars(opt)
-                    if hasattr(opt, "__dict__")
-                    else opt
+        if isinstance(revision.options, dict):
+            options_dict = revision.options
+        else:
+            options_dict = [
+                (
+                    opt
+                    if isinstance(opt, dict)
+                    else (
+                        opt.dict()
+                        if hasattr(opt, "dict") and callable(opt.dict)
+                        else vars(opt)
+                        if hasattr(opt, "__dict__")
+                        else opt
+                    )
                 )
-            )
-            for opt in revision.options
-        ]
+                for opt in revision.options
+            ]
 
     marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 

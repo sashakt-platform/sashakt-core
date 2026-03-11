@@ -827,12 +827,12 @@ def get_test_questions(
             options=(
                 [
                     {
-                        "id": getattr(opt, "id", opt.get("id")),
-                        "key": getattr(opt, "key", opt.get("key")),
+                        "id": opt.get("id") if isinstance(opt, dict) else opt.id,
+                        "key": opt.get("key") if isinstance(opt, dict) else opt.key,
                     }
-                    for opt in (q.options or [])
+                    for opt in q.options
                 ]
-                if hide_question_text and q.options
+                if hide_question_text and isinstance(q.options, list)
                 else q.options
             ),
             subjective_answer_limit=q.subjective_answer_limit,

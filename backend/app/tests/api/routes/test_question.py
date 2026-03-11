@@ -1719,7 +1719,6 @@ def test_question_validation_numerical_decimal_string_invalid(
 
     assert response.status_code == 422
     data = response.json()
-    print("Data is --->", data["detail"])
     assert "Numerical decimal questions" in data["detail"][0]["msg"]
 
 
@@ -6536,3 +6535,274 @@ def test_create_test_with_subjective_question(
         q.get("question_type") for q in data.get("question_revisions", [])
     ]
     assert QuestionType.subjective in question_types
+
+
+MATRIX_OPTIONS = {
+    "rows": {
+        "label": "Column A",
+        "items": [
+            {"id": 1, "key": "P", "value": "Item P"},
+            {"id": 2, "key": "Q", "value": "Item Q"},
+            {"id": 3, "key": "R", "value": "Item R"},
+        ],
+    },
+    "columns": {
+        "label": "Column B",
+        "items": [
+            {"id": 10, "key": "1", "value": "Item 1"},
+            {"id": 20, "key": "2", "value": "Item 2"},
+            {"id": 30, "key": "3", "value": "Item 3"},
+        ],
+    },
+}
+
+MATRIX_CORRECT_ANSWER = {"1": [10, 20], "2": [20], "3": [30]}
+
+
+def test_create_matrix_match_question_valid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "matrix-match",
+        "options": MATRIX_OPTIONS,
+        "correct_answer": MATRIX_CORRECT_ANSWER,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "matrix-match"
+    assert data["options"]["rows"]["items"][0]["id"] == 1
+    assert data["options"]["columns"]["items"][0]["id"] == 10
+    assert data["correct_answer"] == MATRIX_CORRECT_ANSWER
+
+
+def test_create_matrix_match_question_no_correct_answer(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-match question without correct_answer (draft) should succeed."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    question_data = {
+        "organization_id": org.id,
+        "question_text": random_lower_string(),
+        "question_type": "matrix-match",
+        "options": MATRIX_OPTIONS,
+        "correct_answer": None,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json=question_data,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "matrix-match"
+    assert data["correct_answer"] is None
+
+
+def test_create_matrix_match_question_missing_options_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": None,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix match questions must have options with 'rows' and 'columns' columns."
+        in response.text
+    )
+
+
+def test_create_matrix_match_question_options_as_list_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Passing a list instead of the required dict should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": [
+                {"id": 1, "key": "A", "value": "Option 1"},
+                {"id": 2, "key": "B", "value": "Option 2"},
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix match questions must have options with 'rows' and 'columns' columns."
+        in response.text
+    )
+
+
+def test_create_matrix_match_question_empty_column_items_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    options_empty_rows = {
+        "rows": {"label": "Column A", "items": []},
+        "columns": {
+            "label": "Column B",
+            "items": [{"id": 10, "key": "1", "value": "Item 1"}],
+        },
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": options_empty_rows,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix match options must have at least one item in each column."
+        in response.text
+    )
+
+
+def test_create_matrix_match_question_invalid_correct_answer_key_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": MATRIX_OPTIONS,
+            "correct_answer": {"99": [10]},
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert "does not match any left column item ID." in response.text
+
+
+def test_create_matrix_match_question_invalid_correct_answer_value_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": MATRIX_OPTIONS,
+            "correct_answer": {"1": [99]},
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert "do not match any right column item ID." in response.text
+
+
+def test_create_matrix_match_question_correct_answer_not_dict_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": MATRIX_OPTIONS,
+            "correct_answer": [1, 10],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix match correct_answer must be a dict mapping left item IDs to lists of right item IDs."
+        in response.text
+    )
+
+
+def test_non_matrix_question_with_dict_options_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Non-matrix question types must not accept dict options."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "single-choice",
+            "options": MATRIX_OPTIONS,
+            "correct_answer": [1],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert "questions must have options as a list." in response.text
