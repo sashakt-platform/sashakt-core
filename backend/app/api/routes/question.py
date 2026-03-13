@@ -65,6 +65,31 @@ from app.models.utils import MarkingScheme, Message
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
+
+def serialize_options(
+    options: list[Option] | MatrixMatchOptions | None,
+) -> list[Option] | MatrixMatchOptions | None:
+    """Convert options to serializable dicts, handling both list and matrix-match formats."""
+    if not options:
+        return None
+    if isinstance(options, dict):
+        return options
+    return [
+        (
+            opt
+            if isinstance(opt, dict)
+            else (
+                opt.dict()
+                if hasattr(opt, "dict") and callable(opt.dict)
+                else vars(opt)
+                if hasattr(opt, "__dict__")
+                else opt
+            )
+        )
+        for opt in options
+    ]
+
+
 # create sorting dependency
 QuestionSorting = create_sorting_dependency(QuestionSortConfig)
 QuestionSortingDep = Annotated[SortingParams, Depends(QuestionSorting)]
@@ -152,25 +177,7 @@ def build_question_response(
 ) -> QuestionPublic:
     """Build a standardized QuestionPublic response."""
     # Convert complex types to dictionaries for JSON serialization
-    options_dict: MatrixMatchOptions | list[Option] | None = None
-    if revision.options:
-        if isinstance(revision.options, dict):
-            options_dict = revision.options
-        else:
-            options_dict = [
-                (
-                    opt
-                    if isinstance(opt, dict)
-                    else (
-                        opt.dict()
-                        if hasattr(opt, "dict") and callable(opt.dict)
-                        else vars(opt)
-                        if hasattr(opt, "__dict__")
-                        else opt
-                    )
-                )
-                for opt in revision.options
-            ]
+    options_dict = serialize_options(revision.options)
 
     marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
@@ -248,25 +255,7 @@ def prepare_for_db(
 ]:
     """Helper function to prepare data for database by converting objects to dicts"""
     # Handle options
-    options: list[Option] | MatrixMatchOptions | None = None
-    if data.options:
-        if isinstance(data.options, dict):
-            options = data.options
-        else:
-            options = [
-                (
-                    opt
-                    if isinstance(opt, dict)
-                    else (
-                        opt.dict()
-                        if hasattr(opt, "dict") and callable(opt.dict)
-                        else vars(opt)
-                        if hasattr(opt, "__dict__")
-                        else opt
-                    )
-                )
-                for opt in data.options
-            ]
+    options = serialize_options(data.options)
 
     marking_scheme: MarkingScheme | None = None
     marking_scheme = data.marking_scheme if data.marking_scheme else None
@@ -967,25 +956,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         )
 
     # Convert complex objects to dicts for serialization
-    options_dict: list[Option] | MatrixMatchOptions | None = None
-    if revision.options:
-        if isinstance(revision.options, dict):
-            options_dict = revision.options
-        else:
-            options_dict = [
-                (
-                    opt
-                    if isinstance(opt, dict)
-                    else (
-                        opt.dict()
-                        if hasattr(opt, "dict") and callable(opt.dict)
-                        else vars(opt)
-                        if hasattr(opt, "__dict__")
-                        else opt
-                    )
-                )
-                for opt in revision.options
-            ]
+    options_dict = serialize_options(revision.options)
 
     marking_scheme_dict = revision.marking_scheme if revision.marking_scheme else None
 
