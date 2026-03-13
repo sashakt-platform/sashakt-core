@@ -1410,17 +1410,17 @@ def get_test_result(
                         for row_id, column_ids in expected_matrix_answer.items()
                     }
 
-                    correctly_matched_rows = sum(
-                        (
-                            {int(col_id) for col_id in cols}
-                            if isinstance(
-                                cols := candidate_matrix_response.get(row_id), list
-                            )
-                            else set()
-                        )
-                        == expected_cols
-                        for row_id, expected_cols in expected_row_to_columns.items()
-                    )
+                    correctly_matched_rows = 0
+                    for row_id, expected_cols in expected_row_to_columns.items():
+                        candidate_cols = candidate_matrix_response.get(row_id)
+                        if isinstance(candidate_cols, list):
+                            candidate_col_set = {
+                                int(col_id) for col_id in candidate_cols
+                            }
+                        else:
+                            candidate_col_set = set()
+                        if candidate_col_set == expected_cols:
+                            correctly_matched_rows += 1
 
                     if correctly_matched_rows == len(expected_row_to_columns):
                         marks_obtained += correct_mark
