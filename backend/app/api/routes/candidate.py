@@ -1392,6 +1392,62 @@ def get_test_result(
                     incorrect += 1
                     marks_obtained += wrong_mark
 
+            elif revision.question_type.value == "matrix-match":
+                try:
+                    candidate_matrix_response = json.loads(answer.response)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    incorrect += 1
+                    marks_obtained += wrong_mark
+                    continue
+
+                expected_matrix_answer = revision.correct_answer
+
+                if isinstance(candidate_matrix_response, dict) and isinstance(
+                    expected_matrix_answer, dict
+                ):
+                    expected_row_to_columns = {
+                        str(row_id): {int(col_id) for col_id in column_ids}
+                        for row_id, column_ids in expected_matrix_answer.items()
+                    }
+
+                    correctly_matched_rows = sum(
+                        (
+                            {int(col_id) for col_id in cols}
+                            if isinstance(
+                                cols := candidate_matrix_response.get(row_id), list
+                            )
+                            else set()
+                        )
+                        == expected_cols
+                        for row_id, expected_cols in expected_row_to_columns.items()
+                    )
+
+                    if correctly_matched_rows == len(expected_row_to_columns):
+                        marks_obtained += correct_mark
+                        correct += 1
+                    elif (
+                        marking_scheme
+                        and marking_scheme.get("partial")
+                        and correctly_matched_rows > 0
+                    ):
+                        partial_marks = next(
+                            (
+                                cond["marks"]
+                                for cond in marking_scheme["partial"]["correct_answers"]
+                                if cond["num_correct_selected"]
+                                == correctly_matched_rows
+                            ),
+                            0.0,
+                        )
+                        marks_obtained += partial_marks
+                        correct += 1
+                    else:
+                        marks_obtained += wrong_mark
+                        incorrect += 1
+                else:
+                    marks_obtained += wrong_mark
+                    incorrect += 1
+
     total_questions = len(candidate_test.question_revision_ids)
 
     # Generate certificate download URL if test has a certificate assigned
