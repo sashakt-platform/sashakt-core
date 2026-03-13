@@ -1,4 +1,4 @@
-"""added question type matric match
+"""added question type matrix match
 
 Revision ID: dd491959bf1f
 Revises: ce223bd3d892
