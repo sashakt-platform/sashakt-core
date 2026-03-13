@@ -30,6 +30,7 @@ class QuestionType(str, Enum):
     subjective = "subjective"
     numerical_integer = "numerical-integer"
     numerical_decimal = "numerical-decimal"
+    matrix_match = "matrix-match"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -72,6 +73,16 @@ class Option(TypedDict):
     value: NotRequired[str]
 
 
+class MatrixColumn(TypedDict):
+    label: str
+    items: list[Option]
+
+
+class MatrixMatchOptions(TypedDict):
+    rows: MatrixColumn
+    columns: MatrixColumn
+
+
 class FailedQuestion(TypedDict):
     row_number: int
     question_text: str
@@ -107,7 +118,7 @@ class QuestionBase(SQLModel):
         description="Type of question (single-choice, multi-choice, etc.)",
     )
 
-    options: list[Option] | None = Field(
+    options: MatrixMatchOptions | list[Option] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -146,6 +157,12 @@ class QuestionBase(SQLModel):
         question_type = self.question_type
         options = self.options
         correct_answer = self.correct_answer
+        if question_type != QuestionType.matrix_match and options is not None:
+            if not isinstance(options, list):
+                raise ValueError(
+                    f"{question_type} questions must have options as a list."
+                )
+
         if question_type in ["single-choice", "multi-choice"]:
             if options and correct_answer is not None:
                 option_ids = [
@@ -205,6 +222,39 @@ class QuestionBase(SQLModel):
                         else "Numerical decimal questions must have a decimal correct answer. Examples: 3.14, 0.75, -2.5, 5.0"
                     )
                     raise ValueError(msg)
+
+        elif question_type == QuestionType.matrix_match:
+            if options is None or not isinstance(options, dict):
+                raise ValueError(
+                    "Matrix match questions must have options with 'rows' and 'columns' keys."
+                )
+            left_items = options.get("rows", {}).get("items", [])
+            right_items = options.get("columns", {}).get("items", [])
+            left_ids = {item["id"] for item in left_items}
+            right_ids = {item["id"] for item in right_items}
+            if not left_ids or not right_ids:
+                raise ValueError(
+                    "Matrix match options must have at least one item in each column."
+                )
+            if correct_answer is not None:
+                if not isinstance(correct_answer, dict):
+                    raise ValueError(
+                        "Matrix match correct_answer must be a dict mapping left item IDs to lists of right item IDs."
+                    )
+                for row_id, matched_column_ids in correct_answer.items():
+                    if int(row_id) not in left_ids:
+                        raise ValueError(
+                            f"Correct answer key {row_id} does not match any left column item ID."
+                        )
+                    if not isinstance(matched_column_ids, list):
+                        raise ValueError(
+                            f"Correct answer value for key {row_id} must be a list."
+                        )
+                    invalid_column_ids = set(matched_column_ids) - right_ids
+                    if invalid_column_ids:
+                        raise ValueError(
+                            f"Column IDs {invalid_column_ids} do not match any right column item ID."
+                        )
 
         return self
 
@@ -481,7 +531,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[Option] | None = Field(
+    options: MatrixMatchOptions | list[Option] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -514,7 +564,7 @@ class QuestionCandidatePublic(SQLModel):
     )
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: list[Option] | None = Field(
+    options: MatrixMatchOptions | list[Option] | None = Field(
         description="Available options for choice questions (option.value excluded in OMR mode)"
     )
     subjective_answer_limit: int | None = Field(

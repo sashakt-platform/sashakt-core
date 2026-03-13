@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -33,6 +34,11 @@ from app.tests.utils.user import (
     get_current_user_data,
 )
 
+from ...utils.matrix_match import (
+    MATRIX_MATCH_CORRECT_ANSWER,
+    MATRIX_MATCH_OPTIONS,
+    create_matrix_match_test_setup,
+)
 from ...utils.utils import random_email, random_lower_string
 
 
@@ -12285,3 +12291,529 @@ def test_result_certificate_data_not_set_when_no_certificate(
     candidate_test = db.get(CandidateTest, candidate_test_id)
     assert candidate_test is not None
     assert candidate_test.certificate_data is None
+
+
+def test_get_test_result_matrix_match_all_rows_correct(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate matches all rows correctly → counted as correct, full marks awarded."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(MATRIX_MATCH_CORRECT_ANSWER),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 4
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_all_rows_incorrect(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate selects wrong columns for all rows → counted as incorrect, wrong marks applied."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    wrong_response = {"1": [30], "2": [10], "3": [20]}
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(wrong_response),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_not_attempted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate does not answer the matrix-match question → counted as mandatory not attempted."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 0
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_partial_marks(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate matches only some rows correctly → partial marks awarded when partial scheme is set."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    partial_marking_scheme = {
+        "correct": 4,
+        "wrong": -1,
+        "skipped": 0,
+        "partial": {
+            "correct_answers": [
+                {"num_correct_selected": 1, "marks": 1},
+                {"num_correct_selected": 2, "marks": 2},
+            ]
+        },
+    }
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_match,
+        options=MATRIX_MATCH_OPTIONS,
+        correct_answer=MATRIX_MATCH_CORRECT_ANSWER,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=partial_marking_scheme,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    partial_response = {"1": [10, 20], "2": [30], "3": [30]}
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(partial_response),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_invalid_response(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate submits a non-JSON / non-dict response → counted as incorrect."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response="not-valid-json",
+            visited=True,
+            time_spent=10,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_mixed_correct_and_incorrect(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Two matrix-match questions: one answered correctly, one incorrectly."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    marking_scheme = {"correct": 4, "wrong": -1, "skipped": 0}
+
+    revision_1 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_match,
+        options=MATRIX_MATCH_OPTIONS,
+        correct_answer=MATRIX_MATCH_CORRECT_ANSWER,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=marking_scheme,
+    )
+    revision_2 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_match,
+        options=MATRIX_MATCH_OPTIONS,
+        correct_answer=MATRIX_MATCH_CORRECT_ANSWER,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=marking_scheme,
+    )
+    db.add_all([revision_1, revision_2])
+    db.commit()
+    db.refresh(revision_1)
+    db.refresh(revision_2)
+
+    db.add_all(
+        [
+            TestQuestion(test_id=test.id, question_revision_id=revision_1.id),
+            TestQuestion(test_id=test.id, question_revision_id=revision_2.id),
+        ]
+    )
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add_all(
+        [
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=revision_1.id,
+                response=json.dumps(MATRIX_MATCH_CORRECT_ANSWER),
+                visited=True,
+                time_spent=30,
+            ),
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=revision_2.id,
+                response=json.dumps({"1": [30], "2": [10], "3": [20]}),
+                visited=True,
+                time_spent=30,
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 0
+    assert data["total_questions"] == 2
+    assert data["marks_obtained"] == 3
+    assert data["marks_maximum"] == 8
+
+
+def test_get_test_result_matrix_match_without_json_dumps(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=str(MATRIX_MATCH_CORRECT_ANSWER),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["marks_obtained"] == -1
+
+
+def test_get_test_result_matrix_match_partial_one_correct_one_wrong_column(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    test, revision = create_matrix_match_test_setup(db, correct_answer={"1": [20, 30]})
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [30, 10]}),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_partial_only_one_column_of_two_submitted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    test, revision = create_matrix_match_test_setup(db, correct_answer={"1": [20, 30]})
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [10]}),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_partial_scheme_with_wrong_column_in_row(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    partial_marking_scheme = {
+        "correct": 4,
+        "wrong": -1,
+        "skipped": 0,
+        "partial": {
+            "correct_answers": [
+                {"num_correct_selected": 1, "marks": 1},
+                {"num_correct_selected": 2, "marks": 2},
+            ]
+        },
+    }
+    correct_answer = {"1": [20, 30], "2": [20], "3": [30]}
+    test, revision = create_matrix_match_test_setup(
+        db, marking_scheme=partial_marking_scheme, correct_answer=correct_answer
+    )
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [30, 10], "2": [20], "3": [30]}),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 4
