@@ -1410,6 +1410,7 @@ def get_test_result(
                         for row_id, column_ids in expected_matrix_answer.items()
                     }
 
+                    # Only expected rows are evaluated; extra candidate rows are ignored.
                     correctly_matched_rows = 0
                     for row_id, expected_cols in expected_row_to_columns.items():
                         candidate_cols = candidate_matrix_response.get(row_id)
