@@ -6639,7 +6639,7 @@ def test_create_matrix_match_question_missing_options_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix match questions must have options with 'rows' and 'columns' columns."
+        "Matrix match questions must have options with 'rows' and 'columns' keys."
         in response.text
     )
 
@@ -6669,7 +6669,7 @@ def test_create_matrix_match_question_options_as_list_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix match questions must have options with 'rows' and 'columns' columns."
+        "Matrix match questions must have options with 'rows' and 'columns' keys."
         in response.text
     )
 

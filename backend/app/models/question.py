@@ -226,7 +226,7 @@ class QuestionBase(SQLModel):
         elif question_type == QuestionType.matrix_match:
             if options is None or not isinstance(options, dict):
                 raise ValueError(
-                    "Matrix match questions must have options with 'rows' and 'columns' columns."
+                    "Matrix match questions must have options with 'rows' and 'columns' keys."
                 )
             left_items = options.get("rows", {}).get("items", [])
             right_items = options.get("columns", {}).get("items", [])
