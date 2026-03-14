@@ -189,12 +189,12 @@ def validate_external_media_url(url: str) -> ExternalMedia:
     Raises:
         HTTPException: If URL is invalid
     """
+    url = url.strip()
+
     if not url or not url.startswith(("http://", "https://")):
         raise HTTPException(
             status_code=400, detail="Invalid URL. Must start with http:// or https://"
         )
-
-    url = url.strip()
 
     # YouTube
     youtube_id = _extract_youtube_id(url)

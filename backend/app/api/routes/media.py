@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.routes.question import check_question_permission
 from app.core.media import (
     build_external_media_dict,
     build_image_media_dict,
@@ -12,6 +13,7 @@ from app.core.media import (
     validate_image_upload,
 )
 from app.core.provider_config import provider_config_service
+from app.core.roles import state_admin, test_admin
 from app.models import Message
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
@@ -20,6 +22,7 @@ from app.models.question import (
     Question,
     QuestionRevision,
 )
+from app.models.role import Role
 from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/media", tags=["Media"])
@@ -84,6 +87,10 @@ def get_question_with_permission(
     if question.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_question_permission(session, current_user, question)
+
     return question
 
 
@@ -99,27 +106,48 @@ def get_revision(session: SessionDep, question: Question) -> QuestionRevision:
     return revision
 
 
-def get_options_list(
+def find_option(
     options: MatrixMatchOptions | list[Option] | None,
-) -> list[Option]:
-    """Get options as a list, raising 404 if not available or not a list type."""
+    option_id: int,
+) -> tuple[list[Option], int, str | None]:
+    """Find option by ID across flat list or matrix match structure.
+
+    Returns (items_list, index, matrix_key).
+    matrix_key is None for flat lists, "rows" or "columns" for matrix match.
+    """
     if not options:
         raise HTTPException(status_code=404, detail="Question has no options")
-    if isinstance(options, dict):
-        raise HTTPException(
-            status_code=400,
-            detail="Media operations are not supported for matrix match questions",
-        )
-    return options
 
-
-def find_option_index(options: list[Option], option_id: int) -> int:
-    """Find the index of an option by ID."""
-    for i, opt in enumerate(options):
-        if opt.get("id") == option_id:
-            return i
+    if isinstance(options, list):
+        for i, opt in enumerate(options):
+            if opt.get("id") == option_id:
+                return options, i, None
+    else:
+        for key in ("rows", "columns"):
+            items = options[key]["items"]
+            for i, opt in enumerate(items):
+                if opt.get("id") == option_id:
+                    return items, i, key
 
     raise HTTPException(status_code=404, detail="Option not found")
+
+
+def rebuild_options(
+    original: MatrixMatchOptions | list[Option] | None,
+    updated_items: list[Option],
+    matrix_key: str | None,
+) -> MatrixMatchOptions | list[Option]:
+    """Rebuild options structure after modifying an items list."""
+    if matrix_key is None:
+        return updated_items
+    assert isinstance(original, dict)
+    rows = original["rows"]
+    columns = original["columns"]
+    if matrix_key == "rows":
+        rows = {"label": rows["label"], "items": updated_items}
+    else:
+        columns = {"label": columns["label"], "items": updated_items}
+    return MatrixMatchOptions(rows=rows, columns=columns)
 
 
 # Question image endpoints
@@ -288,8 +316,7 @@ async def upload_option_image(
     revision = get_revision(session, question)
 
     # Find the option
-    options = get_options_list(revision.options)
-    option_index = find_option_index(options, option_id)
+    items, option_index, matrix_key = find_option(revision.options, option_id)
 
     # Validate image
     file_content, file_extension, content_type = await validate_image_upload(file)
@@ -300,7 +327,7 @@ async def upload_option_image(
     gcs_service.upload(file_content, gcs_path, content_type)
 
     # Update option with media
-    options = list(options)
+    updated_items = list(items)
     option_media = {
         "image": build_image_media_dict(
             gcs_path=gcs_path,
@@ -309,8 +336,8 @@ async def upload_option_image(
             alt_text=alt_text,
         )
     }
-    options[option_index]["media"] = option_media
-    revision.options = options
+    updated_items[option_index]["media"] = option_media
+    revision.options = rebuild_options(revision.options, updated_items, matrix_key)
     session.add(revision)
     session.commit()
 
@@ -337,11 +364,10 @@ async def delete_option_image(
     revision = get_revision(session, question)
 
     # Find the option
-    options = get_options_list(revision.options)
-    option_index = find_option_index(options, option_id)
+    items, option_index, matrix_key = find_option(revision.options, option_id)
 
-    options_copy = list(options)
-    option = options_copy[option_index]
+    updated_items = list(items)
+    option = updated_items[option_index]
 
     option_media = option.get("media")
     if not option_media or "image" not in option_media:
@@ -356,11 +382,11 @@ async def delete_option_image(
     # Update option
     del option_media["image"]
     if not option_media:
-        del options_copy[option_index]["media"]
+        del updated_items[option_index]["media"]
     else:
-        options_copy[option_index]["media"] = option_media
+        updated_items[option_index]["media"] = option_media
 
-    revision.options = options_copy
+    revision.options = rebuild_options(revision.options, updated_items, matrix_key)
     session.add(revision)
     session.commit()
 
@@ -387,18 +413,17 @@ async def add_option_external_media(
     revision = get_revision(session, question)
 
     # Find the option
-    options = get_options_list(revision.options)
-    option_index = find_option_index(options, option_id)
+    items, option_index, matrix_key = find_option(revision.options, option_id)
 
     # Validate and parse URL
     external_media = validate_external_media_url(url)
 
     # Update option
-    options_copy = list(options)
-    option_media = options_copy[option_index].get("media", {}) or {}
+    updated_items = list(items)
+    option_media = updated_items[option_index].get("media", {}) or {}
     option_media["external_media"] = build_external_media_dict(external_media)
-    options_copy[option_index]["media"] = option_media
-    revision.options = options_copy
+    updated_items[option_index]["media"] = option_media
+    revision.options = rebuild_options(revision.options, updated_items, matrix_key)
     session.add(revision)
     session.commit()
 
@@ -427,11 +452,10 @@ async def delete_option_external_media(
     revision = get_revision(session, question)
 
     # Find the option
-    options = get_options_list(revision.options)
-    option_index = find_option_index(options, option_id)
+    items, option_index, matrix_key = find_option(revision.options, option_id)
 
-    options_copy = list(options)
-    option = options_copy[option_index]
+    updated_items = list(items)
+    option = updated_items[option_index]
 
     option_media = option.get("media")
     if not option_media or "external_media" not in option_media:
@@ -442,11 +466,11 @@ async def delete_option_external_media(
     # Update option
     del option_media["external_media"]
     if not option_media:
-        del options_copy[option_index]["media"]
+        del updated_items[option_index]["media"]
     else:
-        options_copy[option_index]["media"] = option_media
+        updated_items[option_index]["media"] = option_media
 
-    revision.options = options_copy
+    revision.options = rebuild_options(revision.options, updated_items, matrix_key)
     session.add(revision)
     session.commit()
 

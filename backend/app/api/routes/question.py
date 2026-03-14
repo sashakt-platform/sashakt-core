@@ -1,5 +1,6 @@
 import base64
 import csv
+import logging
 import re
 from datetime import datetime
 from io import StringIO
@@ -56,6 +57,7 @@ from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
     BulkUploadQuestionsResponse,
     DeleteQuestion,
+    MatrixColumn,
     MatrixMatchOptions,
     Option,
     QuestionRevisionInfo,
@@ -65,6 +67,8 @@ from app.models.test import TestQuestion
 from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
 from app.services.storage.gcs import GCSStorageService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -211,18 +215,17 @@ def enrich_media_with_signed_urls(
             try:
                 result["image"]["url"] = gcs_service.generate_signed_url(gcs_path)
             except Exception:
-                pass  # GCS error - leave without URL
+                logger.warning(
+                    "Failed to generate signed URL for %s: ", gcs_path, exc_info=True
+                )
 
     return result
 
 
-def enrich_options_with_signed_urls(
-    options: list[Option] | None, gcs_service: GCSStorageService | None
-) -> list[Option] | None:
-    """Add signed URLs to option media objects."""
-    if not options or not gcs_service:
-        return options
-
+def _enrich_option_list(
+    options: list[Option], gcs_service: GCSStorageService
+) -> list[Option]:
+    """Enrich a list of options with signed URLs."""
     result: list[Option] = []
     for opt in options:
         opt_copy = Option(**opt)
@@ -231,8 +234,33 @@ def enrich_options_with_signed_urls(
                 opt_copy["media"], gcs_service
             )
         result.append(opt_copy)
-
     return result
+
+
+def enrich_options_with_signed_urls(
+    options: list[Option] | MatrixMatchOptions | None,
+    gcs_service: GCSStorageService | None,
+) -> list[Option] | MatrixMatchOptions | None:
+    """Add signed URLs to option media objects."""
+    if not options or not gcs_service:
+        return options
+
+    if isinstance(options, list):
+        return _enrich_option_list(options, gcs_service)
+
+    # MatrixMatchOptions - enrich items in both rows and columns
+    rows = options["rows"]
+    columns = options["columns"]
+    return MatrixMatchOptions(
+        rows=MatrixColumn(
+            label=rows["label"],
+            items=_enrich_option_list(rows["items"], gcs_service),
+        ),
+        columns=MatrixColumn(
+            label=columns["label"],
+            items=_enrich_option_list(columns["items"], gcs_service),
+        ),
+    )
 
 
 def build_question_response(
@@ -255,7 +283,7 @@ def build_question_response(
     options_dict = serialize_options(revision.options)
 
     # Enrich options with signed URLs if GCS service is available
-    if isinstance(options_dict, list) and gcs_service:
+    if options_dict and gcs_service:
         enriched = enrich_options_with_signed_urls(options_dict, gcs_service)
         if enriched:
             options_dict = enriched
