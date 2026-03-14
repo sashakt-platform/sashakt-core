@@ -217,15 +217,15 @@ def enrich_media_with_signed_urls(
 
 
 def enrich_options_with_signed_urls(
-    options: list[dict[str, Any]] | None, gcs_service: GCSStorageService | None
-) -> list[dict[str, Any]] | None:
+    options: list[Option] | None, gcs_service: GCSStorageService | None
+) -> list[Option] | None:
     """Add signed URLs to option media objects."""
     if not options or not gcs_service:
         return options
 
-    result = []
+    result: list[Option] = []
     for opt in options:
-        opt_copy = dict(opt)
+        opt_copy = Option(**opt)
         if "media" in opt_copy and isinstance(opt_copy["media"], dict):
             opt_copy["media"] = enrich_media_with_signed_urls(
                 opt_copy["media"], gcs_service
@@ -255,7 +255,7 @@ def build_question_response(
     options_dict = serialize_options(revision.options)
 
     # Enrich options with signed URLs if GCS service is available
-    if options_dict and gcs_service:
+    if isinstance(options_dict, list) and gcs_service:
         enriched = enrich_options_with_signed_urls(options_dict, gcs_service)
         if enriched:
             options_dict = enriched
