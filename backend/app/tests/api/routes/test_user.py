@@ -2108,6 +2108,202 @@ def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
     assert len(data["districts"]) == 1
 
 
+def test_state_admin_with_state_access_creates_test_admin_for_district(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    A state_admin linked to a state (state-level access, no district) creates a
+    test_admin with an explicit district that belongs to their state.
+    The test_admin should be created successfully and have that district assigned.
+    """
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        country = Country(name=random_lower_string(), is_active=True)
+        db.add(country)
+        db.commit()
+        db.refresh(country)
+
+        state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+        db.add(state)
+        db.commit()
+        db.refresh(state)
+
+        district = District(
+            name=random_lower_string(), is_active=True, state_id=state.id
+        )
+        db.add(district)
+        db.commit()
+        db.refresh(district)
+
+        state_admin_role = db.exec(
+            select(Role).where(Role.name == "state_admin")
+        ).first()
+        test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert state_admin_role is not None
+        assert test_admin_role is not None
+
+        org = create_random_organization(db)
+        state_admin_email = random_email()
+
+        # Create state_admin with only state-level access (no district)
+        state_admin_payload = {
+            "email": state_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": org.id,
+            "state_ids": [state.id],
+        }
+        resp = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=get_user_superadmin_token,
+            json=state_admin_payload,
+        )
+        assert resp.status_code == 200
+        state_admin_data = resp.json()
+        assert len(state_admin_data["states"]) == 1
+        assert state_admin_data["states"][0]["id"] == state.id
+        assert not state_admin_data["districts"]
+
+        # Log in as the state_admin
+        token_headers = authentication_token_from_email(
+            client=client, email=state_admin_email, db=db
+        )
+
+        # State_admin creates a test_admin scoped to a specific district within their state
+        test_admin_payload = {
+            "email": random_email(),
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "full_name": random_lower_string(),
+            "organization_id": org.id,
+            "district_ids": [district.id],
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=token_headers,
+            json=test_admin_payload,
+        )
+        assert response.status_code == 200
+        new_user = response.json()
+
+        assert new_user["role_id"] == test_admin_role.id
+        assert "districts" in new_user
+        assert len(new_user["districts"]) == 1
+        assert new_user["districts"][0]["id"] == district.id
+
+        # Verify via GET that the district persists
+        get_resp = client.get(
+            f"{settings.API_V1_STR}/users/{new_user['id']}",
+            headers=token_headers,
+        )
+        assert get_resp.status_code == 200
+        fetched = get_resp.json()
+        assert district.id in [d["id"] for d in fetched["districts"]]
+        assert len(fetched["districts"]) == 1
+
+
+def test_test_admin_creates_test_admin_inherits_states_and_districts(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """
+    A test_admin with existing state and district associations creates another
+    test_admin without specifying state/district. The new test_admin should
+    automatically inherit the creator's states and districts.
+    """
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        country = Country(name=random_lower_string(), is_active=True)
+        db.add(country)
+        db.commit()
+        db.refresh(country)
+
+        state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+        db.add(state)
+        db.commit()
+        db.refresh(state)
+
+        district = District(
+            name=random_lower_string(), is_active=True, state_id=state.id
+        )
+        db.add(district)
+        db.commit()
+        db.refresh(district)
+
+        test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert test_admin_role is not None
+
+        org = create_random_organization(db)
+        creator_email = random_email()
+
+        # Create the creator test_admin (via superadmin) with state + district
+        creator_payload = {
+            "email": creator_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org.id,
+            "state_ids": [state.id],
+            "district_ids": [district.id],
+        }
+        resp = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=get_user_superadmin_token,
+            json=creator_payload,
+        )
+        assert resp.status_code == 200
+        creator_data = resp.json()
+        assert creator_data["states"][0]["id"] == state.id
+        assert creator_data["districts"][0]["id"] == district.id
+
+        # Log in as the creator test_admin
+        token_headers = authentication_token_from_email(
+            client=client, email=creator_email, db=db
+        )
+
+        # Creator test_admin creates a new test_admin without specifying locations
+        new_test_admin_payload = {
+            "email": random_email(),
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "full_name": random_lower_string(),
+            "organization_id": org.id,
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=token_headers,
+            json=new_test_admin_payload,
+        )
+        assert response.status_code == 200
+        new_user = response.json()
+
+        assert new_user["role_id"] == test_admin_role.id
+        assert len(new_user["states"]) == 1
+        assert new_user["states"][0]["id"] == state.id
+        assert len(new_user["districts"]) == 1
+        assert new_user["districts"][0]["id"] == district.id
+
+        # Verify via GET
+        get_resp = client.get(
+            f"{settings.API_V1_STR}/users/{new_user['id']}",
+            headers=token_headers,
+        )
+        assert get_resp.status_code == 200
+        fetched = get_resp.json()
+        assert state.id in [s["id"] for s in fetched["states"]]
+        assert district.id in [d["id"] for d in fetched["districts"]]
+
+
 def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:

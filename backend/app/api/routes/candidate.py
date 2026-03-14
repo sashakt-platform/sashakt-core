@@ -827,12 +827,12 @@ def get_test_questions(
             options=(
                 [
                     {
-                        "id": getattr(opt, "id", opt.get("id")),
-                        "key": getattr(opt, "key", opt.get("key")),
+                        "id": opt.get("id") if isinstance(opt, dict) else opt.id,
+                        "key": opt.get("key") if isinstance(opt, dict) else opt.key,
                     }
-                    for opt in (q.options or [])
+                    for opt in q.options
                 ]
-                if hide_question_text and q.options
+                if hide_question_text and isinstance(q.options, list)
                 else q.options
             ),
             subjective_answer_limit=q.subjective_answer_limit,
@@ -1391,6 +1391,63 @@ def get_test_result(
                 else:
                     incorrect += 1
                     marks_obtained += wrong_mark
+
+            elif revision.question_type.value == "matrix-match":
+                try:
+                    candidate_matrix_response = json.loads(answer.response)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    incorrect += 1
+                    marks_obtained += wrong_mark
+                    continue
+
+                expected_matrix_answer = revision.correct_answer
+
+                if isinstance(candidate_matrix_response, dict) and isinstance(
+                    expected_matrix_answer, dict
+                ):
+                    expected_row_to_columns = {
+                        str(row_id): {int(col_id) for col_id in column_ids}
+                        for row_id, column_ids in expected_matrix_answer.items()
+                    }
+
+                    # Only expected rows are evaluated; extra candidate rows are ignored.
+                    correctly_matched_rows = 0
+                    for row_id, expected_cols in expected_row_to_columns.items():
+                        candidate_cols = candidate_matrix_response.get(row_id)
+                        if isinstance(candidate_cols, list):
+                            candidate_col_set = {
+                                int(col_id) for col_id in candidate_cols
+                            }
+                        else:
+                            candidate_col_set = set()
+                        if candidate_col_set == expected_cols:
+                            correctly_matched_rows += 1
+
+                    if correctly_matched_rows == len(expected_row_to_columns):
+                        marks_obtained += correct_mark
+                        correct += 1
+                    elif (
+                        marking_scheme
+                        and marking_scheme.get("partial")
+                        and correctly_matched_rows > 0
+                    ):
+                        partial_marks = next(
+                            (
+                                cond["marks"]
+                                for cond in marking_scheme["partial"]["correct_answers"]
+                                if cond["num_correct_selected"]
+                                == correctly_matched_rows
+                            ),
+                            0.0,
+                        )
+                        marks_obtained += partial_marks
+                        correct += 1
+                    else:
+                        marks_obtained += wrong_mark
+                        incorrect += 1
+                else:
+                    marks_obtained += wrong_mark
+                    incorrect += 1
 
     total_questions = len(candidate_test.question_revision_ids)
 

@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -18,6 +19,8 @@ from app.models import (
     Test,
     TestCandidatePublic,
 )
+from app.models.certificate import Certificate
+from app.models.form import Form, FormField, FormFieldType, FormResponse
 from app.models.location import Country, District, State
 from app.models.question import QuestionTag, QuestionType
 from app.models.role import Role
@@ -31,6 +34,11 @@ from app.tests.utils.user import (
     get_current_user_data,
 )
 
+from ...utils.matrix_match import (
+    MATRIX_MATCH_CORRECT_ANSWER,
+    MATRIX_MATCH_OPTIONS,
+    create_matrix_match_test_setup,
+)
 from ...utils.utils import random_email, random_lower_string
 
 
@@ -11402,3 +11410,1410 @@ def test_answer_cannot_be_modified_after_review_feedback(
     assert response.status_code == 403
     data = response.json()
     assert "Cannot modify answer after it has been reviewed" in data["detail"]
+
+
+def test_result_includes_certificate_download_url(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Result includes certificate_download_url when test has a certificate assigned."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["certificate_download_url"] is not None
+    assert data["certificate_download_url"].startswith("/api/v1/certificate/download/")
+
+
+def test_result_no_certificate_download_url_when_test_has_no_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Result has certificate_download_url=None when test has no certificate assigned."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        show_result=True,
+        certificate_id=None,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["certificate_download_url"] is None
+
+
+def test_result_certificate_token_reused_on_repeated_calls(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Certificate token is identical on repeated result calls for the same candidate_test."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response1 = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response1.status_code == 200
+    url1 = response1.json()["certificate_download_url"]
+
+    response2 = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response2.status_code == 200
+    url2 = response2.json()["certificate_download_url"]
+
+    assert url1 is not None
+    assert url1 == url2
+
+
+def test_result_certificate_data_snapshot_persisted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Certificate data snapshot is saved to candidate_test after first result call."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert "token" in candidate_test.certificate_data
+    assert candidate_test.certificate_data["test_name"] == test.name
+    assert "score" in candidate_test.certificate_data
+    assert "completion_date" in candidate_test.certificate_data
+
+
+def test_result_certificate_score_formatted_with_marks(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Score in certificate_data is formatted as 'X.X/Y.Y (Z.Z%)' when marking scheme exists."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    marking_scheme = {"correct": 4, "wrong": -1, "skipped": 0}
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+        marks_level="test",
+        marking_scheme=marking_scheme,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    client.post(
+        f"{settings.API_V1_STR}/candidate/answer/{candidate_test_id}/{revision.id}",
+        json={"response": "[1]"},
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    score = candidate_test.certificate_data["score"]
+
+    assert "/" in score
+    assert "%" in score
+    assert "(" in score
+
+
+def test_result_certificate_score_na_when_no_questions(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Score in certificate_data is 'N/A' when test has no questions (marks_maximum stays 0)."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert candidate_test.certificate_data["score"] == "N/A"
+
+
+def test_result_certificate_completion_date_formatted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Completion date in certificate_data is formatted as 'Month DD, YYYY' when end_time is set."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    end_time = datetime(2025, 6, 15, 10, 30, 0)
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.end_time = end_time
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert candidate_test.certificate_data["completion_date"] == "June 15, 2025"
+
+
+def test_result_certificate_data_includes_form_response_fields(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Form response fields are resolved and included in certificate_data when test has a form."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    field = FormField(
+        form_id=form.id,
+        field_type=FormFieldType.TEXT,
+        label="Full Name",
+        name="full_name",
+        order=0,
+    )
+    db.add(field)
+    db.commit()
+    db.refresh(field)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    form_response = FormResponse(
+        candidate_test_id=candidate_test_id,
+        form_id=form.id,
+        responses={"full_name": "Jane Doe"},
+    )
+    db.add(form_response)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert "full_name" in candidate_test.certificate_data
+    assert candidate_test.certificate_data["full_name"] == "Jane Doe"
+
+
+def test_result_certificate_data_form_fields_default_na_when_no_form_response(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Form fields default to 'N/A' in certificate_data when no form response exists."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    field = FormField(
+        form_id=form.id,
+        field_type=FormFieldType.TEXT,
+        label="City",
+        name="city",
+        order=0,
+    )
+    db.add(field)
+    db.commit()
+    db.refresh(field)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=certificate.id,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is not None
+    assert "city" in candidate_test.certificate_data
+    assert candidate_test.certificate_data["city"] == "N/A"
+
+
+def test_result_certificate_data_not_set_when_no_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """certificate_data remains None when test has no certificate assigned."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+        show_result=True,
+        certificate_id=None,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=organization_id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user_id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+        is_mandatory=True,
+        is_active=True,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.certificate_data is None
+
+
+def test_get_test_result_matrix_match_all_rows_correct(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate matches all rows correctly → counted as correct, full marks awarded."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(MATRIX_MATCH_CORRECT_ANSWER),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 4
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_all_rows_incorrect(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate selects wrong columns for all rows → counted as incorrect, wrong marks applied."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    wrong_response = {"1": [30], "2": [10], "3": [20]}
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(wrong_response),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_not_attempted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate does not answer the matrix-match question → counted as mandatory not attempted."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 0
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_partial_marks(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate matches only some rows correctly → partial marks awarded when partial scheme is set."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    partial_marking_scheme = {
+        "correct": 4,
+        "wrong": -1,
+        "skipped": 0,
+        "partial": {
+            "correct_answers": [
+                {"num_correct_selected": 1, "marks": 1},
+                {"num_correct_selected": 2, "marks": 2},
+            ]
+        },
+    }
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_match,
+        options=MATRIX_MATCH_OPTIONS,
+        correct_answer=MATRIX_MATCH_CORRECT_ANSWER,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=partial_marking_scheme,
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    partial_response = {"1": [10, 20], "2": [30], "3": [30]}
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(partial_response),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_invalid_response(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate submits a non-JSON / non-dict response → counted as incorrect."""
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response="not-valid-json",
+            visited=True,
+            time_spent=10,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_mixed_correct_and_incorrect(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Two matrix-match questions: one answered correctly, one incorrectly."""
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+
+    marking_scheme = {"correct": 4, "wrong": -1, "skipped": 0}
+
+    revision_1 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_match,
+        options=MATRIX_MATCH_OPTIONS,
+        correct_answer=MATRIX_MATCH_CORRECT_ANSWER,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=marking_scheme,
+    )
+    revision_2 = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_match,
+        options=MATRIX_MATCH_OPTIONS,
+        correct_answer=MATRIX_MATCH_CORRECT_ANSWER,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=marking_scheme,
+    )
+    db.add_all([revision_1, revision_2])
+    db.commit()
+    db.refresh(revision_1)
+    db.refresh(revision_2)
+
+    db.add_all(
+        [
+            TestQuestion(test_id=test.id, question_revision_id=revision_1.id),
+            TestQuestion(test_id=test.id, question_revision_id=revision_2.id),
+        ]
+    )
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add_all(
+        [
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=revision_1.id,
+                response=json.dumps(MATRIX_MATCH_CORRECT_ANSWER),
+                visited=True,
+                time_spent=30,
+            ),
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=revision_2.id,
+                response=json.dumps({"1": [30], "2": [10], "3": [20]}),
+                visited=True,
+                time_spent=30,
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["mandatory_not_attempted"] == 0
+    assert data["total_questions"] == 2
+    assert data["marks_obtained"] == 3
+    assert data["marks_maximum"] == 8
+
+
+def test_get_test_result_matrix_match_without_json_dumps(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    test, revision = create_matrix_match_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=str(MATRIX_MATCH_CORRECT_ANSWER),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["marks_obtained"] == -1
+
+
+def test_get_test_result_matrix_match_partial_one_correct_one_wrong_column(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    test, revision = create_matrix_match_test_setup(db, correct_answer={"1": [20, 30]})
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [30, 10]}),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_partial_only_one_column_of_two_submitted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    test, revision = create_matrix_match_test_setup(db, correct_answer={"1": [20, 30]})
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [10]}),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == -1
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_match_partial_scheme_with_wrong_column_in_row(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    partial_marking_scheme = {
+        "correct": 4,
+        "wrong": -1,
+        "skipped": 0,
+        "partial": {
+            "correct_answers": [
+                {"num_correct_selected": 1, "marks": 1},
+                {"num_correct_selected": 2, "marks": 2},
+            ]
+        },
+    }
+    correct_answer = {"1": [20, 30], "2": [20], "3": [30]}
+    test, revision = create_matrix_match_test_setup(
+        db, marking_scheme=partial_marking_scheme, correct_answer=correct_answer
+    )
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [30, 10], "2": [20], "3": [30]}),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 2
+    assert data["marks_maximum"] == 4
