@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
@@ -186,6 +187,7 @@ async def upload_question_image(
         alt_text=alt_text,
     )
     revision.media = media
+    flag_modified(revision, "media")
     session.add(revision)
     session.commit()
 
@@ -223,6 +225,7 @@ async def delete_question_image(
     media = dict(revision.media)
     del media["image"]
     revision.media = media if media else None
+    flag_modified(revision, "media")
     session.add(revision)
     session.commit()
 
@@ -254,6 +257,7 @@ async def add_question_external_media(
     media = dict(revision.media) if revision.media else {}
     media["external_media"] = build_external_media_dict(external_media)
     revision.media = media
+    flag_modified(revision, "media")
     session.add(revision)
     session.commit()
 
@@ -289,6 +293,7 @@ async def delete_question_external_media(
     media = dict(revision.media)
     del media["external_media"]
     revision.media = media if media else None
+    flag_modified(revision, "media")
     session.add(revision)
     session.commit()
 
@@ -338,6 +343,7 @@ async def upload_option_image(
     }
     updated_items[option_index]["media"] = option_media
     revision.options = rebuild_options(revision.options, updated_items, matrix_key)
+    flag_modified(revision, "options")
     session.add(revision)
     session.commit()
 
@@ -387,6 +393,7 @@ async def delete_option_image(
         updated_items[option_index]["media"] = option_media
 
     revision.options = rebuild_options(revision.options, updated_items, matrix_key)
+    flag_modified(revision, "options")
     session.add(revision)
     session.commit()
 
@@ -424,6 +431,7 @@ async def add_option_external_media(
     option_media["external_media"] = build_external_media_dict(external_media)
     updated_items[option_index]["media"] = option_media
     revision.options = rebuild_options(revision.options, updated_items, matrix_key)
+    flag_modified(revision, "options")
     session.add(revision)
     session.commit()
 
@@ -471,6 +479,7 @@ async def delete_option_external_media(
         updated_items[option_index]["media"] = option_media
 
     revision.options = rebuild_options(revision.options, updated_items, matrix_key)
+    flag_modified(revision, "options")
     session.add(revision)
     session.commit()
 
