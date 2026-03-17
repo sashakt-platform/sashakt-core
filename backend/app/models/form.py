@@ -208,11 +208,14 @@ class FormField(FormFieldBase, table=True):
 class FormFieldCreate(FormFieldBase):
     @model_validator(mode="after")
     def validate_name_not_reserved(self) -> "FormFieldCreate":
-        reserved = {t["token"] for t in FIXED_TOKENS}
-        if self.name in reserved:
+        reserved_tokens = {t["token"]: t["label"] for t in FIXED_TOKENS}
+        if self.name in reserved_tokens:
+            reserved_labels = [t["label"] for t in FIXED_TOKENS]
             raise ValueError(
-                f"Field name '{self.name}' is reserved. "
-                f"Reserved names: {sorted(reserved)}"
+                f"'{self.name}' is reserved for the certificate field "
+                f"'{reserved_tokens[self.name]}'. "
+                f"Please choose a different name. "
+                f"Reserved names: {', '.join(reserved_labels)}"
             )
         return self
 
