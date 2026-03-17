@@ -158,7 +158,10 @@ class QuestionBase(SQLModel):
         question_type = self.question_type
         options = self.options
         correct_answer = self.correct_answer
-        if question_type != QuestionType.matrix_match and options is not None:
+        if (
+            question_type not in [QuestionType.matrix_match, QuestionType.matrix_rating]
+            and options is not None
+        ):
             if not isinstance(options, list):
                 raise ValueError(
                     f"{question_type} questions must have options as a list."
@@ -223,6 +226,19 @@ class QuestionBase(SQLModel):
                         else "Numerical decimal questions must have a decimal correct answer. Examples: 3.14, 0.75, -2.5, 5.0"
                     )
                     raise ValueError(msg)
+
+        elif question_type == QuestionType.matrix_rating:
+            if options is None or not isinstance(options, dict):
+                raise ValueError(
+                    "Matrix rating questions must have options with 'rows' and 'columns' keys."
+                )
+            row_items = options.get("rows", {}).get("items", [])
+            column_items = options.get("columns", {}).get("items", [])
+            if not row_items or not column_items:
+                raise ValueError(
+                    "Matrix rating options must have at least one item in each column."
+                )
+            self.correct_answer = None
 
         elif question_type == QuestionType.matrix_match:
             if options is None or not isinstance(options, dict):

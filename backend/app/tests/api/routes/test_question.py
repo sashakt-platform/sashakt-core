@@ -6806,3 +6806,234 @@ def test_non_matrix_question_with_dict_options_should_fail(
 
     assert response.status_code == 422
     assert "questions must have options as a list." in response.text
+
+
+MATRIX_RATING_OPTIONS = {
+    "rows": {
+        "label": "Subjects",
+        "items": [
+            {"id": 1, "key": "math", "value": "Math"},
+            {"id": 2, "key": "physics", "value": "Physics"},
+            {"id": 3, "key": "chemistry", "value": "Chemistry"},
+            {"id": 4, "key": "biology", "value": "Biology"},
+            {"id": 5, "key": "english", "value": "English"},
+        ],
+    },
+    "columns": {
+        "label": "Difficulty Rating",
+        "items": [
+            {"id": 1, "key": "1", "value": "Very difficult"},
+            {"id": 2, "key": "2", "value": "A little difficult"},
+            {"id": 3, "key": "3", "value": "Okay / manageable"},
+            {"id": 4, "key": "4", "value": "Easy to understand"},
+            {"id": 5, "key": "5", "value": "Very easy and I enjoy it"},
+        ],
+    },
+}
+
+
+def test_create_matrix_rating_question_valid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-rating question with valid rows/columns options should succeed; correct_answer is always null."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": MATRIX_RATING_OPTIONS,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "matrix-rating"
+    assert data["options"]["rows"]["items"][0]["id"] == 1
+    assert data["options"]["rows"]["items"][0]["value"] == "Math"
+    assert data["options"]["columns"]["items"][0]["id"] == 1
+    assert data["options"]["columns"]["items"][0]["value"] == "Very difficult"
+    assert data["correct_answer"] is None
+
+
+def test_create_matrix_rating_question_correct_answer_ignored(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Any correct_answer supplied for matrix-rating must be silently discarded (stored as null)."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": MATRIX_RATING_OPTIONS,
+            "correct_answer": {"1": [3], "2": [1]},
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] is None
+
+
+def test_create_matrix_rating_question_missing_options_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-rating question with no options should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": None,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix rating questions must have options with 'rows' and 'columns' keys."
+        in response.text
+    )
+
+
+def test_create_matrix_rating_question_options_as_list_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-rating question with a list instead of the required dict should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": [
+                {"id": 1, "key": "A", "value": "Option 1"},
+                {"id": 2, "key": "B", "value": "Option 2"},
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix rating questions must have options with 'rows' and 'columns' keys."
+        in response.text
+    )
+
+
+def test_create_matrix_rating_question_empty_row_items_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-rating question with empty row items should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": {
+                "rows": {"label": "Subjects", "items": []},
+                "columns": {
+                    "label": "Difficulty Rating",
+                    "items": [{"id": 1, "key": "1", "value": "Very difficult"}],
+                },
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix rating options must have at least one item in each column."
+        in response.text
+    )
+
+
+def test_create_matrix_rating_question_empty_column_items_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-rating question with empty rating column items should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": {
+                "rows": {
+                    "label": "Subjects",
+                    "items": [{"id": 1, "key": "math", "value": "Math"}],
+                },
+                "columns": {"label": "Difficulty Rating", "items": []},
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "Matrix rating options must have at least one item in each column."
+        in response.text
+    )
+
+
+def test_create_matrix_rating_question_full_subjects_and_ratings(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Matrix-rating with 5 subjects and 5 rating columns should succeed with null correct_answer."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-rating",
+            "options": MATRIX_RATING_OPTIONS,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "matrix-rating"
+    assert len(data["options"]["rows"]["items"]) == 5
+    assert len(data["options"]["columns"]["items"]) == 5
+    assert data["correct_answer"] is None
