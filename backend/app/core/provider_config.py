@@ -84,7 +84,10 @@ class GCSConfig(BaseModel):
     client_x509_cert_url: str = Field(..., description="Client cert URL")
 
     # GCS-specific settings
-    bucket_name: str = Field(..., description="GCS bucket name for media storage")
+    bucket_name: str = Field(
+        default="sashakt-media",
+        description="GCS bucket name for media storage",
+    )
     signed_url_expiration_minutes: int = Field(
         default=60, description="Expiration time for signed URLs in minutes"
     )
