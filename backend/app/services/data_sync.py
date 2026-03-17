@@ -43,6 +43,7 @@ from app.models.user import UserDistrict, UserState
 from app.services.datasync.base import SyncResult
 from app.services.datasync.bigquery import BigQueryService
 from app.services.google_slides import GoogleSlidesService
+from app.services.storage.gcs import GCSStorageService
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +330,9 @@ class DataSyncService:
                         return False
                     slides_service = GoogleSlidesService(decrypted_config)
                     return slides_service.test_connection(certificate.url)
+                elif org_provider.provider.provider_type == ProviderType.GCS:
+                    gcs_service = GCSStorageService(organization_id, decrypted_config)
+                    return gcs_service.test_connection()
                 else:
                     return False
             except Exception:
