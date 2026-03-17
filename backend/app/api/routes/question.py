@@ -519,7 +519,8 @@ def create_question(
     session.commit()
     # No need to set modified_date manually, as SQLModel will handle it via onupdate
 
-    return build_question_response(question, revision, locations, tags)
+    gcs_service = get_gcs_service_for_org(session, question.organization_id)
+    return build_question_response(question, revision, locations, tags, gcs_service)
 
 
 # TypedDict classes with all required fields
@@ -569,6 +570,7 @@ class CandidateTestInfoDict(TypedDict):
 
 def transform_questions_to_public(
     items: list[tuple[Question, QuestionRevision]] | Any,
+    gcs_service: GCSStorageService | None = None,
 ) -> list[QuestionPublic]:
     """
     Transform a list of (Question, QuestionRevision) tuples to QuestionPublic objects.
@@ -590,7 +592,7 @@ def transform_questions_to_public(
 
         # build the response using existing helper
         question_data = build_question_response(
-            question, revision, list(locations), list(tags)
+            question, revision, list(locations), list(tags), gcs_service
         )
         result.append(question_data)
 
@@ -698,11 +700,12 @@ def get_questions(
             query = query.where(col(Question.id).in_(location_subquery))
 
     # get the questions with pagination and transform to QuestionPublic
+    gcs_service = get_gcs_service_for_org(session, current_user.organization_id)
     questions: Page[QuestionPublic] = paginate(
         session,
         query,
         params,
-        transformer=lambda items: transform_questions_to_public(items),
+        transformer=lambda items: transform_questions_to_public(items, gcs_service),
     )
 
     return questions
@@ -898,8 +901,9 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     )
     tags = session.exec(tags_query).all()
 
+    gcs_service = get_gcs_service_for_org(session, question.organization_id)
     return build_question_response(
-        question, latest_revision, list(locations), list(tags)
+        question, latest_revision, list(locations), list(tags), gcs_service
     )
 
 
@@ -942,8 +946,9 @@ def update_question(
     )
     tags = session.exec(tags_query).all()
 
+    gcs_service = get_gcs_service_for_org(session, question.organization_id)
     return build_question_response(
-        question, latest_revision, list(locations), list(tags)
+        question, latest_revision, list(locations), list(tags), gcs_service
     )
 
 
@@ -1001,7 +1006,10 @@ def create_question_revision(
     )
     tags = session.exec(tags_query).all()
 
-    return build_question_response(question, new_revision, list(locations), list(tags))
+    gcs_service = get_gcs_service_for_org(session, question.organization_id)
+    return build_question_response(
+        question, new_revision, list(locations), list(tags), gcs_service
+    )
 
 
 @router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])
