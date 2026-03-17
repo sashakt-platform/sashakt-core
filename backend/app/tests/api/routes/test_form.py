@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
+from app.core.certificate_token import FIXED_TOKENS
 from app.core.config import settings
 from app.models.form import FormResponse
 from app.models.test import Test
@@ -308,6 +309,34 @@ def test_add_duplicate_field_name(
     )
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
+
+
+def test_add_field_with_reserved_token_name(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    form_data = {"name": random_lower_string()}
+    form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json=form_data,
+        headers=get_user_superadmin_token,
+    )
+    form_id = form_response.json()["id"]
+
+    for token in FIXED_TOKENS:
+        field_data = {
+            "field_type": "text",
+            "label": "Some Label",
+            "name": token["token"],
+        }
+        response = client.post(
+            f"{settings.API_V1_STR}/form/{form_id}/field/",
+            json=field_data,
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == 422
+        assert token["token"] in response.text
 
 
 def test_get_form_fields(

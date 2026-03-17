@@ -2,16 +2,10 @@ from typing import Any
 
 from sqlmodel import Session, col, select
 
+from app.core.certificate_token import FIXED_TOKENS
 from app.models.entity import Entity
 from app.models.form import FormField, FormFieldType
 from app.models.location import Block, District, State
-
-# Fixed tokens that are always available (independent of form fields)
-FIXED_TOKENS: list[dict[str, str]] = [
-    {"token": "test_name", "label": "Test Name"},
-    {"token": "completion_date", "label": "Completion Date"},
-    {"token": "score", "label": "Score"},
-]
 
 
 def get_available_tokens(form_id: int | None, session: Session) -> list[dict[str, str]]:

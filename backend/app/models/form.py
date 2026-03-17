@@ -2,9 +2,11 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
 from typing_extensions import TypedDict
 
+from app.core.certificate_token import FIXED_TOKENS
 from app.core.timezone import get_timezone_aware_now
 
 if TYPE_CHECKING:
@@ -204,7 +206,18 @@ class FormField(FormFieldBase, table=True):
 
 
 class FormFieldCreate(FormFieldBase):
-    pass
+    @model_validator(mode="after")
+    def validate_name_not_reserved(self) -> "FormFieldCreate":
+        reserved_tokens = {t["token"]: t["label"] for t in FIXED_TOKENS}
+        if self.name in reserved_tokens:
+            reserved_labels = [t["label"] for t in FIXED_TOKENS]
+            raise ValueError(
+                f"'{self.name}' is reserved for the certificate field "
+                f"'{reserved_tokens[self.name]}'. "
+                f"Please choose a different name. "
+                f"Reserved names: {', '.join(reserved_labels)}"
+            )
+        return self
 
 
 class FormFieldPublic(FormFieldBase):
