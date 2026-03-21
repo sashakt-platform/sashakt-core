@@ -212,12 +212,14 @@ def enrich_media_with_signed_urls(
     if "image" in result and isinstance(result["image"], dict):
         gcs_path = result["image"].get("gcs_path")
         if gcs_path:
+            image_copy = dict(result["image"])
             try:
-                result["image"]["url"] = gcs_service.generate_signed_url(gcs_path)
+                image_copy["url"] = gcs_service.generate_signed_url(gcs_path)
             except Exception:
                 logger.warning(
                     "Failed to generate signed URL for %s: ", gcs_path, exc_info=True
                 )
+            result["image"] = image_copy
 
     return result
 
