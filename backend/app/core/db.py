@@ -22,6 +22,9 @@ engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
 def init_db(session: Session) -> None:
+    # Seed default providers (idempotent, runs on every startup)
+    init_providers(session)
+
     user = session.exec(
         select(User).where(User.email == settings.FIRST_SUPERUSER)
     ).first()
@@ -35,9 +38,6 @@ def init_db(session: Session) -> None:
 
         # Creating Initial Roles
         init_roles(session)
-
-        # Creating Initial Providers
-        init_providers(session)
 
         initial_organization = Organization(name="T4D", description="T4D Organization")
         session.add(initial_organization)
