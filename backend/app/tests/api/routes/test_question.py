@@ -1228,7 +1228,7 @@ def test_question_validation_no_correct_answer_for_multi_choice(
 
     assert response.status_code == 422
     assert (
-        "Multi-choice questions must have at least one correct answer." in response.text
+        "multi-choice questions must have at least one correct answer." in response.text
     )
     assert question_data["question_type"] == QuestionType.multi_choice
 
@@ -6639,7 +6639,7 @@ def test_create_matrix_match_question_missing_options_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix match questions must have options with 'rows' and 'columns' keys."
+        "matrix-match questions must have options with 'rows' and 'columns' keys."
         in response.text
     )
 
@@ -6669,7 +6669,7 @@ def test_create_matrix_match_question_options_as_list_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix match questions must have options with 'rows' and 'columns' keys."
+        "matrix-match questions must have options with 'rows' and 'columns' keys."
         in response.text
     )
 
@@ -6703,7 +6703,7 @@ def test_create_matrix_match_question_empty_column_items_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix match options must have at least one item in each column."
+        "matrix-match options must have at least one item in each column."
         in response.text
     )
 
@@ -6910,7 +6910,7 @@ def test_create_matrix_rating_question_missing_options_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix rating questions must have options with 'rows' and 'columns' keys."
+        "matrix-rating questions must have options with 'rows' and 'columns' keys."
         in response.text
     )
 
@@ -6940,7 +6940,7 @@ def test_create_matrix_rating_question_options_as_list_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix rating questions must have options with 'rows' and 'columns' keys."
+        "matrix-rating questions must have options with 'rows' and 'columns' keys."
         in response.text
     )
 
@@ -6973,7 +6973,7 @@ def test_create_matrix_rating_question_empty_row_items_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix rating options must have at least one item in each column."
+        "matrix-rating options must have at least one item in each column."
         in response.text
     )
 
@@ -7006,7 +7006,7 @@ def test_create_matrix_rating_question_empty_column_items_should_fail(
 
     assert response.status_code == 422
     assert (
-        "Matrix rating options must have at least one item in each column."
+        "matrix-rating options must have at least one item in each column."
         in response.text
     )
 
