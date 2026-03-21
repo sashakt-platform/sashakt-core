@@ -6,6 +6,7 @@ from app.core.location import init_location
 from app.core.permissions import (
     init_permissions,
 )
+from app.core.providers import init_providers
 from app.core.roles import (
     init_roles,
     super_admin,
@@ -34,6 +35,9 @@ def init_db(session: Session) -> None:
 
         # Creating Initial Roles
         init_roles(session)
+
+        # Creating Initial Providers
+        init_providers(session)
 
         initial_organization = Organization(name="T4D", description="T4D Organization")
         session.add(initial_organization)
