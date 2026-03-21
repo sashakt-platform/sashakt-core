@@ -89,7 +89,7 @@ class GCSConfig(BaseModel):
         description="GCS bucket name for media storage",
     )
     signed_url_expiration_minutes: int = Field(
-        default=60, description="Expiration time for signed URLs in minutes"
+        default=240, description="Expiration time for signed URLs in minutes"
     )
 
 

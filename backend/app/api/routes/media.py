@@ -178,18 +178,23 @@ async def upload_question_image(
     gcs_path = gcs_service.generate_media_path(question_id, file_extension)
     gcs_service.upload(file_content, gcs_path, content_type)
 
-    # Update revision media
-    media = dict(revision.media) if revision.media else {}
-    media["image"] = build_image_media_dict(
-        gcs_path=gcs_path,
-        content_type=content_type,
-        size_bytes=len(file_content),
-        alt_text=alt_text,
-    )
-    revision.media = media
-    flag_modified(revision, "media")
-    session.add(revision)
-    session.commit()
+    # Update revision media, rolling back GCS upload if commit fails
+    try:
+        media = dict(revision.media) if revision.media else {}
+        media["image"] = build_image_media_dict(
+            gcs_path=gcs_path,
+            content_type=content_type,
+            size_bytes=len(file_content),
+            alt_text=alt_text,
+        )
+        revision.media = media
+        flag_modified(revision, "media")
+        session.add(revision)
+        session.commit()
+    except Exception:
+        session.rollback()
+        gcs_service.delete(gcs_path)
+        raise
 
     return ImageUploadResponse(
         gcs_path=gcs_path,
@@ -215,19 +220,21 @@ async def delete_question_image(
     if not revision.media or "image" not in revision.media:
         raise HTTPException(status_code=404, detail="No image found for this question")
 
-    # Delete from GCS
+    # Capture GCS path before modifying metadata
     gcs_path = revision.media["image"].get("gcs_path")
-    if gcs_path:
-        gcs_service = get_gcs_service(session, question.organization_id)
-        gcs_service.delete(gcs_path)
 
-    # Update revision
+    # Update revision first
     media = dict(revision.media)
     del media["image"]
     revision.media = media if media else None
     flag_modified(revision, "media")
     session.add(revision)
     session.commit()
+
+    # Delete from GCS after successful commit
+    if gcs_path:
+        gcs_service = get_gcs_service(session, question.organization_id)
+        gcs_service.delete(gcs_path)
 
     return Message(message="Image deleted successfully")
 
@@ -331,21 +338,26 @@ async def upload_option_image(
     gcs_path = gcs_service.generate_media_path(question_id, file_extension, option_id)
     gcs_service.upload(file_content, gcs_path, content_type)
 
-    # Update option with media
-    updated_items = list(items)
-    option_media = {
-        "image": build_image_media_dict(
-            gcs_path=gcs_path,
-            content_type=content_type,
-            size_bytes=len(file_content),
-            alt_text=alt_text,
-        )
-    }
-    updated_items[option_index]["media"] = option_media
-    revision.options = rebuild_options(revision.options, updated_items, matrix_key)
-    flag_modified(revision, "options")
-    session.add(revision)
-    session.commit()
+    # Update option with media, rolling back GCS upload if commit fails
+    try:
+        updated_items = list(items)
+        option_media = {
+            "image": build_image_media_dict(
+                gcs_path=gcs_path,
+                content_type=content_type,
+                size_bytes=len(file_content),
+                alt_text=alt_text,
+            )
+        }
+        updated_items[option_index]["media"] = option_media
+        revision.options = rebuild_options(revision.options, updated_items, matrix_key)
+        flag_modified(revision, "options")
+        session.add(revision)
+        session.commit()
+    except Exception:
+        session.rollback()
+        gcs_service.delete(gcs_path)
+        raise
 
     return ImageUploadResponse(
         gcs_path=gcs_path,
@@ -379,13 +391,10 @@ async def delete_option_image(
     if not option_media or "image" not in option_media:
         raise HTTPException(status_code=404, detail="No image found for this option")
 
-    # Delete from GCS
+    # Capture GCS path before modifying metadata
     gcs_path = option_media["image"].get("gcs_path")
-    if gcs_path:
-        gcs_service = get_gcs_service(session, question.organization_id)
-        gcs_service.delete(gcs_path)
 
-    # Update option
+    # Update option first
     del option_media["image"]
     if not option_media:
         del updated_items[option_index]["media"]
@@ -396,6 +405,11 @@ async def delete_option_image(
     flag_modified(revision, "options")
     session.add(revision)
     session.commit()
+
+    # Delete from GCS after successful commit
+    if gcs_path:
+        gcs_service = get_gcs_service(session, question.organization_id)
+        gcs_service.delete(gcs_path)
 
     return Message(message="Option image deleted successfully")
 

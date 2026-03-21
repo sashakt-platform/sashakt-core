@@ -11,7 +11,6 @@ from google.oauth2 import service_account
 class GCSStorageService:
     """GCS storage service for media uploads.
 
-    Follows the same pattern as BigQueryService - initialized with
     organization_id and decrypted config from OrganizationProvider.
     """
 
