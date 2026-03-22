@@ -27,6 +27,7 @@ from app.models import (
     TagType,
     TagTypeCreate,
     TagTypePublic,
+    TagTypePublicWithTags,
     TagTypeUpdate,
     TagUpdate,
 )
@@ -51,13 +52,22 @@ TagTypeSorting = create_sorting_dependency(TagTypeSortConfig)
 TagTypeSortingDep = Annotated[SortingParams, Depends(TagTypeSorting)]
 
 
-def transform_tag_types_to_public(items: list[TagType] | Any) -> list[TagTypePublic]:
-    result: list[TagTypePublic] = []
+def transform_tag_types_to_public(
+    items: list[TagType] | Any,
+) -> list[TagTypePublicWithTags]:
+    result: list[TagTypePublicWithTags] = []
 
     tagtype_list: list[TagType] = list(items) if not isinstance(items, list) else items
 
     for tagtype in tagtype_list:
-        result.append(TagTypePublic(**tagtype.model_dump()))
+        tags = [
+            TagPublic(
+                **tag.model_dump(exclude={"tag_type_id"}),
+                tag_type=None,
+            )
+            for tag in tagtype.tags
+        ]
+        result.append(TagTypePublicWithTags(**tagtype.model_dump(), tags=tags))
 
     return result
 
@@ -154,7 +164,7 @@ def create_tagtype(
 
 @router_tagtype.get(
     "/",
-    response_model=Page[TagTypePublic],
+    response_model=Page[TagTypePublicWithTags],
     dependencies=[Depends(permission_dependency("read_tag"))],
 )
 def get_tagtype(
@@ -163,9 +173,13 @@ def get_tagtype(
     sorting: TagTypeSortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
-) -> Page[TagTypePublic]:
-    query = select(TagType).where(
-        TagType.organization_id == current_user.organization_id,
+) -> Page[TagTypePublicWithTags]:
+    query = (
+        select(TagType)
+        .options(selectinload(TagType.tags))  # type: ignore[arg-type]
+        .where(
+            TagType.organization_id == current_user.organization_id,
+        )
     )
     if name:
         query = query.where(
@@ -178,7 +192,7 @@ def get_tagtype(
     )
     query = sorting_with_default.apply_to_query(query, TagTypeSortConfig)
 
-    tagtypes: Page[TagTypePublic] = paginate(
+    tagtypes: Page[TagTypePublicWithTags] = paginate(
         session,
         query,
         params,
