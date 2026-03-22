@@ -50,6 +50,10 @@ def create_random_question_revision(
         created_by_id=user.id,
         correct_answer=[1],
         organization_id=organization.id,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
     )
     session.add(question_revision)
     session.commit()

@@ -31,6 +31,7 @@ class QuestionType(str, Enum):
     numerical_integer = "numerical-integer"
     numerical_decimal = "numerical-decimal"
     matrix_match = "matrix-match"
+    matrix_rating = "matrix-rating"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -157,40 +158,31 @@ class QuestionBase(SQLModel):
         question_type = self.question_type
         options = self.options
         correct_answer = self.correct_answer
-        if question_type != QuestionType.matrix_match and options is not None:
-            if not isinstance(options, list):
+
+        if question_type in [QuestionType.single_choice, QuestionType.multi_choice]:
+            if options is None or not isinstance(options, list):
                 raise ValueError(
                     f"{question_type} questions must have options as a list."
                 )
-
-        if question_type in ["single-choice", "multi-choice"]:
-            if options and correct_answer is not None:
-                option_ids = [
-                    opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
-                    for opt in options
-                ]
-                if len(option_ids) != len(set(option_ids)):
-                    raise ValueError("Option IDs must be unique.")
-                answer_ids = (
-                    correct_answer
-                    if isinstance(correct_answer, list)
-                    else [correct_answer]
+            if not isinstance(correct_answer, list) or len(correct_answer) < 1:
+                raise ValueError(
+                    f"{question_type} questions must have at least one correct answer."
                 )
-                for ans_id in answer_ids:
-                    if ans_id not in option_ids:
-                        raise ValueError(
-                            f"Correct answer ID {ans_id} does not match any option ID."
-                        )
-            if question_type == QuestionType.single_choice:
-                if not isinstance(correct_answer, list) or len(correct_answer) != 1:
+            option_ids = [
+                opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
+                for opt in options
+            ]
+            if len(option_ids) != len(set(option_ids)):
+                raise ValueError("Option IDs must be unique.")
+            for ans_id in correct_answer:
+                if ans_id not in option_ids:
                     raise ValueError(
-                        "Single-choice questions must have exactly one correct answer."
+                        f"Correct answer ID {ans_id} does not match any option ID."
                     )
-            elif question_type == QuestionType.multi_choice:
-                if not isinstance(correct_answer, list) or len(correct_answer) < 1:
-                    raise ValueError(
-                        "Multi-choice questions must have at least one correct answer."
-                    )
+            if question_type == QuestionType.single_choice and len(correct_answer) != 1:
+                raise ValueError(
+                    "Single-choice questions must have exactly one correct answer."
+                )
         elif question_type == QuestionType.subjective:
             if options is not None and len(options) > 0:
                 raise ValueError("Subjective questions should not have options.")
@@ -223,38 +215,42 @@ class QuestionBase(SQLModel):
                     )
                     raise ValueError(msg)
 
-        elif question_type == QuestionType.matrix_match:
+        elif question_type in [QuestionType.matrix_rating, QuestionType.matrix_match]:
             if options is None or not isinstance(options, dict):
                 raise ValueError(
-                    "Matrix match questions must have options with 'rows' and 'columns' keys."
+                    f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
-            left_items = options.get("rows", {}).get("items", [])
-            right_items = options.get("columns", {}).get("items", [])
-            left_ids = {item["id"] for item in left_items}
-            right_ids = {item["id"] for item in right_items}
-            if not left_ids or not right_ids:
+            row_items = options.get("rows", {}).get("items", [])
+            column_items = options.get("columns", {}).get("items", [])
+            if not row_items or not column_items:
                 raise ValueError(
-                    "Matrix match options must have at least one item in each column."
+                    f"{question_type} options must have at least one item in each column."
                 )
-            if correct_answer is not None:
-                if not isinstance(correct_answer, dict):
-                    raise ValueError(
-                        "Matrix match correct_answer must be a dict mapping left item IDs to lists of right item IDs."
-                    )
-                for row_id, matched_column_ids in correct_answer.items():
-                    if int(row_id) not in left_ids:
+
+            if question_type == QuestionType.matrix_rating:
+                self.correct_answer = None
+            else:
+                row_ids = {item["id"] for item in row_items}
+                column_ids = {item["id"] for item in column_items}
+                if correct_answer is not None:
+                    if not isinstance(correct_answer, dict):
                         raise ValueError(
-                            f"Correct answer key {row_id} does not match any left column item ID."
+                            "Matrix match correct_answer must be a dict mapping left item IDs to lists of right item IDs."
                         )
-                    if not isinstance(matched_column_ids, list):
-                        raise ValueError(
-                            f"Correct answer value for key {row_id} must be a list."
-                        )
-                    invalid_column_ids = set(matched_column_ids) - right_ids
-                    if invalid_column_ids:
-                        raise ValueError(
-                            f"Column IDs {invalid_column_ids} do not match any right column item ID."
-                        )
+                    for row_id, matched_column_ids in correct_answer.items():
+                        if int(row_id) not in row_ids:
+                            raise ValueError(
+                                f"Correct answer key {row_id} does not match any left column item ID."
+                            )
+                        if not isinstance(matched_column_ids, list):
+                            raise ValueError(
+                                f"Correct answer value for key {row_id} must be a list."
+                            )
+                        invalid_column_ids = set(matched_column_ids) - column_ids
+                        if invalid_column_ids:
+                            raise ValueError(
+                                f"Column IDs {invalid_column_ids} do not match any right column item ID."
+                            )
 
         return self
 
