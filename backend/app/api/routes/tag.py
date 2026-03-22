@@ -182,8 +182,15 @@ def get_tagtype(
         )
     )
     if name:
-        query = query.where(
-            func.lower(TagType.name).contains(name.strip().lower(), autoescape=True)
+        search_term = name.strip().lower()
+        tagtype_name_match = func.lower(TagType.name).contains(
+            search_term, autoescape=True
+        )
+        tag_name_match = func.lower(Tag.name).contains(search_term, autoescape=True)
+        query = (
+            query.outerjoin(Tag, col(Tag.tag_type_id) == col(TagType.id))
+            .where(or_(tagtype_name_match, tag_name_match))
+            .distinct()
         )
 
     # apply default sorting if no sorting was specified

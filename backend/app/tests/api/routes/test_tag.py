@@ -2464,3 +2464,74 @@ def test_get_tagtype_with_no_tags_returns_empty_list(
     matched = [item for item in items if item["id"] == tagtype.id]
     assert len(matched) == 1
     assert matched[0]["tags"] == []
+
+
+def test_get_tagtype_search_by_tag_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that searching by name also matches tag names and returns the parent tag type."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    unique_suffix = random_lower_string()
+
+    # Create a tag type whose name does NOT match the search term
+    tagtype = TagType(
+        name=f"category_{unique_suffix}",
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+    assert tagtype.id is not None
+
+    # Create a tag whose name WILL match the search term
+    search_term = f"uniquetag_{unique_suffix}"
+    tag = Tag(
+        name=search_term,
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+
+    # Search by tag name — should return the parent tag type
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name={search_term}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 1
+
+    # Search by tag type name — should still work as before
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=category_{unique_suffix}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 1
+
+    # Search with a term that matches neither — should not return this tag type
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=zzznomatch_{unique_suffix}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 0
