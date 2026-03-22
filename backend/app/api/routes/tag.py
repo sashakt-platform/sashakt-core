@@ -66,6 +66,7 @@ def transform_tag_types_to_public(
                 tag_type=None,
             )
             for tag in tagtype.tags
+            if tag.is_active
         ]
         result.append(TagTypePublicWithTags(**tagtype.model_dump(), tags=tags))
 
