@@ -2363,3 +2363,175 @@ def test_delete_tag_after_associated_test_is_deleted(
 
     test_tag_links = db.exec(select(TestTag).where(TestTag.tag_id == tag.id)).all()
     assert len(test_tag_links) == 0
+
+
+def test_get_tagtype_returns_associated_tags(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that GET /tagtype/ returns associated tags for each tag type."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+    assert tagtype.id is not None
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tag1)
+    db.add(tag2)
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 1
+    tagtype_item = matched[0]
+
+    assert "tags" in tagtype_item
+    assert len(tagtype_item["tags"]) == 2
+
+    tag_names = {t["name"] for t in tagtype_item["tags"]}
+    assert tag1.name in tag_names
+    assert tag2.name in tag_names
+
+    for tag_data in tagtype_item["tags"]:
+        assert "id" in tag_data
+        assert "name" in tag_data
+        assert "is_active" in tag_data
+        assert "created_date" in tag_data
+        assert "modified_date" in tag_data
+
+
+def test_get_tagtype_with_no_tags_returns_empty_list(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that GET /tagtype/ returns empty tags list for tag types with no tags."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    tagtype = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 1
+    assert matched[0]["tags"] == []
+
+
+def test_get_tagtype_search_by_tag_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Test that searching by name also matches tag names and returns the parent tag type."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    unique_suffix = random_lower_string()
+
+    # Create a tag type whose name does NOT match the search term
+    tagtype = TagType(
+        name=f"category_{unique_suffix}",
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype)
+    db.commit()
+    db.refresh(tagtype)
+    assert tagtype.id is not None
+
+    # Create a tag whose name WILL match the search term
+    search_term = f"uniquetag_{unique_suffix}"
+    tag = Tag(
+        name=search_term,
+        description=random_lower_string(),
+        tag_type_id=tagtype.id,
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+
+    # Search by tag name — should return the parent tag type
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name={search_term}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 1
+
+    # Search by tag type name — should still work as before
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=category_{unique_suffix}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 1
+
+    # Search with a term that matches neither — should not return this tag type
+    response = client.get(
+        f"{settings.API_V1_STR}/tagtype/?name=zzznomatch_{unique_suffix}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    items = data["items"]
+    matched = [item for item in items if item["id"] == tagtype.id]
+    assert len(matched) == 0

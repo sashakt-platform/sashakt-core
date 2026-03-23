@@ -12817,3 +12817,152 @@ def test_get_test_result_matrix_match_partial_scheme_with_wrong_column_in_row(
     assert data["total_questions"] == 1
     assert data["marks_obtained"] == 2
     assert data["marks_maximum"] == 4
+
+
+MATRIX_RATING_OPTIONS = {
+    "rows": {
+        "label": "Subjects",
+        "items": [
+            {"id": 1, "key": "math", "value": "Math"},
+            {"id": 2, "key": "physics", "value": "Physics"},
+            {"id": 3, "key": "chemistry", "value": "Chemistry"},
+        ],
+    },
+    "columns": {
+        "label": "Difficulty Rating",
+        "items": [
+            {"id": 1, "key": "1", "value": "Very difficult"},
+            {"id": 2, "key": "2", "value": "Manageable"},
+            {"id": 3, "key": "3", "value": "Very easy"},
+        ],
+    },
+}
+
+# A valid response: each row ID mapped to a selected column ID
+MATRIX_RATING_RESPONSE = {"1": 2, "2": 3, "3": 1}
+
+
+def create_matrix_rating_test_setup(
+    session: SessionDep,
+    marking_scheme: dict[str, Any] | None = None,
+) -> tuple[Test, QuestionRevision]:
+    if marking_scheme is None:
+        marking_scheme = {"correct": 4, "wrong": -1, "skipped": 0}
+
+    user = create_random_user(session)
+
+    org = Organization(name=random_lower_string())
+    session.add(org)
+    session.commit()
+    session.refresh(org)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        marks_level="question",
+    )
+    session.add(test)
+    session.commit()
+    session.refresh(test)
+
+    question = Question(organization_id=org.id)
+    session.add(question)
+    session.commit()
+    session.refresh(question)
+
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.matrix_rating,
+        options=MATRIX_RATING_OPTIONS,
+        correct_answer=None,
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=marking_scheme,
+    )
+    session.add(revision)
+    session.commit()
+    session.refresh(revision)
+
+    session.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    session.commit()
+
+    return test, revision
+
+
+def test_get_test_result_matrix_rating_attempted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate submits any response for matrix-rating → counted as correct, full marks awarded."""
+    test, revision = create_matrix_rating_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps(MATRIX_RATING_RESPONSE),
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 0
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 4
+    assert data["marks_maximum"] == 4
+
+
+def test_get_test_result_matrix_rating_not_attempted(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Candidate does not answer the matrix-rating question → counted as mandatory not attempted."""
+    test, revision = create_matrix_rating_test_setup(db)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["incorrect_answer"] == 0
+    assert data["mandatory_not_attempted"] == 1
+    assert data["total_questions"] == 1
+    assert data["marks_obtained"] == 0
+    assert data["marks_maximum"] == 4

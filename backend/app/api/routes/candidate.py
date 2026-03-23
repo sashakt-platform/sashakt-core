@@ -1307,7 +1307,10 @@ def get_test_result(
             else:
                 optional_not_attempted += 1
         else:
-            if revision.question_type == QuestionType.subjective:
+            if (
+                revision.question_type == QuestionType.subjective
+                or revision.question_type == QuestionType.matrix_rating
+            ):
                 is_attempted = bool(answer.response)
                 if is_attempted:
                     correct += 1
