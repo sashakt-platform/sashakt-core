@@ -126,6 +126,7 @@ from .tag import (
     TagType,
     TagTypeCreate,
     TagTypePublic,
+    TagTypePublicWithTags,
     TagTypeUpdate,
     TagUpdate,
 )
@@ -224,6 +225,7 @@ __all__ = [
     "TagTypeCreate",
     "TagTypeUpdate",
     "TagTypePublic",
+    "TagTypePublicWithTags",
     "Candidate",
     "CandidateAnswerSubmitRequest",
     "BatchAnswerSubmitRequest",
@@ -250,6 +252,7 @@ __all__ = [
     "TagTypeCreate",
     "TagTypeUpdate",
     "TagTypePublic",
+    "TagTypePublicWithTags",
     "Permission",
     "PermissionCreate",
     "PermissionPublic",

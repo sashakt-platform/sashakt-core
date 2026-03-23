@@ -56,6 +56,10 @@ class TagTypePublic(TagTypeBase):
     )
 
 
+class TagTypePublicWithTags(TagTypePublic):
+    tags: list["TagPublic"] = []
+
+
 class TagTypeUpdate(TagTypeBase):
     pass
 
@@ -130,3 +134,4 @@ class DeleteTag(SQLModel):
 # Rebuild the models to ensure the database schema is up to date
 
 QuestionRevision.model_rebuild()
+TagTypePublicWithTags.model_rebuild()
