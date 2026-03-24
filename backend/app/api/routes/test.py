@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -14,6 +15,7 @@ from app.api.deps import (
     permission_dependency,
 )
 from app.api.routes.utils import get_current_time, get_current_user_location_ids
+from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     SortingParams,
@@ -24,6 +26,7 @@ from app.core.sorting import (
 from app.models import (
     Message,
     QuestionRevision,
+    QuestionSet,
     State,
     Test,
     TestCreate,
@@ -42,6 +45,10 @@ from app.models.tag import Tag, TagPublic
 from app.models.test import (
     DeleteTest,
     MarksLevelEnum,
+    QuestionSetCreate,
+    QuestionSetPublic,
+    QuestionSetSummaryPublic,
+    QuestionSetUpdate,
     TagRandomCreate,
     TagRandomPublic,
     TestDistrict,
@@ -137,30 +144,7 @@ def check_test_permission(
 def add_test_to_failure_list(
     session: SessionDep, test: Test, failure_list: list[TestPublic]
 ) -> None:
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-    tags = session.exec(tags_query).all()
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
-    states = session.exec(state_query).all()
-    district_query = (
-        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
-    )
-    districts = session.exec(district_query).all()
-
-    failure_list.append(
-        TestPublic(
-            **test.model_dump(),
-            tags=tags,
-            question_revisions=question_revisions,
-            states=states,
-            districts=districts,
-        )
-    )
+    failure_list.append(build_test_public_response(session, test))
 
 
 def check_linked_question(session: SessionDep, test_id: int) -> bool:
@@ -189,52 +173,333 @@ def build_random_tag_public(
     return out
 
 
+def get_test_question_links(session: SessionDep, test_id: int) -> list[TestQuestion]:
+    return session.exec(
+        select(TestQuestion)
+        .where(TestQuestion.test_id == test_id)
+        .order_by(TestQuestion.id)
+    ).all()
+
+
+def get_test_question_sets(session: SessionDep, test_id: int) -> list[QuestionSet]:
+    return session.exec(
+        select(QuestionSet)
+        .where(QuestionSet.test_id == test_id)
+        .order_by(QuestionSet.display_order, QuestionSet.id)
+    ).all()
+
+
+def get_question_revisions_map(
+    session: SessionDep, question_revision_ids: list[int]
+) -> dict[int, QuestionRevision]:
+    if not question_revision_ids:
+        return {}
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(question_revision_ids)
+        )
+    ).all()
+    return {
+        question_revision.id: question_revision
+        for question_revision in question_revisions
+    }
+
+
+def build_question_set_publics(
+    *,
+    test_id: int,
+    test_questions: list[TestQuestion],
+    question_revisions_map: dict[int, QuestionRevision],
+    question_sets: list[QuestionSet],
+) -> list[QuestionSetPublic] | None:
+    if not question_sets:
+        return None
+
+    grouped_question_links: dict[int, list[TestQuestion]] = defaultdict(list)
+    for test_question in test_questions:
+        if test_question.question_set_id is not None:
+            grouped_question_links[test_question.question_set_id].append(test_question)
+
+    return [
+        QuestionSetPublic(
+            id=question_set.id,
+            created_date=question_set.created_date,
+            modified_date=question_set.modified_date,
+            test_id=test_id,
+            title=question_set.title,
+            description=question_set.description,
+            max_questions_allowed_to_attempt=question_set.max_questions_allowed_to_attempt,
+            display_order=question_set.display_order,
+            marking_scheme=question_set.marking_scheme,
+            question_revisions=[
+                question_revisions_map[test_question.question_revision_id]
+                for test_question in grouped_question_links.get(
+                    question_set.id or -1, []
+                )
+                if test_question.question_revision_id in question_revisions_map
+            ],
+        )
+        for question_set in question_sets
+    ]
+
+
+def build_question_set_summary_publics(
+    *,
+    test_questions: list[TestQuestion],
+    question_sets: list[QuestionSet],
+) -> list[QuestionSetSummaryPublic] | None:
+    if not question_sets:
+        return None
+
+    grouped_question_links: dict[int, list[TestQuestion]] = defaultdict(list)
+    for test_question in test_questions:
+        if test_question.question_set_id is not None:
+            grouped_question_links[test_question.question_set_id].append(test_question)
+
+    return [
+        QuestionSetSummaryPublic(
+            id=question_set.id,
+            title=question_set.title,
+            description=question_set.description,
+            max_questions_allowed_to_attempt=question_set.max_questions_allowed_to_attempt,
+            display_order=question_set.display_order,
+            marking_scheme=question_set.marking_scheme,
+            question_count=len(grouped_question_links.get(question_set.id or -1, [])),
+        )
+        for question_set in question_sets
+    ]
+
+
+def get_total_questions(test: Test, explicit_question_count: int) -> int:
+    total_questions = (
+        test.no_of_random_questions
+        if test.random_questions and test.no_of_random_questions
+        else explicit_question_count
+    )
+    if test.random_tag_count:
+        total_questions += sum(
+            tag_rule.get("count", 0) for tag_rule in test.random_tag_count
+        )
+    return total_questions
+
+
+def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
+    tags = session.exec(
+        select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    ).all()
+    states = session.exec(
+        select(State).join(TestState).where(TestState.test_id == test.id)
+    ).all()
+    districts = session.exec(
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
+    ).all()
+
+    test_questions = get_test_question_links(session, test.id)
+    question_revision_ids = [
+        test_question.question_revision_id for test_question in test_questions
+    ]
+    question_revisions_map = get_question_revisions_map(session, question_revision_ids)
+    question_revisions = [
+        question_revisions_map[question_revision_id]
+        for question_revision_id in question_revision_ids
+        if question_revision_id in question_revisions_map
+    ]
+    question_sets = get_test_question_sets(session, test.id)
+
+    if question_sets:
+        try:
+            is_sectioned_test(
+                test_questions,
+                {
+                    question_set.id: question_set
+                    for question_set in question_sets
+                    if question_set.id is not None
+                },
+                test_id=test.id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    random_tag_public = (
+        build_random_tag_public(session, test.random_tag_count)
+        if test.random_tag_count
+        else None
+    )
+
+    return TestPublic(
+        **test.model_dump(),
+        tags=tags,
+        question_revisions=question_revisions,
+        question_sets=build_question_set_publics(
+            test_id=test.id,
+            test_questions=test_questions,
+            question_revisions_map=question_revisions_map,
+            question_sets=question_sets,
+        ),
+        states=states,
+        districts=districts,
+        total_questions=get_total_questions(test, len(question_revisions)),
+        random_tag_counts=random_tag_public,
+    )
+
+
+def validate_question_set_payload(
+    question_sets: list[QuestionSetCreate | QuestionSetUpdate] | None,
+) -> list[QuestionSetCreate | QuestionSetUpdate]:
+    if not question_sets:
+        return []
+
+    seen_question_revision_ids: set[int] = set()
+    seen_display_orders: set[int] = set()
+
+    for question_set in question_sets:
+        question_revision_ids = question_set.question_revision_ids or []
+        if not question_revision_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="Each question set must include at least one question revision.",
+            )
+        if len(question_revision_ids) != len(set(question_revision_ids)):
+            raise HTTPException(
+                status_code=400,
+                detail="Question revisions cannot be duplicated within a question set.",
+            )
+        if question_set.display_order in seen_display_orders:
+            raise HTTPException(
+                status_code=400,
+                detail="Question set display_order values must be unique within a test.",
+            )
+        if question_set.max_questions_allowed_to_attempt > len(question_revision_ids):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Question set max_questions_allowed_to_attempt cannot exceed "
+                    "the number of questions in that set."
+                ),
+            )
+        duplicate_question_ids = seen_question_revision_ids.intersection(
+            question_revision_ids
+        )
+        if duplicate_question_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="Question revisions cannot be duplicated across question sets.",
+            )
+        seen_display_orders.add(question_set.display_order)
+        seen_question_revision_ids.update(question_revision_ids)
+
+    return question_sets
+
+
+def validate_test_membership_payload(
+    session: SessionDep,
+    *,
+    question_revision_ids: list[int],
+    question_sets: list[QuestionSetCreate | QuestionSetUpdate] | None,
+    random_tag_count: list[TagRandomCreate] | None,
+) -> tuple[list[int], list[QuestionSetCreate | QuestionSetUpdate]]:
+    validated_question_sets = validate_question_set_payload(question_sets)
+
+    if validated_question_sets and random_tag_count:
+        raise HTTPException(
+            status_code=400,
+            detail="Question-set tests do not support tag-based random question selection in this pass.",
+        )
+
+    if question_revision_ids and len(question_revision_ids) != len(
+        set(question_revision_ids)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Question revisions cannot be duplicated within a test.",
+        )
+
+    expected_revision_ids = (
+        question_revision_ids
+        if not validated_question_sets
+        else [
+            question_revision_id
+            for question_set in validated_question_sets
+            for question_revision_id in question_set.question_revision_ids
+        ]
+    )
+
+    if expected_revision_ids:
+        existing_revision_ids = set(
+            session.exec(
+                select(QuestionRevision.id).where(
+                    col(QuestionRevision.id).in_(expected_revision_ids)
+                )
+            ).all()
+        )
+        missing_revision_ids = set(expected_revision_ids) - existing_revision_ids
+        if missing_revision_ids:
+            raise HTTPException(
+                status_code=404,
+                detail="One or more question revisions were not found.",
+            )
+
+    return question_revision_ids, validated_question_sets
+
+
+def replace_test_question_membership(
+    session: SessionDep,
+    *,
+    test: Test,
+    question_revision_ids: list[int],
+    question_sets: list[QuestionSetCreate | QuestionSetUpdate],
+) -> None:
+    for test_question in get_test_question_links(session, test.id):
+        session.delete(test_question)
+
+    for question_set in get_test_question_sets(session, test.id):
+        session.delete(question_set)
+
+    session.flush()
+
+    if question_sets:
+        for question_set_payload in sorted(
+            question_sets, key=lambda question_set: question_set.display_order
+        ):
+            question_set = QuestionSet(
+                test_id=test.id,
+                title=question_set_payload.title,
+                description=question_set_payload.description,
+                max_questions_allowed_to_attempt=question_set_payload.max_questions_allowed_to_attempt,
+                display_order=question_set_payload.display_order,
+                marking_scheme=question_set_payload.marking_scheme,
+            )
+            session.add(question_set)
+            session.flush()
+            for question_revision_id in question_set_payload.question_revision_ids:
+                session.add(
+                    TestQuestion(
+                        test_id=test.id,
+                        question_revision_id=question_revision_id,
+                        question_set_id=question_set.id,
+                    )
+                )
+        session.flush()
+        return
+
+    for question_revision_id in question_revision_ids:
+        session.add(
+            TestQuestion(
+                test_id=test.id,
+                question_revision_id=question_revision_id,
+            )
+        )
+    session.flush()
+
+
 def transform_tests_to_public(
     session: SessionDep, tests: list[Test] | Any
 ) -> list[TestPublic]:
     """
     Transform a list of Test objects to TestPublic objects with all nested relationships.
     """
-    result: list[TestPublic] = []
-
-    # cast to proper type since fastapi-pagination might return Sequence[Any]
     test_list: list[Test] = list(tests) if not isinstance(tests, list) else tests
-
-    for test in test_list:
-        tags = test.tags or []
-        question_revisions = test.question_revisions or []
-        states = test.states or []
-        districts = test.districts or []
-
-        random_tag_public: list[TagRandomPublic] | None = None
-        if test.random_tag_count:
-            random_tag_public = build_random_tag_public(session, test.random_tag_count)
-
-        # calculate total questions
-        total_questions = 0
-        if test.random_questions and test.no_of_random_questions:
-            total_questions = test.no_of_random_questions
-        else:
-            total_questions = len(question_revisions)
-
-        if test.random_tag_count:
-            total_questions += sum(
-                tag_rule.get("count", 0) for tag_rule in test.random_tag_count
-            )
-
-        # build TestPublic object
-        test_public = TestPublic(
-            **test.model_dump(),
-            tags=tags,
-            question_revisions=question_revisions,
-            states=states,
-            districts=districts,
-            total_questions=total_questions,
-            random_tag_counts=random_tag_public,
-        )
-        result.append(test_public)
-
-    return result
+    return [build_test_public_response(session, test) for test in test_list]
 
 
 def validate_test_time_config(
@@ -270,25 +535,9 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
 
-    if (
-        test.random_questions
-        and test.no_of_random_questions is not None
-        and test.no_of_random_questions > 0
-    ):
-        total_questions = test.no_of_random_questions
-    else:
-        question_revision_query = (
-            select(QuestionRevision)
-            .join(TestQuestion)
-            .where(TestQuestion.test_id == test.id)
-        )
-        question_revisions = session.exec(question_revision_query).all()
-        total_questions = len(question_revisions)
-
-    if test.random_tag_count:
-        total_questions += sum(
-            tag_rule.get("count", 0) for tag_rule in test.random_tag_count
-        )
+    test_questions = get_test_question_links(session, test.id)
+    question_sets = get_test_question_sets(session, test.id)
+    total_questions = get_total_questions(test, len(test_questions))
 
     # Include form structure if form_id is set
     form_public: FormPublic | None = None
@@ -311,6 +560,10 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     return TestPublicLimited(
         **test.model_dump(),
         total_questions=total_questions,
+        question_sets=build_question_set_summary_publics(
+            test_questions=test_questions,
+            question_sets=question_sets,
+        ),
         form=form_public,
     )
 
@@ -326,8 +579,20 @@ def create_test(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TestPublic:
+    question_revision_ids, question_sets = validate_test_membership_payload(
+        session,
+        question_revision_ids=test_create.question_revision_ids or [],
+        question_sets=test_create.question_sets,
+        random_tag_count=test_create.random_tag_count,
+    )
     test_data = test_create.model_dump(
-        exclude={"tag_ids", "question_revision_ids", "state_ids", "district_ids"}
+        exclude={
+            "tag_ids",
+            "question_revision_ids",
+            "question_sets",
+            "state_ids",
+            "district_ids",
+        }
     )
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
@@ -348,7 +613,14 @@ def create_test(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No. of random questions must be provided if random questions are enabled.",
             )
-        total_questions = len(test_create.question_revision_ids or [])
+        total_questions = (
+            len(question_revision_ids)
+            if not question_sets
+            else sum(
+                len(question_set.question_revision_ids)
+                for question_set in question_sets
+            )
+        )
         if test.no_of_random_questions > total_questions:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -359,35 +631,19 @@ def create_test(
             )
 
     session.add(test)
-    session.commit()
-    session.refresh(test)
-    random_tag_public: list[TagRandomPublic] | None = None
-    if test.random_tag_count:
-        random_tag_public = build_random_tag_public(session, test.random_tag_count)
+    session.flush()
 
     if test_create.tag_ids:
         tag_ids = test_create.tag_ids
         tag_links = [TestTag(test_id=test.id, tag_id=tag_id) for tag_id in tag_ids]
         session.add_all(tag_links)
-        session.commit()
 
-    if test_create.question_revision_ids:
-        revision_ids = test_create.question_revision_ids
-        question_links = []
-
-        for revision_id in revision_ids:
-            # Get the question_id from the revision
-            revision = session.get(QuestionRevision, revision_id)
-            if revision:
-                question_links.append(
-                    TestQuestion(
-                        test_id=test.id,
-                        question_revision_id=revision_id,  # Set question_revision_id
-                    )
-                )
-
-        session.add_all(question_links)
-        session.commit()
+    replace_test_question_membership(
+        session,
+        test=test,
+        question_revision_ids=question_revision_ids,
+        question_sets=question_sets,
+    )
 
     if test_create.state_ids:
         state_ids = test_create.state_ids
@@ -395,7 +651,6 @@ def create_test(
             TestState(test_id=test.id, state_id=state_id) for state_id in state_ids
         ]
         session.add_all(state_links)
-        session.commit()
     if test_create.district_ids:
         district_ids = test_create.district_ids
         district_links = [
@@ -403,34 +658,11 @@ def create_test(
             for district_id in district_ids
         ]
         session.add_all(district_links)
-        session.commit()
 
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    session.commit()
+    session.refresh(test)
 
-    tags = session.exec(tags_query).all()
-
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-
-    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
-    states = session.exec(state_query).all()
-    district_query = (
-        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
-    )
-    districts = session.exec(district_query).all()
-
-    return TestPublic(
-        **test.model_dump(),
-        tags=tags,
-        question_revisions=question_revisions,
-        states=states,
-        districts=districts,
-        random_tag_counts=random_tag_public,
-    )
+    return build_test_public_response(session, test)
 
 
 # Get All Tests
@@ -682,34 +914,7 @@ def get_test_by_id(
     if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
 
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-    tags = session.exec(tags_query).all()
-
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-
-    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
-    states = session.exec(state_query).all()
-    district_query = (
-        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
-    )
-    districts = session.exec(district_query).all()
-    random_tag_public: list[TagRandomPublic] | None = None
-    if test.random_tag_count:
-        random_tag_public = build_random_tag_public(session, test.random_tag_count)
-
-    return TestPublic(
-        **test.model_dump(),
-        tags=tags,
-        question_revisions=question_revisions,
-        states=states,
-        districts=districts,
-        random_tag_counts=random_tag_public,
-    )
+    return build_test_public_response(session, test)
 
 
 @router.put(
@@ -727,6 +932,12 @@ def update_test(
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    question_revision_ids, question_sets = validate_test_membership_payload(
+        session,
+        question_revision_ids=test_update.question_revision_ids or [],
+        question_sets=test_update.question_sets,
+        random_tag_count=test_update.random_tag_count,
+    )
     role = session.get(Role, current_user.role_id)
     if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
@@ -759,19 +970,14 @@ def update_test(
                 status_code=400,
                 detail="No. of random questions must be provided if random questions are enabled.",
             )
-        if (
-            test_update.question_revision_ids
-            and len(test_update.question_revision_ids) > 0
-        ):
-            total_questions = len(test_update.question_revision_ids)
-        else:
-            existing_revision_ids = session.exec(
-                select(TestQuestion.question_revision_id).where(
-                    TestQuestion.test_id == test_id
-                )
-            ).all()
-
-            total_questions = len(existing_revision_ids)
+        total_questions = (
+            len(question_revision_ids)
+            if not question_sets
+            else sum(
+                len(question_set.question_revision_ids)
+                for question_set in question_sets
+            )
+        )
         if test_update.no_of_random_questions > total_questions:
             raise HTTPException(
                 status_code=400,
@@ -807,35 +1013,12 @@ def update_test(
             session.add(TestTag(test_id=test.id, tag_id=tag))
             session.commit()
 
-    current_revision_ids = session.exec(
-        select(TestQuestion.question_revision_id).where(TestQuestion.test_id == test.id)
-    ).all()
-
-    new_revision_ids = test_update.question_revision_ids or []
-
-    # Remove questions that aren't in the update
-    revision_ids_to_remove = [
-        r for r in current_revision_ids if r not in new_revision_ids
-    ]
-    for revision_id in revision_ids_to_remove:
-        session.delete(
-            session.exec(
-                select(TestQuestion).where(
-                    TestQuestion.test_id == test.id,
-                    TestQuestion.question_revision_id == revision_id,
-                )
-            ).one()
-        )
-        session.commit()
-
-    # Add new question revisions
-    revision_ids_to_add = [r for r in new_revision_ids if r not in current_revision_ids]
-    for revision_id in revision_ids_to_add:
-        # Get the question_id from the revision
-        revision = session.get(QuestionRevision, revision_id)
-        if revision:
-            session.add(TestQuestion(test_id=test.id, question_revision_id=revision_id))
-            session.commit()
+    replace_test_question_membership(
+        session,
+        test=test,
+        question_revision_ids=question_revision_ids,
+        question_sets=question_sets,
+    )
 
     # Updating States
     states_remove = [
@@ -892,40 +1075,22 @@ def update_test(
         for district in districts_add:
             session.add(TestDistrict(test_id=test.id, district_id=district))
             session.commit()
-    test_data = test_update.model_dump(exclude_unset=True)
+    test_data = test_update.model_dump(
+        exclude_unset=True,
+        exclude={
+            "tag_ids",
+            "question_revision_ids",
+            "question_sets",
+            "state_ids",
+            "district_ids",
+        },
+    )
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()
     session.refresh(test)
 
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-    tags = session.exec(tags_query).all()
-
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-
-    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
-    states = session.exec(state_query).all()
-    district_query = (
-        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
-    )
-    districts = session.exec(district_query).all()
-    random_tag_public: list[TagRandomPublic] | None = None
-    if test.random_tag_count:
-        random_tag_public = build_random_tag_public(session, test.random_tag_count)
-
-    return TestPublic(
-        **test.model_dump(),
-        tags=tags,
-        question_revisions=question_revisions,
-        states=states,
-        districts=districts,
-        random_tag_counts=random_tag_public,
-    )
+    return build_test_public_response(session, test)
 
 
 @router.patch(
@@ -947,34 +1112,7 @@ def visibility_test(
     session.commit()
     session.refresh(test)
 
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
-    tags = session.exec(tags_query).all()
-
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-
-    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
-    states = session.exec(state_query).all()
-    district_query = (
-        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
-    )
-    districts = session.exec(district_query).all()
-    random_tag_public: list[TagRandomPublic] | None = None
-    if test.random_tag_count:
-        random_tag_public = build_random_tag_public(session, test.random_tag_count)
-
-    return TestPublic(
-        **test.model_dump(),
-        tags=tags,
-        question_revisions=question_revisions,
-        states=states,
-        districts=districts,
-        random_tag_counts=random_tag_public,
-    )
+    return build_test_public_response(session, test)
 
 
 @router.delete(
@@ -1106,15 +1244,29 @@ def clone_test(
 
     new_test = Test.model_validate(test_data)
     session.add(new_test)
-    session.commit()
-    session.refresh(new_test)
+    session.flush()
 
     tag_links = session.exec(
         select(TestTag).where(TestTag.test_id == original.id)
     ).all()
     for tag_link in tag_links:
         session.add(TestTag(test_id=new_test.id, tag_id=tag_link.tag_id))
-    session.commit()
+
+    original_question_sets = get_test_question_sets(session, original.id)
+    question_set_id_map: dict[int, int] = {}
+    for original_question_set in original_question_sets:
+        new_question_set = QuestionSet(
+            test_id=new_test.id,
+            title=original_question_set.title,
+            description=original_question_set.description,
+            max_questions_allowed_to_attempt=original_question_set.max_questions_allowed_to_attempt,
+            display_order=original_question_set.display_order,
+            marking_scheme=original_question_set.marking_scheme,
+        )
+        session.add(new_question_set)
+        session.flush()
+        if original_question_set.id is not None and new_question_set.id is not None:
+            question_set_id_map[original_question_set.id] = new_question_set.id
 
     question_links = session.exec(
         select(TestQuestion).where(TestQuestion.test_id == original.id)
@@ -1122,46 +1274,24 @@ def clone_test(
     for ql in question_links:
         session.add(
             TestQuestion(
-                test_id=new_test.id, question_revision_id=ql.question_revision_id
+                test_id=new_test.id,
+                question_revision_id=ql.question_revision_id,
+                question_set_id=question_set_id_map.get(ql.question_set_id)
+                if ql.question_set_id is not None
+                else None,
             )
         )
-    session.commit()
     state_links = session.exec(
         select(TestState).where(TestState.test_id == original.id)
     ).all()
     for sl in state_links:
         session.add(TestState(test_id=new_test.id, state_id=sl.state_id))
-    session.commit()
     district_links = session.exec(
         select(TestDistrict).where(TestDistrict.test_id == original.id)
     ).all()
     for dl in district_links:
         session.add(TestDistrict(test_id=new_test.id, district_id=dl.district_id))
     session.commit()
-    district_query = (
-        select(District).join(TestDistrict).where(TestDistrict.test_id == new_test.id)
-    )
-    districts = session.exec(district_query).all()
+    session.refresh(new_test)
 
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == new_test.id)
-    tags = session.exec(tags_query).all()
-    question_revision_query = (
-        select(QuestionRevision)
-        .join(TestQuestion)
-        .where(TestQuestion.test_id == new_test.id)
-    )
-    question_revisions = session.exec(question_revision_query).all()
-    state_query = select(State).join(TestState).where(TestState.test_id == new_test.id)
-    states = session.exec(state_query).all()
-    random_tag_public: list[TagRandomPublic] | None = None
-    if new_test.random_tag_count:
-        random_tag_public = build_random_tag_public(session, new_test.random_tag_count)
-
-    return TestPublic(
-        **new_test.model_dump(),
-        tags=tags,
-        question_revisions=question_revisions,
-        states=states,
-        districts=districts,
-        random_tag_counts=random_tag_public,
-    )
+    return build_test_public_response(session, new_test)

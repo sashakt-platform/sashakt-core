@@ -1,0 +1,57 @@
+"""add question sets for tests
+
+Revision ID: 4f2c8a6d9b11
+Revises: ce223bd3d892
+Create Date: 2026-03-24 19:15:00.000000
+
+"""
+from alembic import op
+import sqlalchemy as sa
+import sqlmodel.sql.sqltypes
+
+
+# revision identifiers, used by Alembic.
+revision = '4f2c8a6d9b11'
+down_revision = 'ce223bd3d892'
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    op.create_table(
+        'question_set',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('created_date', sa.DateTime(), nullable=True),
+        sa.Column('modified_date', sa.DateTime(), nullable=True),
+        sa.Column('test_id', sa.Integer(), nullable=False),
+        sa.Column('title', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column('max_questions_allowed_to_attempt', sa.Integer(), nullable=False),
+        sa.Column('display_order', sa.Integer(), nullable=False),
+        sa.Column('marking_scheme', sa.JSON(), nullable=True),
+        sa.ForeignKeyConstraint(['test_id'], ['test.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id'),
+    )
+    op.add_column('test_question', sa.Column('question_set_id', sa.Integer(), nullable=True))
+    op.create_foreign_key(
+        'fk_test_question_question_set_id_question_set',
+        'test_question',
+        'question_set',
+        ['question_set_id'],
+        ['id'],
+    )
+    op.add_column(
+        'candidate_test',
+        sa.Column('question_set_ids', sa.JSON(), server_default='[]', nullable=False),
+    )
+
+
+def downgrade():
+    op.drop_column('candidate_test', 'question_set_ids')
+    op.drop_constraint(
+        'fk_test_question_question_set_id_question_set',
+        'test_question',
+        type_='foreignkey',
+    )
+    op.drop_column('test_question', 'question_set_id')
+    op.drop_table('question_set')

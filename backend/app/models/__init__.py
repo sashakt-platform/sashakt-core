@@ -23,6 +23,7 @@ from .candidate import (
     CandidateTestPublic,
     CandidateTestUpdate,
     CandidateUpdate,
+    QuestionSetCandidatePublic,
     TestCandidatePublic,
 )
 from .certificate import (
@@ -131,6 +132,11 @@ from .tag import (
     TagUpdate,
 )
 from .test import (
+    QuestionSet,
+    QuestionSetCreate,
+    QuestionSetPublic,
+    QuestionSetSummaryPublic,
+    QuestionSetUpdate,
     TagRandomPublic,
     Test,
     TestCreate,
@@ -202,6 +208,11 @@ __all__ = [
     "TestPublic",
     "TestPublicLimited",
     "TestUpdate",
+    "QuestionSet",
+    "QuestionSetCreate",
+    "QuestionSetUpdate",
+    "QuestionSetPublic",
+    "QuestionSetSummaryPublic",
     "TestQuestion",
     "TestTag",
     "TestState",
@@ -244,6 +255,7 @@ __all__ = [
     "CandidateReviewResponse",
     "CandidateTestAnswerUpdate",
     "CandidateTestAnswerCreate",
+    "QuestionSetCandidatePublic",
     "TestCandidatePublic",
     "TagCreate",
     "TagUpdate",
@@ -301,6 +313,8 @@ __all__ = [
 
 # Rebuild models to resolve forward references after all imports are complete
 TagRandomPublic.model_rebuild()
+QuestionSetCandidatePublic.model_rebuild()
+QuestionSetPublic.model_rebuild()
 TestCandidatePublic.model_rebuild()
 TestPublic.model_rebuild()
 TestPublicLimited.model_rebuild()
