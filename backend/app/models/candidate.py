@@ -152,6 +152,9 @@ class CandidateTest(CandidateTestBase, table=True):
     question_revision_ids: list[int] = Field(
         default_factory=list, sa_column=Column(JSON)
     )
+    question_set_ids: list[int | None] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
     form_responses: list["FormResponse"] = Relationship(back_populates="candidate_test")
 
 
@@ -175,6 +178,8 @@ class CandidateTestPublic(CandidateTestBase):
     id: int
     created_date: datetime
     modified_date: datetime
+    question_revision_ids: list[int] = Field(default_factory=list)
+    question_set_ids: list[int | None] = Field(default_factory=list)
     answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
@@ -232,6 +237,16 @@ class CandidateUpdate(CandidateBase):
     pass
 
 
+class QuestionSetCandidatePublic(SQLModel):
+    id: int | None = None
+    title: str
+    description: str | None = None
+    display_order: int
+    max_questions_allowed_to_attempt: int
+    marking_scheme: dict[str, Any] | None = None
+    question_revisions: list["QuestionCandidatePublic"] = Field(default_factory=list)
+
+
 class TestCandidatePublic(SQLModel):
     """Test information for candidates with safe questions (no answers)"""
 
@@ -261,6 +276,7 @@ class TestCandidatePublic(SQLModel):
 
     # Safe questions (no answers)
     question_revisions: list["QuestionCandidatePublic"]
+    question_sets: list["QuestionSetCandidatePublic"] | None = None
 
     # Other test data
     tags: list["Tag"]

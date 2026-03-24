@@ -6,17 +6,24 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import and_, col, not_, outerjoin, select
+from sqlmodel import and_, col, not_, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
 from app.api.routes.question import (
-    enrich_media_with_signed_urls,
-    enrich_options_with_signed_urls,
     get_gcs_service_for_org,
 )
 from app.api.routes.utils import get_current_time
 from app.core.certificate_token import generate_certificate_token
 from app.core.config import TOLERANCE
+from app.core.question_sets import (
+    build_assigned_question_membership,
+    build_question_set_id_map,
+    get_effective_marking_scheme,
+    group_question_ids_by_set,
+    is_attempted_response,
+    is_sectioned_test,
+    normalize_question_set_ids,
+)
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
 from app.models import (
@@ -38,6 +45,8 @@ from app.models import (
     Message,
     QuestionCandidatePublic,
     QuestionRevision,
+    QuestionSet,
+    QuestionSetCandidatePublic,
     Test,
     TestCandidatePublic,
     TestQuestion,
@@ -55,7 +64,6 @@ from app.models.question import (
     Question,
     QuestionTag,
     QuestionType,
-    is_matrix_input_options,
 )
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
@@ -145,6 +153,220 @@ def validate_question_response_format(
         return json.dumps(parsed)
 
 
+def get_test_question_links(session: SessionDep, test_id: int) -> list[TestQuestion]:
+    return session.exec(
+        select(TestQuestion)
+        .where(TestQuestion.test_id == test_id)
+        .order_by(TestQuestion.id)
+    ).all()
+
+
+def get_test_question_sets(session: SessionDep, test_id: int) -> list[QuestionSet]:
+    return session.exec(
+        select(QuestionSet)
+        .where(QuestionSet.test_id == test_id)
+        .order_by(QuestionSet.display_order, QuestionSet.id)
+    ).all()
+
+
+def get_question_revisions_map(
+    session: SessionDep, question_revision_ids: list[int]
+) -> dict[int, QuestionRevision]:
+    if not question_revision_ids:
+        return {}
+    question_revisions = session.exec(
+        select(QuestionRevision).where(
+            col(QuestionRevision.id).in_(question_revision_ids)
+        )
+    ).all()
+    return {
+        question_revision.id: question_revision
+        for question_revision in question_revisions
+    }
+
+
+def build_candidate_safe_question(
+    question_revision: QuestionRevision,
+    *,
+    hide_question_text: bool,
+    marking_scheme: dict[str, Any] | None,
+) -> QuestionCandidatePublic:
+    return QuestionCandidatePublic(
+        id=question_revision.id,
+        question_text=None if hide_question_text else question_revision.question_text,
+        instructions=question_revision.instructions,
+        question_type=question_revision.question_type,
+        options=(
+            [
+                {
+                    "id": option.get("id") if isinstance(option, dict) else option.id,
+                    "key": option.get("key")
+                    if isinstance(option, dict)
+                    else option.key,
+                }
+                for option in (question_revision.options or [])
+            ]
+            if hide_question_text and question_revision.options
+            else question_revision.options
+        ),
+        subjective_answer_limit=question_revision.subjective_answer_limit,
+        is_mandatory=question_revision.is_mandatory,
+        media=question_revision.media,
+        marking_scheme=marking_scheme,
+    )
+
+
+def build_candidate_question_payload(
+    *,
+    test: Test,
+    candidate_test: CandidateTest,
+    question_revisions_map: dict[int, QuestionRevision],
+    question_sets_by_id: dict[int, QuestionSet],
+    hide_question_text: bool,
+    sectioned: bool,
+) -> tuple[list[QuestionCandidatePublic], list[QuestionSetCandidatePublic] | None]:
+    ordered_question_ids = candidate_test.question_revision_ids
+    normalized_question_set_ids = normalize_question_set_ids(
+        ordered_question_ids, candidate_test.question_set_ids
+    )
+    question_set_id_by_revision = build_question_set_id_map(
+        ordered_question_ids, normalized_question_set_ids
+    )
+
+    candidate_questions: list[QuestionCandidatePublic] = []
+    candidate_questions_by_id: dict[int, QuestionCandidatePublic] = {}
+
+    for question_revision_id in ordered_question_ids:
+        question_revision = question_revisions_map.get(question_revision_id)
+        if not question_revision:
+            continue
+        question_set = question_sets_by_id.get(
+            question_set_id_by_revision.get(question_revision_id) or -1
+        )
+        safe_question = build_candidate_safe_question(
+            question_revision,
+            hide_question_text=hide_question_text,
+            marking_scheme=get_effective_marking_scheme(
+                test,
+                question_revision,
+                question_set=question_set,
+                sectioned=sectioned,
+            ),
+        )
+        candidate_questions.append(safe_question)
+        candidate_questions_by_id[question_revision_id] = safe_question
+
+    if not sectioned:
+        return candidate_questions, None
+
+    grouped_question_ids = group_question_ids_by_set(
+        ordered_question_ids, normalized_question_set_ids
+    )
+    candidate_question_sets: list[QuestionSetCandidatePublic] = []
+    fallback_display_order = max(
+        [question_set.display_order for question_set in question_sets_by_id.values()],
+        default=0,
+    )
+
+    for question_set in sorted(
+        question_sets_by_id.values(),
+        key=lambda item: (item.display_order, item.id or 0),
+    ):
+        question_ids = grouped_question_ids.pop(question_set.id, [])
+        if not question_ids:
+            continue
+        candidate_question_sets.append(
+            QuestionSetCandidatePublic(
+                id=question_set.id,
+                title=question_set.title,
+                description=question_set.description,
+                display_order=question_set.display_order,
+                max_questions_allowed_to_attempt=question_set.max_questions_allowed_to_attempt,
+                marking_scheme=question_set.marking_scheme,
+                question_revisions=[
+                    candidate_questions_by_id[question_id]
+                    for question_id in question_ids
+                    if question_id in candidate_questions_by_id
+                ],
+            )
+        )
+
+    for orphan_index, (question_set_id, question_ids) in enumerate(
+        grouped_question_ids.items(), start=1
+    ):
+        if question_set_id is None or not question_ids:
+            continue
+        candidate_question_sets.append(
+            QuestionSetCandidatePublic(
+                id=question_set_id,
+                title=f"Section {question_set_id}",
+                description=None,
+                display_order=fallback_display_order + orphan_index,
+                max_questions_allowed_to_attempt=len(question_ids),
+                marking_scheme=test.marking_scheme,
+                question_revisions=[
+                    candidate_questions_by_id[question_id]
+                    for question_id in question_ids
+                    if question_id in candidate_questions_by_id
+                ],
+            )
+        )
+
+    return candidate_questions, candidate_question_sets or None
+
+
+def enforce_question_set_attempt_limit(
+    session: SessionDep,
+    *,
+    candidate_test: CandidateTest,
+    question_revision_id: int,
+    response: str | None,
+    existing_answer: CandidateTestAnswer | None,
+) -> None:
+    question_set_id_by_revision = build_question_set_id_map(
+        candidate_test.question_revision_ids,
+        candidate_test.question_set_ids,
+    )
+    question_set_id = question_set_id_by_revision.get(question_revision_id)
+    if question_set_id is None:
+        return
+
+    question_set = session.get(QuestionSet, question_set_id)
+    if not question_set:
+        return
+
+    if not is_attempted_response(response):
+        return
+
+    if existing_answer and is_attempted_response(existing_answer.response):
+        return
+
+    answers = session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test.id
+        )
+    ).all()
+    attempted_count = 0
+    for answer in answers:
+        if answer.question_revision_id == question_revision_id:
+            continue
+        if not is_attempted_response(answer.response):
+            continue
+        if (
+            question_set_id_by_revision.get(answer.question_revision_id)
+            == question_set_id
+        ):
+            attempted_count += 1
+
+    if attempted_count >= question_set.max_questions_allowed_to_attempt:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Maximum attempt limit reached for section '{question_set.title}'."
+            ),
+        )
+
+
 def get_score_and_time(
     session: SessionDep, candidate_test: CandidateTest
 ) -> tuple[float, float, float]:
@@ -163,6 +385,21 @@ def get_score_and_time(
             )
         ).all()
     }
+    test_questions = get_test_question_links(session, test.id)
+    question_sets = get_test_question_sets(session, test.id)
+    question_sets_by_id = {
+        question_set.id: question_set
+        for question_set in question_sets
+        if question_set.id is not None
+    }
+    try:
+        sectioned = is_sectioned_test(
+            test_questions,
+            question_sets_by_id,
+            test_id=test.id,
+        )
+    except ValueError:
+        sectioned = False
 
     total_score_obtained = 0.0
     total_max_score = 0.0
@@ -172,27 +409,31 @@ def get_score_and_time(
         )
     ).all()
     question_rev_map = {q.id: q for q in question_revisions}
+    question_set_id_by_revision = build_question_set_id_map(
+        candidate_test.question_revision_ids,
+        candidate_test.question_set_ids,
+    )
 
     for q_id in candidate_test.question_revision_ids:
         question_rev = question_rev_map.get(q_id)
         if not question_rev:
             continue
 
-        if test.marks_level == "test" and test.marking_scheme:
-            marking_scheme = test.marking_scheme
-        elif test.marks_level == "question" and question_rev.marking_scheme:
-            marking_scheme = question_rev.marking_scheme
-        else:
+        marking_scheme = get_effective_marking_scheme(
+            test,
+            question_rev,
+            question_set=question_sets_by_id.get(
+                question_set_id_by_revision.get(q_id) or -1
+            ),
+            sectioned=sectioned,
+        )
+        if not marking_scheme:
             continue
 
         total_max_score += marking_scheme.get("correct", 0.0)
         answer = answers_map.get(q_id)
 
-        if (
-            answer is None
-            or not answer.response
-            or (isinstance(answer.response, str) and answer.response.strip() == "")
-        ):
+        if answer is None or not is_attempted_response(answer.response):
             total_score_obtained += marking_scheme.get("skipped", 0.0)
         else:
             correct_answer = question_rev.correct_answer
@@ -315,18 +556,34 @@ def start_test_for_candidate(
     test = session.get(Test, start_test_request.test_id)
     if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
-    question_revision_ids = [
-        q.question_revision_id
-        for q in session.exec(
-            select(TestQuestion).where(TestQuestion.test_id == test.id)
-        ).all()
-    ]
-
-    if test.random_questions and test.no_of_random_questions:
-        question_revision_ids = random.sample(
-            question_revision_ids,
-            min(test.no_of_random_questions, len(question_revision_ids)),
+    test_questions = get_test_question_links(session, test.id)
+    question_sets = get_test_question_sets(session, test.id)
+    question_sets_by_id = {
+        question_set.id: question_set
+        for question_set in question_sets
+        if question_set.id is not None
+    }
+    try:
+        sectioned = is_sectioned_test(
+            test_questions,
+            question_sets_by_id,
+            test_id=test.id,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    selected_test_questions = list(test_questions)
+    if test.random_questions and test.no_of_random_questions:
+        selected_test_questions = random.sample(
+            selected_test_questions,
+            min(test.no_of_random_questions, len(selected_test_questions)),
+        )
+
+    question_revision_ids, question_set_ids = build_assigned_question_membership(
+        selected_test_questions,
+        question_sets_by_id if sectioned else None,
+        shuffle_questions=test.shuffle,
+    )
 
     if test.random_tag_count:
         extra_question_ids: set[int] = set()
@@ -364,10 +621,22 @@ def start_test_for_candidate(
             )
             extra_question_ids.update(chosen_question_revision_ids)
 
-        question_revision_ids = list(set(question_revision_ids) | extra_question_ids)
+        existing_question_ids = set(question_revision_ids)
+        ordered_extra_question_ids = [
+            question_revision_id
+            for question_revision_id in extra_question_ids
+            if question_revision_id not in existing_question_ids
+        ]
+        question_revision_ids.extend(ordered_extra_question_ids)
+        question_set_ids.extend([None] * len(ordered_extra_question_ids))
 
-    if test.shuffle:
-        random.shuffle(question_revision_ids)
+    if not sectioned and (test.shuffle or test.random_questions):
+        combined = list(zip(question_revision_ids, question_set_ids, strict=False))
+        random.shuffle(combined)
+        question_revision_ids = [
+            question_revision_id for question_revision_id, _ in combined
+        ]
+        question_set_ids = [question_set_id for _, question_set_id in combined]
 
     current_time = get_current_time()
     if test.start_time and test.start_time > current_time:
@@ -398,6 +667,7 @@ def start_test_for_candidate(
         end_time=None,  # Will be set when test is actually submitted
         is_submitted=False,
         question_revision_ids=question_revision_ids,
+        question_set_ids=question_set_ids,
     )
     session.add(candidate_test)
     session.commit()
@@ -455,12 +725,19 @@ def submit_answer_for_qr_candidate(
     Returns the answer along with correct answer from question revision.
     """
     # Verify UUID access
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
     question_revision = session.get(
         QuestionRevision, answer_request.question_revision_id
     )
     if not question_revision:
         raise HTTPException(status_code=404, detail="Question revision not found")
+    if answer_request.question_revision_id not in candidate_test.question_revision_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Question revision is not assigned to this candidate test.",
+        )
 
     if (
         question_revision.question_type == QuestionType.subjective
@@ -484,6 +761,14 @@ def submit_answer_for_qr_candidate(
             == answer_request.question_revision_id
         )
     ).first()
+
+    enforce_question_set_attempt_limit(
+        session,
+        candidate_test=candidate_test,
+        question_revision_id=answer_request.question_revision_id,
+        response=answer_request.response,
+        existing_answer=existing_answer,
+    )
 
     if existing_answer:
         if existing_answer.is_reviewed:
@@ -548,11 +833,23 @@ def submit_batch_answers_for_qr_candidate(
     Returns answers along with correct answers from question revisions.
     """
     # Verify UUID access
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
 
     question_revision_ids = [
         answer.question_revision_id for answer in batch_request.answers
     ]
+    invalid_question_ids = [
+        question_revision_id
+        for question_revision_id in question_revision_ids
+        if question_revision_id not in candidate_test.question_revision_ids
+    ]
+    if invalid_question_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="One or more question revisions are not assigned to this candidate test.",
+        )
     question_revisions = session.exec(
         select(QuestionRevision).where(
             col(QuestionRevision.id).in_(question_revision_ids)
@@ -590,6 +887,14 @@ def submit_batch_answers_for_qr_candidate(
                 CandidateTestAnswer.question_revision_id == answer.question_revision_id
             )
         ).first()
+
+        enforce_question_set_attempt_limit(
+            session,
+            candidate_test=candidate_test,
+            question_revision_id=answer.question_revision_id,
+            response=answer.response,
+            existing_answer=existing_answer,
+        )
 
         if existing_answer:
             if existing_answer.is_reviewed:
@@ -802,20 +1107,22 @@ def get_test_questions(
     assigned_ids = candidate_test.question_revision_ids
     if not assigned_ids:
         raise HTTPException(status_code=404, detail="No questions assigned")
-    question_revision_query = select(QuestionRevision).where(
-        col(QuestionRevision.id).in_(assigned_ids)
-    )
-    question_revisions_map = {
-        q.id: q for q in session.exec(question_revision_query).all()
+    question_revisions_map = get_question_revisions_map(session, assigned_ids)
+    test_questions = get_test_question_links(session, test.id)
+    question_sets = get_test_question_sets(session, test.id)
+    question_sets_by_id = {
+        question_set.id: question_set
+        for question_set in question_sets
+        if question_set.id is not None
     }
-    ordered_questions = [
-        question_revisions_map[qid]
-        for qid in assigned_ids
-        if qid in question_revisions_map
-    ]
-    if test.marks_level == "test":
-        for q in ordered_questions:
-            q.marking_scheme = test.marking_scheme
+    try:
+        sectioned = is_sectioned_test(
+            test_questions,
+            question_sets_by_id,
+            test_id=test.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     omr_mode = getattr(test, "omr", OMRMode.NEVER)
 
     if omr_mode == OMRMode.NEVER:
@@ -828,43 +1135,25 @@ def get_test_questions(
         hide_question_text = bool(use_omr)
 
     # Get GCS service for signed URL generation
-    assert test.organization_id is not None
-    gcs_service = get_gcs_service_for_org(session, test.organization_id)
-
-    # Convert questions to candidate-safe format (no answers)
-    candidate_questions = [
-        QuestionCandidatePublic(
-            id=q.id,
-            question_text=None if hide_question_text else q.question_text,
-            instructions=q.instructions,
-            question_type=q.question_type,
-            options=(
-                [
-                    {
-                        "id": opt.get("id") if isinstance(opt, dict) else opt.id,
-                        "key": opt.get("key") if isinstance(opt, dict) else opt.key,
-                    }
-                    for opt in q.options
-                ]
-                if hide_question_text and isinstance(q.options, list)
-                else (
-                    q.options
-                    if isinstance(q.options, dict)
-                    and is_matrix_input_options(q.options)
-                    else enrich_options_with_signed_urls(q.options, gcs_service)
-                )
-            ),
-            subjective_answer_limit=q.subjective_answer_limit,
-            is_mandatory=q.is_mandatory,
-            media=enrich_media_with_signed_urls(q.media, gcs_service),
-            marking_scheme=q.marking_scheme,
-        )
-        for q in ordered_questions
-    ]
+    gcs_service = (
+        get_gcs_service_for_org(session, test.organization_id)
+        if test.organization_id is not None
+        else None
+    )
+    candidate_questions, candidate_question_sets = build_candidate_question_payload(
+        test=test,
+        candidate_test=candidate_test,
+        question_revisions_map=question_revisions_map,
+        question_sets_by_id=question_sets_by_id,
+        hide_question_text=hide_question_text,
+        sectioned=sectioned,
+        gcs_service=gcs_service,
+    )
 
     return TestCandidatePublic(
         **test.model_dump(),
         question_revisions=candidate_questions,
+        question_sets=candidate_question_sets,
         tags=tags,
         states=states,
         total_questions=len(candidate_questions),
@@ -1279,23 +1568,35 @@ def get_test_result(
         )
 
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-
-    query = (
-        select(QuestionRevision, CandidateTestAnswer)
-        .select_from(
-            outerjoin(
-                QuestionRevision,
-                CandidateTestAnswer,
-                and_(
-                    CandidateTestAnswer.question_revision_id == QuestionRevision.id,
-                    CandidateTestAnswer.candidate_test_id == candidate_test_id,
-                ),
-            )
+    test_questions = get_test_question_links(session, test.id)
+    question_sets = get_test_question_sets(session, test.id)
+    question_sets_by_id = {
+        question_set.id: question_set
+        for question_set in question_sets
+        if question_set.id is not None
+    }
+    try:
+        sectioned = is_sectioned_test(
+            test_questions,
+            question_sets_by_id,
+            test_id=test.id,
         )
-        .where(col(QuestionRevision.id).in_(candidate_test.question_revision_ids))
-    )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    joined_data = session.exec(query).all()
+    question_revisions_map = get_question_revisions_map(
+        session, candidate_test.question_revision_ids
+    )
+    answers = session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all()
+    answers_by_question_id = {answer.question_revision_id: answer for answer in answers}
+    question_set_id_by_revision = build_question_set_id_map(
+        candidate_test.question_revision_ids,
+        candidate_test.question_set_ids,
+    )
 
     correct = 0
     incorrect = 0
@@ -1303,15 +1604,25 @@ def get_test_result(
     optional_not_attempted = 0
     marks_obtained = 0.0
     marks_maximum = 0.0
-    marking_scheme = None
+    has_marking_scheme = False
 
-    for revision, answer in joined_data:
-        if test.marks_level == "test":
-            marking_scheme = test.marking_scheme
-        elif test.marks_level == "question":
-            marking_scheme = revision.marking_scheme
-        else:
-            marking_scheme = None
+    for question_revision_id in candidate_test.question_revision_ids:
+        revision = question_revisions_map.get(question_revision_id)
+        if not revision:
+            continue
+
+        answer = answers_by_question_id.get(question_revision_id)
+        question_set = question_sets_by_id.get(
+            question_set_id_by_revision.get(question_revision_id) or -1
+        )
+        marking_scheme = get_effective_marking_scheme(
+            test,
+            revision,
+            question_set=question_set,
+            sectioned=sectioned,
+        )
+        if marking_scheme:
+            has_marking_scheme = True
 
         correct_mark = marking_scheme["correct"] if marking_scheme else 0
         wrong_mark = marking_scheme["wrong"] if marking_scheme else 0
@@ -1319,7 +1630,7 @@ def get_test_result(
 
         marks_maximum += correct_mark
 
-        if answer is None or not answer.response:
+        if answer is None or not is_attempted_response(answer.response):
             marks_obtained += skipped_mark
             if revision.is_mandatory:
                 mandatory_not_attempted += 1
@@ -1541,8 +1852,8 @@ def get_test_result(
         mandatory_not_attempted=mandatory_not_attempted,
         optional_not_attempted=optional_not_attempted,
         total_questions=total_questions,
-        marks_obtained=marks_obtained if marking_scheme else None,
-        marks_maximum=marks_maximum if marking_scheme else None,
+        marks_obtained=marks_obtained if has_marking_scheme else None,
+        marks_maximum=marks_maximum if has_marking_scheme else None,
         certificate_download_url=certificate_download_url,
     )
 

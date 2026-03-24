@@ -29,7 +29,7 @@ from app.models.certificate import Certificate
 from app.models.location import District
 from app.models.question import QuestionType
 from app.models.role import Role
-from app.models.test import TestDistrict
+from app.models.test import QuestionSet, TestDistrict
 from app.models.user import UserState
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
@@ -401,6 +401,108 @@ def test_create_test(
     ).all()
 
     assert test_question_link == []
+
+
+def test_create_sectioned_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 15,
+        "marks": 10,
+        "link": random_lower_string(),
+        "no_of_attempts": 1,
+        "shuffle": False,
+        "random_questions": False,
+        "question_pagination": 1,
+        "is_template": False,
+        "tag_ids": [tag_hindi.id],
+        "state_ids": [punjab.id],
+        "district_ids": [],
+        "question_sets": [
+            {
+                "title": "Physics",
+                "description": "Section A",
+                "display_order": 1,
+                "max_questions_allowed_to_attempt": 1,
+                "marking_scheme": {"correct": 4, "wrong": -1, "skipped": 0},
+                "question_revision_ids": [question_revision_one.id],
+            },
+            {
+                "title": "Chemistry",
+                "description": "Section B",
+                "display_order": 2,
+                "max_questions_allowed_to_attempt": 1,
+                "marking_scheme": {"correct": 3, "wrong": -1, "skipped": 0},
+                "question_revision_ids": [question_revision_two.id],
+            },
+        ],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_sets"] is not None
+    assert len(data["question_sets"]) == 2
+    assert [question_set["title"] for question_set in data["question_sets"]] == [
+        "Physics",
+        "Chemistry",
+    ]
+    assert [
+        question_set["display_order"] for question_set in data["question_sets"]
+    ] == [
+        1,
+        2,
+    ]
+    assert (
+        data["question_sets"][0]["question_revisions"][0]["id"]
+        == question_revision_one.id
+    )
+    assert (
+        data["question_sets"][1]["question_revisions"][0]["id"]
+        == question_revision_two.id
+    )
+    assert [question["id"] for question in data["question_revisions"]] == [
+        question_revision_one.id,
+        question_revision_two.id,
+    ]
+
+    question_sets = db.exec(
+        select(QuestionSet).where(QuestionSet.test_id == data["id"])
+    ).all()
+    assert len(question_sets) == 2
+
+    test_questions = db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == data["id"])
+    ).all()
+    assert len(test_questions) == 2
+    assert all(
+        test_question.question_set_id is not None for test_question in test_questions
+    )
+    assert {test_question.question_set_id for test_question in test_questions} == {
+        question_set.id for question_set in question_sets
+    }
 
 
 def test_create_test_with_random_tag_count(
@@ -2967,6 +3069,118 @@ def test_clone_test(
     assert len(data["districts"]) == 1
     district_ids = [d["id"] for d in data["districts"]]
     assert district.id in district_ids
+
+
+def test_clone_sectioned_test_preserves_question_sets(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    creator = create_random_user(db)
+
+    original_test = Test(
+        name="Original Sectioned Test",
+        description=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=creator.id,
+        is_active=True,
+    )
+    db.add(original_test)
+    db.commit()
+    db.refresh(original_test)
+
+    physics = QuestionSet(
+        test_id=original_test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    chemistry = QuestionSet(
+        test_id=original_test.id,
+        title="Chemistry",
+        description="Section B",
+        display_order=2,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 3, "wrong": -1, "skipped": 0},
+    )
+    db.add(physics)
+    db.add(chemistry)
+    db.commit()
+    db.refresh(physics)
+    db.refresh(chemistry)
+
+    db.add(
+        TestQuestion(
+            test_id=original_test.id,
+            question_revision_id=question_revision_one.id,
+            question_set_id=physics.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=original_test.id,
+            question_revision_id=question_revision_two.id,
+            question_set_id=chemistry.id,
+        )
+    )
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{original_test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] != original_test.id
+    assert data["question_sets"] is not None
+    assert [question_set["title"] for question_set in data["question_sets"]] == [
+        "Physics",
+        "Chemistry",
+    ]
+    assert (
+        data["question_sets"][0]["question_revisions"][0]["id"]
+        == question_revision_one.id
+    )
+    assert (
+        data["question_sets"][1]["question_revisions"][0]["id"]
+        == question_revision_two.id
+    )
+
+    cloned_question_sets = db.exec(
+        select(QuestionSet).where(QuestionSet.test_id == data["id"])
+    ).all()
+    assert len(cloned_question_sets) == 2
+    assert {question_set.title for question_set in cloned_question_sets} == {
+        "Physics",
+        "Chemistry",
+    }
+
+    cloned_test_questions = db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == data["id"])
+    ).all()
+    assert len(cloned_test_questions) == 2
+    assert all(
+        test_question.question_set_id is not None
+        for test_question in cloned_test_questions
+    )
+    assert {
+        test_question.question_set_id for test_question in cloned_test_questions
+    } == {question_set.id for question_set in cloned_question_sets}
 
 
 def test_bulk_delete_state_admin_cannot_delete_general_tests(

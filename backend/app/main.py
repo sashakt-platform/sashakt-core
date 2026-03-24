@@ -29,7 +29,7 @@ app = FastAPI(
 init_upload_directories()
 
 # Mount static files for uploads
-UPLOAD_ROOT = Path("/app/uploads")
+UPLOAD_ROOT = Path(settings.UPLOAD_ROOT).resolve()
 if UPLOAD_ROOT.exists():
     app.mount("/uploads", StaticFiles(directory=str(UPLOAD_ROOT)), name="uploads")
 
