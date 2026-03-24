@@ -53,12 +53,14 @@ from ...utils.utils import random_email, random_lower_string
 def create_single_choice_question_revision(
     db: SessionDep,
     *,
-    user_id: int,
-    organization_id: int,
+    user_id: int | None,
+    organization_id: int | None,
     question_text: str,
     correct_answer: int,
     marking_scheme: dict[str, float] | None = None,
 ) -> QuestionRevision:
+    if user_id is None or organization_id is None:
+        raise ValueError("user_id and organization_id are required")
     question = Question(organization_id=organization_id)
     db.add(question)
     db.flush()

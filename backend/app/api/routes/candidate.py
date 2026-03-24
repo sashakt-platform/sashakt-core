@@ -3,7 +3,7 @@ import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, select
@@ -61,7 +61,7 @@ from app.models.question import Question, QuestionTag, QuestionType
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
-from app.models.utils import TimeLeft
+from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -147,19 +147,23 @@ def validate_question_response_format(
 
 
 def get_test_question_links(session: SessionDep, test_id: int) -> list[TestQuestion]:
-    return session.exec(
-        select(TestQuestion)
-        .where(TestQuestion.test_id == test_id)
-        .order_by(TestQuestion.id)
-    ).all()
+    return list(
+        session.exec(
+            select(TestQuestion)
+            .where(TestQuestion.test_id == test_id)
+            .order_by(col(TestQuestion.id))
+        ).all()
+    )
 
 
 def get_test_question_sets(session: SessionDep, test_id: int) -> list[QuestionSet]:
-    return session.exec(
-        select(QuestionSet)
-        .where(QuestionSet.test_id == test_id)
-        .order_by(QuestionSet.display_order, QuestionSet.id)
-    ).all()
+    return list(
+        session.exec(
+            select(QuestionSet)
+            .where(QuestionSet.test_id == test_id)
+            .order_by(col(QuestionSet.display_order), col(QuestionSet.id))
+        ).all()
+    )
 
 
 def get_question_revisions_map(
@@ -175,14 +179,21 @@ def get_question_revisions_map(
     return {
         question_revision.id: question_revision
         for question_revision in question_revisions
+        if question_revision.id is not None
     }
+
+
+def get_persisted_test_id(test: Test) -> int:
+    if test.id is None:
+        raise HTTPException(status_code=500, detail="Test is missing a database id.")
+    return test.id
 
 
 def build_candidate_safe_question(
     question_revision: QuestionRevision,
     *,
     hide_question_text: bool,
-    marking_scheme: dict[str, Any] | None,
+    marking_scheme: MarkingScheme | None,
 ) -> QuestionCandidatePublic:
     return QuestionCandidatePublic(
         id=question_revision.id,
@@ -192,12 +203,13 @@ def build_candidate_safe_question(
         options=(
             [
                 {
-                    "id": option.get("id") if isinstance(option, dict) else option.id,
-                    "key": option.get("key")
-                    if isinstance(option, dict)
-                    else option.key,
+                    "id": option["id"],
+                    "key": option["key"],
                 }
-                for option in (question_revision.options or [])
+                for option in cast(
+                    list[dict[str, Any]],
+                    question_revision.options or [],
+                )
             ]
             if hide_question_text and question_revision.options
             else question_revision.options
@@ -369,6 +381,7 @@ def get_score_and_time(
     test = session.get(Test, candidate_test.test_id)
     if not test:
         return 0.0, 0.0, 0.0
+    test_id = get_persisted_test_id(test)
 
     answers_map = {
         ans.question_revision_id: ans
@@ -378,8 +391,8 @@ def get_score_and_time(
             )
         ).all()
     }
-    test_questions = get_test_question_links(session, test.id)
-    question_sets = get_test_question_sets(session, test.id)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
     question_sets_by_id = {
         question_set.id: question_set
         for question_set in question_sets
@@ -389,7 +402,7 @@ def get_score_and_time(
         sectioned = is_sectioned_test(
             test_questions,
             question_sets_by_id,
-            test_id=test.id,
+            test_id=test_id,
         )
     except ValueError:
         sectioned = False
@@ -549,8 +562,9 @@ def start_test_for_candidate(
     test = session.get(Test, start_test_request.test_id)
     if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
-    test_questions = get_test_question_links(session, test.id)
-    question_sets = get_test_question_sets(session, test.id)
+    test_id = get_persisted_test_id(test)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
     question_sets_by_id = {
         question_set.id: question_set
         for question_set in question_sets
@@ -560,7 +574,7 @@ def start_test_for_candidate(
         sectioned = is_sectioned_test(
             test_questions,
             question_sets_by_id,
-            test_id=test.id,
+            test_id=test_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1087,22 +1101,23 @@ def get_test_questions(
     test = session.get(Test, candidate_test.test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
+    test_id = get_persisted_test_id(test)
 
     from app.models.location import State
     from app.models.tag import Tag
     from app.models.test import TestState, TestTag
 
-    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+    tags_query = select(Tag).join(TestTag).where(TestTag.test_id == test_id)
     tags = session.exec(tags_query).all()
 
-    state_query = select(State).join(TestState).where(TestState.test_id == test.id)
+    state_query = select(State).join(TestState).where(TestState.test_id == test_id)
     states = session.exec(state_query).all()
     assigned_ids = candidate_test.question_revision_ids
     if not assigned_ids:
         raise HTTPException(status_code=404, detail="No questions assigned")
     question_revisions_map = get_question_revisions_map(session, assigned_ids)
-    test_questions = get_test_question_links(session, test.id)
-    question_sets = get_test_question_sets(session, test.id)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
     question_sets_by_id = {
         question_set.id: question_set
         for question_set in question_sets
@@ -1112,7 +1127,7 @@ def get_test_questions(
         sectioned = is_sectioned_test(
             test_questions,
             question_sets_by_id,
-            test_id=test.id,
+            test_id=test_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1552,10 +1567,11 @@ def get_test_result(
         raise HTTPException(
             status_code=403, detail="Results are not visible for this test"
         )
+    test_id = get_persisted_test_id(test)
 
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-    test_questions = get_test_question_links(session, test.id)
-    question_sets = get_test_question_sets(session, test.id)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
     question_sets_by_id = {
         question_set.id: question_set
         for question_set in question_sets
@@ -1565,7 +1581,7 @@ def get_test_result(
         sectioned = is_sectioned_test(
             test_questions,
             question_sets_by_id,
-            test_id=test.id,
+            test_id=test_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1686,7 +1702,10 @@ def get_test_result(
                 "numerical-decimal",
             ]:
                 try:
-                    user_value = float(answer.response)
+                    response_value = answer.response
+                    if response_value is None:
+                        raise TypeError
+                    user_value = float(response_value)
                 except (TypeError, ValueError):
                     incorrect += 1
                     marks_obtained += wrong_mark
@@ -1713,7 +1732,10 @@ def get_test_result(
 
             elif revision.question_type.value == "matrix-match":
                 try:
-                    candidate_matrix_response = json.loads(answer.response)
+                    matrix_response = answer.response
+                    if matrix_response is None:
+                        raise TypeError
+                    candidate_matrix_response = json.loads(matrix_response)
                 except (TypeError, ValueError, json.JSONDecodeError):
                     incorrect += 1
                     marks_obtained += wrong_mark

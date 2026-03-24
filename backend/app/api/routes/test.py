@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -159,6 +160,12 @@ def check_linked_question(session: SessionDep, test_id: int) -> bool:
     return bool(result)
 
 
+def get_persisted_test_id(test: Test) -> int:
+    if test.id is None:
+        raise HTTPException(status_code=500, detail="Test is missing a database id.")
+    return test.id
+
+
 def build_random_tag_public(
     session: SessionDep,
     tag_count_mapping: list[TagRandomCreate],
@@ -174,19 +181,23 @@ def build_random_tag_public(
 
 
 def get_test_question_links(session: SessionDep, test_id: int) -> list[TestQuestion]:
-    return session.exec(
-        select(TestQuestion)
-        .where(TestQuestion.test_id == test_id)
-        .order_by(TestQuestion.id)
-    ).all()
+    return list(
+        session.exec(
+            select(TestQuestion)
+            .where(TestQuestion.test_id == test_id)
+            .order_by(col(TestQuestion.id))
+        ).all()
+    )
 
 
 def get_test_question_sets(session: SessionDep, test_id: int) -> list[QuestionSet]:
-    return session.exec(
-        select(QuestionSet)
-        .where(QuestionSet.test_id == test_id)
-        .order_by(QuestionSet.display_order, QuestionSet.id)
-    ).all()
+    return list(
+        session.exec(
+            select(QuestionSet)
+            .where(QuestionSet.test_id == test_id)
+            .order_by(col(QuestionSet.display_order), col(QuestionSet.id))
+        ).all()
+    )
 
 
 def get_question_revisions_map(
@@ -202,6 +213,7 @@ def get_question_revisions_map(
     return {
         question_revision.id: question_revision
         for question_revision in question_revisions
+        if question_revision.id is not None
     }
 
 
@@ -284,17 +296,18 @@ def get_total_questions(test: Test, explicit_question_count: int) -> int:
 
 
 def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
+    test_id = get_persisted_test_id(test)
     tags = session.exec(
-        select(Tag).join(TestTag).where(TestTag.test_id == test.id)
+        select(Tag).join(TestTag).where(TestTag.test_id == test_id)
     ).all()
     states = session.exec(
-        select(State).join(TestState).where(TestState.test_id == test.id)
+        select(State).join(TestState).where(TestState.test_id == test_id)
     ).all()
     districts = session.exec(
-        select(District).join(TestDistrict).where(TestDistrict.test_id == test.id)
+        select(District).join(TestDistrict).where(TestDistrict.test_id == test_id)
     ).all()
 
-    test_questions = get_test_question_links(session, test.id)
+    test_questions = get_test_question_links(session, test_id)
     question_revision_ids = [
         test_question.question_revision_id for test_question in test_questions
     ]
@@ -304,7 +317,7 @@ def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
         for question_revision_id in question_revision_ids
         if question_revision_id in question_revisions_map
     ]
-    question_sets = get_test_question_sets(session, test.id)
+    question_sets = get_test_question_sets(session, test_id)
 
     if question_sets:
         try:
@@ -315,7 +328,7 @@ def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
                     for question_set in question_sets
                     if question_set.id is not None
                 },
-                test_id=test.id,
+                test_id=test_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -331,7 +344,7 @@ def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
         tags=tags,
         question_revisions=question_revisions,
         question_sets=build_question_set_publics(
-            test_id=test.id,
+            test_id=test_id,
             test_questions=test_questions,
             question_revisions_map=question_revisions_map,
             question_sets=question_sets,
@@ -344,7 +357,7 @@ def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
 
 
 def validate_question_set_payload(
-    question_sets: list[QuestionSetCreate | QuestionSetUpdate] | None,
+    question_sets: Sequence[QuestionSetCreate | QuestionSetUpdate] | None,
 ) -> list[QuestionSetCreate | QuestionSetUpdate]:
     if not question_sets:
         return []
@@ -388,14 +401,14 @@ def validate_question_set_payload(
         seen_display_orders.add(question_set.display_order)
         seen_question_revision_ids.update(question_revision_ids)
 
-    return question_sets
+    return list(question_sets)
 
 
 def validate_test_membership_payload(
     session: SessionDep,
     *,
     question_revision_ids: list[int],
-    question_sets: list[QuestionSetCreate | QuestionSetUpdate] | None,
+    question_sets: Sequence[QuestionSetCreate | QuestionSetUpdate] | None,
     random_tag_count: list[TagRandomCreate] | None,
 ) -> tuple[list[int], list[QuestionSetCreate | QuestionSetUpdate]]:
     validated_question_sets = validate_question_set_payload(question_sets)
@@ -449,10 +462,12 @@ def replace_test_question_membership(
     question_revision_ids: list[int],
     question_sets: list[QuestionSetCreate | QuestionSetUpdate],
 ) -> None:
-    for test_question in get_test_question_links(session, test.id):
+    test_id = get_persisted_test_id(test)
+
+    for test_question in get_test_question_links(session, test_id):
         session.delete(test_question)
 
-    for question_set in get_test_question_sets(session, test.id):
+    for question_set in get_test_question_sets(session, test_id):
         session.delete(question_set)
 
     session.flush()
@@ -462,7 +477,7 @@ def replace_test_question_membership(
             question_sets, key=lambda question_set: question_set.display_order
         ):
             question_set = QuestionSet(
-                test_id=test.id,
+                test_id=test_id,
                 title=question_set_payload.title,
                 description=question_set_payload.description,
                 max_questions_allowed_to_attempt=question_set_payload.max_questions_allowed_to_attempt,
@@ -474,7 +489,7 @@ def replace_test_question_membership(
             for question_revision_id in question_set_payload.question_revision_ids:
                 session.add(
                     TestQuestion(
-                        test_id=test.id,
+                        test_id=test_id,
                         question_revision_id=question_revision_id,
                         question_set_id=question_set.id,
                     )
@@ -485,7 +500,7 @@ def replace_test_question_membership(
     for question_revision_id in question_revision_ids:
         session.add(
             TestQuestion(
-                test_id=test.id,
+                test_id=test_id,
                 question_revision_id=question_revision_id,
             )
         )
@@ -535,8 +550,9 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     if test.end_time is not None and test.end_time < current_time:
         raise HTTPException(status_code=400, detail="Test has already ended")
 
-    test_questions = get_test_question_links(session, test.id)
-    question_sets = get_test_question_sets(session, test.id)
+    test_id = get_persisted_test_id(test)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
     total_questions = get_total_questions(test, len(test_questions))
 
     # Include form structure if form_id is set
@@ -1232,6 +1248,7 @@ def clone_test(
     original = session.get(Test, test_id)
     if not original:
         raise HTTPException(status_code=404, detail="Test not found")
+    original_id = get_persisted_test_id(original)
 
     test_data = original.model_dump(exclude={"id", "created_date", "modified_date"})
     test_data["name"] = f"Copy of {original.name}"
@@ -1247,12 +1264,12 @@ def clone_test(
     session.flush()
 
     tag_links = session.exec(
-        select(TestTag).where(TestTag.test_id == original.id)
+        select(TestTag).where(TestTag.test_id == original_id)
     ).all()
     for tag_link in tag_links:
         session.add(TestTag(test_id=new_test.id, tag_id=tag_link.tag_id))
 
-    original_question_sets = get_test_question_sets(session, original.id)
+    original_question_sets = get_test_question_sets(session, original_id)
     question_set_id_map: dict[int, int] = {}
     for original_question_set in original_question_sets:
         new_question_set = QuestionSet(
@@ -1269,7 +1286,7 @@ def clone_test(
             question_set_id_map[original_question_set.id] = new_question_set.id
 
     question_links = session.exec(
-        select(TestQuestion).where(TestQuestion.test_id == original.id)
+        select(TestQuestion).where(TestQuestion.test_id == original_id)
     ).all()
     for ql in question_links:
         session.add(

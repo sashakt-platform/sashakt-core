@@ -1,18 +1,17 @@
 """add question sets for tests
 
 Revision ID: 4f2c8a6d9b11
-Revises: ce223bd3d892
+Revises: 7d90fad13571
 Create Date: 2026-03-24 19:15:00.000000
 
 """
-from alembic import op
 import sqlalchemy as sa
 import sqlmodel.sql.sqltypes
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '4f2c8a6d9b11'
-down_revision = 'ce223bd3d892'
+down_revision = '7d90fad13571'
 branch_labels = None
 depends_on = None
 
