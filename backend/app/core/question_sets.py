@@ -148,6 +148,6 @@ def get_effective_marking_scheme(
         )
 
     if test.marks_level == MarksLevelEnum.TEST:
-        return test.marking_scheme or question_revision.marking_scheme
+        return test.marking_scheme
 
     return question_revision.marking_scheme or test.marking_scheme

@@ -948,12 +948,20 @@ def update_test(
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    question_revision_ids, question_sets = validate_test_membership_payload(
-        session,
-        question_revision_ids=test_update.question_revision_ids or [],
-        question_sets=test_update.question_sets,
-        random_tag_count=test_update.random_tag_count,
+    membership_fields = {"question_revision_ids", "question_sets"}
+    membership_update_requested = bool(
+        membership_fields.intersection(test_update.model_fields_set)
     )
+    if membership_update_requested:
+        question_revision_ids, question_sets = validate_test_membership_payload(
+            session,
+            question_revision_ids=test_update.question_revision_ids or [],
+            question_sets=test_update.question_sets,
+            random_tag_count=test_update.random_tag_count,
+        )
+    else:
+        question_revision_ids = []
+        question_sets = []
     role = session.get(Role, current_user.role_id)
     if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
@@ -978,6 +986,18 @@ def update_test(
         )
         validate_test_time_config(start_time, end_time, time_limit)
     if test_update.random_questions:
+        total_questions = (
+            len(get_test_question_links(session, test_id))
+            if not membership_update_requested
+            else (
+                len(question_revision_ids)
+                if not question_sets
+                else sum(
+                    len(question_set.question_revision_ids)
+                    for question_set in question_sets
+                )
+            )
+        )
         if (
             test_update.no_of_random_questions is None
             or test_update.no_of_random_questions < 1
@@ -986,14 +1006,6 @@ def update_test(
                 status_code=400,
                 detail="No. of random questions must be provided if random questions are enabled.",
             )
-        total_questions = (
-            len(question_revision_ids)
-            if not question_sets
-            else sum(
-                len(question_set.question_revision_ids)
-                for question_set in question_sets
-            )
-        )
         if test_update.no_of_random_questions > total_questions:
             raise HTTPException(
                 status_code=400,
@@ -1029,12 +1041,13 @@ def update_test(
             session.add(TestTag(test_id=test.id, tag_id=tag))
             session.commit()
 
-    replace_test_question_membership(
-        session,
-        test=test,
-        question_revision_ids=question_revision_ids,
-        question_sets=question_sets,
-    )
+    if membership_update_requested:
+        replace_test_question_membership(
+            session,
+            test=test,
+            question_revision_ids=question_revision_ids,
+            question_sets=question_sets,
+        )
 
     # Updating States
     states_remove = [
