@@ -32,6 +32,8 @@ class QuestionType(str, Enum):
     numerical_decimal = "numerical-decimal"
     matrix_match = "matrix-match"
     matrix_rating = "matrix-rating"
+    matrix_number = "matrix-number"
+    matrix_string = "matrix-string"
 
 
 # Simple structure classes - no SQLModel inheritance
