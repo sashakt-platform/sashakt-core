@@ -7037,3 +7037,99 @@ def test_create_matrix_rating_question_full_subjects_and_ratings(
     assert len(data["options"]["rows"]["items"]) == 5
     assert len(data["options"]["columns"]["items"]) == 5
     assert data["correct_answer"] is None
+
+
+MATRIX_NUMBER_OPTIONS = {
+    "left": {
+        "label": "Subjects",
+        "items": [
+            {"id": 1, "key": "1", "value": "Math"},
+            {"id": 2, "key": "2", "value": "Physics"},
+            {"id": 3, "key": "3", "value": "Chemistry"},
+            {"id": 4, "key": "4", "value": "Biology"},
+            {"id": 5, "key": "5", "value": "English"},
+        ],
+    },
+    "right": {
+        "label": "Percentage",
+        "input_type": "number",
+    },
+}
+
+
+MATRIX_STRING_OPTIONS = {
+    "left": {
+        "label": "Subjects",
+        "items": [
+            {"id": 1, "key": "1", "value": "Math"},
+            {"id": 2, "key": "2", "value": "Physics"},
+            {"id": 3, "key": "3", "value": "Chemistry"},
+            {"id": 4, "key": "4", "value": "Biology"},
+            {"id": 5, "key": "5", "value": "English"},
+        ],
+    },
+    "right": {
+        "label": "Grade",
+        "input_type": "text",
+    },
+}
+
+
+def test_create_matrix_number_question_valid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-number question with left/right options should succeed; correct_answer is always None."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-number",
+            "options": MATRIX_NUMBER_OPTIONS,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "matrix-number"
+    assert data["options"]["left"]["label"] == "Subjects"
+    assert data["options"]["right"]["input_type"] == "number"
+    assert len(data["options"]["left"]["items"]) == 5
+    assert data["options"]["left"]["items"][0]["value"] == "Math"
+    assert data["correct_answer"] is None
+
+
+def test_create_matrix_string_question_valid(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-string question with left/right options should succeed; correct_answer is always None."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-string",
+            "options": MATRIX_STRING_OPTIONS,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_type"] == "matrix-string"
+    assert data["options"]["left"]["label"] == "Subjects"
+    assert data["options"]["right"]["input_type"] == "text"
+    assert len(data["options"]["left"]["items"]) == 5
+    assert data["options"]["left"]["items"][0]["value"] == "Math"
+    assert data["correct_answer"] is None

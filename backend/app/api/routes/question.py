@@ -54,6 +54,7 @@ from app.models import (
 from app.models.question import (
     BulkUploadQuestionsResponse,
     DeleteQuestion,
+    MatrixInputOptions,
     MatrixMatchOptions,
     Option,
     QuestionRevisionInfo,
@@ -67,8 +68,8 @@ router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
 def serialize_options(
-    options: list[Option] | MatrixMatchOptions | None,
-) -> list[Option] | MatrixMatchOptions | None:
+    options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None,
+) -> list[Option] | MatrixMatchOptions | MatrixInputOptions | None:
     """Convert options to serializable dicts, handling both list and matrix-match formats."""
     if not options:
         return None
@@ -249,7 +250,7 @@ def build_question_response(
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
 ) -> tuple[
-    list[Option] | MatrixMatchOptions | None,
+    list[Option] | MatrixMatchOptions | MatrixInputOptions | None,
     MarkingScheme | None,
     dict[str, Any] | None,
 ]:
@@ -421,7 +422,7 @@ class RevisionDetailDict(TypedDict):
     question_text: str
     instructions: str | None
     question_type: str
-    options: list[Option] | MatrixMatchOptions | None
+    options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool

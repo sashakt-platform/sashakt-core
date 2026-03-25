@@ -1411,6 +1411,7 @@ def get_test_result(
                     expected_row_to_columns = {
                         str(row_id): {int(col_id) for col_id in column_ids}
                         for row_id, column_ids in expected_matrix_answer.items()
+                        if isinstance(column_ids, list)
                     }
 
                     # Only expected rows are evaluated; extra candidate rows are ignored.

@@ -10,7 +10,15 @@ class Message(SQLModel):
 
 
 CorrectAnswerType = (
-    list[int] | list[str] | float | int | str | dict[str, list[int]] | None
+    list[int]
+    | list[str]
+    | float
+    | int
+    | str
+    | dict[str, list[int]]
+    | dict[str, int | float]
+    | dict[str, str]
+    | None
 )
 
 

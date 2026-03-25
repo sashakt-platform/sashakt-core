@@ -86,6 +86,16 @@ class MatrixMatchOptions(TypedDict):
     columns: MatrixColumn
 
 
+class MatrixInputRight(TypedDict):
+    label: str
+    input_type: str
+
+
+class MatrixInputOptions(TypedDict):
+    left: MatrixColumn
+    right: MatrixInputRight
+
+
 class FailedQuestion(TypedDict):
     row_number: int
     question_text: str
@@ -121,7 +131,7 @@ class QuestionBase(SQLModel):
         description="Type of question (single-choice, multi-choice, etc.)",
     )
 
-    options: MatrixMatchOptions | list[Option] | None = Field(
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -222,8 +232,9 @@ class QuestionBase(SQLModel):
                 raise ValueError(
                     f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
-            row_items = options.get("rows", {}).get("items", [])
-            column_items = options.get("columns", {}).get("items", [])
+            opts: Any = options
+            row_items = opts.get("rows", {}).get("items", [])
+            column_items = opts.get("columns", {}).get("items", [])
             if not row_items or not column_items:
                 raise ValueError(
                     f"{question_type} options must have at least one item in each column."
@@ -253,6 +264,24 @@ class QuestionBase(SQLModel):
                             raise ValueError(
                                 f"Column IDs {invalid_column_ids} do not match any right column item ID."
                             )
+
+        elif question_type in [QuestionType.matrix_number, QuestionType.matrix_string]:
+            if options is None or not isinstance(options, dict):
+                raise ValueError(
+                    f"{question_type} questions must have options with 'left' and 'right' keys."
+                )
+            input_opts: Any = options
+            left_items = input_opts.get("left", {}).get("items", [])
+            if not left_items:
+                raise ValueError(
+                    f"{question_type} options must have at least one item in 'left'."
+                )
+            right = input_opts.get("right")
+            if not right or "input_type" not in right:
+                raise ValueError(
+                    f"{question_type} options must have a 'right' section with 'input_type'."
+                )
+            self.correct_answer = None
 
         return self
 
@@ -529,7 +558,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: MatrixMatchOptions | list[Option] | None = Field(
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -562,7 +591,7 @@ class QuestionCandidatePublic(SQLModel):
     )
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: MatrixMatchOptions | list[Option] | None = Field(
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None = Field(
         description="Available options for choice questions (option.value excluded in OMR mode)"
     )
     subjective_answer_limit: int | None = Field(
