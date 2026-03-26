@@ -9,6 +9,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, outerjoin, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.routes.question import (
+    enrich_media_with_signed_urls,
+    enrich_options_with_signed_urls,
+    get_gcs_service_for_org,
+)
 from app.api.routes.utils import get_current_time
 from app.core.certificate_token import generate_certificate_token
 from app.core.config import TOLERANCE
@@ -817,6 +822,10 @@ def get_test_questions(
     elif omr_mode == OMRMode.OPTIONAL:
         hide_question_text = bool(use_omr)
 
+    # Get GCS service for signed URL generation
+    assert test.organization_id is not None
+    gcs_service = get_gcs_service_for_org(session, test.organization_id)
+
     # Convert questions to candidate-safe format (no answers)
     candidate_questions = [
         QuestionCandidatePublic(
@@ -833,11 +842,11 @@ def get_test_questions(
                     for opt in q.options
                 ]
                 if hide_question_text and isinstance(q.options, list)
-                else q.options
+                else enrich_options_with_signed_urls(q.options, gcs_service)
             ),
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,
-            media=q.media,
+            media=enrich_media_with_signed_urls(q.media, gcs_service),
             marking_scheme=q.marking_scheme,
         )
         for q in ordered_questions

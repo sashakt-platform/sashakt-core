@@ -8,6 +8,7 @@ from app.api.routes import (
     languages,
     location,
     login,
+    media,
     organization,
     permissions,
     private,
@@ -42,6 +43,7 @@ api_router.include_router(form.router)
 api_router.include_router(providers.router)
 api_router.include_router(languages.router)
 api_router.include_router(certificate.router)
+api_router.include_router(media.router)
 
 if settings.ENVIRONMENT == "local":
     api_router.include_router(private.router)

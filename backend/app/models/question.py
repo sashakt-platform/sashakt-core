@@ -74,6 +74,7 @@ class Option(TypedDict):
     id: int
     key: str
     value: NotRequired[str]
+    media: NotRequired[dict[str, Any] | None]
 
 
 class MatrixColumn(TypedDict):
