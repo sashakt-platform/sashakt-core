@@ -58,6 +58,41 @@ class GoogleSlidesConfig(BaseModel):
     client_x509_cert_url: str = Field(..., description="Client cert URL")
 
 
+class GCSConfig(BaseModel):
+    """
+    Google Cloud Storage configuration for media uploads.
+    Uses same service account format as other Google services.
+    """
+
+    # Required service account fields
+    type: str = Field(..., description="Service account type")
+    project_id: str = Field(..., description="Google Cloud Project ID")
+    private_key_id: str = Field(..., description="Private key ID")
+    private_key: str = Field(..., description="Private key")
+    client_email: str = Field(..., description="Service account email")
+    client_id: str = Field(..., description="Client ID")
+    auth_uri: str = Field(
+        default="https://accounts.google.com/o/oauth2/auth", description="Auth URI"
+    )
+    token_uri: str = Field(
+        default="https://oauth2.googleapis.com/token", description="Token URI"
+    )
+    auth_provider_x509_cert_url: str = Field(
+        default="https://www.googleapis.com/oauth2/v1/certs",
+        description="Auth provider cert URL",
+    )
+    client_x509_cert_url: str = Field(..., description="Client cert URL")
+
+    # GCS-specific settings
+    bucket_name: str = Field(
+        default="sashakt-media",
+        description="GCS bucket name for media storage",
+    )
+    signed_url_expiration_minutes: int = Field(
+        default=240, description="Expiration time for signed URLs in minutes"
+    )
+
+
 class ProviderConfigService:
     def __init__(self) -> None:
         self._encryption_key = self._get_or_generate_key()
@@ -102,6 +137,8 @@ class ProviderConfigService:
             return BigQueryConfig(**config).model_dump()
         elif provider_type == ProviderType.GOOGLE_SLIDES:
             return GoogleSlidesConfig(**config).model_dump()
+        elif provider_type == ProviderType.GCS:
+            return GCSConfig(**config).model_dump()
         else:
             raise ValueError(f"Unknown provider type: {provider_type}")
 

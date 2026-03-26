@@ -6,6 +6,7 @@ from app.core.location import init_location
 from app.core.permissions import (
     init_permissions,
 )
+from app.core.providers import init_providers
 from app.core.roles import (
     init_roles,
     super_admin,
@@ -21,6 +22,9 @@ engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
 def init_db(session: Session) -> None:
+    # Seed default providers (idempotent, runs on every startup)
+    init_providers(session)
+
     user = session.exec(
         select(User).where(User.email == settings.FIRST_SUPERUSER)
     ).first()
