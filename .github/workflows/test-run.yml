@@ -52,7 +52,7 @@ jobs:
       - run: docker compose exec backend pytest --cov=app --cov-branch --cov-report=xml
       - run: docker cp sashakt-core-backend-1:app/coverage.xml .
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
       - run: docker compose down -v --remove-orphans
