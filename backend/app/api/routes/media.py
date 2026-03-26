@@ -1,5 +1,7 @@
 """Media upload endpoints for questions."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm.attributes import flag_modified
@@ -18,6 +20,8 @@ from app.core.roles import state_admin, test_admin
 from app.models import Message
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
+    MatrixColumn,
+    MatrixInputOptions,
     MatrixMatchOptions,
     Option,
     Question,
@@ -108,13 +112,14 @@ def get_revision(session: SessionDep, question: Question) -> QuestionRevision:
 
 
 def find_option(
-    options: MatrixMatchOptions | list[Option] | None,
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None,
     option_id: int,
 ) -> tuple[list[Option], int, str | None]:
-    """Find option by ID across flat list or matrix match structure.
+    """Find option by ID across flat list or matrix match/input structure.
 
     Returns (items_list, index, matrix_key).
-    matrix_key is None for flat lists, "rows" or "columns" for matrix match.
+    matrix_key is None for flat lists, "rows" or "columns" for matrix match,
+    "rows" only for matrix input (columns has no selectable items).
     """
     if not options:
         raise HTTPException(status_code=404, detail="Question has no options")
@@ -124,8 +129,12 @@ def find_option(
             if opt.get("id") == option_id:
                 return options, i, None
     else:
-        for key in ("rows", "columns"):
-            items = options[key]["items"]
+        opts: Any = options
+
+        is_matrix_input = "input_type" in opts.get("columns", {})
+        keys: tuple[str, ...] = ("rows",) if is_matrix_input else ("rows", "columns")
+        for key in keys:
+            items = opts[key]["items"]
             for i, opt in enumerate(items):
                 if opt.get("id") == option_id:
                     return items, i, key
@@ -134,16 +143,24 @@ def find_option(
 
 
 def rebuild_options(
-    original: MatrixMatchOptions | list[Option] | None,
+    original: MatrixMatchOptions | MatrixInputOptions | list[Option] | None,
     updated_items: list[Option],
     matrix_key: str | None,
-) -> MatrixMatchOptions | list[Option]:
+) -> MatrixMatchOptions | MatrixInputOptions | list[Option]:
     """Rebuild options structure after modifying an items list."""
     if matrix_key is None:
         return updated_items
     assert isinstance(original, dict)
-    rows = original["rows"]
-    columns = original["columns"]
+    orig: Any = original
+    is_matrix_input = "input_type" in orig.get("columns", {})
+    if is_matrix_input:
+        rows = orig["rows"]
+        return MatrixInputOptions(
+            rows=MatrixColumn(label=rows["label"], items=updated_items),
+            columns=orig["columns"],
+        )
+    rows = orig["rows"]
+    columns = orig["columns"]
     if matrix_key == "rows":
         rows = {"label": rows["label"], "items": updated_items}
     else:

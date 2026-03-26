@@ -7039,8 +7039,8 @@ def test_create_matrix_rating_question_full_subjects_and_ratings(
     assert data["correct_answer"] is None
 
 
-MATRIX_NUMBER_OPTIONS = {
-    "left": {
+MATRIX_INPUT_NUMBER_OPTIONS = {
+    "rows": {
         "label": "Subjects",
         "items": [
             {"id": 1, "key": "1", "value": "Math"},
@@ -7050,15 +7050,15 @@ MATRIX_NUMBER_OPTIONS = {
             {"id": 5, "key": "5", "value": "English"},
         ],
     },
-    "right": {
+    "columns": {
         "label": "Percentage",
         "input_type": "number",
     },
 }
 
 
-MATRIX_STRING_OPTIONS = {
-    "left": {
+MATRIX_INPUT_TEXT_OPTIONS = {
+    "rows": {
         "label": "Subjects",
         "items": [
             {"id": 1, "key": "1", "value": "Math"},
@@ -7068,17 +7068,17 @@ MATRIX_STRING_OPTIONS = {
             {"id": 5, "key": "5", "value": "English"},
         ],
     },
-    "right": {
+    "columns": {
         "label": "Grade",
         "input_type": "text",
     },
 }
 
 
-def test_create_matrix_number_question_valid(
+def test_create_matrix_input_question_valid_number_type(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    """matrix-number question with left/right options should succeed; correct_answer is always None."""
+    """matrix-input question with number input_type should succeed; correct_answer is always None."""
     org = Organization(name=random_lower_string())
     db.add(org)
     db.commit()
@@ -7089,26 +7089,26 @@ def test_create_matrix_number_question_valid(
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
-            "question_type": "matrix-number",
-            "options": MATRIX_NUMBER_OPTIONS,
+            "question_type": "matrix-input",
+            "options": MATRIX_INPUT_NUMBER_OPTIONS,
         },
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert data["question_type"] == "matrix-number"
-    assert data["options"]["left"]["label"] == "Subjects"
-    assert data["options"]["right"]["input_type"] == "number"
-    assert len(data["options"]["left"]["items"]) == 5
-    assert data["options"]["left"]["items"][0]["value"] == "Math"
+    assert data["question_type"] == "matrix-input"
+    assert data["options"]["rows"]["label"] == "Subjects"
+    assert data["options"]["columns"]["input_type"] == "number"
+    assert len(data["options"]["rows"]["items"]) == 5
+    assert data["options"]["rows"]["items"][0]["value"] == "Math"
     assert data["correct_answer"] is None
 
 
-def test_create_matrix_string_question_valid(
+def test_create_matrix_input_question_valid_text_type(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    """matrix-string question with left/right options should succeed; correct_answer is always None."""
+    """matrix-input question with text input_type should succeed; correct_answer is always None."""
     org = Organization(name=random_lower_string())
     db.add(org)
     db.commit()
@@ -7119,17 +7119,186 @@ def test_create_matrix_string_question_valid(
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
-            "question_type": "matrix-string",
-            "options": MATRIX_STRING_OPTIONS,
+            "question_type": "matrix-input",
+            "options": MATRIX_INPUT_TEXT_OPTIONS,
         },
         headers=get_user_superadmin_token,
     )
 
     assert response.status_code == 200
     data = response.json()
-    assert data["question_type"] == "matrix-string"
-    assert data["options"]["left"]["label"] == "Subjects"
-    assert data["options"]["right"]["input_type"] == "text"
-    assert len(data["options"]["left"]["items"]) == 5
-    assert data["options"]["left"]["items"][0]["value"] == "Math"
+    assert data["question_type"] == "matrix-input"
+    assert data["options"]["rows"]["label"] == "Subjects"
+    assert data["options"]["columns"]["input_type"] == "text"
+    assert len(data["options"]["rows"]["items"]) == 5
+    assert data["options"]["rows"]["items"][0]["value"] == "Math"
     assert data["correct_answer"] is None
+
+
+def test_create_matrix_input_question_correct_answer_ignored(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Any correct_answer supplied for matrix-input must be silently discarded (stored as null)."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": MATRIX_INPUT_NUMBER_OPTIONS,
+            "correct_answer": {"1": 95, "2": 80},
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] is None
+
+
+def test_create_matrix_input_question_missing_options_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question with no options should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": None,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "matrix-input questions must have options with 'rows' and 'columns' keys."
+        in response.text
+    )
+
+
+def test_create_matrix_input_question_options_as_list_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question with a list instead of the required dict should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": [
+                {"id": 1, "key": "A", "value": "Option 1"},
+                {"id": 2, "key": "B", "value": "Option 2"},
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "matrix-input questions must have options with 'rows' and 'columns' keys."
+        in response.text
+    )
+
+
+def test_create_matrix_input_question_empty_row_items_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question with empty rows items should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": {
+                "rows": {"label": "Subjects", "items": []},
+                "columns": {"label": "Percentage", "input_type": "number"},
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "matrix-input options must have at least one item in 'rows'." in response.text
+    )
+
+
+def test_create_matrix_input_question_missing_columns_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question without a 'columns' section should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": {
+                "rows": {
+                    "label": "Subjects",
+                    "items": [{"id": 1, "key": "1", "value": "Math"}],
+                },
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_matrix_input_question_missing_input_type_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question with a 'columns' section missing 'input_type' should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": {
+                "rows": {
+                    "label": "Subjects",
+                    "items": [{"id": 1, "key": "1", "value": "Math"}],
+                },
+                "columns": {"label": "Percentage"},
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422

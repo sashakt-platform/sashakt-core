@@ -32,8 +32,7 @@ class QuestionType(str, Enum):
     numerical_decimal = "numerical-decimal"
     matrix_match = "matrix-match"
     matrix_rating = "matrix-rating"
-    matrix_number = "matrix-number"
-    matrix_string = "matrix-string"
+    matrix_input = "matrix-input"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -87,14 +86,14 @@ class MatrixMatchOptions(TypedDict):
     columns: MatrixColumn
 
 
-class MatrixInputRight(TypedDict):
+class MatrixInputColumn(TypedDict):
     label: str
     input_type: str
 
 
 class MatrixInputOptions(TypedDict):
-    left: MatrixColumn
-    right: MatrixInputRight
+    rows: MatrixColumn
+    columns: MatrixInputColumn
 
 
 class FailedQuestion(TypedDict):
@@ -266,21 +265,21 @@ class QuestionBase(SQLModel):
                                 f"Column IDs {invalid_column_ids} do not match any right column item ID."
                             )
 
-        elif question_type in [QuestionType.matrix_number, QuestionType.matrix_string]:
+        elif question_type == QuestionType.matrix_input:
             if options is None or not isinstance(options, dict):
                 raise ValueError(
-                    f"{question_type} questions must have options with 'left' and 'right' keys."
+                    f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
             input_opts: Any = options
-            left_items = input_opts.get("left", {}).get("items", [])
-            if not left_items:
+            row_items = input_opts.get("rows", {}).get("items", [])
+            if not row_items:
                 raise ValueError(
-                    f"{question_type} options must have at least one item in 'left'."
+                    f"{question_type} options must have at least one item in 'rows'."
                 )
-            right = input_opts.get("right")
-            if not right or "input_type" not in right:
+            columns = input_opts.get("columns")
+            if not columns or "input_type" not in columns:
                 raise ValueError(
-                    f"{question_type} options must have a 'right' section with 'input_type'."
+                    f"{question_type} options must have a 'columns' section with 'input_type'."
                 )
             self.correct_answer = None
 

@@ -179,9 +179,11 @@ class TestRebuildOptions:
         updated: list[Option] = [{"id": 1, "key": "P", "value": "Updated"}]
         result = rebuild_options(original, updated, "rows")
         assert isinstance(result, dict)
-        assert result["rows"]["items"] == updated
+        res: Any = result
+        assert res["rows"]["items"] == updated
         # Columns unchanged
-        assert result["columns"]["items"] == original["columns"]["items"]
+        orig: Any = original
+        assert res["columns"]["items"] == orig["columns"]["items"]
 
     def test_matrix_columns(self) -> None:
         original = MatrixMatchOptions(
@@ -197,8 +199,10 @@ class TestRebuildOptions:
         updated: list[Option] = [{"id": 10, "key": "1", "value": "Updated"}]
         result = rebuild_options(original, updated, "columns")
         assert isinstance(result, dict)
-        assert result["columns"]["items"] == updated
-        assert result["rows"]["items"] == original["rows"]["items"]
+        res: Any = result
+        assert res["columns"]["items"] == updated
+        orig: Any = original
+        assert res["rows"]["items"] == orig["rows"]["items"]
 
 
 class TestSerializeOptions:
@@ -332,10 +336,11 @@ class TestEnrichOptionsWithSignedUrls:
         result = enrich_options_with_signed_urls(options, gcs_service)
         assert result is not None
         assert isinstance(result, dict)
-        row_media = result["rows"]["items"][0].get("media")
+        res: Any = result
+        row_media = res["rows"]["items"][0].get("media")
         assert row_media is not None
         assert row_media["image"]["url"] == "https://signed.example.com"
-        col_media = result["columns"]["items"][0].get("media")
+        col_media = res["columns"]["items"][0].get("media")
         assert col_media is not None
         assert col_media["image"]["url"] == "https://signed.example.com"
         assert gcs_service.generate_signed_url.call_count == 2
@@ -642,7 +647,8 @@ class TestOptionImageUpload:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        row_items = updated_revision.options["rows"]["items"]
+        opts: Any = updated_revision.options
+        row_items = opts["rows"]["items"]
         assert "media" in row_items[0]
 
     @patch("app.api.routes.media.get_gcs_service")
@@ -684,7 +690,8 @@ class TestOptionImageUpload:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        col_items = updated_revision.options["columns"]["items"]
+        opts: Any = updated_revision.options
+        col_items = opts["columns"]["items"]
         assert "media" in col_items[0]
 
     def test_upload_option_not_found(
@@ -784,7 +791,8 @@ class TestOptionImageDelete:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        row_item = updated_revision.options["rows"]["items"][0]
+        opts: Any = updated_revision.options
+        row_item = opts["rows"]["items"][0]
         assert "media" not in row_item or row_item.get("media") is None
 
     def test_delete_option_image_no_media(
@@ -853,7 +861,8 @@ class TestOptionExternalMedia:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        col_item = updated_revision.options["columns"]["items"][0]
+        opts: Any = updated_revision.options
+        col_item = opts["columns"]["items"][0]
         col_item_media = col_item.get("media")
         assert col_item_media is not None
         assert "external_media" in col_item_media
