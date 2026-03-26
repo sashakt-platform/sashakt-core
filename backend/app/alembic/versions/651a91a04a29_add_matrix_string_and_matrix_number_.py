@@ -1,7 +1,7 @@
 """add matrix-string and matrix-number question types
 
 Revision ID: 651a91a04a29
-Revises: 7d90fad13571
+Revises: db0cc58b6583
 Create Date: 2026-03-24 16:59:27.312015
 
 """
@@ -12,7 +12,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = '651a91a04a29'
-down_revision = '7d90fad13571'
+down_revision = 'db0cc58b6583'
 branch_labels = None
 depends_on = None
 
