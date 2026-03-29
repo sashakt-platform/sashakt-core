@@ -1390,14 +1390,15 @@ async def upload_questions_csv(
                             tag_type_name = None
                             tag_name = tag_entry
 
-                        cache_key = f"{tag_type_name}:{tag_name}"
+                        cache_key = f"{tag_type_name.strip().lower() if tag_type_name else None}:{tag_name.strip().lower()}"
                         if cache_key in tag_cache:
                             tag_ids.append(tag_cache[cache_key])
                             continue
                         tag_type = None
                         if tag_type_name:
                             tag_type_query = select(TagType).where(
-                                TagType.name == tag_type_name,
+                                func.lower(func.trim(TagType.name))
+                                == tag_type_name.strip().lower(),
                                 TagType.organization_id == organization_id,
                             )
 
@@ -1411,14 +1412,16 @@ async def upload_questions_csv(
                         if tag_type and tag_type.id:
                             # Get or create tag
                             tag_query = select(Tag).where(
-                                Tag.name == tag_name,
+                                func.lower(func.trim(Tag.name))
+                                == tag_name.strip().lower(),
                                 Tag.tag_type_id == tag_type.id,
                                 Tag.organization_id == organization_id,
                             )
                         else:
                             tag_query = select(Tag).where(
-                                Tag.name == tag_name,
-                                Tag.tag_type_id is None,
+                                func.lower(func.trim(Tag.name))
+                                == tag_name.strip().lower(),
+                                Tag.tag_type_id == None,  # noqa: E711
                                 Tag.organization_id == organization_id,
                             )
                         tag = session.exec(tag_query).first()
