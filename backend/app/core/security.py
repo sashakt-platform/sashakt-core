@@ -47,8 +47,8 @@ def create_refresh_token(user_id: str | Any, expires_delta: timedelta) -> str:
 def verify_token(token: str, token_type: str = "access") -> str | None:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        token_type_in_payload: str = payload.get("type", "access")
+        user_id: str | None = payload.get("sub")
+        token_type_in_payload: str = str(payload.get("type", "access"))
 
         if user_id is None or token_type_in_payload != token_type:
             return None
