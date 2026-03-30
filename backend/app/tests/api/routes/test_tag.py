@@ -2535,3 +2535,104 @@ def test_get_tagtype_search_by_tag_name(
     items = data["items"]
     matched = [item for item in items if item["id"] == tagtype.id]
     assert len(matched) == 0
+
+
+def test_read_tags_filter_by_tag_type_ids(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    tagtype_a = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype_b = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    tagtype_c = TagType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(tagtype_a)
+    db.add(tagtype_b)
+    db.add(tagtype_c)
+    db.commit()
+    db.refresh(tagtype_a)
+    db.refresh(tagtype_b)
+    db.refresh(tagtype_c)
+    assert tagtype_a.id is not None
+    assert tagtype_b.id is not None
+    assert tagtype_c.id is not None
+
+    tag_a = Tag(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        tag_type_id=tagtype_a.id,
+    )
+    tag_b = Tag(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        tag_type_id=tagtype_b.id,
+    )
+    tag_c = Tag(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        tag_type_id=tagtype_c.id,
+    )
+    db.add(tag_a)
+    db.add(tag_b)
+    db.add(tag_c)
+    db.commit()
+    db.refresh(tag_a)
+    db.refresh(tag_b)
+    db.refresh(tag_c)
+
+    # Filter by a single tag type — only tag_a should be returned
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        params={"tag_type_ids": tagtype_a.id},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert tag_a.id in returned_ids
+    assert tag_b.id not in returned_ids
+    assert tag_c.id not in returned_ids
+
+    # Filter by two tag types — tag_a and tag_b should be returned, not tag_c
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        params={"tag_type_ids": [tagtype_a.id, tagtype_b.id]},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = {item["id"] for item in data["items"]}
+    assert tag_a.id in returned_ids
+    assert tag_b.id in returned_ids
+    assert tag_c.id not in returned_ids
+
+    # Filter by a non-existent tag type id — should return no results
+    response = client.get(
+        f"{settings.API_V1_STR}/tag/",
+        params={"tag_type_ids": -1},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 0
