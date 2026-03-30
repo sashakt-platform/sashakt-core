@@ -26,6 +26,7 @@ from app.models.question import (
     Option,
     Question,
     QuestionRevision,
+    is_matrix_input_options,
 )
 from app.models.role import Role
 from app.services.storage.gcs import GCSStorageService
@@ -131,8 +132,9 @@ def find_option(
     else:
         opts: Any = options
 
-        is_matrix_input = "input_type" in opts.get("columns", {})
-        keys: tuple[str, ...] = ("rows",) if is_matrix_input else ("rows", "columns")
+        keys: tuple[str, ...] = (
+            ("rows",) if is_matrix_input_options(opts) else ("rows", "columns")
+        )
         for key in keys:
             items = opts[key]["items"]
             for i, opt in enumerate(items):
@@ -152,8 +154,7 @@ def rebuild_options(
         return updated_items
     assert isinstance(original, dict)
     orig: Any = original
-    is_matrix_input = "input_type" in orig.get("columns", {})
-    if is_matrix_input:
+    if is_matrix_input_options(orig):
         rows = orig["rows"]
         return MatrixInputOptions(
             rows=MatrixColumn(label=rows["label"], items=updated_items),

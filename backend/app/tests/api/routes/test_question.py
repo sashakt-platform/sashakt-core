@@ -7302,3 +7302,72 @@ def test_create_matrix_input_question_missing_input_type_should_fail(
     )
 
     assert response.status_code == 422
+
+
+def test_create_matrix_input_question_invalid_input_type_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question with an invalid 'input_type' value should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": {
+                "rows": {
+                    "label": "Subjects",
+                    "items": [{"id": 1, "key": "1", "value": "Math"}],
+                },
+                "columns": {"label": "Percentage", "input_type": "checkbox"},
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "matrix_input 'columns.input_type' must be one of"
+        in response.json()["detail"][0]["msg"]
+    )
+
+
+def test_create_matrix_input_question_duplicate_row_ids_should_fail(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """matrix-input question with duplicate row item IDs should fail."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": {
+                "rows": {
+                    "label": "Subjects",
+                    "items": [
+                        {"id": 1, "key": "1", "value": "Math"},
+                        {"id": 1, "key": "2", "value": "Physics"},
+                    ],
+                },
+                "columns": {"label": "Percentage", "input_type": "number"},
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "matrix_input row item IDs must be unique"
+        in response.json()["detail"][0]["msg"]
+    )

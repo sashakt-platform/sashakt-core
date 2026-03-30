@@ -62,6 +62,7 @@ from app.models.question import (
     MatrixMatchOptions,
     Option,
     QuestionRevisionInfo,
+    is_matrix_input_options,
 )
 from app.models.role import Role
 from app.models.test import TestQuestion
@@ -254,7 +255,7 @@ def enrich_options_with_signed_urls(
     opts: Any = options
     rows = opts["rows"]
     columns = opts["columns"]
-    if "items" in columns:
+    if not is_matrix_input_options(opts):
         return MatrixMatchOptions(
             rows=MatrixColumn(
                 label=rows["label"],

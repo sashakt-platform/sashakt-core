@@ -96,6 +96,11 @@ class MatrixInputOptions(TypedDict):
     columns: MatrixInputColumn
 
 
+def is_matrix_input_options(options: dict[str, Any]) -> bool:
+    """Return True if options dict is MatrixInputOptions (not MatrixMatchOptions)."""
+    return "input_type" in options.get("columns", {})
+
+
 class FailedQuestion(TypedDict):
     row_number: int
     question_text: str
@@ -240,9 +245,7 @@ class QuestionBase(SQLModel):
                     f"{question_type} options must have at least one item in each column."
                 )
 
-            if question_type == QuestionType.matrix_rating:
-                self.correct_answer = None
-            else:
+            if question_type == QuestionType.matrix_match:
                 row_ids = {item["id"] for item in row_items}
                 column_ids = {item["id"] for item in column_items}
                 if correct_answer is not None:
@@ -276,11 +279,22 @@ class QuestionBase(SQLModel):
                 raise ValueError(
                     f"{question_type} options must have at least one item in 'rows'."
                 )
+            row_ids_list = [item["id"] for item in row_items]
+            if len(row_ids_list) != len(set(row_ids_list)):
+                raise ValueError("matrix_input row item IDs must be unique.")
             columns = input_opts.get("columns")
             if not columns or "input_type" not in columns:
                 raise ValueError(
                     f"{question_type} options must have a 'columns' section with 'input_type'."
                 )
+            valid_input_types = {"number", "text"}
+            if columns.get("input_type") not in valid_input_types:
+                raise ValueError(
+                    f"matrix_input 'columns.input_type' must be one of {valid_input_types}."
+                )
+
+        no_answer_types = {QuestionType.matrix_rating, QuestionType.matrix_input}
+        if question_type in no_answer_types:
             self.correct_answer = None
 
         return self
