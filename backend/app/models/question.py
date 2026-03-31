@@ -235,13 +235,16 @@ class QuestionBase(SQLModel):
                     raise ValueError(msg)
 
         elif question_type in [QuestionType.matrix_rating, QuestionType.matrix_match]:
-            if options is None or not isinstance(options, dict):
+            if (
+                options is None
+                or not isinstance(options, dict)
+                or is_matrix_input_options(options)
+            ):
                 raise ValueError(
                     f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
-            opts: Any = options
-            row_items = opts.get("rows", {}).get("items", [])
-            column_items = opts.get("columns", {}).get("items", [])
+            row_items = options.get("rows", {}).get("items", [])
+            column_items = options.get("columns", {}).get("items", [])
             if not row_items or not column_items:
                 raise ValueError(
                     f"{question_type} options must have at least one item in each column."
