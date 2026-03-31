@@ -7273,10 +7273,7 @@ def test_create_matrix_input_question_missing_columns_should_fail(
     )
 
     assert response.status_code == 422
-    assert (
-        "options must have a 'columns' section with 'input_type'"
-        in response.json()["detail"][0]["msg"]
-    )
+    assert response.json()["detail"][0]["msg"] == "Field required"
 
 
 def test_create_matrix_input_question_missing_input_type_should_fail(
@@ -7306,10 +7303,7 @@ def test_create_matrix_input_question_missing_input_type_should_fail(
     )
 
     assert response.status_code == 422
-    assert (
-        "options must have a 'columns' section with 'input_type'"
-        in response.json()["detail"][0]["msg"]
-    )
+    assert response.json()["detail"][0]["msg"] == "Field required"
 
 
 def test_create_matrix_input_question_invalid_input_type_should_fail(
