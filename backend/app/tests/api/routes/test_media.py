@@ -18,11 +18,13 @@ from app.api.routes.question import (
 from app.core.config import settings
 from app.models.question import (
     MatrixColumn,
+    MatrixInputOptions,
     MatrixMatchOptions,
     Option,
     Question,
     QuestionRevision,
     QuestionType,
+    is_matrix_input_options,
 )
 from app.tests.utils.files import create_test_image
 from app.tests.utils.user import get_current_user_data
@@ -179,11 +181,10 @@ class TestRebuildOptions:
         updated: list[Option] = [{"id": 1, "key": "P", "value": "Updated"}]
         result = rebuild_options(original, updated, "rows")
         assert isinstance(result, dict)
-        res: Any = result
-        assert res["rows"]["items"] == updated
+        assert not is_matrix_input_options(result)
+        assert result["rows"]["items"] == updated
         # Columns unchanged
-        orig: Any = original
-        assert res["columns"]["items"] == orig["columns"]["items"]
+        assert result["columns"]["items"] == original["columns"]["items"]
 
     def test_matrix_columns(self) -> None:
         original = MatrixMatchOptions(
@@ -199,10 +200,9 @@ class TestRebuildOptions:
         updated: list[Option] = [{"id": 10, "key": "1", "value": "Updated"}]
         result = rebuild_options(original, updated, "columns")
         assert isinstance(result, dict)
-        res: Any = result
-        assert res["columns"]["items"] == updated
-        orig: Any = original
-        assert res["rows"]["items"] == orig["rows"]["items"]
+        assert not is_matrix_input_options(result)
+        assert result["columns"]["items"] == updated
+        assert result["rows"]["items"] == original["rows"]["items"]
 
 
 class TestSerializeOptions:
@@ -336,14 +336,41 @@ class TestEnrichOptionsWithSignedUrls:
         result = enrich_options_with_signed_urls(options, gcs_service)
         assert result is not None
         assert isinstance(result, dict)
-        res: Any = result
-        row_media = res["rows"]["items"][0].get("media")
+        assert not is_matrix_input_options(result)
+        row_media = result["rows"]["items"][0].get("media")
         assert row_media is not None
         assert row_media["image"]["url"] == "https://signed.example.com"
-        col_media = res["columns"]["items"][0].get("media")
+        col_media = result["columns"]["items"][0].get("media")
         assert col_media is not None
         assert col_media["image"]["url"] == "https://signed.example.com"
         assert gcs_service.generate_signed_url.call_count == 2
+
+    def test_enriches_matrix_input_options_rows_only(self) -> None:
+        gcs_service = MagicMock()
+        gcs_service.generate_signed_url.return_value = "https://signed.example.com"
+        options = MatrixInputOptions(
+            rows=MatrixColumn(
+                label="Rows",
+                items=[
+                    {
+                        "id": 1,
+                        "key": "P",
+                        "value": "P",
+                        "media": {"image": {"gcs_path": "row.png"}},
+                    },
+                ],
+            ),
+            columns={"label": "Cols", "input_type": "text"},
+        )
+        result = enrich_options_with_signed_urls(options, gcs_service)
+        assert result is not None
+        assert isinstance(result, dict)
+        assert is_matrix_input_options(result)
+        row_media = result["rows"]["items"][0].get("media")
+        assert row_media is not None
+        assert row_media["image"]["url"] == "https://signed.example.com"
+        assert result["columns"] == {"label": "Cols", "input_type": "text"}
+        assert gcs_service.generate_signed_url.call_count == 1
 
     def test_options_without_media_unchanged(self) -> None:
         gcs_service = MagicMock()
@@ -647,8 +674,8 @@ class TestOptionImageUpload:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        opts: Any = updated_revision.options
-        row_items = opts["rows"]["items"]
+        assert not is_matrix_input_options(updated_revision.options)
+        row_items = updated_revision.options["rows"]["items"]
         assert "media" in row_items[0]
 
     @patch("app.api.routes.media.get_gcs_service")
@@ -690,8 +717,8 @@ class TestOptionImageUpload:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        opts: Any = updated_revision.options
-        col_items = opts["columns"]["items"]
+        assert not is_matrix_input_options(updated_revision.options)
+        col_items = updated_revision.options["columns"]["items"]
         assert "media" in col_items[0]
 
     def test_upload_option_not_found(
@@ -791,8 +818,8 @@ class TestOptionImageDelete:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        opts: Any = updated_revision.options
-        row_item = opts["rows"]["items"][0]
+        assert not is_matrix_input_options(updated_revision.options)
+        row_item = updated_revision.options["rows"]["items"][0]
         assert "media" not in row_item or row_item.get("media") is None
 
     def test_delete_option_image_no_media(
@@ -861,7 +888,8 @@ class TestOptionExternalMedia:
         updated_revision = db.get(QuestionRevision, revision.id)
         assert updated_revision is not None
         assert isinstance(updated_revision.options, dict)
-        opts: Any = updated_revision.options
+        assert not is_matrix_input_options(updated_revision.options)
+        opts = updated_revision.options
         col_item = opts["columns"]["items"][0]
         col_item_media = col_item.get("media")
         assert col_item_media is not None
