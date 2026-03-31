@@ -1,7 +1,5 @@
 """Media upload endpoints for questions."""
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm.attributes import flag_modified
@@ -130,16 +128,18 @@ def find_option(
             if opt.get("id") == option_id:
                 return options, i, None
     else:
-        opts: Any = options
-
-        keys: tuple[str, ...] = (
-            ("rows",) if is_matrix_input_options(opts) else ("rows", "columns")
-        )
-        for key in keys:
-            items = opts[key]["items"]
+        opts: MatrixMatchOptions | MatrixInputOptions = options
+        if is_matrix_input_options(opts):
+            items = opts["rows"]["items"]
             for i, opt in enumerate(items):
                 if opt.get("id") == option_id:
-                    return items, i, key
+                    return items, i, "rows"
+        else:
+            for key, col in (("rows", opts["rows"]), ("columns", opts["columns"])):
+                items = col["items"]
+                for i, opt in enumerate(items):
+                    if opt.get("id") == option_id:
+                        return items, i, key
 
     raise HTTPException(status_code=404, detail="Option not found")
 
@@ -153,7 +153,7 @@ def rebuild_options(
     if matrix_key is None:
         return updated_items
     assert isinstance(original, dict)
-    orig: Any = original
+    orig: MatrixMatchOptions | MatrixInputOptions = original
     if is_matrix_input_options(orig):
         rows = orig["rows"]
         return MatrixInputOptions(

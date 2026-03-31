@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from pydantic import model_validator
 from sqlalchemy.orm import Mapped
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import NotRequired, TypedDict, TypeIs
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
@@ -96,7 +96,9 @@ class MatrixInputOptions(TypedDict):
     columns: MatrixInputColumn
 
 
-def is_matrix_input_options(options: dict[str, Any]) -> bool:
+def is_matrix_input_options(
+    options: MatrixMatchOptions | MatrixInputOptions,
+) -> TypeIs[MatrixInputOptions]:
     """Return True if options dict is MatrixInputOptions (not MatrixMatchOptions)."""
     return "input_type" in options.get("columns", {})
 
