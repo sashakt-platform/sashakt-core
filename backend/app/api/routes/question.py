@@ -252,10 +252,10 @@ def enrich_options_with_signed_urls(
     if isinstance(options, list):
         return _enrich_option_list(options, gcs_service)
 
-    opts: Any = options
-    rows = opts["rows"]
-    columns = opts["columns"]
+    opts: MatrixMatchOptions | MatrixInputOptions = options
     if not is_matrix_input_options(opts):
+        rows = opts["rows"]
+        columns = opts["columns"]
         return MatrixMatchOptions(
             rows=MatrixColumn(
                 label=rows["label"],
@@ -267,12 +267,13 @@ def enrich_options_with_signed_urls(
             ),
         )
 
+    rows = opts["rows"]
     return MatrixInputOptions(
         rows=MatrixColumn(
             label=rows["label"],
             items=_enrich_option_list(rows["items"], gcs_service),
         ),
-        columns=columns,
+        columns=opts["columns"],
     )
 
 
