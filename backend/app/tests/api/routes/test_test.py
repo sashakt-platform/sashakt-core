@@ -2359,6 +2359,73 @@ def test_update_test(
     assert updated_test_questions[0].question_revision_id == question_revision_one.id
 
 
+def test_update_test_blocks_membership_changes_after_candidate_test_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision_one.id))
+    db.commit()
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+        question_revision_ids=[question_revision_one.id],
+        question_set_ids=[None],
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": test.name,
+            "link": test.link,
+            "is_template": False,
+            "question_revision_ids": [question_revision_two.id],
+            "locale": "en-US",
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Cannot update test membership after candidate tests have been created."
+    )
+
+
 def test_visibility_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:

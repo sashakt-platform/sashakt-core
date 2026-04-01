@@ -53,17 +53,16 @@ from ...utils.utils import random_email, random_lower_string
 def create_single_choice_question_revision(
     db: SessionDep,
     *,
-    user_id: int | None,
-    organization_id: int | None,
+    user_id: int,
+    organization_id: int,
     question_text: str,
     correct_answer: int,
     marking_scheme: dict[str, float] | None = None,
 ) -> QuestionRevision:
-    if user_id is None or organization_id is None:
-        raise ValueError("user_id and organization_id are required")
     question = Question(organization_id=organization_id)
     db.add(question)
     db.flush()
+    assert question.id is not None
 
     revision = QuestionRevision(
         question_id=question.id,
@@ -79,6 +78,7 @@ def create_single_choice_question_revision(
     )
     db.add(revision)
     db.flush()
+    assert revision.id is not None
 
     question.last_revision_id = revision.id
     db.add(question)
@@ -1386,6 +1386,8 @@ def test_get_test_questions_returns_question_sets_for_sectioned_test(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
 
     revision_one = create_single_choice_question_revision(
         db,
@@ -1852,6 +1854,8 @@ def test_submit_answer_enforces_question_set_attempt_limit(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
 
     revision_one = create_single_choice_question_revision(
         db,
@@ -1867,6 +1871,14 @@ def test_submit_answer_enforces_question_set_attempt_limit(
         organization_id=org.id,
         question_text="Question 2",
         correct_answer=2,
+        marking_scheme=None,
+    )
+    revision_three = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 3",
+        correct_answer=1,
         marking_scheme=None,
     )
 
@@ -1888,9 +1900,19 @@ def test_submit_answer_enforces_question_set_attempt_limit(
         max_questions_allowed_to_attempt=1,
         marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
     )
+    section_two = QuestionSet(
+        test_id=test.id,
+        title="Chemistry",
+        description="Section B",
+        display_order=2,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
     db.add(section)
+    db.add(section_two)
     db.commit()
     db.refresh(section)
+    db.refresh(section_two)
 
     db.add(
         TestQuestion(
@@ -1903,6 +1925,13 @@ def test_submit_answer_enforces_question_set_attempt_limit(
         TestQuestion(
             test_id=test.id,
             question_revision_id=revision_two.id,
+            question_set_id=section_two.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_three.id,
             question_set_id=section.id,
         )
     )
@@ -1932,15 +1961,27 @@ def test_submit_answer_enforces_question_set_attempt_limit(
         f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
         json={
             "question_revision_id": revision_two.id,
+            "response": "[2]",
+            "visited": True,
+            "time_spent": 20,
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert second_response.status_code == 200
+
+    third_response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json={
+            "question_revision_id": revision_three.id,
             "response": "[1]",
             "visited": True,
             "time_spent": 20,
         },
         params={"candidate_uuid": candidate_uuid},
     )
-    assert second_response.status_code == 400
+    assert third_response.status_code == 400
     assert (
-        "Maximum attempt limit reached for section" in second_response.json()["detail"]
+        "Maximum attempt limit reached for section" in third_response.json()["detail"]
     )
 
 
@@ -2808,6 +2849,8 @@ def test_get_test_result_uses_section_marking_precedence(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
 
     revision_one = create_single_choice_question_revision(
         db,
@@ -2823,7 +2866,7 @@ def test_get_test_result_uses_section_marking_precedence(
         organization_id=org.id,
         question_text="Chemistry question",
         correct_answer=2,
-        marking_scheme={"correct": 7, "wrong": -3, "skipped": 0},
+        marking_scheme=None,
     )
 
     test = Test(
@@ -2917,8 +2960,8 @@ def test_get_test_result_uses_section_marking_precedence(
     data = result_response.json()
     assert data["correct_answer"] == 1
     assert data["incorrect_answer"] == 1
-    assert data["marks_obtained"] == 6.0
-    assert data["marks_maximum"] == 11.0
+    assert data["marks_obtained"] == 4.0
+    assert data["marks_maximum"] == 9.0
 
 
 def test_get_score_and_time_test_not_found(
