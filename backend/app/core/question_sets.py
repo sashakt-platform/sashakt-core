@@ -91,7 +91,7 @@ def build_assigned_question_membership(
     *,
     shuffle_questions: bool = False,
 ) -> tuple[list[int], list[int | None]]:
-    ordered_links = sorted(test_questions, key=lambda link: (link.id or 0))
+    ordered_links = sorted(test_questions, key=lambda link: link.id or 0)
     sectioned = is_sectioned_test(ordered_links, question_sets_by_id)
 
     if not sectioned:
