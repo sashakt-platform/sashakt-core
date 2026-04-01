@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -11,6 +12,7 @@ from app.core.question_sets import (
     is_sectioned_test,
     normalize_question_set_ids,
 )
+from app.models import question as question_models
 from app.models import test as test_models
 
 
@@ -40,6 +42,38 @@ def make_question_set(
         display_order=display_order,
         marking_scheme=marking_scheme,
         test_id=test_id,
+    )
+
+
+def make_test_stub(
+    *,
+    marks_level: test_models.MarksLevelEnum,
+    marking_scheme: dict[str, float] | None,
+) -> test_models.Test:
+    return cast(
+        test_models.Test,
+        SimpleNamespace(
+            marks_level=marks_level,
+            marking_scheme=marking_scheme,
+        ),
+    )
+
+
+def make_question_revision_stub(
+    *, marking_scheme: dict[str, float] | None
+) -> question_models.QuestionRevision:
+    return cast(
+        question_models.QuestionRevision,
+        SimpleNamespace(marking_scheme=marking_scheme),
+    )
+
+
+def make_question_set_stub(
+    *, marking_scheme: dict[str, float] | None
+) -> test_models.QuestionSet:
+    return cast(
+        test_models.QuestionSet,
+        SimpleNamespace(marking_scheme=marking_scheme),
     )
 
 
@@ -209,13 +243,14 @@ class TestAssignedQuestionMembership:
 class TestEffectiveMarkingScheme:
     def test_sectioned_marking_prefers_question_revision(self) -> None:
         result = get_effective_marking_scheme(
-            SimpleNamespace(
-                marking_scheme={"correct": 4.0, "wrong": -1.0, "skipped": 0.0}
+            make_test_stub(
+                marks_level=test_models.MarksLevelEnum.QUESTION,
+                marking_scheme={"correct": 4.0, "wrong": -1.0, "skipped": 0.0},
             ),
-            SimpleNamespace(
+            make_question_revision_stub(
                 marking_scheme={"correct": 3.0, "wrong": -0.5, "skipped": 0.0}
             ),
-            question_set=SimpleNamespace(
+            question_set=make_question_set_stub(
                 marking_scheme={"correct": 2.0, "wrong": 0.0, "skipped": 0.0}
             ),
             sectioned=True,
@@ -224,16 +259,16 @@ class TestEffectiveMarkingScheme:
         assert result == {"correct": 3.0, "wrong": -0.5, "skipped": 0.0}
 
     def test_sectioned_marking_falls_back_to_question_set_then_test(self) -> None:
-        test = SimpleNamespace(
+        test = make_test_stub(
             marks_level=test_models.MarksLevelEnum.QUESTION,
             marking_scheme={"correct": 4.0, "wrong": -1.0, "skipped": 0.0},
         )
-        question_revision = SimpleNamespace(marking_scheme=None)
+        question_revision = make_question_revision_stub(marking_scheme=None)
 
         assert get_effective_marking_scheme(
             test,
             question_revision,
-            question_set=SimpleNamespace(
+            question_set=make_question_set_stub(
                 marking_scheme={"correct": 2.0, "wrong": 0.0, "skipped": 0.0}
             ),
             sectioned=True,
@@ -247,11 +282,11 @@ class TestEffectiveMarkingScheme:
 
     def test_non_sectioned_test_level_marking_uses_test_scheme(self) -> None:
         result = get_effective_marking_scheme(
-            SimpleNamespace(
+            make_test_stub(
                 marks_level=test_models.MarksLevelEnum.TEST,
                 marking_scheme={"correct": 4.0, "wrong": -1.0, "skipped": 0.0},
             ),
-            SimpleNamespace(
+            make_question_revision_stub(
                 marking_scheme={"correct": 2.0, "wrong": 0.0, "skipped": 0.0}
             ),
             sectioned=False,
@@ -260,21 +295,21 @@ class TestEffectiveMarkingScheme:
         assert result == {"correct": 4.0, "wrong": -1.0, "skipped": 0.0}
 
     def test_non_sectioned_question_level_marking_prefers_question_scheme(self) -> None:
-        test = SimpleNamespace(
+        test = make_test_stub(
             marks_level=test_models.MarksLevelEnum.QUESTION,
             marking_scheme={"correct": 4.0, "wrong": -1.0, "skipped": 0.0},
         )
 
         assert get_effective_marking_scheme(
             test,
-            SimpleNamespace(
+            make_question_revision_stub(
                 marking_scheme={"correct": 2.0, "wrong": 0.0, "skipped": 0.0}
             ),
             sectioned=False,
         ) == {"correct": 2.0, "wrong": 0.0, "skipped": 0.0}
         assert get_effective_marking_scheme(
             test,
-            SimpleNamespace(marking_scheme=None),
+            make_question_revision_stub(marking_scheme=None),
             sectioned=False,
         ) == {"correct": 4.0, "wrong": -1.0, "skipped": 0.0}
 
