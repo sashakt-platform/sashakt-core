@@ -9,6 +9,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.routes.question import (
+    enrich_media_with_signed_urls,
+    enrich_options_with_signed_urls,
+    get_gcs_service_for_org,
+)
 from app.api.routes.utils import get_current_time
 from app.core.certificate_token import generate_certificate_token
 from app.core.config import TOLERANCE
@@ -194,8 +199,11 @@ def build_candidate_safe_question(
     *,
     hide_question_text: bool,
     marking_scheme: MarkingScheme | None,
+    gcs_service: Any | None = None,
 ) -> QuestionCandidatePublic:
-    safe_options = question_revision.options
+    safe_options = enrich_options_with_signed_urls(
+        question_revision.options, gcs_service
+    )
     if hide_question_text and isinstance(question_revision.options, list):
         safe_options = []
         for option in question_revision.options:
@@ -224,7 +232,7 @@ def build_candidate_safe_question(
         options=safe_options,
         subjective_answer_limit=question_revision.subjective_answer_limit,
         is_mandatory=question_revision.is_mandatory,
-        media=question_revision.media,
+        media=enrich_media_with_signed_urls(question_revision.media, gcs_service),
         marking_scheme=marking_scheme,
     )
 
@@ -237,6 +245,7 @@ def build_candidate_question_payload(
     question_sets_by_id: dict[int, QuestionSet],
     hide_question_text: bool,
     sectioned: bool,
+    gcs_service: Any | None = None,
 ) -> tuple[list[QuestionCandidatePublic], list[QuestionSetCandidatePublic] | None]:
     ordered_question_ids = candidate_test.question_revision_ids
     normalized_question_set_ids = normalize_question_set_ids(
@@ -265,6 +274,7 @@ def build_candidate_question_payload(
                 question_set=question_set,
                 sectioned=sectioned,
             ),
+            gcs_service=gcs_service,
         )
         candidate_questions.append(safe_question)
         candidate_questions_by_id[question_revision_id] = safe_question
@@ -1150,6 +1160,11 @@ def get_test_questions(
     elif omr_mode == OMRMode.OPTIONAL:
         hide_question_text = bool(use_omr)
 
+    gcs_service = (
+        get_gcs_service_for_org(session, test.organization_id)
+        if test.organization_id is not None
+        else None
+    )
     candidate_questions, candidate_question_sets = build_candidate_question_payload(
         test=test,
         candidate_test=candidate_test,
@@ -1157,6 +1172,7 @@ def get_test_questions(
         question_sets_by_id=question_sets_by_id,
         hide_question_text=hide_question_text,
         sectioned=sectioned,
+        gcs_service=gcs_service,
     )
 
     return TestCandidatePublic(

@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     # Provider encryption settings
     PROVIDER_ENCRYPTION_KEY: str | None = None
 
+    # Media upload settings
+    MAX_QUESTION_IMAGE_SIZE_MB: int = 5
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

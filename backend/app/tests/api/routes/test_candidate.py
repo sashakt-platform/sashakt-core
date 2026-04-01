@@ -1325,6 +1325,7 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
         created_by_id=user.id,
         is_active=True,
         link=random_lower_string(),
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
@@ -1522,6 +1523,7 @@ def test_get_test_questions_omr_optional_yes(
         is_active=True,
         link=random_lower_string(),
         omr=OMRMode.OPTIONAL,
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
@@ -1592,6 +1594,7 @@ def test_get_test_questions_omr_mode(client: TestClient, db: SessionDep) -> None
         is_active=True,
         link=random_lower_string(),
         omr=OMRMode.ALWAYS,
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
@@ -1673,6 +1676,7 @@ def test_get_test_questions_normal_mode(client: TestClient, db: SessionDep) -> N
         is_active=True,
         link=random_lower_string(),
         omr=OMRMode.NEVER,
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
@@ -6732,6 +6736,7 @@ def test_candidate_test_question_ids_are_shuffled(
         created_by_id=user.id,
         shuffle=True,
         is_active=True,
+        organization_id=user.organization_id,
     )
     db.add(test)
     db.commit()
@@ -6829,6 +6834,7 @@ def test_candidate_test_question_ids_are_random(
         random_questions=True,
         no_of_random_questions=3,
         is_active=True,
+        organization_id=user.organization_id,
     )
     db.add(test)
     db.commit()
@@ -7768,6 +7774,7 @@ def test_random_questions_by_tag_skipping_selected_questions(
             {"tag_id": tag2.id, "count": 3},
         ],
         is_active=True,
+        organization_id=organization.id,
     )
 
     db.add(test)
@@ -7966,6 +7973,7 @@ def test_get_test_result_with_random_question_true(
         link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
@@ -8363,6 +8371,7 @@ def test_test_level_marking_scheme_applied_on_questions(
         link=random_lower_string(),
         marks_level="test",
         marking_scheme={"correct": 5, "wrong": -1, "skipped": 1},
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
@@ -8444,6 +8453,7 @@ def test_question_level_marking_scheme_applied_on_questions(
         link=random_lower_string(),
         marks_level="question",
         marking_scheme={"correct": 5, "wrong": -1, "skipped": 1},  # should not be used
+        organization_id=org.id,
     )
     db.add(test)
     db.commit()
