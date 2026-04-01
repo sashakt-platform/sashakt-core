@@ -1,7 +1,7 @@
 """add question sets for tests
 
 Revision ID: 4f2c8a6d9b11
-Revises: 7d90fad13571
+Revises: db0cc58b6583
 Create Date: 2026-03-24 19:15:00.000000
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '4f2c8a6d9b11'
-down_revision = '7d90fad13571'
+down_revision = 'db0cc58b6583'
 branch_labels = None
 depends_on = None
 
