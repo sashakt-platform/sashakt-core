@@ -7037,3 +7037,109 @@ def test_create_matrix_rating_question_full_subjects_and_ratings(
     assert len(data["options"]["rows"]["items"]) == 5
     assert len(data["options"]["columns"]["items"]) == 5
     assert data["correct_answer"] is None
+
+
+def test_bulk_upload_questions_case_insensitive_tags(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    """Tags and tag types in CSV should match existing ones regardless of case."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    # Create country and state
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+
+    # Create tag type with specific casing
+    response = client.post(
+        f"{settings.API_V1_STR}/tagtype/",
+        json={
+            "name": "Difficulty",
+            "description": "Difficulty level",
+            "organization_id": org_id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    tag_type_id = response.json()["id"]
+
+    # Create a tag under that tag type with specific casing
+    response = client.post(
+        f"{settings.API_V1_STR}/tag/",
+        json={
+            "name": "Easy",
+            "description": "Easy questions",
+            "tag_type_id": tag_type_id,
+            "organization_id": org_id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    # Upload CSV using DIFFERENT casing for tag type and tag name
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
+What is 1+1?,2,3,4,5,A,difficulty:easy,Punjab
+What is 2+2?,4,3,5,6,A,DIFFICULTY:EASY,Punjab
+What is 3+3?,6,5,7,8,A, Difficulty : Easy ,Punjab
+"""
+
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_case_insensitive.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Created" in data["message"]
+
+        # Verify all 3 questions were created (none failed due to tag mismatch)
+        response = client.get(
+            f"{settings.API_V1_STR}/questions/",
+            headers=get_user_superadmin_token,
+        )
+        data = response.json()
+        questions = data["items"]
+        uploaded_texts = {"What is 1+1?", "What is 2+2?", "What is 3+3?"}
+        uploaded_questions = [
+            q for q in questions if q["question_text"] in uploaded_texts
+        ]
+        assert len(uploaded_questions) == 3
+
+        # All three should have the existing "Easy" tag (not duplicates)
+        for q in uploaded_questions:
+            tag_names = [t["name"] for t in q["tags"]]
+            assert "Easy" in tag_names
+
+        # Verify only one "Easy" tag exists (no duplicates created by case variation)
+        easy_tags = db.exec(
+            select(Tag).where(
+                Tag.organization_id == org_id,
+                Tag.tag_type_id == tag_type_id,
+            )
+        ).all()
+        easy_tag_names = [t.name for t in easy_tags if t.name.lower() == "easy"]
+        assert len(easy_tag_names) == 1, (
+            f"Expected 1 'Easy' tag but found {len(easy_tag_names)}: {easy_tag_names}"
+        )
+
+    finally:
+        import os
+
+        with suppress(FileNotFoundError):
+            os.unlink(temp_file_path)
