@@ -396,6 +396,7 @@ def get_tags(
     sorting: TagSortingDep,
     params: Pagination = Depends(),
     name: str | None = None,
+    tag_type_ids: list[int] | None = Query(None),
 ) -> Page[TagPublic]:
     query = (
         select(Tag)
@@ -418,6 +419,9 @@ def get_tags(
         )
 
         query = query.where(or_(tag_name_condition, tag_type_name_condition))
+
+    if tag_type_ids is not None:
+        query = query.where(col(Tag.tag_type_id).in_(tag_type_ids))
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none(
