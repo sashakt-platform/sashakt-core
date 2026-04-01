@@ -1,3 +1,4 @@
+import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
@@ -463,6 +464,16 @@ def replace_test_question_membership(
     question_sets: list[QuestionSetCreate | QuestionSetUpdate],
 ) -> None:
     test_id = get_persisted_test_id(test)
+    existing_candidate_test_id = session.exec(
+        select(CandidateTest.id).where(CandidateTest.test_id == test_id)
+    ).first()
+    if existing_candidate_test_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cannot update test membership after candidate tests have been created."
+            ),
+        )
 
     for test_question in get_test_question_links(session, test_id):
         session.delete(test_question)
@@ -614,8 +625,6 @@ def create_test(
     test_data["organization_id"] = current_user.organization_id
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
-        import uuid
-
         test_data["link"] = str(uuid.uuid4())
     validate_test_time_config(
         test_data.get("start_time"),
@@ -1268,8 +1277,6 @@ def clone_test(
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
     if not original.is_template:
-        import uuid
-
         test_data["link"] = str(uuid.uuid4())
 
     new_test = Test.model_validate(test_data)
@@ -1299,7 +1306,9 @@ def clone_test(
             question_set_id_map[original_question_set.id] = new_question_set.id
 
     question_links = session.exec(
-        select(TestQuestion).where(TestQuestion.test_id == original_id)
+        select(TestQuestion)
+        .where(TestQuestion.test_id == original_id)
+        .order_by(col(TestQuestion.id))
     ).all()
     for ql in question_links:
         session.add(

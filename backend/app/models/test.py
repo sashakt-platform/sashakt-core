@@ -73,6 +73,7 @@ class QuestionSetBase(SQLModel):
 class QuestionSet(QuestionSetBase, table=True):
     __tablename__ = "question_set"
     __test__ = False
+    __table_args__ = (UniqueConstraint("test_id", "display_order"),)
 
     id: int | None = Field(default=None, primary_key=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)

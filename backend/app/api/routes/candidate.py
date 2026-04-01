@@ -3,7 +3,7 @@ import random
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlmodel import and_, col, not_, select
@@ -202,25 +202,33 @@ def build_candidate_safe_question(
     hide_question_text: bool,
     marking_scheme: MarkingScheme | None,
 ) -> QuestionCandidatePublic:
+    safe_options = question_revision.options
+    if hide_question_text and isinstance(question_revision.options, list):
+        safe_options = []
+        for option in question_revision.options:
+            if isinstance(option, dict):
+                option_id = option.get("id")
+                option_key = option.get("key")
+            else:
+                option_id = getattr(option, "id", None)
+                option_key = getattr(option, "key", None)
+
+            if option_id is None and option_key is None:
+                continue
+
+            safe_options.append(
+                {
+                    "id": option_id,
+                    "key": option_key,
+                }
+            )
+
     return QuestionCandidatePublic(
         id=question_revision.id,
         question_text=None if hide_question_text else question_revision.question_text,
         instructions=question_revision.instructions,
         question_type=question_revision.question_type,
-        options=(
-            [
-                {
-                    "id": option["id"],
-                    "key": option["key"],
-                }
-                for option in cast(
-                    list[dict[str, Any]],
-                    question_revision.options or [],
-                )
-            ]
-            if hide_question_text and question_revision.options
-            else question_revision.options
-        ),
+        options=safe_options,
         subjective_answer_limit=question_revision.subjective_answer_limit,
         is_mandatory=question_revision.is_mandatory,
         media=question_revision.media,
@@ -411,8 +419,8 @@ def get_score_and_time(
             question_sets_by_id,
             test_id=test_id,
         )
-    except ValueError:
-        sectioned = False
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     total_score_obtained = 0.0
     total_max_score = 0.0
