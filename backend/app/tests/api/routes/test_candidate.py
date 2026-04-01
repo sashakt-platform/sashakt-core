@@ -1989,6 +1989,248 @@ def test_submit_answer_enforces_question_set_attempt_limit(
     )
 
 
+def test_submit_answer_allows_updating_existing_attempt_in_full_section(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 1",
+        correct_answer=1,
+        marking_scheme=None,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 2",
+        correct_answer=2,
+        marking_scheme=None,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    section = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_one.id,
+            question_set_id=section.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_two.id,
+            question_set_id=section.id,
+        )
+    )
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "QR Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    first_response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json={
+            "question_revision_id": revision_one.id,
+            "response": "[1]",
+            "visited": True,
+            "time_spent": 20,
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert first_response.status_code == 200
+
+    update_response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json={
+            "question_revision_id": revision_one.id,
+            "response": "[2]",
+            "visited": True,
+            "time_spent": 25,
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["response"] == "[2]"
+
+
+def test_submit_answer_for_unassigned_question_revision_returns_403(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    assigned_revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Assigned question",
+        correct_answer=1,
+    )
+    unassigned_revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Unassigned question",
+        correct_answer=2,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=assigned_revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "QR Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json={
+            "question_revision_id": unassigned_revision.id,
+            "response": "[2]",
+            "visited": True,
+            "time_spent": 20,
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 403
+    assert (
+        response.json()["detail"]
+        == "Question revision is not assigned to this candidate test."
+    )
+
+    answers = db.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all()
+    assert answers == []
+
+
+def test_start_test_rejects_mixed_question_set_membership(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 1",
+        correct_answer=1,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 2",
+        correct_answer=2,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    section = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_one.id,
+            question_set_id=section.id,
+        )
+    )
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision_two.id))
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "QR Test Device"},
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Mixed question-set membership is not allowed for a test."
+    )
+
+
 def test_submit_answer_for_subjective_qr_candidate(
     client: TestClient, db: SessionDep
 ) -> None:
@@ -2966,6 +3208,181 @@ def test_get_test_result_uses_section_marking_precedence(
     assert data["incorrect_answer"] == 1
     assert data["marks_obtained"] == 4.0
     assert data["marks_maximum"] == 9.0
+
+
+def test_get_test_questions_rejects_mixed_question_set_membership(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 1",
+        correct_answer=1,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 2",
+        correct_answer=2,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    section = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_one.id,
+            question_set_id=section.id,
+        )
+    )
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision_two.id))
+    db.commit()
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="QR Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        question_revision_ids=[revision_one.id, revision_two.id],
+        question_set_ids=[section.id, None],
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Mixed question-set membership is not allowed for a test."
+    )
+
+
+def test_get_test_result_rejects_mixed_question_set_membership(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 1",
+        correct_answer=1,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 2",
+        correct_answer=2,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    section = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_one.id,
+            question_set_id=section.id,
+        )
+    )
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision_two.id))
+    db.commit()
+
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="QR Test Device",
+        consent=True,
+        start_time="2025-02-10T10:00:00Z",
+        question_revision_ids=[revision_one.id, revision_two.id],
+        question_set_ids=[section.id, None],
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        headers=get_user_superadmin_token,
+        params={"candidate_uuid": str(candidate.identity)},
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"]
+        == "Mixed question-set membership is not allowed for a test."
+    )
 
 
 def test_get_score_and_time_test_not_found(
@@ -5834,6 +6251,227 @@ def test_submit_batch_answers_for_qr_candidate(
     assert len(answers) == 2
     assert answers[0].response == "[4]"
     assert answers[1].response == "[1]"
+
+
+def test_submit_batch_answers_for_unassigned_question_revision_returns_403(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    assigned_revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Assigned question",
+        correct_answer=1,
+    )
+    unassigned_revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Unassigned question",
+        correct_answer=2,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=assigned_revision.id))
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "QR Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json={
+            "answers": [
+                {
+                    "question_revision_id": assigned_revision.id,
+                    "response": "[1]",
+                    "visited": True,
+                    "time_spent": 20,
+                },
+                {
+                    "question_revision_id": unassigned_revision.id,
+                    "response": "[2]",
+                    "visited": True,
+                    "time_spent": 20,
+                },
+            ]
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 403
+    assert (
+        response.json()["detail"]
+        == "One or more question revisions are not assigned to this candidate test."
+    )
+
+    answers = db.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all()
+    assert answers == []
+
+
+def test_submit_batch_answers_enforces_question_set_attempt_limit(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 1",
+        correct_answer=1,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 2",
+        correct_answer=2,
+    )
+    revision_three = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Question 3",
+        correct_answer=1,
+    )
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    physics = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    chemistry = QuestionSet(
+        test_id=test.id,
+        title="Chemistry",
+        description="Section B",
+        display_order=2,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    db.add(physics)
+    db.add(chemistry)
+    db.commit()
+    db.refresh(physics)
+    db.refresh(chemistry)
+
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_one.id,
+            question_set_id=physics.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_two.id,
+            question_set_id=chemistry.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision_three.id,
+            question_set_id=physics.id,
+        )
+    )
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test.id, "device_info": "QR Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    first_response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json={
+            "answers": [
+                {
+                    "question_revision_id": revision_one.id,
+                    "response": "[1]",
+                    "visited": True,
+                    "time_spent": 20,
+                },
+                {
+                    "question_revision_id": revision_two.id,
+                    "response": "[2]",
+                    "visited": True,
+                    "time_spent": 20,
+                },
+            ]
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json={
+            "answers": [
+                {
+                    "question_revision_id": revision_three.id,
+                    "response": "[1]",
+                    "visited": True,
+                    "time_spent": 20,
+                }
+            ]
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert second_response.status_code == 400
+    assert (
+        "Maximum attempt limit reached for section" in second_response.json()["detail"]
+    )
 
 
 def test_submit_batch_answers_for_qr_candidate_with_subjective(

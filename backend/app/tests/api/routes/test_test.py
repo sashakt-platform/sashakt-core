@@ -505,6 +505,336 @@ def test_create_sectioned_test(
     }
 
 
+def test_create_sectioned_test_rejects_empty_question_set(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "link": random_lower_string(),
+        "question_sets": [
+            {
+                "title": "Physics",
+                "description": "Section A",
+                "display_order": 1,
+                "max_questions_allowed_to_attempt": 1,
+                "question_revision_ids": [],
+            }
+        ],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Each question set must include at least one question revision."
+    )
+
+
+def test_create_sectioned_test_rejects_duplicate_questions_across_sets(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "link": random_lower_string(),
+        "question_sets": [
+            {
+                "title": "Physics",
+                "description": "Section A",
+                "display_order": 1,
+                "max_questions_allowed_to_attempt": 1,
+                "question_revision_ids": [question_revision_one.id],
+            },
+            {
+                "title": "Chemistry",
+                "description": "Section B",
+                "display_order": 2,
+                "max_questions_allowed_to_attempt": 1,
+                "question_revision_ids": [question_revision_one.id],
+            },
+        ],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question revisions cannot be duplicated across question sets."
+    )
+
+
+def test_create_sectioned_test_rejects_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    payload = {
+        "name": random_lower_string(),
+        "link": random_lower_string(),
+        "question_sets": [
+            {
+                "title": "Physics",
+                "description": "Section A",
+                "display_order": 1,
+                "max_questions_allowed_to_attempt": 1,
+                "question_revision_ids": [question_revision_one.id],
+            }
+        ],
+        "random_tag_count": [{"tag_id": tag_hindi.id, "count": 1}],
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question-set tests do not support tag-based random question selection in this pass."
+    )
+
+
+def test_create_sectioned_test_rejects_duplicate_questions_within_set(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_sets": [
+                {
+                    "title": "Physics",
+                    "description": "Section A",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [
+                        question_revision_one.id,
+                        question_revision_one.id,
+                    ],
+                }
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question revisions cannot be duplicated within a question set."
+    )
+
+
+def test_create_sectioned_test_rejects_duplicate_display_order(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_sets": [
+                {
+                    "title": "Physics",
+                    "description": "Section A",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [question_revision_one.id],
+                },
+                {
+                    "title": "Chemistry",
+                    "description": "Section B",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [question_revision_two.id],
+                },
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question set display_order values must be unique within a test."
+    )
+
+
+def test_create_sectioned_test_rejects_attempt_limit_greater_than_section_size(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_sets": [
+                {
+                    "title": "Physics",
+                    "description": "Section A",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 2,
+                    "question_revision_ids": [question_revision_one.id],
+                }
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question set max_questions_allowed_to_attempt cannot exceed the number of questions in that set."
+    )
+
+
+def test_create_test_rejects_duplicate_question_revision_ids(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_revision_ids": [
+                question_revision_one.id,
+                question_revision_one.id,
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question revisions cannot be duplicated within a test."
+    )
+
+
+def test_create_test_rejects_missing_question_revision_ids(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_revision_ids": [999999],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "One or more question revisions were not found."
+
+
 def test_create_test_with_random_tag_count(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2426,6 +2756,90 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
     )
 
 
+def test_update_test_can_replace_flat_membership_with_question_sets(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision_one.id))
+    db.commit()
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": test.name,
+            "link": test.link,
+            "is_template": False,
+            "locale": "en-US",
+            "question_sets": [
+                {
+                    "title": "Physics",
+                    "description": "Section A",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [question_revision_one.id],
+                },
+                {
+                    "title": "Chemistry",
+                    "description": "Section B",
+                    "display_order": 2,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [question_revision_two.id],
+                },
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question_sets"] is not None
+    assert [question_set["title"] for question_set in data["question_sets"]] == [
+        "Physics",
+        "Chemistry",
+    ]
+    assert [question["id"] for question in data["question_revisions"]] == [
+        question_revision_one.id,
+        question_revision_two.id,
+    ]
+
+    test_questions = db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == test.id)
+    ).all()
+    assert len(test_questions) == 2
+    assert all(
+        test_question.question_set_id is not None for test_question in test_questions
+    )
+
+    question_sets = db.exec(
+        select(QuestionSet).where(QuestionSet.test_id == test.id)
+    ).all()
+    assert len(question_sets) == 2
+
+
 def test_visibility_test(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2765,6 +3179,94 @@ def test_get_public_test_info_with_random_tag_count(
     assert data["time_limit"] == test.time_limit
     assert data["start_instructions"] == test.start_instructions
     assert data["total_questions"] == 7
+
+
+def test_get_public_test_info_includes_question_set_summaries(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    physics = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    chemistry = QuestionSet(
+        test_id=test.id,
+        title="Chemistry",
+        description="Section B",
+        display_order=2,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 3, "wrong": -1, "skipped": 0},
+    )
+    db.add(physics)
+    db.add(chemistry)
+    db.commit()
+    db.refresh(physics)
+    db.refresh(chemistry)
+
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=question_revision_one.id,
+            question_set_id=physics.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=question_revision_two.id,
+            question_set_id=chemistry.id,
+        )
+    )
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["total_questions"] == 2
+    assert data["question_sets"] is not None
+    assert [question_set["title"] for question_set in data["question_sets"]] == [
+        "Physics",
+        "Chemistry",
+    ]
+    assert [
+        question_set["question_count"] for question_set in data["question_sets"]
+    ] == [
+        1,
+        1,
+    ]
 
 
 def test_get_public_test_info_with_random_questions(
