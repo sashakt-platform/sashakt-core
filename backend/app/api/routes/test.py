@@ -439,19 +439,38 @@ def validate_test_membership_payload(
     )
 
     if expected_revision_ids:
-        existing_revision_ids = set(
-            session.exec(
-                select(QuestionRevision.id).where(
-                    col(QuestionRevision.id).in_(expected_revision_ids)
-                )
-            ).all()
+        question_revisions = session.exec(
+            select(QuestionRevision).where(
+                col(QuestionRevision.id).in_(expected_revision_ids)
+            )
+        ).all()
+        question_revisions_by_id = {
+            question_revision.id: question_revision
+            for question_revision in question_revisions
+            if question_revision.id is not None
+        }
+        missing_revision_ids = set(expected_revision_ids) - set(
+            question_revisions_by_id
         )
-        missing_revision_ids = set(expected_revision_ids) - existing_revision_ids
         if missing_revision_ids:
             raise HTTPException(
                 status_code=404,
                 detail="One or more question revisions were not found.",
             )
+        for question_set in validated_question_sets:
+            mandatory_question_count = sum(
+                1
+                for question_revision_id in question_set.question_revision_ids
+                if question_revisions_by_id[question_revision_id].is_mandatory
+            )
+            if mandatory_question_count > question_set.max_questions_allowed_to_attempt:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Question set max_questions_allowed_to_attempt cannot be less "
+                        "than the number of mandatory questions in that set."
+                    ),
+                )
 
     return question_revision_ids, validated_question_sets
 
