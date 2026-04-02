@@ -18,7 +18,6 @@ from app.core.roles import state_admin, test_admin
 from app.models import Message
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
-    MatrixColumn,
     MatrixInputOptions,
     MatrixMatchOptions,
     Option,
@@ -114,11 +113,10 @@ def find_option(
     options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None,
     option_id: int,
 ) -> tuple[list[Option], int, str | None]:
-    """Find option by ID across flat list or matrix match/input structure.
+    """Find option by ID across flat list or matrix match structure.
 
     Returns (items_list, index, matrix_key).
-    matrix_key is None for flat lists, "rows" or "columns" for matrix match,
-    "rows" only for matrix input (columns has no selectable items).
+    matrix_key is None for flat lists, "rows" or "columns" for matrix match.
     """
     if not options:
         raise HTTPException(status_code=404, detail="Question has no options")
@@ -127,19 +125,12 @@ def find_option(
         for i, opt in enumerate(options):
             if opt.get("id") == option_id:
                 return options, i, None
-    else:
-        opts: MatrixMatchOptions | MatrixInputOptions = options
-        if is_matrix_input_options(opts):
-            items = opts["rows"]["items"]
+    elif not is_matrix_input_options(options):
+        for key in ("rows", "columns"):
+            items = options[key]["items"]
             for i, opt in enumerate(items):
                 if opt.get("id") == option_id:
-                    return items, i, "rows"
-        else:
-            for key, col in (("rows", opts["rows"]), ("columns", opts["columns"])):
-                items = col["items"]
-                for i, opt in enumerate(items):
-                    if opt.get("id") == option_id:
-                        return items, i, key
+                    return items, i, key
 
     raise HTTPException(status_code=404, detail="Option not found")
 
@@ -148,20 +139,13 @@ def rebuild_options(
     original: MatrixMatchOptions | MatrixInputOptions | list[Option] | None,
     updated_items: list[Option],
     matrix_key: str | None,
-) -> MatrixMatchOptions | MatrixInputOptions | list[Option]:
+) -> MatrixMatchOptions | list[Option]:
     """Rebuild options structure after modifying an items list."""
     if matrix_key is None:
         return updated_items
-    assert isinstance(original, dict)
-    orig: MatrixMatchOptions | MatrixInputOptions = original
-    if is_matrix_input_options(orig):
-        rows = orig["rows"]
-        return MatrixInputOptions(
-            rows=MatrixColumn(label=rows["label"], items=updated_items),
-            columns=orig["columns"],
-        )
-    rows = orig["rows"]
-    columns = orig["columns"]
+    assert isinstance(original, dict) and not is_matrix_input_options(original)
+    rows = original["rows"]
+    columns = original["columns"]
     if matrix_key == "rows":
         rows = {"label": rows["label"], "items": updated_items}
     else:
