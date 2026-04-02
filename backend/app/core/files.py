@@ -12,7 +12,7 @@ from PIL import Image
 from app.core.config import settings
 
 # Configuration
-UPLOAD_ROOT = Path(settings.UPLOAD_ROOT).resolve()
+UPLOAD_ROOT = Path("/app/uploads")
 LOGO_DIR = UPLOAD_ROOT / "organizations" / "logos"
 
 # Validation configuration
