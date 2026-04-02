@@ -51,7 +51,12 @@ from app.models.candidate import (
     TestStatusSummary,
 )
 from app.models.form import FormResponse
-from app.models.question import Question, QuestionTag, QuestionType
+from app.models.question import (
+    Question,
+    QuestionTag,
+    QuestionType,
+    is_matrix_input_options,
+)
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
@@ -842,7 +847,12 @@ def get_test_questions(
                     for opt in q.options
                 ]
                 if hide_question_text and isinstance(q.options, list)
-                else enrich_options_with_signed_urls(q.options, gcs_service)
+                else (
+                    q.options
+                    if isinstance(q.options, dict)
+                    and is_matrix_input_options(q.options)
+                    else enrich_options_with_signed_urls(q.options, gcs_service)
+                )
             ),
             subjective_answer_limit=q.subjective_answer_limit,
             is_mandatory=q.is_mandatory,

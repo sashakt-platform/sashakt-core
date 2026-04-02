@@ -18,7 +18,6 @@ from app.api.routes.question import (
 from app.core.config import settings
 from app.models.question import (
     MatrixColumn,
-    MatrixInputOptions,
     MatrixMatchOptions,
     Option,
     Question,
@@ -344,33 +343,6 @@ class TestEnrichOptionsWithSignedUrls:
         assert col_media is not None
         assert col_media["image"]["url"] == "https://signed.example.com"
         assert gcs_service.generate_signed_url.call_count == 2
-
-    def test_enriches_matrix_input_options_rows_only(self) -> None:
-        gcs_service = MagicMock()
-        gcs_service.generate_signed_url.return_value = "https://signed.example.com"
-        options = MatrixInputOptions(
-            rows=MatrixColumn(
-                label="Rows",
-                items=[
-                    {
-                        "id": 1,
-                        "key": "P",
-                        "value": "P",
-                        "media": {"image": {"gcs_path": "row.png"}},
-                    },
-                ],
-            ),
-            columns={"label": "Cols", "input_type": "text"},
-        )
-        result = enrich_options_with_signed_urls(options, gcs_service)
-        assert result is not None
-        assert isinstance(result, dict)
-        assert is_matrix_input_options(result)
-        row_media = result["rows"]["items"][0].get("media")
-        assert row_media is not None
-        assert row_media["image"]["url"] == "https://signed.example.com"
-        assert result["columns"] == {"label": "Cols", "input_type": "text"}
-        assert gcs_service.generate_signed_url.call_count == 1
 
     def test_options_without_media_unchanged(self) -> None:
         gcs_service = MagicMock()

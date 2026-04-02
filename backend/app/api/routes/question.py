@@ -242,9 +242,9 @@ def _enrich_option_list(
 
 
 def enrich_options_with_signed_urls(
-    options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None,
+    options: list[Option] | MatrixMatchOptions | None,
     gcs_service: GCSStorageService | None,
-) -> list[Option] | MatrixMatchOptions | MatrixInputOptions | None:
+) -> list[Option] | MatrixMatchOptions | None:
     """Add signed URLs to option media objects."""
     if not options or not gcs_service:
         return options
@@ -252,28 +252,18 @@ def enrich_options_with_signed_urls(
     if isinstance(options, list):
         return _enrich_option_list(options, gcs_service)
 
-    opts: MatrixMatchOptions | MatrixInputOptions = options
-    if not is_matrix_input_options(opts):
-        rows = opts["rows"]
-        columns = opts["columns"]
-        return MatrixMatchOptions(
-            rows=MatrixColumn(
-                label=rows["label"],
-                items=_enrich_option_list(rows["items"], gcs_service),
-            ),
-            columns=MatrixColumn(
-                label=columns["label"],
-                items=_enrich_option_list(columns["items"], gcs_service),
-            ),
-        )
-
-    rows = opts["rows"]
-    return MatrixInputOptions(
+    # MatrixMatchOptions - enrich items in both rows and columns
+    rows = options["rows"]
+    columns = options["columns"]
+    return MatrixMatchOptions(
         rows=MatrixColumn(
             label=rows["label"],
             items=_enrich_option_list(rows["items"], gcs_service),
         ),
-        columns=opts["columns"],
+        columns=MatrixColumn(
+            label=columns["label"],
+            items=_enrich_option_list(columns["items"], gcs_service),
+        ),
     )
 
 
@@ -297,7 +287,13 @@ def build_question_response(
     options_dict = serialize_options(revision.options)
 
     # Enrich options with signed URLs if GCS service is available
-    if options_dict and gcs_service:
+    if (
+        options_dict
+        and gcs_service
+        and not (
+            isinstance(options_dict, dict) and is_matrix_input_options(options_dict)
+        )
+    ):
         enriched = enrich_options_with_signed_urls(options_dict, gcs_service)
         if enriched:
             options_dict = enriched
