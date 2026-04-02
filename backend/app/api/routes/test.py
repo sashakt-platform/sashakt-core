@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
@@ -475,6 +475,45 @@ def validate_test_membership_payload(
     return question_revision_ids, validated_question_sets
 
 
+def validate_random_question_config(
+    *,
+    random_questions: bool,
+    no_of_random_questions: int | None,
+    question_revision_ids: Sequence[int],
+    question_sets_present: bool,
+) -> None:
+    if not random_questions:
+        return
+
+    if question_sets_present:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Question-set tests do not support random question selection in "
+                "this pass."
+            ),
+        )
+
+    if no_of_random_questions is None or no_of_random_questions < 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No. of random questions must be provided if random questions "
+                "are enabled."
+            ),
+        )
+
+    total_questions = len(question_revision_ids)
+    if no_of_random_questions > total_questions:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No. of random questions ({no_of_random_questions}) "
+                f"cannot be greater than total questions added ({total_questions})"
+            ),
+        )
+
+
 def replace_test_question_membership(
     session: SessionDep,
     *,
@@ -651,28 +690,21 @@ def create_test(
         test_data.get("time_limit"),
     )
     test = Test.model_validate(test_data)
-    if test.random_questions:
-        if test.no_of_random_questions is None or test.no_of_random_questions < 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No. of random questions must be provided if random questions are enabled.",
-            )
-        total_questions = (
-            len(question_revision_ids)
-            if not question_sets
-            else sum(
-                len(question_set.question_revision_ids)
-                for question_set in question_sets
-            )
-        )
-        if test.no_of_random_questions > total_questions:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"No. of random questions ({test.no_of_random_questions}) "
-                    f"cannot be greater than total questions added ({total_questions})"
-                ),
-            )
+    effective_question_revision_ids = (
+        question_revision_ids
+        if not question_sets
+        else [
+            question_revision_id
+            for question_set in question_sets
+            for question_revision_id in question_set.question_revision_ids
+        ]
+    )
+    validate_random_question_config(
+        random_questions=test.random_questions,
+        no_of_random_questions=test.no_of_random_questions,
+        question_revision_ids=effective_question_revision_ids,
+        question_sets_present=bool(question_sets),
+    )
 
     session.add(test)
     session.flush()
@@ -1013,35 +1045,42 @@ def update_test(
             else test.time_limit
         )
         validate_test_time_config(start_time, end_time, time_limit)
-    if test_update.random_questions:
-        total_questions = (
-            len(get_test_question_links(session, test_id))
-            if not membership_update_requested
-            else (
-                len(question_revision_ids)
-                if not question_sets
-                else sum(
-                    len(question_set.question_revision_ids)
-                    for question_set in question_sets
-                )
-            )
+    existing_test_questions = get_test_question_links(session, test_id)
+    existing_question_sets = get_test_question_sets(session, test_id)
+    effective_question_revision_ids = (
+        [
+            test_question.question_revision_id
+            for test_question in existing_test_questions
+        ]
+        if not membership_update_requested
+        else (
+            question_revision_ids
+            if not question_sets
+            else [
+                question_revision_id
+                for question_set in question_sets
+                for question_revision_id in question_set.question_revision_ids
+            ]
         )
-        if (
-            test_update.no_of_random_questions is None
-            or test_update.no_of_random_questions < 1
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="No. of random questions must be provided if random questions are enabled.",
-            )
-        if test_update.no_of_random_questions > total_questions:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"No. of random questions ({test_update.no_of_random_questions}) "
-                    f"cannot be greater than total questions added ({total_questions})"
-                ),
-            )
+    )
+    validate_random_question_config(
+        random_questions=(
+            test_update.random_questions
+            if "random_questions" in test_update.model_fields_set
+            else test.random_questions
+        ),
+        no_of_random_questions=(
+            test_update.no_of_random_questions
+            if "no_of_random_questions" in test_update.model_fields_set
+            else test.no_of_random_questions
+        ),
+        question_revision_ids=effective_question_revision_ids,
+        question_sets_present=(
+            bool(existing_question_sets)
+            if not membership_update_requested
+            else bool(question_sets)
+        ),
+    )
 
     # Updating Tags
     tags_remove = [
