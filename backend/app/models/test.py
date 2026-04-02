@@ -46,6 +46,47 @@ class TagRandomPublic(SQLModel):
     count: int
 
 
+class QuestionSetBase(SQLModel):
+    title: str = Field(nullable=False, description="Title of the question set")
+    description: str | None = Field(
+        default=None,
+        nullable=True,
+        description="Optional description for the question set",
+    )
+    max_questions_allowed_to_attempt: int = Field(
+        ge=1,
+        nullable=False,
+        description="Maximum number of questions a candidate can attempt in this set",
+    )
+    display_order: int = Field(
+        ge=1,
+        nullable=False,
+        description="Order in which the question set should be shown",
+    )
+    marking_scheme: MarkingScheme | None = Field(
+        default=None,
+        sa_type=JSON,
+        description="Scoring rules for this question set",
+    )
+
+
+class QuestionSet(QuestionSetBase, table=True):
+    __tablename__ = "question_set"
+    __test__ = False
+    __table_args__ = (UniqueConstraint("test_id", "display_order"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
+    modified_date: datetime | None = Field(
+        default_factory=get_timezone_aware_now,
+        sa_column_kwargs={"onupdate": get_timezone_aware_now},
+    )
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+
+    test: "Test" = Relationship(back_populates="question_sets")
+    test_questions: list["TestQuestion"] = Relationship(back_populates="question_set")
+
+
 class TestTag(SQLModel, table=True):
     __tablename__ = "test_tag"
     __test__ = False
@@ -63,10 +104,14 @@ class TestQuestion(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("test_id", "question_revision_id"),)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    question_set_id: int | None = Field(default=None, foreign_key="question_set.id")
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
     question_revision: "QuestionRevision" = Relationship(
+        back_populates="test_questions"
+    )
+    question_set: Optional["QuestionSet"] = Relationship(
         back_populates="test_questions"
     )
 
@@ -287,6 +332,9 @@ class Test(TestBase, table=True):
     question_revisions: list["QuestionRevision"] | None = Relationship(
         back_populates="tests", link_model=TestQuestion
     )
+    question_sets: list["QuestionSet"] | None = Relationship(
+        back_populates="test", cascade_delete=True
+    )
     states: list["State"] | None = Relationship(
         back_populates="tests", link_model=TestState
     )
@@ -304,6 +352,7 @@ class Test(TestBase, table=True):
 class TestCreate(TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
+    question_sets: list["QuestionSetCreate"] | None = None
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
@@ -313,7 +362,33 @@ class TestCreate(TestBase):
     def check_link_for_template(self) -> Self:
         if self.is_template and self.link:
             raise ValueError("Templates should not have a link.")
+        if self.question_sets and self.question_revision_ids:
+            raise ValueError(
+                "Use either question_revision_ids or question_sets, not both."
+            )
         return self
+
+
+class QuestionSetCreate(QuestionSetBase):
+    question_revision_ids: list[int] = []
+
+
+class QuestionSetUpdate(QuestionSetBase):
+    id: int | None = None
+    question_revision_ids: list[int] = []
+
+
+class QuestionSetPublic(QuestionSetBase):
+    id: int
+    created_date: datetime
+    modified_date: datetime
+    test_id: int
+    question_revisions: list["QuestionRevision"] = Field(default_factory=list)
+
+
+class QuestionSetSummaryPublic(QuestionSetBase):
+    id: int
+    question_count: int = 0
 
 
 class TestPublic(TestBase):
@@ -322,6 +397,7 @@ class TestPublic(TestBase):
     modified_date: datetime
     tags: list["TagPublic"]
     question_revisions: list["QuestionRevision"]
+    question_sets: list["QuestionSetPublic"] | None = None
     states: list["State"]
     districts: list["District"]
     total_questions: int | None = None
@@ -339,10 +415,19 @@ class TestPublic(TestBase):
 class TestUpdate(TestBase):
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
+    question_sets: list["QuestionSetUpdate"] | None = None
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
     locale: LocaleEnum
+
+    @model_validator(mode="after")
+    def check_question_membership_shape(self) -> Self:
+        if self.question_sets and self.question_revision_ids:
+            raise ValueError(
+                "Use either question_revision_ids or question_sets, not both."
+            )
+        return self
 
 
 class DeleteTest(SQLModel):
@@ -355,4 +440,5 @@ class TestPublicLimited(TestBase):
 
     id: int
     total_questions: int
+    question_sets: list["QuestionSetSummaryPublic"] | None = None
     form: "FormPublic | None" = None
