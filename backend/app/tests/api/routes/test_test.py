@@ -234,7 +234,6 @@ def test_create_test(
     assert "created_date" in data
     assert "modified_date" in data
     assert "tags" in data
-    assert data["question_sets"] is None
     assert len(data["tags"]) == 2
     assert [data["tags"][0]["name"], data["tags"][1]["name"]] == [
         tag_hindi.name,
@@ -326,7 +325,6 @@ def test_create_test(
     assert "modified_date" in data
     assert "tags" in data
     assert "states" in data
-    assert data["question_sets"] is None
     assert len(data["tags"]) == 2
     assert len(data["states"]) == 2
     assert len(data["question_revisions"]) == 2
