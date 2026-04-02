@@ -781,6 +781,51 @@ def test_create_sectioned_test_rejects_attempt_limit_greater_than_section_size(
     )
 
 
+def test_create_sectioned_test_rejects_mandatory_questions_exceeding_attempt_limit(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "link": random_lower_string(),
+            "question_sets": [
+                {
+                    "title": "Physics",
+                    "description": "Section A",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [
+                        question_revision_one.id,
+                        question_revision_two.id,
+                    ],
+                }
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question set max_questions_allowed_to_attempt cannot be less than the number of mandatory questions in that set."
+    )
+
+
 def test_create_test_rejects_duplicate_question_revision_ids(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2838,6 +2883,63 @@ def test_update_test_can_replace_flat_membership_with_question_sets(
         select(QuestionSet).where(QuestionSet.test_id == test.id)
     ).all()
     assert len(question_sets) == 2
+
+
+def test_update_test_rejects_mandatory_questions_exceeding_attempt_limit(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": test.name,
+            "link": test.link,
+            "is_template": False,
+            "locale": "en-US",
+            "question_sets": [
+                {
+                    "title": "Physics",
+                    "description": "Section A",
+                    "display_order": 1,
+                    "max_questions_allowed_to_attempt": 1,
+                    "question_revision_ids": [
+                        question_revision_one.id,
+                        question_revision_two.id,
+                    ],
+                }
+            ],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Question set max_questions_allowed_to_attempt cannot be less than the number of mandatory questions in that set."
+    )
 
 
 def test_visibility_test(
