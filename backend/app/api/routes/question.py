@@ -58,9 +58,11 @@ from app.models.question import (
     BulkUploadQuestionsResponse,
     DeleteQuestion,
     MatrixColumn,
+    MatrixInputOptions,
     MatrixMatchOptions,
     Option,
     QuestionRevisionInfo,
+    is_matrix_input_options,
 )
 from app.models.role import Role
 from app.models.test import TestQuestion
@@ -74,8 +76,8 @@ router = APIRouter(prefix="/questions", tags=["Questions"])
 
 
 def serialize_options(
-    options: list[Option] | MatrixMatchOptions | None,
-) -> list[Option] | MatrixMatchOptions | None:
+    options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None,
+) -> list[Option] | MatrixMatchOptions | MatrixInputOptions | None:
     """Convert options to serializable dicts, handling both list and matrix-match formats."""
     if not options:
         return None
@@ -285,7 +287,13 @@ def build_question_response(
     options_dict = serialize_options(revision.options)
 
     # Enrich options with signed URLs if GCS service is available
-    if options_dict and gcs_service:
+    if (
+        options_dict
+        and gcs_service
+        and not (
+            isinstance(options_dict, dict) and is_matrix_input_options(options_dict)
+        )
+    ):
         enriched = enrich_options_with_signed_urls(options_dict, gcs_service)
         if enriched:
             options_dict = enriched
@@ -364,7 +372,7 @@ def build_question_response(
 def prepare_for_db(
     data: QuestionCreate | QuestionRevisionCreate,
 ) -> tuple[
-    list[Option] | MatrixMatchOptions | None,
+    list[Option] | MatrixMatchOptions | MatrixInputOptions | None,
     MarkingScheme | None,
     dict[str, Any] | None,
 ]:
@@ -537,7 +545,7 @@ class RevisionDetailDict(TypedDict):
     question_text: str
     instructions: str | None
     question_type: str
-    options: list[Option] | MatrixMatchOptions | None
+    options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None
     correct_answer: Any
     subjective_answer_limit: int | None
     is_mandatory: bool

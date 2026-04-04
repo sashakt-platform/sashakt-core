@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from pydantic import model_validator
 from sqlalchemy.orm import Mapped
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import NotRequired, TypedDict, TypeIs
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
@@ -32,6 +32,7 @@ class QuestionType(str, Enum):
     numerical_decimal = "numerical-decimal"
     matrix_match = "matrix-match"
     matrix_rating = "matrix-rating"
+    matrix_input = "matrix-input"
 
 
 # Simple structure classes - no SQLModel inheritance
@@ -85,6 +86,23 @@ class MatrixMatchOptions(TypedDict):
     columns: MatrixColumn
 
 
+class MatrixInputColumn(TypedDict):
+    label: str
+    input_type: str
+
+
+class MatrixInputOptions(TypedDict):
+    rows: MatrixColumn
+    columns: MatrixInputColumn
+
+
+def is_matrix_input_options(
+    options: MatrixMatchOptions | MatrixInputOptions,
+) -> TypeIs[MatrixInputOptions]:
+    """Return True if options dict is MatrixInputOptions (not MatrixMatchOptions)."""
+    return "input_type" in options.get("columns", {})
+
+
 class FailedQuestion(TypedDict):
     row_number: int
     question_text: str
@@ -120,7 +138,7 @@ class QuestionBase(SQLModel):
         description="Type of question (single-choice, multi-choice, etc.)",
     )
 
-    options: MatrixMatchOptions | list[Option] | None = Field(
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None = Field(
         sa_type=JSON,
         default=None,
         description="Available options for choice-based questions",
@@ -217,7 +235,11 @@ class QuestionBase(SQLModel):
                     raise ValueError(msg)
 
         elif question_type in [QuestionType.matrix_rating, QuestionType.matrix_match]:
-            if options is None or not isinstance(options, dict):
+            if (
+                options is None
+                or not isinstance(options, dict)
+                or is_matrix_input_options(options)
+            ):
                 raise ValueError(
                     f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
@@ -228,9 +250,7 @@ class QuestionBase(SQLModel):
                     f"{question_type} options must have at least one item in each column."
                 )
 
-            if question_type == QuestionType.matrix_rating:
-                self.correct_answer = None
-            else:
+            if question_type == QuestionType.matrix_match:
                 row_ids = {item["id"] for item in row_items}
                 column_ids = {item["id"] for item in column_items}
                 if correct_answer is not None:
@@ -252,6 +272,35 @@ class QuestionBase(SQLModel):
                             raise ValueError(
                                 f"Column IDs {invalid_column_ids} do not match any right column item ID."
                             )
+
+        elif question_type == QuestionType.matrix_input:
+            if options is None or not isinstance(options, dict):
+                raise ValueError(
+                    f"{question_type} questions must have options with 'rows' and 'columns' keys."
+                )
+            input_opts: Any = options
+            row_items = input_opts.get("rows", {}).get("items", [])
+            if not row_items:
+                raise ValueError(
+                    f"{question_type} options must have at least one item in 'rows'."
+                )
+            row_ids_list = [item["id"] for item in row_items]
+            if len(row_ids_list) != len(set(row_ids_list)):
+                raise ValueError("matrix_input row item IDs must be unique.")
+            columns = input_opts.get("columns")
+            if not columns or "input_type" not in columns:
+                raise ValueError(
+                    f"{question_type} options must have a 'columns' section with 'input_type'."
+                )
+            valid_input_types = {"number", "text"}
+            if columns.get("input_type") not in valid_input_types:
+                raise ValueError(
+                    f"matrix_input 'columns.input_type' must be one of {valid_input_types}."
+                )
+
+        no_answer_types = {QuestionType.matrix_rating, QuestionType.matrix_input}
+        if question_type in no_answer_types:
+            self.correct_answer = None
 
         return self
 
@@ -528,7 +577,7 @@ class QuestionPublic(SQLModel):
     question_text: str = Field(description="The question text")
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: MatrixMatchOptions | list[Option] | None = Field(
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None = Field(
         description="Available options for choice questions"
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
@@ -561,7 +610,7 @@ class QuestionCandidatePublic(SQLModel):
     )
     instructions: str | None = Field(description="Instructions for answering")
     question_type: QuestionType = Field(description="Type of question")
-    options: MatrixMatchOptions | list[Option] | None = Field(
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None = Field(
         description="Available options for choice questions (option.value excluded in OMR mode)"
     )
     subjective_answer_limit: int | None = Field(

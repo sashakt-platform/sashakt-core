@@ -18,10 +18,12 @@ from app.core.roles import state_admin, test_admin
 from app.models import Message
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
+    MatrixInputOptions,
     MatrixMatchOptions,
     Option,
     Question,
     QuestionRevision,
+    is_matrix_input_options,
 )
 from app.models.role import Role
 from app.services.storage.gcs import GCSStorageService
@@ -108,7 +110,7 @@ def get_revision(session: SessionDep, question: Question) -> QuestionRevision:
 
 
 def find_option(
-    options: MatrixMatchOptions | list[Option] | None,
+    options: MatrixMatchOptions | MatrixInputOptions | list[Option] | None,
     option_id: int,
 ) -> tuple[list[Option], int, str | None]:
     """Find option by ID across flat list or matrix match structure.
@@ -123,7 +125,7 @@ def find_option(
         for i, opt in enumerate(options):
             if opt.get("id") == option_id:
                 return options, i, None
-    else:
+    elif not is_matrix_input_options(options):
         for key in ("rows", "columns"):
             items = options[key]["items"]
             for i, opt in enumerate(items):
@@ -134,14 +136,14 @@ def find_option(
 
 
 def rebuild_options(
-    original: MatrixMatchOptions | list[Option] | None,
+    original: MatrixMatchOptions | MatrixInputOptions | list[Option] | None,
     updated_items: list[Option],
     matrix_key: str | None,
 ) -> MatrixMatchOptions | list[Option]:
     """Rebuild options structure after modifying an items list."""
     if matrix_key is None:
         return updated_items
-    assert isinstance(original, dict)
+    assert isinstance(original, dict) and not is_matrix_input_options(original)
     rows = original["rows"]
     columns = original["columns"]
     if matrix_key == "rows":
