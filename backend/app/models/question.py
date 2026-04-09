@@ -115,6 +115,19 @@ MarkingSchemeDict = dict[str, float]  # More specific than dict[str, Any]
 ImageDict = dict[str, Any]  # Consider using dict[str, Union[str, None]] later
 
 
+def _option_has_content(item: Any) -> bool:
+    """Return True if an option/item has a non-blank value or media."""
+    return bool((item.get("value") or "").strip() or item.get("media"))
+
+
+def _filter_section_items(section: MatrixColumn) -> MatrixColumn:
+    """Return a MatrixColumn with empty items stripped out."""
+    return MatrixColumn(
+        label=section["label"],
+        items=[i for i in section["items"] if _option_has_content(i)],
+    )
+
+
 class QuestionRevisionInfo(SQLModel):
     id: int
     created_date: datetime
@@ -183,6 +196,8 @@ class QuestionBase(SQLModel):
                 raise ValueError(
                     f"{question_type} questions must have options as a list."
                 )
+            options = [opt for opt in options if _option_has_content(opt)]
+            self.options = options
             if not isinstance(correct_answer, list) or len(correct_answer) < 1:
                 raise ValueError(
                     f"{question_type} questions must have at least one correct answer."
@@ -243,8 +258,10 @@ class QuestionBase(SQLModel):
                 raise ValueError(
                     f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
-            row_items = options.get("rows", {}).get("items", [])
-            column_items = options.get("columns", {}).get("items", [])
+            options["rows"] = _filter_section_items(options["rows"])
+            options["columns"] = _filter_section_items(options["columns"])
+            row_items = options["rows"]["items"]
+            column_items = options["columns"]["items"]
             if not row_items or not column_items:
                 raise ValueError(
                     f"{question_type} options must have at least one item in each column."
@@ -278,8 +295,12 @@ class QuestionBase(SQLModel):
                 raise ValueError(
                     f"{question_type} questions must have options with 'rows' and 'columns' keys."
                 )
-            input_opts: Any = options
-            row_items = input_opts.get("rows", {}).get("items", [])
+            if not is_matrix_input_options(options):
+                raise ValueError(
+                    f"{question_type} options must have a 'columns' section with 'input_type'."
+                )
+            options["rows"] = _filter_section_items(options["rows"])
+            row_items = options["rows"]["items"]
             if not row_items:
                 raise ValueError(
                     f"{question_type} options must have at least one item in 'rows'."
@@ -287,13 +308,8 @@ class QuestionBase(SQLModel):
             row_ids_list = [item["id"] for item in row_items]
             if len(row_ids_list) != len(set(row_ids_list)):
                 raise ValueError("matrix_input row item IDs must be unique.")
-            columns = input_opts.get("columns")
-            if not columns or "input_type" not in columns:
-                raise ValueError(
-                    f"{question_type} options must have a 'columns' section with 'input_type'."
-                )
             valid_input_types = {"number", "text"}
-            if columns.get("input_type") not in valid_input_types:
+            if options["columns"]["input_type"] not in valid_input_types:
                 raise ValueError(
                     f"matrix_input 'columns.input_type' must be one of {valid_input_types}."
                 )

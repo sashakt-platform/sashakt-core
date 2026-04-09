@@ -7479,3 +7479,142 @@ def test_create_matrix_input_question_duplicate_row_ids_should_fail(
         "matrix_input row item IDs must be unique"
         in response.json()["detail"][0]["msg"]
     )
+
+
+def test_create_single_choice_question_strips_empty_options(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Empty-value options are silently removed; valid ones are saved."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "single-choice",
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": "Option B"},
+                {"id": 3, "key": "C", "value": ""},
+                {"id": 4, "key": "D", "value": "   "},
+            ],
+            "correct_answer": [1],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    saved_options = response.json()["options"]
+    assert len(saved_options) == 2
+    assert all(opt["value"].strip() for opt in saved_options)
+
+
+def test_create_multi_choice_question_strips_empty_options(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Whitespace-only option values are stripped; media-only options are kept."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "multi-choice",
+            "options": [
+                {"id": 1, "key": "A", "value": "Option A"},
+                {"id": 2, "key": "B", "value": ""},
+                {"id": 3, "key": "C", "media": {"url": "img.png"}},
+            ],
+            "correct_answer": [1],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    saved_ids = {opt["id"] for opt in response.json()["options"]}
+    assert saved_ids == {1, 3}
+
+
+def test_create_matrix_match_question_strips_empty_items(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Empty items in matrix rows/columns are stripped before saving."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-match",
+            "options": {
+                "rows": {
+                    "label": "Left",
+                    "items": [
+                        {"id": 1, "key": "1", "value": "Row 1"},
+                        {"id": 2, "key": "2", "value": ""},
+                    ],
+                },
+                "columns": {
+                    "label": "Right",
+                    "items": [
+                        {"id": 10, "key": "1", "value": "Col 1"},
+                        {"id": 11, "key": "2", "value": "   "},
+                    ],
+                },
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    opts = response.json()["options"]
+    assert len(opts["rows"]["items"]) == 1
+    assert len(opts["columns"]["items"]) == 1
+
+
+def test_create_matrix_input_question_strips_empty_row_items(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Empty row items in matrix-input are stripped before saving."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org.id,
+            "question_text": random_lower_string(),
+            "question_type": "matrix-input",
+            "options": {
+                "rows": {
+                    "label": "Subjects",
+                    "items": [
+                        {"id": 1, "key": "1", "value": "Math"},
+                        {"id": 2, "key": "2", "value": ""},
+                        {"id": 3, "key": "3", "value": "Physics"},
+                    ],
+                },
+                "columns": {"label": "Score", "input_type": "number"},
+            },
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    row_items = response.json()["options"]["rows"]["items"]
+    assert len(row_items) == 2
+    assert all(item["value"].strip() for item in row_items)
