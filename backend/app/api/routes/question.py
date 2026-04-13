@@ -242,15 +242,26 @@ def _enrich_option_list(
 
 
 def enrich_options_with_signed_urls(
-    options: list[Option] | MatrixMatchOptions | None,
+    options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None,
     gcs_service: GCSStorageService | None,
-) -> list[Option] | MatrixMatchOptions | None:
+) -> list[Option] | MatrixMatchOptions | MatrixInputOptions | None:
     """Add signed URLs to option media objects."""
     if not options or not gcs_service:
         return options
 
     if isinstance(options, list):
         return _enrich_option_list(options, gcs_service)
+
+    if is_matrix_input_options(options):
+        # MatrixInputOptions - only rows have Option items; columns have input_type
+        rows = options["rows"]
+        return MatrixInputOptions(
+            rows=MatrixColumn(
+                label=rows["label"],
+                items=_enrich_option_list(rows["items"], gcs_service),
+            ),
+            columns=options["columns"],
+        )
 
     # MatrixMatchOptions - enrich items in both rows and columns
     rows = options["rows"]
