@@ -120,6 +120,66 @@ def test_get_certificates(
     assert len(data["items"]) == 2
 
 
+def test_get_certificates_filter_is_active(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    active_cert = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+        is_active=True,
+    )
+    inactive_cert = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+        url=random_lower_string(),
+        is_active=False,
+    )
+    db.add(active_cert)
+    db.add(inactive_cert)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/?is_active=true",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert all(item["is_active"] is True for item in items)
+    assert any(item["name"] == active_cert.name for item in items)
+    assert not any(item["name"] == inactive_cert.name for item in items)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/?is_active=false",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert all(item["is_active"] is False for item in items)
+    assert any(item["name"] == inactive_cert.name for item in items)
+    assert not any(item["name"] == active_cert.name for item in items)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/certificate/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    names = [item["name"] for item in items]
+    assert active_cert.name in names
+    assert inactive_cert.name in names
+
+
 def test_get_certificate_by_id(
     client: TestClient,
     db: SessionDep,

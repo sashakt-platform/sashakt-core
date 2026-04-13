@@ -68,6 +68,7 @@ def get_certificates(
     current_user: CurrentUser,
     params: Pagination = Depends(),
     name: str | None = None,
+    is_active: bool | None = None,
 ) -> Page[CertificatePublic]:
     query = select(Certificate).where(
         Certificate.organization_id == current_user.organization_id,
@@ -77,6 +78,9 @@ def get_certificates(
         query = query.where(
             func.lower(Certificate.name).contains(name.strip().lower(), autoescape=True)
         )
+
+    if is_active is not None:
+        query = query.where(Certificate.is_active == is_active)
 
     certificates: Page[CertificatePublic] = paginate(
         session,
