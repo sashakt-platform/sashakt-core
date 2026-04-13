@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app.core.config import settings
 from app.core.roles import state_admin, test_admin
 from app.core.security import create_access_token, get_password_hash, verify_password
-from app.models import District, Permission, Role, RolePermission, State
+from app.models import District, Organization, Permission, Role, RolePermission, State
 from app.models.user import (
     User,
     UserCreate,
@@ -62,6 +62,11 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
     role_name = role.name if role else "N/A"
     role_label = role.label if role else "N/A"
 
+    organization = session.exec(
+        select(Organization).where(Organization.id == db_user.organization_id)
+    ).first()
+    organization_name = organization.name if organization else "N/A"
+
     states = None
     districts = None
     if role_name == state_admin.name or role_name == test_admin.name:
@@ -90,6 +95,7 @@ def get_user_public(*, session: Session, db_user: User) -> UserPublic:
         phone=db_user.phone,
         role_id=db_user.role_id,
         organization_id=db_user.organization_id,
+        organization_name=organization_name,
         created_by_id=db_user.created_by_id,
         is_active=db_user.is_active,
         role_label=role_label,
