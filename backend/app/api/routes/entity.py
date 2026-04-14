@@ -152,6 +152,7 @@ def get_entitytype(
     current_user: CurrentUser,
     params: Pagination = Depends(),
     name: str | None = None,
+    is_active: bool | None = Query(None),
 ) -> Page[EntityTypePublic]:
     query = select(EntityType).where(
         EntityType.organization_id == current_user.organization_id,
@@ -160,6 +161,8 @@ def get_entitytype(
         query = query.where(
             func.lower(EntityType.name).contains(name.strip().lower(), autoescape=True)
         )
+    if is_active is not None:
+        query = query.where(EntityType.is_active == is_active)
 
     entity_types: Page[EntityTypePublic] = paginate(
         session,
@@ -312,6 +315,7 @@ def get_entities(
     name: str | None = None,
     entity_type_id: int | None = None,
     test_id: int | None = Query(None),
+    is_active: bool | None = Query(None),
 ) -> Page[EntityPublic]:
     # Determine organization scope
     org_id: int | None = None
@@ -348,6 +352,8 @@ def get_entities(
         )
     if entity_type_id:
         query = query.where(Entity.entity_type_id == entity_type_id)
+    if is_active is not None:
+        query = query.where(Entity.is_active == is_active)
 
     # Filter by test location scope
     if test_id is not None:
