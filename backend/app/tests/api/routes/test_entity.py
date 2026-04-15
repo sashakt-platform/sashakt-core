@@ -2590,3 +2590,139 @@ def test_get_entities_no_is_active_filter_returns_all(
     ids = [item["id"] for item in response.json()["items"]]
     assert active_entity.id in ids
     assert inactive_entity.id in ids
+
+
+def test_entitytype_list_total_records_zero_when_no_entities(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Entity type with no associated entities should report total_records=0."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    match = next(item for item in items if item["id"] == entity_type.id)
+    assert match["total_records"] == 0
+
+
+def test_entitytype_list_total_records_counts_entities(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """total_records counts all entities (active and inactive)."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    active_entities = [
+        Entity(
+            name=random_lower_string(),
+            entity_type_id=entity_type.id,
+            created_by_id=user_id,
+            is_active=True,
+        )
+        for _ in range(3)
+    ]
+    inactive_entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+        is_active=False,
+    )
+    db.add_all(active_entities)
+    db.add(inactive_entity)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    match = next(item for item in items if item["id"] == entity_type.id)
+    assert match["total_records"] == 4
+
+
+def test_entitytype_list_total_records_independent_per_type(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Each entity type reports its own count independently."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    type_a = EntityType(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    type_b = EntityType(
+        name=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add_all([type_a, type_b])
+    db.commit()
+    db.refresh(type_a)
+    db.refresh(type_b)
+
+    db.add_all(
+        [
+            Entity(
+                name=random_lower_string(),
+                entity_type_id=type_a.id,
+                created_by_id=user_id,
+                is_active=True,
+            ),
+            Entity(
+                name=random_lower_string(),
+                entity_type_id=type_a.id,
+                created_by_id=user_id,
+                is_active=True,
+            ),
+            Entity(
+                name=random_lower_string(),
+                entity_type_id=type_b.id,
+                created_by_id=user_id,
+                is_active=True,
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/entitytype/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[type_a.id]["total_records"] == 2
+    assert items[type_b.id]["total_records"] == 1

@@ -56,16 +56,14 @@ EntitySorting = create_sorting_dependency(EntitySortConfig)
 EntitySortingDep = Annotated[SortingParams, Depends(EntitySorting)]
 
 
-def transform_entity_types_to_public(
-    items: list[EntityType] | Any,
-) -> list[EntityTypePublic]:
+def transform_entity_types_to_public(items: Any) -> list[EntityTypePublic]:
     result: list[EntityTypePublic] = []
-    entity_type_list: list[EntityType] = (
-        list(items) if not isinstance(items, list) else items
-    )
-
-    for entity_type in entity_type_list:
-        result.append(EntityTypePublic(**entity_type.model_dump()))
+    for row in items:
+        entity_type: EntityType = row[0]
+        total_records: int = row[1]
+        result.append(
+            EntityTypePublic(**entity_type.model_dump(), total_records=total_records)
+        )
     return result
 
 
@@ -154,9 +152,13 @@ def get_entitytype(
     name: str | None = None,
     is_active: bool | None = Query(None),
 ) -> Page[EntityTypePublic]:
-    query = select(EntityType).where(
-        EntityType.organization_id == current_user.organization_id,
+    query = (
+        select(EntityType, func.count(col(Entity.id)).label("total_records"))
+        .outerjoin(Entity, col(Entity.entity_type_id) == EntityType.id)
+        .where(EntityType.organization_id == current_user.organization_id)
+        .group_by(col(EntityType.id))
     )
+
     if name:
         query = query.where(
             func.lower(EntityType.name).contains(name.strip().lower(), autoescape=True)
@@ -164,9 +166,9 @@ def get_entitytype(
     if is_active is not None:
         query = query.where(EntityType.is_active == is_active)
 
-    entity_types: Page[EntityTypePublic] = paginate(
+    entity_types: Page[EntityTypePublic] = paginate(  # type: ignore[type-var]
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_entity_types_to_public(items),
     )

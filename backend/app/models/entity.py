@@ -62,6 +62,10 @@ class EntityTypePublic(EntityTypeBase):
         title="ID of the organization",
         description="ID of the organization to which the test belongs.",
     )
+    total_records: int = Field(
+        default=0,
+        description="Count of active entity records belonging to this entity type",
+    )
 
 
 class EntityTypeUpdate(EntityTypeBase):
