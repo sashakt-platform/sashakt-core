@@ -29,6 +29,7 @@ from app.models import (
     EntityPublic,
     EntityType,
     EntityTypeCreate,
+    EntityTypeListPublic,
     EntityTypePublic,
     EntityTypeUpdate,
     EntityUpdate,
@@ -56,15 +57,11 @@ EntitySorting = create_sorting_dependency(EntitySortConfig)
 EntitySortingDep = Annotated[SortingParams, Depends(EntitySorting)]
 
 
-def transform_entity_types_to_public(items: Any) -> list[EntityTypePublic]:
-    result: list[EntityTypePublic] = []
-    for row in items:
-        entity_type: EntityType = row[0]
-        total_records: int = row[1]
-        result.append(
-            EntityTypePublic(**entity_type.model_dump(), total_records=total_records)
-        )
-    return result
+def transform_entity_types_to_public(items: Any) -> list[EntityTypeListPublic]:
+    return [
+        EntityTypeListPublic(**row[0].model_dump(), total_records=row[1])
+        for row in items
+    ]
 
 
 def transform_entities_to_public(
@@ -142,7 +139,7 @@ def create_entitytype(
 
 @router_entitytype.get(
     "/",
-    response_model=Page[EntityTypePublic],
+    response_model=Page[EntityTypeListPublic],
     dependencies=[Depends(permission_dependency("read_entity"))],
 )
 def get_entitytype(
@@ -151,7 +148,7 @@ def get_entitytype(
     params: Pagination = Depends(),
     name: str | None = None,
     is_active: bool | None = Query(None),
-) -> Page[EntityTypePublic]:
+) -> Page[EntityTypeListPublic]:
     query = (
         select(EntityType, func.count(col(Entity.id)).label("total_records"))
         .outerjoin(Entity, col(Entity.entity_type_id) == EntityType.id)
@@ -166,7 +163,7 @@ def get_entitytype(
     if is_active is not None:
         query = query.where(EntityType.is_active == is_active)
 
-    entity_types: Page[EntityTypePublic] = paginate(  # type: ignore[type-var]
+    entity_types: Page[EntityTypeListPublic] = paginate(  # type: ignore[type-var]
         session,
         query,
         params,
