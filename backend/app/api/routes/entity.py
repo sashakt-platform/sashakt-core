@@ -29,6 +29,7 @@ from app.models import (
     EntityPublic,
     EntityType,
     EntityTypeCreate,
+    EntityTypeListPublic,
     EntityTypePublic,
     EntityTypeUpdate,
     EntityUpdate,
@@ -56,17 +57,11 @@ EntitySorting = create_sorting_dependency(EntitySortConfig)
 EntitySortingDep = Annotated[SortingParams, Depends(EntitySorting)]
 
 
-def transform_entity_types_to_public(
-    items: list[EntityType] | Any,
-) -> list[EntityTypePublic]:
-    result: list[EntityTypePublic] = []
-    entity_type_list: list[EntityType] = (
-        list(items) if not isinstance(items, list) else items
-    )
-
-    for entity_type in entity_type_list:
-        result.append(EntityTypePublic(**entity_type.model_dump()))
-    return result
+def transform_entity_types_to_public(items: Any) -> list[EntityTypeListPublic]:
+    return [
+        EntityTypeListPublic(**row[0].model_dump(), total_records=row[1])
+        for row in items
+    ]
 
 
 def transform_entities_to_public(
@@ -144,7 +139,7 @@ def create_entitytype(
 
 @router_entitytype.get(
     "/",
-    response_model=Page[EntityTypePublic],
+    response_model=Page[EntityTypeListPublic],
     dependencies=[Depends(permission_dependency("read_entity"))],
 )
 def get_entitytype(
@@ -152,18 +147,25 @@ def get_entitytype(
     current_user: CurrentUser,
     params: Pagination = Depends(),
     name: str | None = None,
-) -> Page[EntityTypePublic]:
-    query = select(EntityType).where(
-        EntityType.organization_id == current_user.organization_id,
+    is_active: bool | None = Query(None),
+) -> Page[EntityTypeListPublic]:
+    query = (
+        select(EntityType, func.count(col(Entity.id)).label("total_records"))
+        .outerjoin(Entity, col(Entity.entity_type_id) == EntityType.id)
+        .where(EntityType.organization_id == current_user.organization_id)
+        .group_by(col(EntityType.id))
     )
+
     if name:
         query = query.where(
             func.lower(EntityType.name).contains(name.strip().lower(), autoescape=True)
         )
+    if is_active is not None:
+        query = query.where(EntityType.is_active == is_active)
 
-    entity_types: Page[EntityTypePublic] = paginate(
+    entity_types: Page[EntityTypeListPublic] = paginate(  # type: ignore[type-var]
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_entity_types_to_public(items),
     )
@@ -312,6 +314,7 @@ def get_entities(
     name: str | None = None,
     entity_type_id: int | None = None,
     test_id: int | None = Query(None),
+    is_active: bool | None = Query(None),
 ) -> Page[EntityPublic]:
     # Determine organization scope
     org_id: int | None = None
@@ -348,6 +351,8 @@ def get_entities(
         )
     if entity_type_id:
         query = query.where(Entity.entity_type_id == entity_type_id)
+    if is_active is not None:
+        query = query.where(Entity.is_active == is_active)
 
     # Filter by test location scope
     if test_id is not None:

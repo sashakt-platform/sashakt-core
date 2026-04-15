@@ -64,6 +64,12 @@ class EntityTypePublic(EntityTypeBase):
     )
 
 
+class EntityTypeListPublic(EntityTypePublic):
+    total_records: int = Field(
+        description="Total count of entity records belonging to this entity type",
+    )
+
+
 class EntityTypeUpdate(EntityTypeBase):
     pass
 
