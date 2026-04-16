@@ -157,11 +157,7 @@ class TestLink(SQLModel, table=True):
 
 
 class TestLinkPublic(SQLModel):
-    id: int
     uuid: str
-    test_id: int
-    admin_id: int
-    created_date: datetime | None
 
 
 class TestBase(SQLModel):
