@@ -140,6 +140,10 @@ class CandidateTest(CandidateTestBase, table=True):
     __test__ = False
     __table_args__ = (UniqueConstraint("test_id", "candidate_id"),)
     id: int | None = Field(default=None, primary_key=True)
+    admin_id: int = Field(
+        foreign_key="user.id",
+        description="ID of the admin whose test link the candidate used to start the test.",
+    )
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
         default_factory=get_timezone_aware_now,
@@ -314,7 +318,7 @@ class TestStatusSummary(SQLModel):
 
 
 class StartTestRequest(SQLModel):
-    test_id: int
+    test_uuid: str
     device_info: str | None = None
     form_responses: dict[str, Any] | None = None
 
