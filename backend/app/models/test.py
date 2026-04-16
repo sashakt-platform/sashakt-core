@@ -136,6 +136,34 @@ class TestDistrict(SQLModel, table=True):
     district_id: int = Field(foreign_key="district.id", ondelete="CASCADE")
 
 
+class TestLink(SQLModel, table=True):
+    __tablename__ = "test_link"
+    __test__ = False
+    __table_args__ = (UniqueConstraint("test_id", "admin_id"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
+    uuid: str = Field(
+        nullable=False,
+        index=True,
+        unique=True,
+        description="UUID used in the shareable URL for this (test, admin) pair.",
+    )
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    admin_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
+
+    test: "Test" = Relationship(back_populates="test_links")
+    admin: "User" = Relationship(back_populates="test_links")
+
+
+class TestLinkPublic(SQLModel):
+    id: int
+    uuid: str
+    test_id: int
+    admin_id: int
+    created_date: datetime | None
+
+
 class TestBase(SQLModel):
     name: str = Field(
         index=True,
@@ -353,6 +381,7 @@ class Test(TestBase, table=True):
     )
 
     organization: Optional["Organization"] = Relationship(back_populates="tests")
+    test_links: list["TestLink"] | None = Relationship(back_populates="test")
 
 
 class TestCreate(TestBase):
