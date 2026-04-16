@@ -1,7 +1,7 @@
 """fix_schema_drift_question_set_indexes_and_candidate_test_nullable
 
 Revision ID: a640a03f877a
-Revises: d84165c8e013
+Revises: 4f2c8a6d9b11
 Create Date: 2026-04-16 12:36:35.544214
 
 """
