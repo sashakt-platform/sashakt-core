@@ -51,6 +51,33 @@ def test_get_users_normal_user_me(
     assert current_user["email"] == settings.EMAIL_TEST_USER
 
 
+def test_get_users_me_includes_organization_name(
+    client: TestClient, db: Session
+) -> None:
+    """organization_name in /me response matches the user's actual organization."""
+    organization = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
+    user_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=organization.id,
+    )
+    user = crud.create_user(session=db, user_create=user_in)
+    headers = {"Authorization": f"Bearer {user.token}"}
+
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 200
+    current_user = r.json()
+    assert "organization_name" in current_user
+    assert current_user["organization_name"] == organization.name
+    assert current_user["organization_id"] == organization.id
+
+
 def test_get_logged_user_me_permissions(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:

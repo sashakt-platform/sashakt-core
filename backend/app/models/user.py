@@ -149,6 +149,7 @@ class User(UserBase, table=True):
 class UserPublic(UserBase):
     id: int
     organization_id: int
+    organization_name: str
     role_label: str
     created_date: datetime
     modified_date: datetime
