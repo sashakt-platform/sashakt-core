@@ -79,16 +79,24 @@ alembic upgrade head
 ### Backend Structure (`backend/app/`)
 - **`main.py`** — FastAPI app entry point
 - **`api/main.py`** — API router aggregation
-- **`api/routes/`** — Route handlers (candidate, certificate, entity, form, location, login, organization, permissions, providers, question, roles, tag, test, users, utils)
+- **`api/routes/`** — Route handlers (candidate, certificate, entity, form, languages, location, login, media, organization, permissions, private, providers, question, roles, tag, test, users, utils)
 - **`api/deps.py`** — Dependency injection (`SessionDep`, `CurrentUser`, `permission_dependency()`)
 - **`models/`** — SQLModel models (define both DB tables and Pydantic schemas)
 - **`crud/`** — Database CRUD operations
-- **`services/`** — Business logic (data_sync, certificate_tokens, google_slides)
+- **`services/`** — Business logic (data_sync, certificate_tokens, google_slides, datasync/, storage/)
 - **`core/config.py`** — Pydantic Settings loaded from `.env`
 - **`core/security.py`** — JWT token creation/validation, password hashing
 - **`core/db.py`** — Database engine and session setup
 - **`core/permissions.py`** / **`core/roles.py`** — Permission and role initialization
+- **`core/files.py`** — File upload validation and management
+- **`core/media.py`** — Media handling utilities for question/test media
+- **`core/sorting/`** — Dynamic sorting utilities (`SortingParams`, model-specific sort configs)
+- **`core/provider_config.py`** — Provider configuration management (Fernet encryption)
+- **`core/location.py`** — Location/geography initialization
+- **`core/timezone.py`** — Timezone utilities (defaults to Asia/Kolkata)
 - **`alembic/`** — Database migration versions
+- **`utils.py`** — Email utilities (rendering, templates, password reset tokens)
+- **`initial_data.py`** — Initial data seeding
 - **`tests/`** — Pytest test suite with fixtures in `conftest.py`
 
 ### Auth & Authorization
@@ -102,6 +110,8 @@ alembic upgrade head
 - Always run `mypy app` after code changes (inside Docker: `docker compose exec backend bash -c "mypy app"`)
 - mypy is configured with `strict = true`
 - ruff targets Python 3.10, excludes alembic directory
+- Sentry is integrated for error tracking (configured via `SENTRY_DSN` env var)
+- FastAPI Pagination is used for list endpoints
 
 ### Testing
 - Tests use transactional rollback for isolation
@@ -115,3 +125,25 @@ alembic upgrade head
 - Traefik UI: http://localhost:8090
 - MailCatcher: http://localhost:1080
 - Health check: http://localhost:8000/api/v1/utils/health-check/
+
+## Plans
+
+- Save implementation plans as markdown files in the `plans/` folder at the project root
+- Never delete plan files automatically — they serve as a reference for the team
+
+## CI/CD
+
+GitHub Actions workflows in `.github/workflows/`:
+- **`test-run.yml`** — Main test runner
+- **`lint-backend.yml`** — Linting checks
+- **`test-docker-compose.yml`** — Docker compose tests
+- **`cd_staging.yml`** — Staging deployment
+- **`cd_production.yml`** — Production deployment
+
+## Additional Scripts (from project root)
+
+- `scripts/test-local.sh` — Run tests locally without Docker
+- `scripts/generate-client.sh` — Generate API client
+- `scripts/build.sh` / `scripts/build-push.sh` — Docker build and push
+- `scripts/deploy.sh` — Deployment
+- `scripts/reset-migrations.sh` — Reset migrations
