@@ -43,7 +43,6 @@ from app.models import (
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
-from app.models.organization_settings import OrganizationSettingsPayload
 from app.models.role import Role
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
@@ -686,15 +685,11 @@ def create_test(
     test_data["organization_id"] = current_user.organization_id
 
     if current_user.organization_id is not None:
-        settings_row = crud_settings.get_by_org_id(
+        settings_payload = crud_settings.get_payload(
             session=session, organization_id=current_user.organization_id
         )
-        if settings_row is not None:
-            test_data.update(
-                fixed_overrides_for_test(
-                    OrganizationSettingsPayload.model_validate(settings_row.settings)
-                )
-            )
+        if settings_payload is not None:
+            test_data.update(fixed_overrides_for_test(settings_payload))
 
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
@@ -1197,15 +1192,11 @@ def update_test(
         },
     )
     if test.organization_id is not None:
-        settings_row = crud_settings.get_by_org_id(
+        settings_payload = crud_settings.get_payload(
             session=session, organization_id=test.organization_id
         )
-        if settings_row is not None:
-            test_data.update(
-                fixed_overrides_for_test(
-                    OrganizationSettingsPayload.model_validate(settings_row.settings)
-                )
-            )
+        if settings_payload is not None:
+            test_data.update(fixed_overrides_for_test(settings_payload))
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()
@@ -1398,9 +1389,11 @@ def clone_test(
             TestQuestion(
                 test_id=new_test.id,
                 question_revision_id=ql.question_revision_id,
-                question_set_id=question_set_id_map.get(ql.question_set_id)
-                if ql.question_set_id is not None
-                else None,
+                question_set_id=(
+                    question_set_id_map.get(ql.question_set_id)
+                    if ql.question_set_id is not None
+                    else None
+                ),
             )
         )
     state_links = session.exec(

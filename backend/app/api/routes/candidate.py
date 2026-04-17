@@ -63,7 +63,6 @@ from app.models.candidate import (
     TestStatusSummary,
 )
 from app.models.form import FormResponse
-from app.models.organization_settings import OrganizationSettingsPayload
 from app.models.question import (
     Question,
     QuestionTag,
@@ -74,7 +73,10 @@ from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
-from app.services.organization_settings_mapper import runtime_disabled_overrides
+from app.services.organization_settings_mapper import (
+    check_org_time_window,
+    runtime_disabled_overrides,
+)
 from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -679,26 +681,21 @@ def start_test_for_candidate(
         )
 
     if test.organization_id is not None:
-        settings_row = crud_settings.get_by_org_id(
+        settings_payload = crud_settings.get_payload(
             session=session, organization_id=test.organization_id
         )
-        if settings_row is not None:
-            org_settings = OrganizationSettingsPayload.model_validate(
-                settings_row.settings
-            )
-            window_start = org_settings.test_timings.value.start_time
-            window_end = org_settings.test_timings.value.end_time
-            if window_start is not None and window_end is not None:
-                now_time = current_time.time()
-                if not (window_start <= now_time <= window_end):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            "Tests can only be started between "
-                            f"{window_start.strftime('%H:%M')} and "
-                            f"{window_end.strftime('%H:%M')}."
-                        ),
-                    )
+        if settings_payload is not None:
+            outside_window = check_org_time_window(settings_payload, current_time)
+            if outside_window is not None:
+                window_start, window_end = outside_window
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Tests can only be started between "
+                        f"{window_start.strftime('%H:%M')} and "
+                        f"{window_end.strftime('%H:%M')}."
+                    ),
+                )
 
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
@@ -1181,15 +1178,11 @@ def get_test_questions(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     test_data = test.model_dump()
     if test.organization_id is not None:
-        settings_row = crud_settings.get_by_org_id(
+        settings_payload = crud_settings.get_payload(
             session=session, organization_id=test.organization_id
         )
-        if settings_row is not None:
-            test_data.update(
-                runtime_disabled_overrides(
-                    OrganizationSettingsPayload.model_validate(settings_row.settings)
-                )
-            )
+        if settings_payload is not None:
+            test_data.update(runtime_disabled_overrides(settings_payload))
 
     omr_mode = OMRMode(test_data.get("omr", OMRMode.NEVER))
 
