@@ -17,7 +17,6 @@ from app.models.organization_settings import (
     TestTimingsValue,
 )
 from app.models.utils import MarkingScheme
-from app.tests.utils.user import get_current_user_data
 
 
 def flexible_settings_payload() -> OrganizationSettingsPayload:
@@ -54,5 +53,7 @@ def make_current_user_org_flexible(
     *, client: TestClient, session: Session, auth_header: dict[str, str]
 ) -> None:
     """Flip the caller's org to all-flexible settings."""
+    from app.tests.utils.user import get_current_user_data
+
     org_id = get_current_user_data(client, auth_header)["organization_id"]
     make_org_settings_flexible(session=session, organization_id=org_id)

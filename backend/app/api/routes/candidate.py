@@ -28,6 +28,7 @@ from app.core.question_sets import (
 )
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
+from app.crud import organization_settings as crud_settings
 from app.models import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -62,6 +63,7 @@ from app.models.candidate import (
     TestStatusSummary,
 )
 from app.models.form import FormResponse
+from app.models.organization_settings import OrganizationSettingsPayload
 from app.models.question import (
     Question,
     QuestionTag,
@@ -72,6 +74,7 @@ from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
+from app.services.organization_settings_mapper import runtime_disabled_overrides
 from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -675,6 +678,28 @@ def start_test_for_candidate(
             detail="Test has not started yet. Please wait until the scheduled start time.",
         )
 
+    if test.organization_id is not None:
+        settings_row = crud_settings.get_by_org_id(
+            session=session, organization_id=test.organization_id
+        )
+        if settings_row is not None:
+            org_settings = OrganizationSettingsPayload.model_validate(
+                settings_row.settings
+            )
+            window_start = org_settings.test_timings.value.start_time
+            window_end = org_settings.test_timings.value.end_time
+            if window_start is not None and window_end is not None:
+                now_time = current_time.time()
+                if not (window_start <= now_time <= window_end):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Tests can only be started between "
+                            f"{window_start.strftime('%H:%M')} and "
+                            f"{window_end.strftime('%H:%M')}."
+                        ),
+                    )
+
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
         identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
@@ -1154,7 +1179,19 @@ def get_test_questions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    omr_mode = getattr(test, "omr", OMRMode.NEVER)
+    test_data = test.model_dump()
+    if test.organization_id is not None:
+        settings_row = crud_settings.get_by_org_id(
+            session=session, organization_id=test.organization_id
+        )
+        if settings_row is not None:
+            test_data.update(
+                runtime_disabled_overrides(
+                    OrganizationSettingsPayload.model_validate(settings_row.settings)
+                )
+            )
+
+    omr_mode = OMRMode(test_data.get("omr", OMRMode.NEVER))
 
     if omr_mode == OMRMode.NEVER:
         hide_question_text = False
@@ -1182,7 +1219,7 @@ def get_test_questions(
     )
 
     return TestCandidatePublic(
-        **test.model_dump(),
+        **test_data,
         question_revisions=candidate_questions,
         question_sets=candidate_question_sets,
         tags=tags,

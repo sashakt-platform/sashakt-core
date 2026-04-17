@@ -444,6 +444,15 @@ def test_create_test_applies_all_fixed_overrides(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Default org settings are all fixed; client-supplied test fields get overridden."""
+    # Materialize a defaults-backed settings row for the superadmin's org
+    # (test fixtures create orgs directly in DB, bypassing the auto-init on POST /organization).
+    own_org_id = _get_org_id(client, get_user_superadmin_token)
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_superadmin_token,
+    )
+    assert get_resp.status_code == 200
+
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=_create_test_payload(),
@@ -564,3 +573,290 @@ def test_fixed_value_change_does_not_affect_existing_tests(
     )
     assert get_resp.status_code == 200
     assert get_resp.json()["time_limit"] == 42
+
+
+# ---------- Runtime enforcement in candidate flow ----------
+
+
+def _create_startable_test(
+    client: TestClient,
+    db: SessionDep,
+    headers: dict[str, str],
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create a test via POST + attach one question so the candidate flow has work to do."""
+    from app.models.question import Question, QuestionRevision, QuestionType
+    from app.models.test import TestQuestion
+
+    body = _create_test_payload() if payload is None else payload
+    response = client.post(f"{settings.API_V1_STR}/test/", headers=headers, json=body)
+    assert response.status_code == 200, response.text
+    data: dict[str, Any] = response.json()
+    org_id = data["organization_id"]
+    user_id = data["created_by_id"]
+
+    question = Question(organization_id=org_id)
+    db.add(question)
+    db.flush()
+    revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user_id,
+        question_text="dummy",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "x"},
+            {"id": 2, "key": "B", "value": "y"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(revision)
+    db.flush()
+    question.last_revision_id = revision.id
+    db.add(TestQuestion(test_id=data["id"], question_revision_id=revision.id))
+    db.commit()
+    return data
+
+
+def test_start_test_rejected_outside_time_window(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    monkeypatch: Any,
+) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(client, db, get_user_superadmin_token)
+
+    # Configure org time-of-day window 09:00-17:00 (mode is irrelevant).
+    window_payload = flexible_settings_payload()
+    window_payload.test_timings.value.start_time = time(9, 0)
+    window_payload.test_timings.value.end_time = time(17, 0)
+    _put_settings(client, get_user_superadmin_token, org_id, window_payload)
+
+    # Freeze current time at 07:30 (outside window).
+    frozen = datetime(2026, 5, 1, 7, 30, tzinfo=ZoneInfo("Asia/Kolkata"))
+    monkeypatch.setattr("app.api.routes.candidate.get_current_time", lambda: frozen)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test_data["id"], "device_info": "test"},
+    )
+    assert response.status_code == 400
+    assert "09:00" in response.json()["detail"]
+    assert "17:00" in response.json()["detail"]
+
+
+def test_start_test_allowed_inside_time_window(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    monkeypatch: Any,
+) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(client, db, get_user_superadmin_token)
+
+    window_payload = flexible_settings_payload()
+    window_payload.test_timings.value.start_time = time(9, 0)
+    window_payload.test_timings.value.end_time = time(17, 0)
+    _put_settings(client, get_user_superadmin_token, org_id, window_payload)
+
+    frozen = datetime(2026, 5, 1, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    monkeypatch.setattr("app.api.routes.candidate.get_current_time", lambda: frozen)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test_data["id"], "device_info": "test"},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_time_window_skipped_when_not_configured(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Flexible settings with null start/end time: no enforcement."""
+    from app.tests.utils.organization_settings import make_current_user_org_flexible
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    test_data = _create_startable_test(client, db, get_user_superadmin_token)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test_data["id"], "device_info": "test"},
+    )
+    assert response.status_code == 200, response.text
+
+
+def _start_and_fetch_candidate_test(client: TestClient, test_id: int) -> dict[str, Any]:
+    start_resp = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test_id, "device_info": "test"},
+    )
+    assert start_resp.status_code == 200, start_resp.text
+    start = start_resp.json()
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{start['candidate_test_id']}",
+        params={"candidate_uuid": start["candidate_uuid"]},
+    )
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def test_runtime_omr_disabled_overrides_existing_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """An existing test with omr=ALWAYS must appear as omr=NEVER once org disables OMR."""
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(omr="ALWAYS"),
+    )
+    assert test_data["omr"] == "ALWAYS"
+
+    # Now disable OMR at org level.
+    disabled = flexible_settings_payload()
+    disabled.omr_mode.mode = "fixed"
+    disabled.omr_mode.value.default = False
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    assert body["omr"] == "NEVER"
+
+
+def test_runtime_question_palette_disabled(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(show_question_palette=True, bookmark=True),
+    )
+    assert test_data["show_question_palette"] is True
+    assert test_data["bookmark"] is True
+
+    disabled = flexible_settings_payload()
+    disabled.question_palette.mode = "fixed"
+    disabled.question_palette.value.palette = False
+    disabled.question_palette.value.mark_for_review = False
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    assert body["show_question_palette"] is False
+    assert body["bookmark"] is False
+
+
+def test_runtime_answer_review_disabled(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(
+            show_feedback_immediately=True, show_feedback_on_completion=True
+        ),
+    )
+    assert test_data["show_feedback_immediately"] is True
+    assert test_data["show_feedback_on_completion"] is True
+
+    disabled = flexible_settings_payload()
+    disabled.answer_review.mode = "fixed"
+    disabled.answer_review.value.default = "off"
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    assert body["show_feedback_immediately"] is False
+    assert body["show_feedback_on_completion"] is False
+
+
+def test_runtime_fixed_on_does_not_override_existing_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Fixed-on (enabling) should NOT force existing tests to the new value — only new tests."""
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(omr="NEVER"),
+    )
+    assert test_data["omr"] == "NEVER"
+
+    # Lock OMR on via fixed + default=True — existing test should keep NEVER.
+    locked_on = flexible_settings_payload()
+    locked_on.omr_mode.mode = "fixed"
+    locked_on.omr_mode.value.default = True
+    _put_settings(client, get_user_superadmin_token, org_id, locked_on)
+
+    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    assert body["omr"] == "NEVER"

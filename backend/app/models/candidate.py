@@ -273,6 +273,11 @@ class TestCandidatePublic(SQLModel):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
+    omr: str
+    show_question_palette: bool
+    bookmark: bool
+    show_feedback_immediately: bool
+    show_feedback_on_completion: bool
 
     # Safe questions (no answers)
     question_revisions: list["QuestionCandidatePublic"]

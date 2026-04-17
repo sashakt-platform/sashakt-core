@@ -685,15 +685,16 @@ def create_test(
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
 
-    assert current_user.organization_id is not None
-    settings_row = crud_settings.get_or_create(
-        session=session, organization_id=current_user.organization_id
-    )
-    test_data.update(
-        fixed_overrides_for_test(
-            OrganizationSettingsPayload.model_validate(settings_row.settings)
+    if current_user.organization_id is not None:
+        settings_row = crud_settings.get_by_org_id(
+            session=session, organization_id=current_user.organization_id
         )
-    )
+        if settings_row is not None:
+            test_data.update(
+                fixed_overrides_for_test(
+                    OrganizationSettingsPayload.model_validate(settings_row.settings)
+                )
+            )
 
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
@@ -1196,14 +1197,15 @@ def update_test(
         },
     )
     if test.organization_id is not None:
-        settings_row = crud_settings.get_or_create(
+        settings_row = crud_settings.get_by_org_id(
             session=session, organization_id=test.organization_id
         )
-        test_data.update(
-            fixed_overrides_for_test(
-                OrganizationSettingsPayload.model_validate(settings_row.settings)
+        if settings_row is not None:
+            test_data.update(
+                fixed_overrides_for_test(
+                    OrganizationSettingsPayload.model_validate(settings_row.settings)
+                )
             )
-        )
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()
