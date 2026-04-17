@@ -7966,4 +7966,54 @@ def test_get_tests_list_returns_show_mark_for_review(
     data = list_response.json()
     assert "items" in data
     assert len(data["items"]) > 0
-    assert "bookmark" in data["items"][0]
+
+
+def test_create_test_with_show_marks_true(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_marks set to True."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_marks": True,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_marks"] is True
+
+
+def test_create_test_with_show_marks_false(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Test creating a test with show_marks set to False."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "show_marks": False,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["show_marks"] is False
+    assert "bookmark" in data
