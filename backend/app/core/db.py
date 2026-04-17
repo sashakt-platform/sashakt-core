@@ -11,7 +11,14 @@ from app.core.roles import (
     init_roles,
     super_admin,
 )
-from app.models import Organization, Role, User, UserCreate
+from app.models import (
+    DEFAULT_ORGANIZATION_SETTINGS,
+    Organization,
+    OrganizationSettings,
+    Role,
+    User,
+    UserCreate,
+)
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
@@ -41,6 +48,15 @@ def init_db(session: Session) -> None:
 
         initial_organization = Organization(name="T4D", description="T4D Organization")
         session.add(initial_organization)
+        session.commit()
+        session.refresh(initial_organization)
+        assert initial_organization.id is not None
+        session.add(
+            OrganizationSettings(
+                organization_id=initial_organization.id,
+                settings=DEFAULT_ORGANIZATION_SETTINGS,
+            )
+        )
         session.commit()
 
         super_admin_role = session.exec(

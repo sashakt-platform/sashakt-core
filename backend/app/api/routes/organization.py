@@ -20,11 +20,13 @@ from app.core.files import (
 )
 from app.core.roles import state_admin, test_admin
 from app.models import (
+    DEFAULT_ORGANIZATION_SETTINGS,
     AggregatedData,
     Message,
     Organization,
     OrganizationCreate,
     OrganizationPublic,
+    OrganizationSettings,
     OrganizationUpdate,
     Question,
     Test,
@@ -167,6 +169,15 @@ def create_organization(
 ) -> Organization:
     organization = Organization.model_validate(organization_create)
     session.add(organization)
+    session.commit()
+    session.refresh(organization)
+    assert organization.id is not None
+    session.add(
+        OrganizationSettings(
+            organization_id=organization.id,
+            settings=DEFAULT_ORGANIZATION_SETTINGS,
+        )
+    )
     session.commit()
     session.refresh(organization)
     return organization
