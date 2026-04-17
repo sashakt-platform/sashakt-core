@@ -25,6 +25,7 @@ from app.core.sorting import (
     TestSortConfig,
     create_sorting_dependency,
 )
+from app.crud import organization_settings as crud_settings
 from app.models import (
     Message,
     QuestionRevision,
@@ -42,6 +43,7 @@ from app.models import (
 from app.models.candidate import CandidateTest, CandidateTestAnswer
 from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
+from app.models.organization_settings import OrganizationSettingsPayload
 from app.models.role import Role
 from app.models.tag import Tag, TagPublic
 from app.models.test import (
@@ -57,6 +59,7 @@ from app.models.test import (
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.organization_settings_mapper import fixed_overrides_for_test
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -681,6 +684,17 @@ def create_test(
     )
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
+
+    assert current_user.organization_id is not None
+    settings_row = crud_settings.get_or_create(
+        session=session, organization_id=current_user.organization_id
+    )
+    test_data.update(
+        fixed_overrides_for_test(
+            OrganizationSettingsPayload.model_validate(settings_row.settings)
+        )
+    )
+
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
         test_data["link"] = str(uuid.uuid4())
@@ -1181,6 +1195,15 @@ def update_test(
             "district_ids",
         },
     )
+    if test.organization_id is not None:
+        settings_row = crud_settings.get_or_create(
+            session=session, organization_id=test.organization_id
+        )
+        test_data.update(
+            fixed_overrides_for_test(
+                OrganizationSettingsPayload.model_validate(settings_row.settings)
+            )
+        )
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()

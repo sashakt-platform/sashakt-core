@@ -306,3 +306,261 @@ def test_put_settings_extra_field_rejected_422(
         json={"settings": bad_payload},
     )
     assert response.status_code == 422
+
+
+# ---------- Mapper unit tests ----------
+
+
+def test_mapper_fixed_features_produce_overrides() -> None:
+    from app.models.organization_settings import (
+        AnswerReviewSetting,
+        AnswerReviewValue,
+        MarkingSchemeSetting,
+        OMRModeSetting,
+        OMRModeValue,
+        QuestionPaletteSetting,
+        QuestionPaletteValue,
+        QuestionsPerPageSetting,
+        QuestionsPerPageValue,
+        TestTimingsSetting,
+        TestTimingsValue,
+    )
+    from app.models.test import OMRMode
+    from app.models.utils import MarkingScheme
+    from app.services.organization_settings_mapper import fixed_overrides_for_test
+
+    payload = OrganizationSettingsPayload(
+        test_timings=TestTimingsSetting(
+            mode="fixed", value=TestTimingsValue(time_limit=90)
+        ),
+        questions_per_page=QuestionsPerPageSetting(
+            mode="fixed", value=QuestionsPerPageValue(question_pagination=3)
+        ),
+        marking_scheme=MarkingSchemeSetting(
+            mode="fixed",
+            value=MarkingScheme(correct=2, wrong=-1, skipped=0),
+        ),
+        answer_review=AnswerReviewSetting(
+            mode="fixed", value=AnswerReviewValue(default="end_of_test")
+        ),
+        question_palette=QuestionPaletteSetting(
+            mode="fixed",
+            value=QuestionPaletteValue(palette=True, mark_for_review=False),
+        ),
+        omr_mode=OMRModeSetting(mode="fixed", value=OMRModeValue(default=True)),
+    )
+
+    overrides = fixed_overrides_for_test(payload)
+    assert overrides["time_limit"] == 90
+    assert overrides["question_pagination"] == 3
+    assert overrides["marking_scheme"] == MarkingScheme(correct=2, wrong=-1, skipped=0)
+    assert overrides["show_feedback_immediately"] is False
+    assert overrides["show_feedback_on_completion"] is True
+    assert overrides["show_question_palette"] is True
+    assert overrides["bookmark"] is False
+    assert overrides["omr"] == OMRMode.ALWAYS
+
+
+def test_mapper_flexible_features_produce_no_overrides() -> None:
+    from app.services.organization_settings_mapper import fixed_overrides_for_test
+    from app.tests.utils.organization_settings import flexible_settings_payload
+
+    overrides = fixed_overrides_for_test(flexible_settings_payload())
+    assert overrides == {}
+
+
+def test_mapper_answer_review_mapping() -> None:
+    from app.models.organization_settings import (
+        AnswerReviewSetting,
+        AnswerReviewValue,
+    )
+    from app.services.organization_settings_mapper import (
+        ANSWER_REVIEW_TO_FEEDBACK_FLAGS,
+        fixed_overrides_for_test,
+    )
+
+    for option, (
+        expected_immediately,
+        expected_on_completion,
+    ) in ANSWER_REVIEW_TO_FEEDBACK_FLAGS.items():
+        payload = default_organization_settings()
+        payload.answer_review = AnswerReviewSetting(
+            mode="fixed", value=AnswerReviewValue(default=option)
+        )
+        overrides = fixed_overrides_for_test(payload)
+        assert overrides["show_feedback_immediately"] == expected_immediately
+        assert overrides["show_feedback_on_completion"] == expected_on_completion
+
+
+def test_mapper_omr_fixed_false_maps_to_never() -> None:
+    from app.models.organization_settings import OMRModeSetting, OMRModeValue
+    from app.models.test import OMRMode
+    from app.services.organization_settings_mapper import fixed_overrides_for_test
+
+    payload = default_organization_settings()
+    payload.omr_mode = OMRModeSetting(mode="fixed", value=OMRModeValue(default=False))
+    overrides = fixed_overrides_for_test(payload)
+    assert overrides["omr"] == OMRMode.NEVER
+
+
+# ---------- End-to-end: create/update test with org settings ----------
+
+
+def _create_test_payload(**overrides: Any) -> dict[str, Any]:
+    base = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 15,
+        "marks": 5,
+        "link": random_lower_string(),
+        "is_active": True,
+        "question_pagination": 2,
+        "show_question_palette": False,
+        "bookmark": False,
+        "show_feedback_immediately": True,
+        "show_feedback_on_completion": False,
+        "omr": "OPTIONAL",
+    }
+    base.update(overrides)
+    return base
+
+
+def _put_settings(
+    client: TestClient,
+    headers: dict[str, str],
+    org_id: int,
+    payload: OrganizationSettingsPayload,
+) -> None:
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org_id}/settings",
+        headers=headers,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_create_test_applies_all_fixed_overrides(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Default org settings are all fixed; client-supplied test fields get overridden."""
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(),
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["time_limit"] == 60
+    assert data["question_pagination"] == 1
+    assert data["show_question_palette"] is True
+    assert data["bookmark"] is True
+    assert data["show_feedback_immediately"] is False
+    assert data["show_feedback_on_completion"] is False
+    assert data["omr"] == "NEVER"
+
+
+def test_create_test_flexible_passes_client_values_through(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    from app.tests.utils.organization_settings import make_current_user_org_flexible
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(),
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["time_limit"] == 15
+    assert data["question_pagination"] == 2
+    assert data["show_question_palette"] is False
+    assert data["bookmark"] is False
+    assert data["show_feedback_immediately"] is True
+    assert data["show_feedback_on_completion"] is False
+    assert data["omr"] == "OPTIONAL"
+
+
+def test_update_test_reapplies_fixed_overrides(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """On update, fixed features still win even if client submits different values."""
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    # Start flexible so we can create the test with specific non-default values.
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(),
+        headers=get_user_superadmin_token,
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    test_id = create_resp.json()["id"]
+    assert create_resp.json()["time_limit"] == 15
+
+    # Lock time_limit via fixed org settings and update the test.
+    locked = flexible_settings_payload()
+    locked.test_timings.mode = "fixed"
+    locked.test_timings.value.time_limit = 120
+    _put_settings(client, get_user_superadmin_token, org_id, locked)
+
+    update_payload = _create_test_payload(time_limit=45)
+    update_payload["locale"] = "en-US"
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+        json=update_payload,
+    )
+    assert update_resp.status_code == 200, update_resp.text
+    assert update_resp.json()["time_limit"] == 120
+
+
+def test_fixed_value_change_does_not_affect_existing_tests(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Changing a fixed org setting only affects *new* tests; existing rows keep their values."""
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(time_limit=42),
+        headers=get_user_superadmin_token,
+    )
+    test_id = create_resp.json()["id"]
+    assert create_resp.json()["time_limit"] == 42
+
+    # Don't lock — just change the flexible default; existing test must be untouched.
+    new_default = flexible_settings_payload()
+    new_default.test_timings.value.time_limit = 999
+    _put_settings(client, get_user_superadmin_token, org_id, new_default)
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert get_resp.status_code == 200
+    assert get_resp.json()["time_limit"] == 42

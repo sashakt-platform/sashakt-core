@@ -35,6 +35,7 @@ from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
     create_random_organization,
 )
+from app.tests.utils.organization_settings import make_current_user_org_flexible
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.user import (
@@ -52,6 +53,9 @@ from app.tests.utils.utils import (
 def setup_data(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> Any:
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     user_data = get_current_user_data(client, get_user_superadmin_token)
     user_id = user_data["id"]
 
@@ -6655,6 +6659,9 @@ def test_create_test_with_organization_id(
 def test_clone_test_with_organization_id(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
     user = create_random_user(db, organization_id=org_id)
@@ -7287,9 +7294,14 @@ def test_create_test_with_show_question_palette_true(
 
 
 def test_create_test_with_show_question_palette_false(
-    client: TestClient, get_user_superadmin_token: dict[str, str]
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Test creating a test with show_question_palette set to False."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     payload = {
         "name": random_lower_string(),
         "description": random_lower_string(),
@@ -7312,9 +7324,14 @@ def test_create_test_with_show_question_palette_false(
 
 
 def test_create_test_show_question_palette_defaults_to_false(
-    client: TestClient, get_user_superadmin_token: dict[str, str]
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Test that show_question_palette defaults to False when not specified."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     payload = {
         "name": random_lower_string(),
         "description": random_lower_string(),
@@ -7810,9 +7827,14 @@ def test_create_test_show_mark_for_review_true(
 
 
 def test_create_test_show_mark_for_review_false(
-    client: TestClient, get_user_superadmin_token: dict[str, str]
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Test creating a test with show_mark_for_review set to False."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     payload = {
         "name": random_lower_string(),
         "description": random_lower_string(),
@@ -7859,9 +7881,14 @@ def test_create_test_show_mark_for_review_defaults_to_true(
 
 
 def test_update_test_show_mark_for_review(
-    client: TestClient, get_user_superadmin_token: dict[str, str]
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Test updating show_mark_for_review from True to False."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     test_name = random_lower_string()
     test_link = random_lower_string()
     create_payload = {
@@ -7905,9 +7932,14 @@ def test_update_test_show_mark_for_review(
 
 
 def test_get_test_by_id_returns_show_mark_for_review(
-    client: TestClient, get_user_superadmin_token: dict[str, str]
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Test that GET /test/{id} returns the show_mark_for_review field."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
     payload = {
         "name": random_lower_string(),
         "description": random_lower_string(),
