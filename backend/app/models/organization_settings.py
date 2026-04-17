@@ -16,12 +16,18 @@ if TYPE_CHECKING:
 ORGANIZATION_SETTINGS_SCHEMA_VERSION = 1
 
 
-AnswerReviewValue = Literal[
+AnswerReviewOption = Literal[
     "off",
     "after_each_question",
     "end_of_test",
     "after_question_and_after_test",
 ]
+
+
+class AnswerReviewValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    default: AnswerReviewOption = "off"
 
 
 class TestTimingsValue(BaseModel):
@@ -65,7 +71,7 @@ class AnswerReviewSetting(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["fixed", "flexible"]
-    value: AnswerReviewValue = "off"
+    value: AnswerReviewValue = PydanticField(default_factory=AnswerReviewValue)
 
 
 class QuestionPaletteValue(BaseModel):
@@ -141,7 +147,10 @@ def default_organization_settings() -> OrganizationSettingsPayload:
         ),
         questions_per_page=QuestionsPerPageSetting(mode="fixed"),
         marking_scheme=MarkingSchemeSetting(mode="fixed"),
-        answer_review=AnswerReviewSetting(mode="fixed", value="off"),
+        answer_review=AnswerReviewSetting(
+            mode="fixed",
+            value=AnswerReviewValue(default="off"),
+        ),
         question_palette=QuestionPaletteSetting(
             mode="fixed",
             value=QuestionPaletteValue(palette=True, mark_for_review=True),
