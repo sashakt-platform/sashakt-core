@@ -295,7 +295,7 @@ class TestBase(SQLModel):
         default=True,
         title="Show Marks",
         description="Whether marks should be visible to the candidate during the test.",
-        sa_column_kwargs={"server_default": "false"},
+        sa_column_kwargs={"server_default": "true"},
     )
 
 
