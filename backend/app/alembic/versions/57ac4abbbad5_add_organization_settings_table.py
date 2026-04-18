@@ -11,13 +11,52 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from app.models.organization_settings import DEFAULT_ORGANIZATION_SETTINGS
 
 # revision identifiers, used by Alembic.
 revision = '57ac4abbbad5'
 down_revision = '4f2c8a6d9b11'
 branch_labels = None
 depends_on = None
+
+
+# Frozen snapshot of DEFAULT_ORGANIZATION_SETTINGS at the time this migration
+# was authored. Do not reference the live model constant — backfills must be
+# reproducible regardless of future schema/default changes.
+_FROZEN_DEFAULT_SETTINGS = {
+    "version": 1,
+    "test_timings": {
+        "mode": "fixed",
+        "value": {
+            "time_limit": 60,
+            "start_time": "09:00:00",
+            "end_time": "17:00:00",
+        },
+    },
+    "questions_per_page": {
+        "mode": "fixed",
+        "value": {"question_pagination": 1},
+    },
+    "marking_scheme": {
+        "mode": "fixed",
+        "value": {"correct": 1.0, "wrong": 0.0, "skipped": 0.0},
+    },
+    "answer_review": {
+        "mode": "fixed",
+        "value": {"default": "off"},
+    },
+    "question_palette": {
+        "mode": "fixed",
+        "value": {"default": True},
+    },
+    "mark_for_review": {
+        "mode": "fixed",
+        "value": {"default": True},
+    },
+    "omr_mode": {
+        "mode": "fixed",
+        "value": {"default": False},
+    },
+}
 
 
 def upgrade():
@@ -39,7 +78,7 @@ def upgrade():
     )
 
     # Backfill: one settings row per existing organization with defaults.
-    defaults_json = json.dumps(DEFAULT_ORGANIZATION_SETTINGS)
+    defaults_json = json.dumps(_FROZEN_DEFAULT_SETTINGS)
     op.execute(
         sa.text(
             """
