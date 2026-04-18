@@ -1,3 +1,4 @@
+import copy
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -169,13 +170,12 @@ def create_organization(
 ) -> Organization:
     organization = Organization.model_validate(organization_create)
     session.add(organization)
-    session.commit()
-    session.refresh(organization)
+    session.flush()
     assert organization.id is not None
     session.add(
         OrganizationSettings(
             organization_id=organization.id,
-            settings=DEFAULT_ORGANIZATION_SETTINGS,
+            settings=copy.deepcopy(DEFAULT_ORGANIZATION_SETTINGS),
         )
     )
     session.commit()

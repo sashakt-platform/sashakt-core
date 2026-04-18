@@ -53,13 +53,36 @@ def upgrade():
         ).bindparams(defaults=defaults_json)
     )
 
-    # Add the new permission and grant to super_admin + system_admin.
+    # Add new permissions: "any org" (super_admin only) and "own org" (super + system).
     op.execute(
         """
         INSERT INTO permission (name, description, is_active)
-        SELECT 'update_organization_settings', 'Update Organization Settings', true
+        SELECT 'update_organization_settings', 'Update Settings for Any Organization', true
         WHERE NOT EXISTS (
             SELECT 1 FROM permission WHERE name = 'update_organization_settings'
+        )
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO permission (name, description, is_active)
+        SELECT 'update_my_organization_settings', 'Update Settings for Own Organization', true
+        WHERE NOT EXISTS (
+            SELECT 1 FROM permission WHERE name = 'update_my_organization_settings'
+        )
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO role_permission (role_id, permission_id)
+        SELECT r.id, p.id
+        FROM role r
+        CROSS JOIN permission p
+        WHERE r.name = 'super_admin'
+        AND p.name = 'update_organization_settings'
+        AND NOT EXISTS (
+            SELECT 1 FROM role_permission rp
+            WHERE rp.role_id = r.id AND rp.permission_id = p.id
         )
         """
     )
@@ -70,7 +93,7 @@ def upgrade():
         FROM role r
         CROSS JOIN permission p
         WHERE r.name IN ('super_admin', 'system_admin')
-        AND p.name = 'update_organization_settings'
+        AND p.name = 'update_my_organization_settings'
         AND NOT EXISTS (
             SELECT 1 FROM role_permission rp
             WHERE rp.role_id = r.id AND rp.permission_id = p.id
@@ -83,13 +106,17 @@ def downgrade():
     op.execute(
         """
         DELETE FROM role_permission
-        WHERE permission_id = (
-            SELECT id FROM permission WHERE name = 'update_organization_settings'
+        WHERE permission_id IN (
+            SELECT id FROM permission
+            WHERE name IN ('update_organization_settings', 'update_my_organization_settings')
         )
         """
     )
     op.execute(
-        "DELETE FROM permission WHERE name = 'update_organization_settings'"
+        """
+        DELETE FROM permission
+        WHERE name IN ('update_organization_settings', 'update_my_organization_settings')
+        """
     )
     op.drop_index(
         op.f('ix_organization_settings_organization_id'),

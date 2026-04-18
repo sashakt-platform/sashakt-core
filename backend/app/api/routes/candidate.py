@@ -75,7 +75,7 @@ from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
 from app.services.organization_settings_mapper import (
     check_org_time_window,
-    runtime_disabled_overrides,
+    get_effective_test_flags,
 )
 from app.services.storage.gcs import GCSStorageService
 
@@ -1065,7 +1065,11 @@ def submit_test_for_qr_candidate(
     session.refresh(candidate_test)
 
     test = session.get(Test, candidate_test.test_id)
-    show_feedback = test.show_feedback_on_completion if test else False
+    show_feedback = (
+        bool(get_effective_test_flags(session, test)["show_feedback_on_completion"])
+        if test
+        else False
+    )
 
     answers_with_feedback = None
     if show_feedback:
@@ -1176,14 +1180,7 @@ def get_test_questions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    test_data = test.model_dump()
-    if test.organization_id is not None:
-        settings_payload = crud_settings.get_payload(
-            session=session, organization_id=test.organization_id
-        )
-        if settings_payload is not None:
-            test_data.update(runtime_disabled_overrides(settings_payload))
-
+    test_data = get_effective_test_flags(session, test)
     omr_mode = OMRMode(test_data.get("omr", OMRMode.NEVER))
 
     if omr_mode == OMRMode.NEVER:
@@ -1986,8 +1983,9 @@ def get_review_feedback(
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    show_instant_feedback = test.show_feedback_immediately
-    show_feedback_on_completion = test.show_feedback_on_completion
+    effective = get_effective_test_flags(session, test)
+    show_instant_feedback = bool(effective["show_feedback_immediately"])
+    show_feedback_on_completion = bool(effective["show_feedback_on_completion"])
 
     if candidate_test.end_time is None and not show_instant_feedback:
         raise HTTPException(

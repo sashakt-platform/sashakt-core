@@ -1,3 +1,5 @@
+import copy
+
 from sqlmodel import Session, create_engine, select
 
 from app import crud
@@ -48,16 +50,16 @@ def init_db(session: Session) -> None:
 
         initial_organization = Organization(name="T4D", description="T4D Organization")
         session.add(initial_organization)
-        session.commit()
-        session.refresh(initial_organization)
+        session.flush()
         assert initial_organization.id is not None
         session.add(
             OrganizationSettings(
                 organization_id=initial_organization.id,
-                settings=DEFAULT_ORGANIZATION_SETTINGS,
+                settings=copy.deepcopy(DEFAULT_ORGANIZATION_SETTINGS),
             )
         )
         session.commit()
+        session.refresh(initial_organization)
 
         super_admin_role = session.exec(
             select(Role.id).where(Role.name == super_admin.name)

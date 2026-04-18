@@ -244,8 +244,8 @@ def test_put_settings_forbidden_for_low_privilege_roles(
     get_user_testadmin_token: dict[str, str],
     get_user_candidate_token: dict[str, str],
 ) -> None:
-    # state_admin / test_admin / candidate all lack update_organization_settings.
-    # Target any org; permission check fires before scope check.
+    # state_admin / test_admin / candidate have neither update permission
+    # (neither "any org" nor "own org"), so any target yields 403.
     target_org_id = _get_org_id(client, get_user_superadmin_token)
     for headers in (
         get_user_stateadmin_token,
@@ -257,7 +257,35 @@ def test_put_settings_forbidden_for_low_privilege_roles(
             headers=headers,
             json=_valid_payload(),
         )
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_put_settings_super_admin_uses_any_org_permission(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    """super_admin has update_organization_settings; system_admin does not.
+
+    Confirms the permission split: super can edit another org via the
+    'any-org' permission; system_admin is blocked (scope check) since they
+    only hold 'update_my_organization_settings'.
+    """
+    target_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    sa = client.put(
+        f"{settings.API_V1_STR}/organization/{target_org_id}/settings",
+        headers=get_user_superadmin_token,
+        json=_valid_payload(),
+    )
+    assert sa.status_code == 200
+
+    sys_other = client.put(
+        f"{settings.API_V1_STR}/organization/{_get_org_id(client, get_user_superadmin_token)}/settings",
+        headers=get_user_systemadmin_token,
+        json=_valid_payload(),
+    )
+    assert sys_other.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_put_settings_invalid_mode_returns_422(
@@ -675,6 +703,7 @@ def _create_startable_test(
             {"id": 2, "key": "B", "value": "y"},
         ],
         correct_answer=[1],
+        is_mandatory=False,
     )
     db.add(revision)
     db.flush()
@@ -894,6 +923,97 @@ def test_runtime_answer_review_disabled(
     body = _start_and_fetch_candidate_test(client, test_data["id"])
     assert body["show_feedback_immediately"] is False
     assert body["show_feedback_on_completion"] is False
+
+
+def test_submit_test_honors_disabled_answer_review(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Submitting a test whose test row says feedback-on-completion=True must NOT
+    leak answers_with_feedback when the org has answer review fixed-off."""
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(
+            show_feedback_immediately=True, show_feedback_on_completion=True
+        ),
+    )
+    assert test_data["show_feedback_on_completion"] is True
+
+    start_resp = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test_data["id"], "device_info": "test"},
+    )
+    assert start_resp.status_code == 200
+    start = start_resp.json()
+
+    # Now disable answer review at org level.
+    disabled = flexible_settings_payload()
+    disabled.answer_review.mode = "fixed"
+    disabled.answer_review.value.default = "off"
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    submit_resp = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{start['candidate_test_id']}",
+        params={"candidate_uuid": start["candidate_uuid"]},
+    )
+    assert submit_resp.status_code == 200
+    assert submit_resp.json().get("answers") is None
+
+
+def test_review_feedback_blocked_when_disabled_by_org(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """GET /review-feedback returns 403 when org has answer review fixed-off,
+    even if the test row had the flags enabled."""
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(
+            show_feedback_immediately=True, show_feedback_on_completion=True
+        ),
+    )
+
+    start_resp = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_id": test_data["id"], "device_info": "test"},
+    )
+    start = start_resp.json()
+
+    disabled = flexible_settings_payload()
+    disabled.answer_review.mode = "fixed"
+    disabled.answer_review.value.default = "off"
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    # During attempt (end_time=None) → rejected because instant feedback is forced off.
+    review_resp = client.get(
+        f"{settings.API_V1_STR}/candidate/{start['candidate_test_id']}/review-feedback",
+        params={"candidate_uuid": start["candidate_uuid"]},
+    )
+    assert review_resp.status_code == 403
 
 
 def test_runtime_fixed_on_does_not_override_existing_test(

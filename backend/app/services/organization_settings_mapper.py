@@ -1,11 +1,14 @@
 from datetime import datetime, time
 from typing import Any
 
+from sqlmodel import Session
+
+from app.crud import organization_settings as crud_settings
 from app.models.organization_settings import (
     AnswerReviewOption,
     OrganizationSettingsPayload,
 )
-from app.models.test import OMRMode
+from app.models.test import OMRMode, Test
 
 ANSWER_REVIEW_TO_FEEDBACK_FLAGS: dict[AnswerReviewOption, tuple[bool, bool]] = {
     "off": (False, False),
@@ -69,6 +72,26 @@ def check_org_time_window(
     if window_start <= now_time <= window_end:
         return None
     return (window_start, window_end)
+
+
+def get_effective_test_flags(session: Session, test: Test) -> dict[str, Any]:
+    """Return `test.model_dump()` merged with the org's runtime disabled-feature
+    overrides.
+
+    Use this anywhere a candidate-facing decision depends on feature flags
+    (`show_feedback_*`, `omr`, `show_question_palette`, `bookmark`) so that an
+    org's decision to turn a feature off is honoured regardless of the test row.
+    """
+    test_data: dict[str, Any] = test.model_dump()
+    if test.organization_id is None:
+        return test_data
+    settings_payload = crud_settings.get_payload(
+        session=session, organization_id=test.organization_id
+    )
+    if settings_payload is None:
+        return test_data
+    test_data.update(runtime_disabled_overrides(settings_payload))
+    return test_data
 
 
 def runtime_disabled_overrides(
