@@ -9129,6 +9129,149 @@ def test_question_level_marking_scheme_applied_on_questions(
         assert question_data["marking_scheme"] == question_level_scheme
 
 
+def test_show_marks_false_hides_marking_scheme_from_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """When show_marks=False, marking_scheme must be None in the candidate question payload."""
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+        show_marks=False,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "show_marks false device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert isinstance(data["question_revisions"], list)
+    assert len(data["question_revisions"]) > 0
+    for question_data in data["question_revisions"]:
+        assert question_data["marking_scheme"] is None
+
+
+def test_show_marks_true_exposes_marking_scheme_to_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """When show_marks=True, marking_scheme must be present in the candidate question payload."""
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    expected_scheme = {"correct": 5, "wrong": -2, "skipped": 0}
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        marking_scheme=expected_scheme,
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+        show_marks=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    payload = {"test_id": test.id, "device_info": "show_marks true device"}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert isinstance(data["question_revisions"], list)
+    assert len(data["question_revisions"]) > 0
+    for question_data in data["question_revisions"]:
+        assert question_data["marking_scheme"] == expected_scheme
+
+
 def test_submitted_candidate_with_end_time(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
