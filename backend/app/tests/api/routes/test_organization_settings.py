@@ -292,6 +292,41 @@ def test_put_settings_invalid_answer_review_value_returns_422(
     assert response.status_code == 422
 
 
+def test_put_settings_rejects_start_time_after_end_time(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    bad_payload = default_organization_settings().model_dump(mode="json")
+    bad_payload["test_timings"]["value"]["start_time"] = "17:00:00"
+    bad_payload["test_timings"]["value"]["end_time"] = "09:00:00"
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": bad_payload},
+    )
+    assert response.status_code == 422
+    assert "start_time must be earlier than end_time" in response.text
+
+
+def test_put_settings_rejects_equal_start_and_end_time(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    bad_payload = default_organization_settings().model_dump(mode="json")
+    bad_payload["test_timings"]["value"]["start_time"] = "12:00:00"
+    bad_payload["test_timings"]["value"]["end_time"] = "12:00:00"
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": bad_payload},
+    )
+    assert response.status_code == 422
+
+
 def test_put_settings_extra_field_rejected_422(
     client: TestClient,
     get_user_systemadmin_token: dict[str, str],
@@ -401,6 +436,38 @@ def test_mapper_omr_fixed_false_maps_to_never() -> None:
     payload.omr_mode = OMRModeSetting(mode="fixed", value=OMRModeValue(default=False))
     overrides = fixed_overrides_for_test(payload)
     assert overrides["omr"] == OMRMode.NEVER
+
+
+def test_check_org_time_window() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.services.organization_settings_mapper import check_org_time_window
+
+    tz = ZoneInfo("Asia/Kolkata")
+    payload = default_organization_settings()
+    payload.test_timings.value.start_time = time(9, 0)
+    payload.test_timings.value.end_time = time(17, 0)
+
+    assert (
+        check_org_time_window(payload, datetime(2026, 5, 1, 12, 0, tzinfo=tz)) is None
+    )
+    assert check_org_time_window(payload, datetime(2026, 5, 1, 9, 0, tzinfo=tz)) is None
+    assert (
+        check_org_time_window(payload, datetime(2026, 5, 1, 17, 0, tzinfo=tz)) is None
+    )
+
+    outside = check_org_time_window(payload, datetime(2026, 5, 1, 7, 30, tzinfo=tz))
+    assert outside == (time(9, 0), time(17, 0))
+
+    # Unconfigured window (either bound null) → no enforcement
+    unconfigured = default_organization_settings()
+    unconfigured.test_timings.value.start_time = None
+    unconfigured.test_timings.value.end_time = time(17, 0)
+    assert (
+        check_org_time_window(unconfigured, datetime(2026, 5, 1, 7, 30, tzinfo=tz))
+        is None
+    )
 
 
 # ---------- End-to-end: create/update test with org settings ----------

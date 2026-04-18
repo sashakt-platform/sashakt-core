@@ -1,10 +1,11 @@
 from datetime import datetime, time
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pydantic import Field as PydanticField
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
+from typing_extensions import Self
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.utils import MarkingScheme
@@ -36,6 +37,16 @@ class TestTimingsValue(BaseModel):
     time_limit: int | None = PydanticField(default=None, ge=1)
     start_time: time | None = None
     end_time: time | None = None
+
+    @model_validator(mode="after")
+    def _check_window_order(self) -> Self:
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and self.start_time >= self.end_time
+        ):
+            raise ValueError("start_time must be earlier than end_time")
+        return self
 
 
 class TestTimingsSetting(BaseModel):

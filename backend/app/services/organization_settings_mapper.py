@@ -1,3 +1,4 @@
+from datetime import datetime, time
 from typing import Any
 
 from app.models.organization_settings import (
@@ -51,6 +52,23 @@ def fixed_overrides_for_test(
         )
 
     return overrides
+
+
+def check_org_time_window(
+    settings: OrganizationSettingsPayload, current_time: datetime
+) -> tuple[time, time] | None:
+    """Return the (start, end) bounds when current_time falls outside the org's
+    time-of-day window. Returns None if the window is unconfigured or current
+    time is inside the window.
+    """
+    window_start = settings.test_timings.value.start_time
+    window_end = settings.test_timings.value.end_time
+    if window_start is None or window_end is None:
+        return None
+    now_time = current_time.time()
+    if window_start <= now_time <= window_end:
+        return None
+    return (window_start, window_end)
 
 
 def runtime_disabled_overrides(
