@@ -5,6 +5,8 @@ from app.crud import organization_settings as crud_settings
 from app.models.organization_settings import (
     AnswerReviewSetting,
     AnswerReviewValue,
+    MarkForReviewSetting,
+    MarkForReviewValue,
     MarkingSchemeSetting,
     OMRModeSetting,
     OMRModeValue,
@@ -35,7 +37,11 @@ def flexible_settings_payload() -> OrganizationSettingsPayload:
         ),
         question_palette=QuestionPaletteSetting(
             mode="flexible",
-            value=QuestionPaletteValue(palette=True, mark_for_review=True),
+            value=QuestionPaletteValue(default=True),
+        ),
+        mark_for_review=MarkForReviewSetting(
+            mode="flexible",
+            value=MarkForReviewValue(default=True),
         ),
         omr_mode=OMRModeSetting(mode="flexible", value=OMRModeValue(default=False)),
     )

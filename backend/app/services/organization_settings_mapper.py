@@ -46,8 +46,10 @@ def fixed_overrides_for_test(
         overrides["show_feedback_on_completion"] = on_completion
 
     if settings.question_palette.mode == "fixed":
-        overrides["show_question_palette"] = settings.question_palette.value.palette
-        overrides["bookmark"] = settings.question_palette.value.mark_for_review
+        overrides["show_question_palette"] = settings.question_palette.value.default
+
+    if settings.mark_for_review.mode == "fixed":
+        overrides["bookmark"] = settings.mark_for_review.value.default
 
     if settings.omr_mode.mode == "fixed":
         overrides["omr"] = (
@@ -109,11 +111,17 @@ def runtime_disabled_overrides(
     if settings.omr_mode.mode == "fixed" and settings.omr_mode.value.default is False:
         overrides["omr"] = OMRMode.NEVER
 
-    if settings.question_palette.mode == "fixed":
-        if settings.question_palette.value.palette is False:
-            overrides["show_question_palette"] = False
-        if settings.question_palette.value.mark_for_review is False:
-            overrides["bookmark"] = False
+    if (
+        settings.question_palette.mode == "fixed"
+        and settings.question_palette.value.default is False
+    ):
+        overrides["show_question_palette"] = False
+
+    if (
+        settings.mark_for_review.mode == "fixed"
+        and settings.mark_for_review.value.default is False
+    ):
+        overrides["bookmark"] = False
 
     if (
         settings.answer_review.mode == "fixed"

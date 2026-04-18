@@ -42,8 +42,9 @@ def test_default_settings_match_schema() -> None:
     assert payload.answer_review.mode == "fixed"
     assert payload.answer_review.value.default == "off"
     assert payload.question_palette.mode == "fixed"
-    assert payload.question_palette.value.palette is True
-    assert payload.question_palette.value.mark_for_review is True
+    assert payload.question_palette.value.default is True
+    assert payload.mark_for_review.mode == "fixed"
+    assert payload.mark_for_review.value.default is True
     assert payload.omr_mode.mode == "fixed"
     assert payload.omr_mode.value.default is False
 
@@ -378,6 +379,8 @@ def test_mapper_fixed_features_produce_overrides() -> None:
     from app.models.organization_settings import (
         AnswerReviewSetting,
         AnswerReviewValue,
+        MarkForReviewSetting,
+        MarkForReviewValue,
         MarkingSchemeSetting,
         OMRModeSetting,
         OMRModeValue,
@@ -408,7 +411,10 @@ def test_mapper_fixed_features_produce_overrides() -> None:
         ),
         question_palette=QuestionPaletteSetting(
             mode="fixed",
-            value=QuestionPaletteValue(palette=True, mark_for_review=False),
+            value=QuestionPaletteValue(default=True),
+        ),
+        mark_for_review=MarkForReviewSetting(
+            mode="fixed", value=MarkForReviewValue(default=False)
         ),
         omr_mode=OMRModeSetting(mode="fixed", value=OMRModeValue(default=True)),
     )
@@ -879,15 +885,48 @@ def test_runtime_question_palette_disabled(
     assert test_data["show_question_palette"] is True
     assert test_data["bookmark"] is True
 
+    # Disabling question_palette must NOT affect bookmark (independent features now).
     disabled = flexible_settings_payload()
     disabled.question_palette.mode = "fixed"
-    disabled.question_palette.value.palette = False
-    disabled.question_palette.value.mark_for_review = False
+    disabled.question_palette.value.default = False
     _put_settings(client, get_user_superadmin_token, org_id, disabled)
 
     body = _start_and_fetch_candidate_test(client, test_data["id"])
     assert body["show_question_palette"] is False
+    assert body["bookmark"] is True
+
+
+def test_runtime_mark_for_review_disabled(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    from app.tests.utils.organization_settings import (
+        flexible_settings_payload,
+        make_current_user_org_flexible,
+    )
+
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(show_question_palette=True, bookmark=True),
+    )
+    assert test_data["bookmark"] is True
+
+    disabled = flexible_settings_payload()
+    disabled.mark_for_review.mode = "fixed"
+    disabled.mark_for_review.value.default = False
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    body = _start_and_fetch_candidate_test(client, test_data["id"])
     assert body["bookmark"] is False
+    # Question palette stays untouched.
+    assert body["show_question_palette"] is True
 
 
 def test_runtime_answer_review_disabled(

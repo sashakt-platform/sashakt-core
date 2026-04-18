@@ -88,21 +88,39 @@ class AnswerReviewSetting(BaseModel):
 class QuestionPaletteValue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    palette: bool = True
-    mark_for_review: bool = True
+    default: bool = True
 
 
 class QuestionPaletteSetting(BaseModel):
     """
-    - fixed + value with both booleans False: feature effectively disabled
-    - fixed + value: feature locked to these values, hidden from test config
-    - flexible + value: shown in test config with these defaults
+    - fixed + value.default=True: palette always on, hidden from test config
+    - fixed + value.default=False: palette disabled
+    - flexible + value.default: shown in test config with this default
     """
 
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["fixed", "flexible"]
     value: QuestionPaletteValue = PydanticField(default_factory=QuestionPaletteValue)
+
+
+class MarkForReviewValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    default: bool = True
+
+
+class MarkForReviewSetting(BaseModel):
+    """
+    - fixed + value.default=True: mark-for-review always on, hidden from test config
+    - fixed + value.default=False: mark-for-review disabled
+    - flexible + value.default: shown in test config with this default
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["fixed", "flexible"]
+    value: MarkForReviewValue = PydanticField(default_factory=MarkForReviewValue)
 
 
 class OMRModeValue(BaseModel):
@@ -133,6 +151,7 @@ class OrganizationSettingsPayload(BaseModel):
     marking_scheme: MarkingSchemeSetting
     answer_review: AnswerReviewSetting
     question_palette: QuestionPaletteSetting
+    mark_for_review: MarkForReviewSetting
     omr_mode: OMRModeSetting
 
     @field_validator("version")
@@ -164,7 +183,11 @@ def default_organization_settings() -> OrganizationSettingsPayload:
         ),
         question_palette=QuestionPaletteSetting(
             mode="fixed",
-            value=QuestionPaletteValue(palette=True, mark_for_review=True),
+            value=QuestionPaletteValue(default=True),
+        ),
+        mark_for_review=MarkForReviewSetting(
+            mode="fixed",
+            value=MarkForReviewValue(default=True),
         ),
         omr_mode=OMRModeSetting(
             mode="fixed",
