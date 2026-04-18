@@ -669,6 +669,7 @@ def _create_startable_test(
     question = Question(organization_id=org_id)
     db.add(question)
     db.flush()
+    assert question.id is not None
     revision = QuestionRevision(
         question_id=question.id,
         created_by_id=user_id,
@@ -683,6 +684,7 @@ def _create_startable_test(
     )
     db.add(revision)
     db.flush()
+    assert revision.id is not None
     question.last_revision_id = revision.id
     db.add(TestQuestion(test_id=data["id"], question_revision_id=revision.id))
     db.commit()
