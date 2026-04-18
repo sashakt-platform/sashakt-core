@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
@@ -10,6 +10,8 @@ from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.organization import Organization
 from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme
+
+TestStatus = Literal["In Progress", "Completed", "Scheduled"]
 
 
 class MarksLevelEnum(str, enum.Enum):
@@ -409,6 +411,10 @@ class TestPublic(TestBase):
     organization_id: int | None = Field(
         title="ID of the organization",
         description="ID of the organization to which the test belongs.",
+    )
+    status: TestStatus = Field(
+        title="Status",
+        description="Current status of the test.",
     )
 
 

@@ -54,6 +54,7 @@ from app.models.test import (
     TagRandomCreate,
     TagRandomPublic,
     TestDistrict,
+    TestStatus,
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
@@ -296,6 +297,17 @@ def get_total_questions(test: Test, explicit_question_count: int) -> int:
     return total_questions
 
 
+def _get_test_status(
+    test: Test,
+) -> TestStatus:
+    now = get_current_time()
+    if test.start_time is not None and now < test.start_time:
+        return "Scheduled"
+    if test.end_time is not None and now > test.end_time:
+        return "Completed"
+    return "In Progress"
+
+
 def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
     test_id = get_persisted_test_id(test)
     tags = session.exec(
@@ -354,6 +366,7 @@ def build_test_public_response(session: SessionDep, test: Test) -> TestPublic:
         districts=districts,
         total_questions=get_total_questions(test, len(question_revisions)),
         random_tag_counts=random_tag_public,
+        status=_get_test_status(test),
     )
 
 
