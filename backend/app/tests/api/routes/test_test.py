@@ -7979,13 +7979,24 @@ def test_get_test_status(
     now = get_current_time()
 
     # No start/end times → In Progress
-    test_in_progress = Test(
+    test_always_in_progress = Test(
         name=random_lower_string(),
         description=random_lower_string(),
         created_by_id=user.id,
         link=random_lower_string(),
         no_of_random_questions=1,
         organization_id=org_id,
+    )
+    # Both start/end times → In Progress
+    test_current_in_progress = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+        start_time=now - timedelta(days=1),
+        end_time=now + timedelta(days=1),
     )
     # start_time in the future → Scheduled
     test_scheduled = Test(
@@ -8007,13 +8018,32 @@ def test_get_test_status(
         organization_id=org_id,
         end_time=now - timedelta(days=1),
     )
-    db.add_all([test_in_progress, test_scheduled, test_completed])
+    test_is_template = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+        is_template=True,
+    )
+    db.add_all(
+        [
+            test_always_in_progress,
+            test_current_in_progress,
+            test_scheduled,
+            test_completed,
+            test_is_template,
+        ]
+    )
     db.commit()
 
     for test, expected_status in [
-        (test_in_progress, "In Progress"),
+        (test_always_in_progress, "In Progress"),
+        (test_current_in_progress, "In Progress"),
         (test_scheduled, "Scheduled"),
         (test_completed, "Completed"),
+        (test_is_template, None),
     ]:
         response = client.get(
             f"{settings.API_V1_STR}/test/{test.id}",

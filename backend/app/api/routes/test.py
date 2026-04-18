@@ -300,6 +300,8 @@ def get_total_questions(test: Test, explicit_question_count: int) -> int:
 def _get_test_status(
     test: Test,
 ) -> TestStatus:
+    if test.is_template:
+        return None
     now = get_current_time()
     if test.start_time is not None and now < test.start_time:
         return "Scheduled"
