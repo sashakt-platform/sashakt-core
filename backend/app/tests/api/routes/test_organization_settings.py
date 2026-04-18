@@ -1,5 +1,6 @@
-from datetime import time
+from datetime import datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -7,12 +8,38 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
+from app.models.organization import Organization
 from app.models.organization_settings import (
     DEFAULT_ORGANIZATION_SETTINGS,
     ORGANIZATION_SETTINGS_SCHEMA_VERSION,
+    AnswerReviewSetting,
+    AnswerReviewValue,
+    MarkForReviewSetting,
+    MarkForReviewValue,
+    MarkingSchemeSetting,
+    OMRModeSetting,
+    OMRModeValue,
     OrganizationSettings,
     OrganizationSettingsPayload,
+    QuestionPaletteSetting,
+    QuestionPaletteValue,
+    QuestionsPerPageSetting,
+    QuestionsPerPageValue,
+    TestTimingsSetting,
+    TestTimingsValue,
     default_organization_settings,
+)
+from app.models.question import Question, QuestionRevision, QuestionType
+from app.models.test import OMRMode, TestQuestion
+from app.models.utils import MarkingScheme
+from app.services.organization_settings_mapper import (
+    ANSWER_REVIEW_TO_FEEDBACK_FLAGS,
+    check_org_time_window,
+    fixed_overrides_for_test,
+)
+from app.tests.utils.organization_settings import (
+    flexible_settings_payload,
+    make_current_user_org_flexible,
 )
 from app.tests.utils.user import get_current_user_data
 from app.tests.utils.utils import random_lower_string
@@ -105,8 +132,6 @@ def test_get_settings_returns_defaults_when_row_missing(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """get_or_create: settings row is lazily created with defaults if missing."""
-    from app.models.organization import Organization
-
     org = Organization(name=random_lower_string())
     db.add(org)
     db.commit()
@@ -376,25 +401,6 @@ def test_put_settings_extra_field_rejected_422(
 
 
 def test_mapper_fixed_features_produce_overrides() -> None:
-    from app.models.organization_settings import (
-        AnswerReviewSetting,
-        AnswerReviewValue,
-        MarkForReviewSetting,
-        MarkForReviewValue,
-        MarkingSchemeSetting,
-        OMRModeSetting,
-        OMRModeValue,
-        QuestionPaletteSetting,
-        QuestionPaletteValue,
-        QuestionsPerPageSetting,
-        QuestionsPerPageValue,
-        TestTimingsSetting,
-        TestTimingsValue,
-    )
-    from app.models.test import OMRMode
-    from app.models.utils import MarkingScheme
-    from app.services.organization_settings_mapper import fixed_overrides_for_test
-
     payload = OrganizationSettingsPayload(
         test_timings=TestTimingsSetting(
             mode="fixed", value=TestTimingsValue(time_limit=90)
@@ -431,23 +437,11 @@ def test_mapper_fixed_features_produce_overrides() -> None:
 
 
 def test_mapper_flexible_features_produce_no_overrides() -> None:
-    from app.services.organization_settings_mapper import fixed_overrides_for_test
-    from app.tests.utils.organization_settings import flexible_settings_payload
-
     overrides = fixed_overrides_for_test(flexible_settings_payload())
     assert overrides == {}
 
 
 def test_mapper_answer_review_mapping() -> None:
-    from app.models.organization_settings import (
-        AnswerReviewSetting,
-        AnswerReviewValue,
-    )
-    from app.services.organization_settings_mapper import (
-        ANSWER_REVIEW_TO_FEEDBACK_FLAGS,
-        fixed_overrides_for_test,
-    )
-
     for option, (
         expected_immediately,
         expected_on_completion,
@@ -462,10 +456,6 @@ def test_mapper_answer_review_mapping() -> None:
 
 
 def test_mapper_omr_fixed_false_maps_to_never() -> None:
-    from app.models.organization_settings import OMRModeSetting, OMRModeValue
-    from app.models.test import OMRMode
-    from app.services.organization_settings_mapper import fixed_overrides_for_test
-
     payload = default_organization_settings()
     payload.omr_mode = OMRModeSetting(mode="fixed", value=OMRModeValue(default=False))
     overrides = fixed_overrides_for_test(payload)
@@ -473,11 +463,6 @@ def test_mapper_omr_fixed_false_maps_to_never() -> None:
 
 
 def test_check_org_time_window() -> None:
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from app.services.organization_settings_mapper import check_org_time_window
-
     tz = ZoneInfo("Asia/Kolkata")
     payload = default_organization_settings()
     payload.test_timings.value.start_time = time(9, 0)
@@ -575,8 +560,6 @@ def test_create_test_flexible_passes_client_values_through(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    from app.tests.utils.organization_settings import make_current_user_org_flexible
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -602,11 +585,6 @@ def test_update_test_reapplies_fixed_overrides(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """On update, fixed features still win even if client submits different values."""
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     # Start flexible so we can create the test with specific non-default values.
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
@@ -645,11 +623,6 @@ def test_fixed_value_change_does_not_affect_existing_tests(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Changing a fixed org setting only affects *new* tests; existing rows keep their values."""
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -686,9 +659,6 @@ def _create_startable_test(
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create a test via POST + attach one question so the candidate flow has work to do."""
-    from app.models.question import Question, QuestionRevision, QuestionType
-    from app.models.test import TestQuestion
-
     body = _create_test_payload() if payload is None else payload
     response = client.post(f"{settings.API_V1_STR}/test/", headers=headers, json=body)
     assert response.status_code == 200, response.text
@@ -725,14 +695,6 @@ def test_start_test_rejected_outside_time_window(
     get_user_superadmin_token: dict[str, str],
     monkeypatch: Any,
 ) -> None:
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -764,14 +726,6 @@ def test_start_test_allowed_inside_time_window(
     get_user_superadmin_token: dict[str, str],
     monkeypatch: Any,
 ) -> None:
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -799,8 +753,6 @@ def test_time_window_skipped_when_not_configured(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Flexible settings with null start/end time: no enforcement."""
-    from app.tests.utils.organization_settings import make_current_user_org_flexible
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -835,11 +787,6 @@ def test_runtime_omr_disabled_overrides_existing_test(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """An existing test with omr=ALWAYS must appear as omr=NEVER once org disables OMR."""
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -867,11 +814,6 @@ def test_runtime_question_palette_disabled(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -901,11 +843,6 @@ def test_runtime_mark_for_review_disabled(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -934,11 +871,6 @@ def test_runtime_answer_review_disabled(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -971,11 +903,6 @@ def test_submit_test_honors_disabled_answer_review(
 ) -> None:
     """Submitting a test whose test row says feedback-on-completion=True must NOT
     leak answers_with_feedback when the org has answer review fixed-off."""
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -1018,11 +945,6 @@ def test_review_feedback_blocked_when_disabled_by_org(
 ) -> None:
     """GET /review-feedback returns 403 when org has answer review fixed-off,
     even if the test row had the flags enabled."""
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
@@ -1061,11 +983,6 @@ def test_runtime_fixed_on_does_not_override_existing_test(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Fixed-on (enabling) should NOT force existing tests to the new value — only new tests."""
-    from app.tests.utils.organization_settings import (
-        flexible_settings_payload,
-        make_current_user_org_flexible,
-    )
-
     make_current_user_org_flexible(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
