@@ -58,7 +58,10 @@ from app.models.test import (
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
-from app.services.organization_settings_mapper import fixed_overrides_for_test
+from app.services.organization_settings_mapper import (
+    fixed_overrides_for_test,
+    get_effective_test_flags,
+)
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -644,8 +647,13 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
                 fields=fields_public,
             )
 
+    # Apply org-settings runtime overrides so a feature the admin has since
+    # disabled (e.g. mark_for_review) is reflected in the landing payload even
+    # when the test row was created before the admin's change.
+    test_data = get_effective_test_flags(session, test)
+
     return TestPublicLimited(
-        **test.model_dump(),
+        **test_data,
         total_questions=total_questions,
         question_sets=build_question_set_summary_publics(
             test_questions=test_questions,

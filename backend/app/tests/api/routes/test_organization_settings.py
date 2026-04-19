@@ -811,6 +811,41 @@ def test_runtime_omr_disabled_overrides_existing_test(
     assert body["omr"] == "NEVER"
 
 
+def test_public_landing_reflects_disabled_feature(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """GET /test/public/{slug} must apply runtime disabled overrides so a
+    landing page for an existing test reflects the admin's current config."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(omr="ALWAYS", bookmark=True),
+    )
+    assert test_data["omr"] == "ALWAYS"
+    assert test_data["bookmark"] is True
+
+    # Disable OMR and mark-for-review at org level.
+    disabled = flexible_settings_payload()
+    disabled.omr_mode.mode = "fixed"
+    disabled.omr_mode.value.default = False
+    disabled.mark_for_review.mode = "fixed"
+    disabled.mark_for_review.value.default = False
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_data['link']}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["omr"] == "NEVER"
+    assert body["bookmark"] is False
+
+
 def test_runtime_question_palette_disabled(
     client: TestClient,
     db: SessionDep,
