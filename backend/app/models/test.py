@@ -291,6 +291,12 @@ class TestBase(SQLModel):
         nullable=True,
         description="Form to be filled when candidate_profile is enabled",
     )
+    show_marks: bool = Field(
+        default=True,
+        title="Show Marks",
+        description="Whether marks should be visible to the candidate during the test.",
+        sa_column_kwargs={"server_default": "true"},
+    )
 
 
 class Test(TestBase, table=True):
