@@ -594,14 +594,14 @@ def start_test_for_candidate(
     """
     # Resolve test and admin from the UUID — TestLink takes precedence over legacy Test.link
     test_link = session.exec(
-        select(TestLink).where(TestLink.uuid == start_test_request.test_uuid)
+        select(TestLink).where(TestLink.uuid == start_test_request.test_link_uuid)
     ).first()
     if test_link:
         test = session.get(Test, test_link.test_id)
         admin_id: int = test_link.admin_id
     else:
         test = session.exec(
-            select(Test).where(Test.link == start_test_request.test_uuid)
+            select(Test).where(Test.link == start_test_request.test_link_uuid)
         ).first()
         admin_id = test.created_by_id if test else 0
 
