@@ -1,7 +1,7 @@
 """add_test_link_table
 
 Revision ID: efc4eeba0daf
-Revises: 4f2c8a6d9b11
+Revises: f6b6c797b24e
 Create Date: 2026-04-16 12:28:13.043886
 
 """
@@ -11,7 +11,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = 'efc4eeba0daf'
-down_revision = 'a640a03f877a'
+down_revision = 'f6b6c797b24e'
 branch_labels = None
 depends_on = None
 
