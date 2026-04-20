@@ -275,15 +275,20 @@ def build_candidate_question_payload(
         question_set = question_sets_by_id.get(
             question_set_id_by_revision.get(question_revision_id) or -1
         )
-        safe_question = build_candidate_safe_question(
-            question_revision,
-            hide_question_text=hide_question_text,
-            marking_scheme=get_effective_marking_scheme(
+        effective_marking_scheme = (
+            get_effective_marking_scheme(
                 test,
                 question_revision,
                 question_set=question_set,
                 sectioned=sectioned,
-            ),
+            )
+            if test.show_marks
+            else None
+        )
+        safe_question = build_candidate_safe_question(
+            question_revision,
+            hide_question_text=hide_question_text,
+            marking_scheme=effective_marking_scheme,
             gcs_service=gcs_service,
         )
         candidate_questions.append(safe_question)
@@ -315,7 +320,7 @@ def build_candidate_question_payload(
                 description=question_set.description,
                 display_order=question_set.display_order,
                 max_questions_allowed_to_attempt=question_set.max_questions_allowed_to_attempt,
-                marking_scheme=question_set.marking_scheme,
+                marking_scheme=question_set.marking_scheme if test.show_marks else None,
                 question_revisions=[
                     candidate_questions_by_id[question_id]
                     for question_id in question_ids
@@ -336,7 +341,7 @@ def build_candidate_question_payload(
                 description=None,
                 display_order=fallback_display_order + orphan_index,
                 max_questions_allowed_to_attempt=len(question_ids),
-                marking_scheme=test.marking_scheme,
+                marking_scheme=test.marking_scheme if test.show_marks else None,
                 question_revisions=[
                     candidate_questions_by_id[question_id]
                     for question_id in question_ids
