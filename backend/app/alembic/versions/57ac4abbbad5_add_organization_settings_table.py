@@ -1,7 +1,7 @@
 """add organization_settings table
 
 Revision ID: 57ac4abbbad5
-Revises: 4f2c8a6d9b11
+Revises: f6b6c797b24e
 Create Date: 2026-04-17 19:04:28.862966
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '57ac4abbbad5'
-down_revision = '4f2c8a6d9b11'
+down_revision = 'f6b6c797b24e'
 branch_labels = None
 depends_on = None
 
