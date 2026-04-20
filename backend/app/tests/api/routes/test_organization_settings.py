@@ -636,8 +636,9 @@ def test_fixed_value_change_does_not_affect_existing_tests(
     test_id = create_resp.json()["id"]
     assert create_resp.json()["time_limit"] == 42
 
-    # Don't lock — just change the flexible default; existing test must be untouched.
+    # Lock test_timings as fixed with a different value; existing test must keep 42.
     new_default = flexible_settings_payload()
+    new_default.test_timings.mode = "fixed"
     new_default.test_timings.value.time_limit = 999
     _put_settings(client, get_user_superadmin_token, org_id, new_default)
 
