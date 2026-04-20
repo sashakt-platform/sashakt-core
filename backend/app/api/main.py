@@ -10,6 +10,7 @@ from app.api.routes import (
     login,
     media,
     organization,
+    organization_settings,
     permissions,
     private,
     providers,
@@ -29,6 +30,7 @@ api_router.include_router(utils.router)
 api_router.include_router(roles.router)
 api_router.include_router(permissions.router)
 api_router.include_router(organization.router)
+api_router.include_router(organization_settings.router)
 api_router.include_router(location.router)
 api_router.include_router(test.router)
 api_router.include_router(tag.router_tag)
