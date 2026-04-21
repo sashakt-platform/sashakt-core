@@ -2833,6 +2833,7 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
         start_time=get_current_time(),
         question_revision_ids=[question_revision_one.id],
         question_set_ids=[None],
+        admin_id=user.id,
     )
     db.add(candidate_test)
     db.commit()
@@ -6279,6 +6280,7 @@ def test_delete_test_with_attempted_candidate_should_fail(
         consent=True,
         start_time="2025-01-01T10:00:00Z",
         is_submitted=True,
+        admin_id=user_data["id"],
     )
     db.add(candidate_test)
     db.commit()
@@ -6413,6 +6415,7 @@ def test_bulk_delete_test_with_attempted_candidate_should_fail(
         consent=True,
         start_time="2025-01-01T10:00:00Z",
         is_submitted=True,
+        admin_id=user_data["id"],
     )
 
     db.add(candidate_test)

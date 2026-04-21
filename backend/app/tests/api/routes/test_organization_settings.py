@@ -46,6 +46,7 @@ from app.tests.utils.organization_settings import (
     flexible_settings_payload,
     make_current_user_org_flexible,
 )
+from app.tests.utils.test import get_test_link
 from app.tests.utils.user import get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
@@ -1006,10 +1007,16 @@ def test_review_feedback_blocked_when_disabled_by_org(
             show_feedback_immediately=True, show_feedback_on_completion=True
         ),
     )
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
 
     start_resp = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test_data["id"], "device_info": "test"},
+        json={
+            "test_link_uuid": test_link.uuid,
+            "device_info": "Chrome Browser on MacOS",
+        },
     )
     start = start_resp.json()
 
