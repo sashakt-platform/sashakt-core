@@ -21,14 +21,20 @@ NOMENCLATURE_DEFAULTS: dict[str, str] = {
     "dashboard": "Dashboard",
     "question_bank": "Question Bank",
     "test_templates": "Test Templates",
+    "test_template": "Test Template",
     "tests": "Tests",
     "tag_management": "Tag Management",
     "tags": "Tags",
     "tag_types": "Tag Types",
+    "tag_type": "Tag Type",
     "forms": "Forms",
+    "form": "Form",
     "certificates": "Certificates",
+    "certificate": "Certificate",
     "entities": "Entities",
+    "entity": "Entity",
     "users": "Users",
+    "user": "User",
 }
 
 MAX_NOMENCLATURE_LABEL_LEN = 50
@@ -165,14 +171,20 @@ class PlatformNomenclatureValue(BaseModel):
     dashboard: str = ""
     question_bank: str = ""
     test_templates: str = ""
+    test_template: str = ""
     tests: str = ""
     tag_management: str = ""
     tags: str = ""
     tag_types: str = ""
+    tag_type: str = ""
     forms: str = ""
+    form: str = ""
     certificates: str = ""
+    certificate: str = ""
     entities: str = ""
+    entity: str = ""
     users: str = ""
+    user: str = ""
 
     @field_validator("*")
     @classmethod

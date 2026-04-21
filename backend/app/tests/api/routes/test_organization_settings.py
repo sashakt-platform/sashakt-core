@@ -1214,6 +1214,16 @@ def test_resolve_label_custom_mode_empty_falls_back_to_default() -> None:
     )
 
 
+def test_resolve_label_singular_and_plural_are_independent() -> None:
+    payload = default_organization_settings()
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tag_types="Categories", tag_type="Category"),
+    )
+    assert resolve_label(payload, "tag_types") == "Categories"
+    assert resolve_label(payload, "tag_type") == "Category"
+
+
 def test_resolve_all_returns_every_tracked_term() -> None:
     payload = default_organization_settings()
     payload.platform_nomenclature = PlatformNomenclatureSetting(

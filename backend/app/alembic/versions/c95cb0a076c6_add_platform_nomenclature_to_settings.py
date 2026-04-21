@@ -23,14 +23,20 @@ _NOMENCLATURE_TERMS = [
     "dashboard",
     "question_bank",
     "test_templates",
+    "test_template",
     "tests",
     "tag_management",
     "tags",
     "tag_types",
+    "tag_type",
     "forms",
+    "form",
     "certificates",
+    "certificate",
     "entities",
+    "entity",
     "users",
+    "user",
 ]
 
 _FROZEN_NOMENCLATURE_DEFAULT = {
