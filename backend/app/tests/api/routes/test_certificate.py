@@ -536,6 +536,7 @@ def test_download_certificate_certificate_not_active(
             "score": "70%",
             "completion_date": "2025-01-01",
         },
+        admin_id=user_id,
     )
     db.add(candidate_test)
     db.commit()
@@ -599,6 +600,7 @@ def test_download_certificate_no_provider_configured(
             "score": "80%",
             "completion_date": "2025-01-01",
         },
+        admin_id=user_id,
     )
     db.add(candidate_test)
     db.commit()

@@ -1054,18 +1054,7 @@ def test_create_test_auto_generate_link_uuid(
 
     assert response.status_code == 200
     assert "link" in data
-    assert data["link"] is not None
-    assert len(data["link"]) == 36  # UUID length
-
-    # Verify it's a valid UUID format
-    import uuid
-
-    try:
-        uuid.UUID(data["link"])
-        uuid_is_valid = True
-    except ValueError:
-        uuid_is_valid = False
-    assert uuid_is_valid
+    assert data["link"] is None
 
     # Test 2: Create test with empty string link field
     payload = {
@@ -1084,15 +1073,7 @@ def test_create_test_auto_generate_link_uuid(
     assert response.status_code == 200
     assert "link" in data
     assert data["link"] is not None
-    assert len(data["link"]) == 36  # UUID length
-
-    # Verify it's a valid UUID format
-    try:
-        uuid.UUID(data["link"])
-        uuid_is_valid = True
-    except ValueError:
-        uuid_is_valid = False
-    assert uuid_is_valid
+    assert len(data["link"]) == 0  # UUID length
 
     # Test 3: Create test with provided link field (should not be overridden)
     custom_link = "my-custom-test-link"
@@ -3783,7 +3764,7 @@ def test_clone_test(
     assert data["created_by_id"] != test.created_by_id
     assert data["created_by_id"] == superadmin["id"]
     assert data["link"] is not None
-    assert data["link"] != test.link
+    assert data["link"] == test.link
     assert len(data["tags"]) == 2
     tag_ids = [tag["id"] for tag in data["tags"]]
     assert set(tag_ids) == {tag_hindi.id, tag_marathi.id}
@@ -6726,7 +6707,7 @@ def test_clone_test_with_organization_id(
     assert data["time_limit"] == test_payload["time_limit"]
     assert data["marks"] == test_payload["marks"]
     assert data["start_instructions"] == test_payload["start_instructions"]
-    assert data["link"] != test_payload["link"]
+    assert data["link"] == test_payload["link"]
     assert data["is_active"] == test_payload["is_active"]
     user_data = get_current_user_data(client, get_user_superadmin_token)
     assert data["organization_id"] == user_data["organization_id"]

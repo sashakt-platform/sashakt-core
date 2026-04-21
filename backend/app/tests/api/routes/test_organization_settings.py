@@ -726,9 +726,12 @@ def test_start_test_rejected_outside_time_window(
     frozen = datetime(2026, 5, 1, 7, 30, tzinfo=ZoneInfo("Asia/Kolkata"))
     monkeypatch.setattr("app.api.routes.candidate.get_current_time", lambda: frozen)
 
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
     response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test_data["id"], "device_info": "test"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "test"},
     )
     assert response.status_code == 400
     assert "09:00" in response.json()["detail"]
@@ -755,10 +758,16 @@ def test_start_test_allowed_inside_time_window(
     frozen = datetime(2026, 5, 1, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
     monkeypatch.setattr("app.api.routes.candidate.get_current_time", lambda: frozen)
 
-    response = client.post(
-        f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test_data["id"], "device_info": "test"},
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
     )
+
+    # Test start_test endpoint - no authentication required
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Chrome Browser on MacOS",
+    }
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200, response.text
 
 
@@ -773,17 +782,26 @@ def test_time_window_skipped_when_not_configured(
     )
     test_data = _create_startable_test(client, db, get_user_superadmin_token)
 
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
     response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test_data["id"], "device_info": "test"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "test"},
     )
     assert response.status_code == 200, response.text
 
 
-def _start_and_fetch_candidate_test(client: TestClient, test_id: int) -> dict[str, Any]:
+def _start_and_fetch_candidate_test(
+    client: TestClient,
+    db: SessionDep,
+    test_id: int,
+    admin_id: int,
+) -> dict[str, Any]:
+    test_link = get_test_link(db, test_id=test_id, admin_id=admin_id)
     start_resp = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test_id, "device_info": "test"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "test"},
     )
     assert start_resp.status_code == 200, start_resp.text
     start = start_resp.json()
@@ -820,7 +838,9 @@ def test_runtime_omr_disabled_overrides_existing_test(
     disabled.omr_mode.value.default = False
     _put_settings(client, get_user_superadmin_token, org_id, disabled)
 
-    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    body = _start_and_fetch_candidate_test(
+        client, db, test_data["id"], test_data["created_by_id"]
+    )
     assert body["omr"] == "NEVER"
 
 
@@ -883,7 +903,9 @@ def test_runtime_question_palette_disabled(
     disabled.question_palette.value.default = False
     _put_settings(client, get_user_superadmin_token, org_id, disabled)
 
-    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    body = _start_and_fetch_candidate_test(
+        client, db, test_data["id"], test_data["created_by_id"]
+    )
     assert body["show_question_palette"] is False
     assert body["bookmark"] is True
 
@@ -910,7 +932,9 @@ def test_runtime_mark_for_review_disabled(
     disabled.mark_for_review.value.default = False
     _put_settings(client, get_user_superadmin_token, org_id, disabled)
 
-    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    body = _start_and_fetch_candidate_test(
+        client, db, test_data["id"], test_data["created_by_id"]
+    )
     assert body["bookmark"] is False
     # Question palette stays untouched.
     assert body["show_question_palette"] is True
@@ -941,7 +965,9 @@ def test_runtime_answer_review_disabled(
     disabled.answer_review.value.default = "off"
     _put_settings(client, get_user_superadmin_token, org_id, disabled)
 
-    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    body = _start_and_fetch_candidate_test(
+        client, db, test_data["id"], test_data["created_by_id"]
+    )
     assert body["show_feedback_immediately"] is False
     assert body["show_feedback_on_completion"] is False
 
@@ -967,9 +993,12 @@ def test_submit_test_honors_disabled_answer_review(
     )
     assert test_data["show_feedback_on_completion"] is True
 
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
     start_resp = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test_data["id"], "device_info": "test"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "test"},
     )
     assert start_resp.status_code == 200
     start = start_resp.json()
@@ -1057,7 +1086,9 @@ def test_runtime_fixed_on_does_not_override_existing_test(
     locked_on.omr_mode.value.default = True
     _put_settings(client, get_user_superadmin_token, org_id, locked_on)
 
-    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    body = _start_and_fetch_candidate_test(
+        client, db, test_data["id"], test_data["created_by_id"]
+    )
     assert body["omr"] == "NEVER"
 
 

@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.models.form import FormResponse
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
+from app.tests.utils.test import get_test_link
 from app.tests.utils.user import get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
@@ -598,8 +599,11 @@ def test_start_test_with_form_responses(
     db.refresh(test)
 
     # Start test with form responses
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+
     start_request = {
-        "test_id": test.id,
+        "test_link_uuid": test_link.uuid,
         "device_info": "test_device",
         "form_responses": {
             "full_name": "John Doe",
