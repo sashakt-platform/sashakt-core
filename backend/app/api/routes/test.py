@@ -25,6 +25,7 @@ from app.core.sorting import (
     TestSortConfig,
     create_sorting_dependency,
 )
+from app.crud import organization_settings as crud_settings
 from app.models import (
     Message,
     QuestionRevision,
@@ -57,6 +58,10 @@ from app.models.test import (
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.organization_settings_mapper import (
+    fixed_overrides_for_test,
+    get_effective_test_flags,
+)
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -642,8 +647,13 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
                 fields=fields_public,
             )
 
+    # Apply org-settings runtime overrides so a feature the admin has since
+    # disabled (e.g. mark_for_review) is reflected in the landing payload even
+    # when the test row was created before the admin's change.
+    test_data = get_effective_test_flags(session, test)
+
     return TestPublicLimited(
-        **test.model_dump(),
+        **test_data,
         total_questions=total_questions,
         question_sets=build_question_set_summary_publics(
             test_questions=test_questions,
@@ -681,6 +691,14 @@ def create_test(
     )
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
+
+    if current_user.organization_id is not None:
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=current_user.organization_id
+        )
+        if settings_payload is not None:
+            test_data.update(fixed_overrides_for_test(settings_payload))
+
     # Auto-generate UUID for link if not provided
     if not test_data["is_template"] and not test_data["link"]:
         test_data["link"] = str(uuid.uuid4())
@@ -1181,6 +1199,12 @@ def update_test(
             "district_ids",
         },
     )
+    if test.organization_id is not None:
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=test.organization_id
+        )
+        if settings_payload is not None:
+            test_data.update(fixed_overrides_for_test(settings_payload))
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()
@@ -1373,9 +1397,11 @@ def clone_test(
             TestQuestion(
                 test_id=new_test.id,
                 question_revision_id=ql.question_revision_id,
-                question_set_id=question_set_id_map.get(ql.question_set_id)
-                if ql.question_set_id is not None
-                else None,
+                question_set_id=(
+                    question_set_id_map.get(ql.question_set_id)
+                    if ql.question_set_id is not None
+                    else None
+                ),
             )
         )
     state_links = session.exec(

@@ -28,6 +28,7 @@ from app.core.question_sets import (
 )
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
+from app.crud import organization_settings as crud_settings
 from app.models import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -72,6 +73,10 @@ from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
+from app.services.organization_settings_mapper import (
+    check_org_time_window,
+    get_effective_test_flags,
+)
 from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -680,6 +685,23 @@ def start_test_for_candidate(
             detail="Test has not started yet. Please wait until the scheduled start time.",
         )
 
+    if test.organization_id is not None:
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=test.organization_id
+        )
+        if settings_payload is not None:
+            outside_window = check_org_time_window(settings_payload, current_time)
+            if outside_window is not None:
+                window_start, window_end = outside_window
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Tests can only be started between "
+                        f"{window_start.strftime('%H:%M')} and "
+                        f"{window_end.strftime('%H:%M')}."
+                    ),
+                )
+
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
         identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
@@ -1048,7 +1070,11 @@ def submit_test_for_qr_candidate(
     session.refresh(candidate_test)
 
     test = session.get(Test, candidate_test.test_id)
-    show_feedback = test.show_feedback_on_completion if test else False
+    show_feedback = (
+        bool(get_effective_test_flags(session, test)["show_feedback_on_completion"])
+        if test
+        else False
+    )
 
     answers_with_feedback = None
     if show_feedback:
@@ -1159,7 +1185,8 @@ def get_test_questions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    omr_mode = getattr(test, "omr", OMRMode.NEVER)
+    test_data = get_effective_test_flags(session, test)
+    omr_mode = OMRMode(test_data.get("omr", OMRMode.NEVER))
 
     if omr_mode == OMRMode.NEVER:
         hide_question_text = False
@@ -1187,7 +1214,7 @@ def get_test_questions(
     )
 
     return TestCandidatePublic(
-        **test.model_dump(),
+        **test_data,
         question_revisions=candidate_questions,
         question_sets=candidate_question_sets,
         tags=tags,
@@ -1961,8 +1988,9 @@ def get_review_feedback(
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    show_instant_feedback = test.show_feedback_immediately
-    show_feedback_on_completion = test.show_feedback_on_completion
+    effective = get_effective_test_flags(session, test)
+    show_instant_feedback = bool(effective["show_feedback_immediately"])
+    show_feedback_on_completion = bool(effective["show_feedback_on_completion"])
 
     if candidate_test.end_time is None and not show_instant_feedback:
         raise HTTPException(
