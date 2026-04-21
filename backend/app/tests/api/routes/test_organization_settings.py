@@ -1224,3 +1224,72 @@ def test_resolve_all_returns_every_tracked_term() -> None:
     assert set(resolved.keys()) == set(NOMENCLATURE_DEFAULTS.keys())
     assert resolved["tests"] == "Exams"
     assert resolved["users"] == NOMENCLATURE_DEFAULTS["users"]
+
+
+# ---------- Platform nomenclature: candidate-facing API ----------
+
+
+def test_public_landing_includes_nomenclature_defaults(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    test_data = _create_startable_test(client, db, get_user_superadmin_token)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_data['link']}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["nomenclature"] == dict(NOMENCLATURE_DEFAULTS)
+
+
+def test_public_landing_includes_custom_nomenclature(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(client, db, get_user_superadmin_token)
+
+    custom = flexible_settings_payload()
+    custom.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tests="Exams", certificates="Awards"),
+    )
+    _put_settings(client, get_user_superadmin_token, org_id, custom)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_data['link']}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["nomenclature"]["tests"] == "Exams"
+    assert body["nomenclature"]["certificates"] == "Awards"
+    # Untouched terms fall back to built-ins.
+    assert body["nomenclature"]["forms"] == NOMENCLATURE_DEFAULTS["forms"]
+
+
+def test_candidate_response_includes_custom_nomenclature(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+    test_data = _create_startable_test(client, db, get_user_superadmin_token)
+
+    custom = flexible_settings_payload()
+    custom.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tests="Exams"),
+    )
+    _put_settings(client, get_user_superadmin_token, org_id, custom)
+
+    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    assert body["nomenclature"]["tests"] == "Exams"
+    assert body["nomenclature"]["users"] == NOMENCLATURE_DEFAULTS["users"]

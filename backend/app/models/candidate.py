@@ -291,6 +291,9 @@ class TestCandidatePublic(SQLModel):
     # Candidate test info
     candidate_test: "CandidateTestPublic"
 
+    # Resolved platform nomenclature for the test's organization
+    nomenclature: dict[str, str] = Field(default_factory=dict)
+
 
 class Result(SQLModel):
     correct_answer: int

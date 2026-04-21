@@ -73,6 +73,7 @@ from app.models.test import OMRMode, TestDistrict, TestState, TestTag
 from app.models.user import User
 from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
+from app.services.organization_nomenclature import resolve_nomenclature_for_test
 from app.services.organization_settings_mapper import (
     check_org_time_window,
     get_effective_test_flags,
@@ -1186,6 +1187,7 @@ def get_test_questions(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     test_data = get_effective_test_flags(session, test)
+    nomenclature = resolve_nomenclature_for_test(session, test)
     omr_mode = OMRMode(test_data.get("omr", OMRMode.NEVER))
 
     if omr_mode == OMRMode.NEVER:
@@ -1221,6 +1223,7 @@ def get_test_questions(
         states=states,
         total_questions=len(candidate_questions),
         candidate_test=candidate_test,
+        nomenclature=nomenclature,
     )
 
 

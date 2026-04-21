@@ -448,3 +448,4 @@ class TestPublicLimited(TestBase):
     total_questions: int
     question_sets: list["QuestionSetSummaryPublic"] | None = None
     form: "FormPublic | None" = None
+    nomenclature: dict[str, str] = Field(default_factory=dict)
