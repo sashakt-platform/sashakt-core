@@ -1132,6 +1132,7 @@ def submit_test_for_qr_candidate(
         created_date=candidate_test.created_date,
         modified_date=candidate_test.modified_date,
         answers=answers_with_feedback,
+        admin_id=candidate_test.admin_id,
     )
 
 
