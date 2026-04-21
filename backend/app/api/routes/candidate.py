@@ -56,6 +56,7 @@ from app.models import (
 )
 from app.models.candidate import (
     CandidateReviewResponse,
+    CandidateTimerSyncRequest,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -86,6 +87,9 @@ router_candidate_test_answer = APIRouter(
     prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
 
+HEARTBEAT_INTERVAL = timedelta(seconds=15)
+HEARTBEAT_STALE_THRESHOLD = timedelta(seconds=20)
+
 
 def validate_subjective_answer_limit(
     answer_limit: int,
@@ -107,23 +111,114 @@ def validate_subjective_answer_limit(
 
 
 def is_candidate_test_expired(
-    session: SessionDep, candidate_test: CandidateTest
+    session: SessionDep,
+    candidate_test: CandidateTest,
+    *,
+    test: Test | None = None,
+    time_now: datetime | None = None,
 ) -> bool:
     if not candidate_test or not candidate_test.start_time:
         return False
-    test = session.get(Test, candidate_test.test_id)
+    test = test or session.get(Test, candidate_test.test_id)
     if not test:
         return False
 
-    time_now = get_timezone_aware_now()
+    time_now = time_now or get_current_time()
 
-    if (test.end_time and time_now > test.end_time) or (
-        test.time_limit
-        and time_now > candidate_test.start_time + timedelta(minutes=test.time_limit)
-    ):
+    if test.end_time and time_now > test.end_time:
+        return True
+
+    if test.time_limit and get_candidate_test_elapsed_time(
+        candidate_test, test, time_now
+    ) >= timedelta(minutes=test.time_limit):
         return True
 
     return False
+
+
+def is_candidate_test_timer_stale(
+    candidate_test: CandidateTest, time_now: datetime
+) -> bool:
+    if candidate_test.last_heartbeat_at is None:
+        return True
+    return (time_now - candidate_test.last_heartbeat_at) > HEARTBEAT_STALE_THRESHOLD
+
+
+def get_candidate_test_elapsed_time(
+    candidate_test: CandidateTest, test: Test, time_now: datetime
+) -> timedelta:
+    if not candidate_test.start_time:
+        return timedelta()
+
+    if not test.pause_timer_when_inactive:
+        return max(time_now - candidate_test.start_time, timedelta())
+
+    elapsed_seconds = max(candidate_test.active_time_spent_seconds, 0)
+    if not candidate_test.last_timer_started_at:
+        return timedelta(seconds=elapsed_seconds)
+
+    if candidate_test.last_heartbeat_at is None:
+        return timedelta(seconds=elapsed_seconds)
+
+    active_until = candidate_test.last_heartbeat_at
+    if active_until <= candidate_test.last_timer_started_at:
+        return timedelta(seconds=elapsed_seconds)
+
+    elapsed_seconds += int(
+        (active_until - candidate_test.last_timer_started_at).total_seconds()
+    )
+    return timedelta(seconds=elapsed_seconds)
+
+
+def settle_candidate_test_timer(
+    candidate_test: CandidateTest, test: Test, time_now: datetime
+) -> None:
+    if not test.pause_timer_when_inactive:
+        return
+
+    elapsed_time = get_candidate_test_elapsed_time(candidate_test, test, time_now)
+    candidate_test.active_time_spent_seconds = int(elapsed_time.total_seconds())
+    candidate_test.last_timer_started_at = None
+
+
+def start_candidate_test_timer(
+    candidate_test: CandidateTest, time_now: datetime
+) -> None:
+    candidate_test.last_timer_started_at = time_now
+    candidate_test.last_heartbeat_at = time_now
+
+
+def update_candidate_test_heartbeat(
+    candidate_test: CandidateTest, time_now: datetime
+) -> None:
+    candidate_test.last_heartbeat_at = time_now
+
+
+def build_candidate_test_time_left(
+    candidate_test: CandidateTest,
+    test: Test,
+    *,
+    time_now: datetime,
+) -> TimeLeft:
+    remaining_times = []
+    elapsed_time = get_candidate_test_elapsed_time(candidate_test, test, time_now)
+
+    if test.time_limit is not None:
+        remaining_by_limit = timedelta(minutes=float(test.time_limit)) - elapsed_time
+        remaining_times.append(remaining_by_limit)
+
+    if test.end_time is not None:
+        remaining_by_endtime = test.end_time - time_now
+        remaining_times.append(remaining_by_endtime)
+
+    if not remaining_times:
+        return TimeLeft(time_left=None)
+
+    final_time_left = min(remaining_times)
+    if final_time_left.total_seconds() <= 0:
+        return TimeLeft(time_left=0)
+
+    return TimeLeft(time_left=int(final_time_left.total_seconds()))
 
 
 def validate_question_response_format(
@@ -734,6 +829,9 @@ def start_test_for_candidate(
         question_revision_ids=question_revision_ids,
         question_set_ids=question_set_ids,
         admin_id=admin_id,
+        active_time_spent_seconds=0,
+        last_timer_started_at=start_time if test.pause_timer_when_inactive else None,
+        last_heartbeat_at=start_time if test.pause_timer_when_inactive else None,
     )
     session.add(candidate_test)
     session.commit()
@@ -1034,11 +1132,33 @@ def submit_test_for_qr_candidate(
     if candidate_test.is_submitted:
         raise HTTPException(status_code=400, detail="Test already submitted")
 
-    test_expired = is_candidate_test_expired(session, candidate_test)
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Associated test not found")
+
+    time_now = (
+        get_current_time()
+        if test.pause_timer_when_inactive
+        else get_timezone_aware_now()
+    )
+    settle_candidate_test_timer(candidate_test, test, time_now)
+    test_expired = is_candidate_test_expired(
+        session,
+        candidate_test,
+        test=test,
+        time_now=time_now,
+    )
 
     if not test_expired:
         # Validate mandatory questions are answered
         assigned_question_ids = candidate_test.question_revision_ids
+        if not assigned_question_ids and test:
+            assigned_question_ids = [
+                test_question.question_revision_id
+                for test_question in get_test_question_links(
+                    session, get_persisted_test_id(test)
+                )
+            ]
         if assigned_question_ids:
             # Get all mandatory question revisions for this test
             mandatory_questions_query = select(QuestionRevision).where(
@@ -1072,17 +1192,18 @@ def submit_test_for_qr_candidate(
 
     # Mark test as submitted and set end time
     candidate_test.is_submitted = True
-    candidate_test.end_time = get_timezone_aware_now()
+    candidate_test.end_time = time_now
 
     session.add(candidate_test)
     session.commit()
     session.refresh(candidate_test)
 
-    test = session.get(Test, candidate_test.test_id)
-    show_feedback = (
-        bool(get_effective_test_flags(session, test)["show_feedback_on_completion"])
-        if test
-        else False
+    effective_test_flags = get_effective_test_flags(session, test) if test else {}
+    show_feedback = bool(
+        effective_test_flags.get(
+            "show_feedback_on_completion",
+            test.show_feedback_on_completion if test else False,
+        )
     )
 
     answers_with_feedback = None
@@ -1971,23 +2092,66 @@ def get_time_left(
     if not test:
         raise HTTPException(status_code=404, detail="Associated test not found")
     current_time = get_current_time()
+    return build_candidate_test_time_left(
+        candidate_test,
+        test,
+        time_now=current_time,
+    )
 
-    elapsed_time = current_time - candidate_test.start_time
-    remaining_times = []
-    if test.time_limit is not None:
-        remaining_by_limit = timedelta(minutes=float(test.time_limit)) - elapsed_time
-        remaining_times.append(remaining_by_limit)
-    if test.end_time is not None:
-        remaining_by_endtime = test.end_time - current_time
-        remaining_times.append(remaining_by_endtime)
-    if not remaining_times:
-        return TimeLeft(time_left=None)
-    final_time_left = min(remaining_times)
-    if final_time_left.total_seconds() <= 0:
-        return TimeLeft(time_left=0)
 
-    time_left = int(final_time_left.total_seconds())
-    return TimeLeft(time_left=time_left)
+@router.post("/timer_sync/{candidate_test_id}", response_model=TimeLeft)
+def sync_timer(
+    candidate_test_id: int,
+    timer_sync_request: CandidateTimerSyncRequest,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> TimeLeft:
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+    if candidate_test.is_submitted:
+        raise HTTPException(status_code=400, detail="Test already submitted")
+
+    test = session.get(Test, candidate_test.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Associated test not found")
+
+    time_now = get_current_time()
+    if test.pause_timer_when_inactive:
+        if timer_sync_request.event.value == "resume":
+            settle_candidate_test_timer(candidate_test, test, time_now)
+            if not is_candidate_test_expired(
+                session,
+                candidate_test,
+                test=test,
+                time_now=time_now,
+            ):
+                start_candidate_test_timer(candidate_test, time_now)
+        elif candidate_test.last_timer_started_at is None:
+            start_candidate_test_timer(candidate_test, time_now)
+        elif is_candidate_test_timer_stale(candidate_test, time_now):
+            settle_candidate_test_timer(candidate_test, test, time_now)
+            if not is_candidate_test_expired(
+                session,
+                candidate_test,
+                test=test,
+                time_now=time_now,
+            ):
+                start_candidate_test_timer(candidate_test, time_now)
+        else:
+            update_candidate_test_heartbeat(candidate_test, time_now)
+
+        session.add(candidate_test)
+        session.commit()
+        session.refresh(candidate_test)
+
+    return build_candidate_test_time_left(
+        candidate_test,
+        test,
+        time_now=time_now,
+    )
 
 
 @router.get(
