@@ -20,6 +20,7 @@ from sqlmodel import Session, select
 
 from app import crud
 from app.core.db import engine
+from app.crud import organization_settings as crud_organization_settings
 from app.models import (
     District,
     Entity,
@@ -491,6 +492,9 @@ def seed(session: Session) -> None:
 
     org = _get_or_create_organization(session)
     assert org.id is not None
+
+    # Seed default organization settings (idempotent).
+    crud_organization_settings.get_or_create(session=session, organization_id=org.id)
 
     created_users: list[User] = []
     for spec in USERS:
