@@ -189,6 +189,11 @@ class TestBase(SQLModel):
         ge=1,
         description="The maximum time allowed for the test in minutes.",
     )
+    pause_timer_when_inactive: bool = Field(
+        default=False,
+        sa_column_kwargs={"server_default": "false"},
+        description="Whether the timer should pause when the candidate is inactive.",
+    )
     marks_level: MarksLevelEnum | None = Field(
         default=MarksLevelEnum.QUESTION,
         title="Marks Level as Question or Test",
