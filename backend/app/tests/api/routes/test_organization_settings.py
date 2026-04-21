@@ -11,6 +11,8 @@ from app.core.config import settings
 from app.models.organization import Organization
 from app.models.organization_settings import (
     DEFAULT_ORGANIZATION_SETTINGS,
+    MAX_NOMENCLATURE_LABEL_LEN,
+    NOMENCLATURE_DEFAULTS,
     ORGANIZATION_SETTINGS_SCHEMA_VERSION,
     AnswerReviewSetting,
     AnswerReviewValue,
@@ -21,6 +23,8 @@ from app.models.organization_settings import (
     OMRModeValue,
     OrganizationSettings,
     OrganizationSettingsPayload,
+    PlatformNomenclatureSetting,
+    PlatformNomenclatureValue,
     QuestionPaletteSetting,
     QuestionPaletteValue,
     QuestionsPerPageSetting,
@@ -32,6 +36,7 @@ from app.models.organization_settings import (
 from app.models.question import Question, QuestionRevision, QuestionType
 from app.models.test import OMRMode, TestQuestion
 from app.models.utils import MarkingScheme
+from app.services.organization_nomenclature import resolve_all, resolve_label
 from app.services.organization_settings_mapper import (
     ANSWER_REVIEW_TO_FEEDBACK_FLAGS,
     check_org_time_window,
@@ -74,6 +79,11 @@ def test_default_settings_match_schema() -> None:
     assert payload.mark_for_review.value.default is True
     assert payload.omr_mode.mode == "fixed"
     assert payload.omr_mode.value.default is False
+    assert payload.platform_nomenclature.mode == "default"
+    assert all(
+        getattr(payload.platform_nomenclature.value, term) == ""
+        for term in NOMENCLATURE_DEFAULTS
+    )
 
 
 def test_default_settings_factory_is_idempotent() -> None:
@@ -423,6 +433,7 @@ def test_mapper_fixed_features_produce_overrides() -> None:
             mode="fixed", value=MarkForReviewValue(default=False)
         ),
         omr_mode=OMRModeSetting(mode="fixed", value=OMRModeValue(default=True)),
+        platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
     )
 
     overrides = fixed_overrides_for_test(payload)
@@ -1041,3 +1052,175 @@ def test_runtime_fixed_on_does_not_override_existing_test(
 
     body = _start_and_fetch_candidate_test(client, test_data["id"])
     assert body["omr"] == "NEVER"
+
+
+# ---------- Platform nomenclature: API round-trip and validation ----------
+
+
+def test_put_settings_custom_nomenclature_round_trip(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    new_payload = default_organization_settings()
+    new_payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tests="Exams", certificates="Awards"),
+    )
+
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": new_payload.model_dump(mode="json")},
+    )
+    assert put_resp.status_code == 200, put_resp.text
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+    )
+    assert get_resp.status_code == 200
+    nom = get_resp.json()["settings"]["platform_nomenclature"]
+    assert nom["mode"] == "custom"
+    assert nom["value"]["tests"] == "Exams"
+    assert nom["value"]["certificates"] == "Awards"
+    # Untouched terms stay empty
+    assert nom["value"]["forms"] == ""
+
+
+def test_put_settings_nomenclature_strips_whitespace(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["platform_nomenclature"] = {
+        "mode": "custom",
+        "value": {"tests": "  Exams  "},
+    }
+
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert put_resp.status_code == 200, put_resp.text
+    assert put_resp.json()["settings"]["platform_nomenclature"]["value"]["tests"] == (
+        "Exams"
+    )
+
+
+def test_put_settings_nomenclature_label_too_long_returns_422(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["platform_nomenclature"] = {
+        "mode": "custom",
+        "value": {"tests": "x" * (MAX_NOMENCLATURE_LABEL_LEN + 1)},
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+def test_put_settings_nomenclature_unknown_key_returns_422(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["platform_nomenclature"] = {
+        "mode": "custom",
+        "value": {"bogus": "x"},
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+def test_put_settings_nomenclature_invalid_mode_returns_422(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["platform_nomenclature"] = {"mode": "flexible", "value": {}}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+def test_put_settings_version_mismatch_returns_422(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["version"] = 1
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+# ---------- Platform nomenclature: resolver unit tests ----------
+
+
+def test_resolve_label_default_mode_returns_builtins() -> None:
+    payload = default_organization_settings()
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="default",
+        value=PlatformNomenclatureValue(tests="Ignored"),
+    )
+    for term, builtin in NOMENCLATURE_DEFAULTS.items():
+        assert resolve_label(payload, term) == builtin
+
+
+def test_resolve_label_custom_mode_uses_value_when_set() -> None:
+    payload = default_organization_settings()
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tests="Exams", forms="Surveys"),
+    )
+    assert resolve_label(payload, "tests") == "Exams"
+    assert resolve_label(payload, "forms") == "Surveys"
+
+
+def test_resolve_label_custom_mode_empty_falls_back_to_default() -> None:
+    payload = default_organization_settings()
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tests="Exams"),
+    )
+    assert (
+        resolve_label(payload, "certificates") == NOMENCLATURE_DEFAULTS["certificates"]
+    )
+
+
+def test_resolve_all_returns_every_tracked_term() -> None:
+    payload = default_organization_settings()
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom",
+        value=PlatformNomenclatureValue(tests="Exams"),
+    )
+    resolved = resolve_all(payload)
+    assert set(resolved.keys()) == set(NOMENCLATURE_DEFAULTS.keys())
+    assert resolved["tests"] == "Exams"
+    assert resolved["users"] == NOMENCLATURE_DEFAULTS["users"]
