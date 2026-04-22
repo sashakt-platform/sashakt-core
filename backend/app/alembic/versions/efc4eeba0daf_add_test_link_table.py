@@ -23,11 +23,11 @@ def upgrade():
     sa.Column('created_date', sa.DateTime(), nullable=True),
     sa.Column('uuid', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('test_id', sa.Integer(), nullable=False),
-    sa.Column('admin_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['admin_id'], ['user.id'], ondelete='CASCADE'),
+    sa.Column('created_by_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['created_by_id'], ['user.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['test_id'], ['test.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('test_id', 'admin_id')
+    sa.UniqueConstraint('test_id', 'created_by_id')
     )
     op.create_index(op.f('ix_test_link_uuid'), 'test_link', ['uuid'], unique=True)
     # ### end Alembic commands ###

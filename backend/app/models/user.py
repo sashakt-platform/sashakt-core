@@ -125,7 +125,7 @@ class User(UserBase, table=True):
     organization_id: int = Field(foreign_key="organization.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
     test_links: list["TestLink"] | None = Relationship(
-        back_populates="admin", cascade_delete=True
+        back_populates="created_by_user", cascade_delete=True
     )
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")

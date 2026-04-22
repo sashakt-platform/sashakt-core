@@ -25,7 +25,7 @@ def upgrade():
     conn.execute(
         sa.text(
             "UPDATE candidate_test ct "
-            "SET admin_id = tl.admin_id "
+            "SET admin_id = tl.created_by_id "
             "FROM test_link tl "
             "WHERE ct.test_id = tl.test_id "
             "AND ct.admin_id IS NULL"

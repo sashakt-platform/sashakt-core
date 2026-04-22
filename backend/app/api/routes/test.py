@@ -1029,13 +1029,13 @@ def get_or_create_test_link(
     assert current_user.id is not None
     existing = session.exec(
         select(TestLink).where(
-            TestLink.test_id == test_id, TestLink.admin_id == current_user.id
+            TestLink.test_id == test_id, TestLink.created_by_id == current_user.id
         )
     ).first()
     if existing:
         return TestLinkPublic.model_validate(existing)
     new_link = TestLink(
-        uuid=str(uuid.uuid4()), test_id=test_id, admin_id=current_user.id
+        uuid=str(uuid.uuid4()), test_id=test_id, created_by_id=current_user.id
     )
     session.add(new_link)
     session.commit()

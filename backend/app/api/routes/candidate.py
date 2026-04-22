@@ -598,7 +598,7 @@ def start_test_for_candidate(
     ).first()
     if test_link:
         test = session.get(Test, test_link.test_id)
-        admin_id: int = test_link.admin_id
+        admin_id: int = test_link.created_by_id
     else:
         raise HTTPException(status_code=404, detail="Test Link Not Found")
     if not test or (test.is_active is False):
@@ -1227,7 +1227,7 @@ def get_test_questions(
     test_link = session.exec(
         select(TestLink).where(
             TestLink.test_id == test_id,
-            TestLink.admin_id == candidate_test.admin_id,
+            TestLink.created_by_id == candidate_test.admin_id,
         )
     ).first()
 

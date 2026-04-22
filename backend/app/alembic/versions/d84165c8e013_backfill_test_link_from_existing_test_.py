@@ -30,11 +30,11 @@ def upgrade():
     if rows:
         conn.execute(
             sa.text(
-                "INSERT INTO test_link (uuid, test_id, admin_id, created_date) "
-                "VALUES (:uuid, :test_id, :admin_id, NOW()) "
+                "INSERT INTO test_link (uuid, test_id, created_by_id, created_date) "
+                "VALUES (:uuid, :test_id, :created_by_id, NOW()) "
                 "ON CONFLICT DO NOTHING"
             ),
-            [{"uuid": row.link, "test_id": row.id, "admin_id": row.created_by_id} for row in rows],
+            [{"uuid": row.link, "test_id": row.id, "created_by_id": row.created_by_id} for row in rows],
         )
 
 
