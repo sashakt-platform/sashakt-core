@@ -1291,7 +1291,11 @@ def test_public_landing_includes_nomenclature_defaults(
     )
     test_data = _create_startable_test(client, db, get_user_superadmin_token)
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test_data['link']}")
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["nomenclature"] == dict(NOMENCLATURE_DEFAULTS)
@@ -1315,7 +1319,11 @@ def test_public_landing_includes_custom_nomenclature(
     )
     _put_settings(client, get_user_superadmin_token, org_id, custom)
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test_data['link']}")
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["nomenclature"]["tests"] == "Exams"
@@ -1342,6 +1350,8 @@ def test_candidate_response_includes_custom_nomenclature(
     )
     _put_settings(client, get_user_superadmin_token, org_id, custom)
 
-    body = _start_and_fetch_candidate_test(client, test_data["id"])
+    body = _start_and_fetch_candidate_test(
+        client, db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
     assert body["nomenclature"]["tests"] == "Exams"
     assert body["nomenclature"]["users"] == NOMENCLATURE_DEFAULTS["users"]
