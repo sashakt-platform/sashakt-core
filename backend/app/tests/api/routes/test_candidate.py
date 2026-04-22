@@ -14392,3 +14392,147 @@ def test_get_test_result_matrix_rating_not_attempted(
     assert data["total_questions"] == 1
     assert data["marks_obtained"] == 0
     assert data["marks_maximum"] == 4
+
+
+# ---------------------------------------------------------------------------
+# POST /candidate/start_test — test_link_uuid payload
+# ---------------------------------------------------------------------------
+
+
+def test_start_test_invalid_uuid(client: TestClient) -> None:
+    """start_test returns 404 when the test_link_uuid does not exist."""
+    payload = {"test_link_uuid": str(uuid.uuid4()), "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test Link Not Found"
+
+
+def test_start_test_stores_admin_id(client: TestClient, db: SessionDep) -> None:
+    """admin_id on the CandidateTest matches the admin from the TestLink used."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.get(CandidateTest, data["candidate_test_id"])
+    assert candidate_test is not None
+    assert candidate_test.admin_id == user.id
+
+
+# ---------------------------------------------------------------------------
+# GET /candidate/test_questions — link field
+# ---------------------------------------------------------------------------
+
+
+def test_get_test_questions_returns_link(client: TestClient, db: SessionDep) -> None:
+    """test_questions response includes the link UUID of the TestLink used to start."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 1+1?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "1"},
+            {"id": 2, "key": "B", "value": "2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{start_data['candidate_test_id']}",
+        params={"candidate_uuid": start_data["candidate_uuid"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["link"] == test_link.uuid
+
+
+# ---------------------------------------------------------------------------
+# POST /candidate/submit_test — admin_id in response
+# ---------------------------------------------------------------------------
+
+
+def test_submit_test_returns_admin_id(client: TestClient, db: SessionDep) -> None:
+    """submit_test response includes the admin_id from the TestLink used to start."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    assert response.json()["admin_id"] == user.id

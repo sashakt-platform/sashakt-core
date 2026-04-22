@@ -7963,3 +7963,233 @@ def test_create_test_with_show_marks_false(
     data = response.json()
     assert data["show_marks"] is False
     assert "bookmark" in data
+
+
+# ---------------------------------------------------------------------------
+# GET /{test_id}/link
+# ---------------------------------------------------------------------------
+
+
+def test_get_or_create_test_link_creates_new(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/link creates and returns a UUID for a new test."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    test = Test(name=random_lower_string(), created_by_id=user_id, is_active=True)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/link",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "uuid" in data
+    assert data["uuid"] != ""
+
+
+def test_get_or_create_test_link_is_idempotent(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Calling GET /{test_id}/link twice returns the same UUID."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    test = Test(name=random_lower_string(), created_by_id=user_id, is_active=True)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    response1 = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/link",
+        headers=get_user_superadmin_token,
+    )
+    response2 = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/link",
+        headers=get_user_superadmin_token,
+    )
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert response1.json()["uuid"] == response2.json()["uuid"]
+
+
+def test_get_or_create_test_link_different_admins_get_different_uuids(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    """Two different admins calling GET /{test_id}/link receive different UUIDs."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    test = Test(name=random_lower_string(), created_by_id=user_id, is_active=True)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    response1 = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/link",
+        headers=get_user_superadmin_token,
+    )
+    response2 = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/link",
+        headers=get_user_testadmin_token,
+    )
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert response1.json()["uuid"] != response2.json()["uuid"]
+
+
+def test_get_or_create_test_link_test_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/link returns 404 when the test does not exist."""
+    response = client.get(
+        f"{settings.API_V1_STR}/test/999999/link",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test not found"
+
+
+def test_get_or_create_test_link_template_rejected(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/link returns 400 for template tests."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    template = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        is_template=True,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    assert template.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{template.id}/link",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Templates do not have shareable links."
+
+
+# ---------------------------------------------------------------------------
+# GET /test/public/{uuid} — link field in response
+# ---------------------------------------------------------------------------
+
+
+def test_public_endpoint_response_includes_link(
+    client: TestClient, db: SessionDep
+) -> None:
+    """GET /test/public/{uuid} response body includes a link equal to the UUID."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    test = Test(name=random_lower_string(), created_by_id=user.id, is_active=True)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
+    assert response.status_code == 200
+    assert response.json()["link"] == test_link.uuid
+
+
+# ---------------------------------------------------------------------------
+# TestLink cascade — deleting a User removes their TestLink rows
+# ---------------------------------------------------------------------------
+
+
+def test_test_link_cascade_deleted_when_user_deleted(db: SessionDep) -> None:
+    """Deleting a User cascades to their TestLink rows (ORM + DB level)."""
+    # Use a separate admin to own the test so deleting user_to_delete
+    # doesn't violate the Test.created_by_id FK.
+    test_owner = create_random_user(db)
+    assert test_owner.id is not None
+
+    user_to_delete = create_random_user(db)
+    assert user_to_delete.id is not None
+
+    test = Test(name=random_lower_string(), created_by_id=test_owner.id, is_active=True)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user_to_delete.id)
+    test_link_id = test_link.id
+
+    db.delete(user_to_delete)
+    db.commit()
+
+    from app.models.test import TestLink
+
+    remaining = db.get(TestLink, test_link_id)
+    assert remaining is None
+
+
+# ---------------------------------------------------------------------------
+# Test creation / clone — link field removed
+# ---------------------------------------------------------------------------
+
+
+def test_create_test_response_has_no_link_field(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Creating a test no longer returns a link field in the response."""
+    payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "is_active": True,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert "link" not in response.json()
+
+
+def test_clone_test_does_not_generate_test_link(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Cloning a test does not auto-create a TestLink for the cloning admin."""
+    from sqlmodel import select
+
+    from app.models.test import TestLink
+
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    test = Test(name=random_lower_string(), created_by_id=user_id, is_active=True)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{test.id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    cloned_id = response.json()["id"]
+
+    links = db.exec(select(TestLink).where(TestLink.test_id == cloned_id)).all()
+    assert links == []
