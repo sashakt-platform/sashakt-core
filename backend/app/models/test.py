@@ -207,11 +207,6 @@ class TestBase(SQLModel):
         title="Start Instructions",
         description="Instructions to be shown to the candidate before starting the test.",
     )
-    link: str | None = Field(
-        default=None,
-        title="Test Link",
-        description="Link to the test shared with the candidate. Auto-generated if not provided.",
-    )
     no_of_attempts: int | None = Field(
         nullable=False,
         default=1,
@@ -377,7 +372,9 @@ class Test(TestBase, table=True):
     )
 
     organization: Optional["Organization"] = Relationship(back_populates="tests")
-    test_links: list["TestLink"] | None = Relationship(back_populates="test")
+    test_links: list["TestLink"] | None = Relationship(
+        back_populates="test", cascade_delete=True
+    )
 
 
 class TestCreate(TestBase):
@@ -390,9 +387,7 @@ class TestCreate(TestBase):
     locale: LocaleEnum = DEFAULT_LOCALE
 
     @model_validator(mode="after")
-    def check_link_for_template(self) -> Self:
-        if self.is_template and self.link:
-            raise ValueError("Templates should not have a link.")
+    def check_question_set_validity(self) -> Self:
         if self.question_sets and self.question_revision_ids:
             raise ValueError(
                 "Use either question_revision_ids or question_sets, not both."
