@@ -620,7 +620,7 @@ def resolve_test_by_uuid(session: SessionDep, test_uuid: str) -> Test | None:
     test_link = session.exec(select(TestLink).where(TestLink.uuid == test_uuid)).first()
     if test_link:
         return session.get(Test, test_link.test_id)
-    return session.exec(select(Test).where(Test.link == test_uuid)).first()
+    return None
 
 
 # Public endpoint to get basic test information (for landing page)

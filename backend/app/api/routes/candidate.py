@@ -600,11 +600,7 @@ def start_test_for_candidate(
         test = session.get(Test, test_link.test_id)
         admin_id: int = test_link.admin_id
     else:
-        test = session.exec(
-            select(Test).where(Test.link == start_test_request.test_link_uuid)
-        ).first()
-        admin_id = test.created_by_id if test else 0
-
+        raise HTTPException(status_code=404, detail="Test Link Not Found")
     if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
     test_id = get_persisted_test_id(test)
@@ -1228,6 +1224,13 @@ def get_test_questions(
         gcs_service=gcs_service,
     )
 
+    test_link = session.exec(
+        select(TestLink).where(
+            TestLink.test_id == test_id,
+            TestLink.admin_id == candidate_test.admin_id,
+        )
+    ).first()
+
     return TestCandidatePublic(
         **test_data,
         question_revisions=candidate_questions,
@@ -1237,6 +1240,7 @@ def get_test_questions(
         total_questions=len(candidate_questions),
         candidate_test=candidate_test,
         nomenclature=nomenclature,
+        link=test_link.uuid if test_link else None,
     )
 
 
