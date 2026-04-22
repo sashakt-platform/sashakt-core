@@ -58,6 +58,7 @@ from app.models.test import (
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.organization_nomenclature import resolve_nomenclature_for_test
 from app.services.organization_settings_mapper import (
     fixed_overrides_for_test,
     get_effective_test_flags,
@@ -651,6 +652,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     # disabled (e.g. mark_for_review) is reflected in the landing payload even
     # when the test row was created before the admin's change.
     test_data = get_effective_test_flags(session, test)
+    nomenclature = resolve_nomenclature_for_test(session, test)
 
     return TestPublicLimited(
         **test_data,
@@ -660,6 +662,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
             question_sets=question_sets,
         ),
         form=form_public,
+        nomenclature=nomenclature,
     )
 
 

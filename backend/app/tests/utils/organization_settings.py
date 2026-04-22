@@ -11,6 +11,7 @@ from app.models.organization_settings import (
     OMRModeSetting,
     OMRModeValue,
     OrganizationSettingsPayload,
+    PlatformNomenclatureSetting,
     QuestionPaletteSetting,
     QuestionPaletteValue,
     QuestionsPerPageSetting,
@@ -44,6 +45,7 @@ def flexible_settings_payload() -> OrganizationSettingsPayload:
             value=MarkForReviewValue(default=True),
         ),
         omr_mode=OMRModeSetting(mode="flexible", value=OMRModeValue(default=False)),
+        platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
     )
 
 

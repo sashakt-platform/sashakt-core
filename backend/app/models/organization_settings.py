@@ -14,7 +14,32 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
 
 
-ORGANIZATION_SETTINGS_SCHEMA_VERSION = 1
+ORGANIZATION_SETTINGS_SCHEMA_VERSION = 2
+
+
+NOMENCLATURE_DEFAULTS: dict[str, str] = {
+    "dashboard": "Dashboard",
+    "question_bank": "Question Bank",
+    "test_templates": "Test Templates",
+    "test_template": "Test Template",
+    "tests": "Tests",
+    "test": "Test",
+    "tag_management": "Tag Management",
+    "tags": "Tags",
+    "tag": "Tag",
+    "tag_types": "Tag Types",
+    "tag_type": "Tag Type",
+    "forms": "Forms",
+    "form": "Form",
+    "certificates": "Certificates",
+    "certificate": "Certificate",
+    "entities": "Entities",
+    "entity": "Entity",
+    "users": "Users",
+    "user": "User",
+}
+
+MAX_NOMENCLATURE_LABEL_LEN = 50
 
 
 AnswerReviewOption = Literal[
@@ -142,6 +167,54 @@ class OMRModeSetting(BaseModel):
     value: OMRModeValue = PydanticField(default_factory=OMRModeValue)
 
 
+class PlatformNomenclatureValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dashboard: str = ""
+    question_bank: str = ""
+    test_templates: str = ""
+    test_template: str = ""
+    tests: str = ""
+    test: str = ""
+    tag_management: str = ""
+    tags: str = ""
+    tag: str = ""
+    tag_types: str = ""
+    tag_type: str = ""
+    forms: str = ""
+    form: str = ""
+    certificates: str = ""
+    certificate: str = ""
+    entities: str = ""
+    entity: str = ""
+    users: str = ""
+    user: str = ""
+
+    @field_validator("*")
+    @classmethod
+    def _strip_and_limit(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) > MAX_NOMENCLATURE_LABEL_LEN:
+            raise ValueError(
+                f"Label must be {MAX_NOMENCLATURE_LABEL_LEN} characters or fewer"
+            )
+        return v
+
+
+class PlatformNomenclatureSetting(BaseModel):
+    """
+    - mode="default": built-in labels are used everywhere; value is ignored for rendering.
+    - mode="custom": per-term value is used; empty string falls back to the built-in default.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["default", "custom"]
+    value: PlatformNomenclatureValue = PydanticField(
+        default_factory=PlatformNomenclatureValue
+    )
+
+
 class OrganizationSettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -153,6 +226,7 @@ class OrganizationSettingsPayload(BaseModel):
     question_palette: QuestionPaletteSetting
     mark_for_review: MarkForReviewSetting
     omr_mode: OMRModeSetting
+    platform_nomenclature: PlatformNomenclatureSetting
 
     @field_validator("version")
     @classmethod
@@ -193,6 +267,7 @@ def default_organization_settings() -> OrganizationSettingsPayload:
             mode="fixed",
             value=OMRModeValue(default=False),
         ),
+        platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
     )
 
 
