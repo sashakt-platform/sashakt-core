@@ -38,6 +38,7 @@ from app.tests.utils.organization import (
 from app.tests.utils.organization_settings import make_current_user_org_flexible
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.tag import create_random_tag
+from app.tests.utils.test import get_test_link
 from app.tests.utils.user import (
     authentication_token_from_email,
     create_random_user,
@@ -197,7 +198,6 @@ def test_create_test(
         "marks": 3,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "link": random_lower_string(),
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
@@ -224,7 +224,6 @@ def test_create_test(
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
     assert data["marks_level"] == "question"
-    assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
@@ -265,7 +264,6 @@ def test_create_test(
         completion_message=random_lower_string(),
         start_instructions=random_lower_string(),
         marks_level=None,
-        link=random_lower_string(),
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
@@ -287,7 +285,6 @@ def test_create_test(
         "marks": 3,
         "completion_message": "Congratulations!!",
         "start_instructions": "Please keep your mobile phones away",
-        "link": "string",
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
@@ -314,7 +311,6 @@ def test_create_test(
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
     assert data["marks_level"] == "question"
-    assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
@@ -353,7 +349,6 @@ def test_create_test(
         "marks": 3,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "link": "string",
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
@@ -378,7 +373,6 @@ def test_create_test(
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
     assert data["marks_level"] == "question"
-    assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
@@ -1032,68 +1026,6 @@ def test_create_test_random_question_field(
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
-def test_create_test_auto_generate_link_uuid(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
-) -> None:
-    """Test that a UUID is auto-generated for the link field when not provided."""
-    user = create_random_user(db)
-
-    # Test 1: Create test without providing link field
-    payload = {
-        "name": random_lower_string(),
-        "created_by_id": user.id,
-        # No link field provided
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/test/",
-        json=payload,
-        headers=get_user_superadmin_token,
-    )
-    data = response.json()
-
-    assert response.status_code == 200
-    assert "link" in data
-    assert data["link"] is None
-
-    # Test 2: Create test with empty string link field
-    payload = {
-        "name": random_lower_string(),
-        "created_by_id": user.id,
-        "link": "",  # Empty string
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/test/",
-        json=payload,
-        headers=get_user_superadmin_token,
-    )
-    data = response.json()
-
-    assert response.status_code == 200
-    assert "link" in data
-    assert data["link"] is not None
-    assert len(data["link"]) == 0  # UUID length
-
-    # Test 3: Create test with provided link field (should not be overridden)
-    custom_link = "my-custom-test-link"
-    payload = {
-        "name": random_lower_string(),
-        "created_by_id": user.id,
-        "link": custom_link,
-    }
-
-    response = client.post(
-        f"{settings.API_V1_STR}/test/",
-        json=payload,
-        headers=get_user_superadmin_token,
-    )
-    data = response.json()
-
-    assert response.status_code == 200
-    assert data["link"] == custom_link  # Should preserve custom link
-
-
 def test_get_tests(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -1165,7 +1097,6 @@ def test_get_tests(
     assert any(item["completion_message"] == test.completion_message for item in data)
     assert any(item["start_instructions"] == test.start_instructions for item in data)
     assert any(item["marks_level"] == test.marks_level for item in data)
-    assert any(item["link"] == test.link for item in data)
     assert any(item["no_of_attempts"] == test.no_of_attempts for item in data)
     assert any(item["shuffle"] == test.shuffle for item in data)
     assert any(item["random_questions"] == test.random_questions for item in data)
@@ -2518,7 +2449,6 @@ def test_get_test_by_id(
 
     assert response.status_code == 200
     assert data["name"] == test.name
-    assert data["link"] == test.link
     assert data["created_by_id"] == test.created_by_id
     assert data["description"] == test.description
     assert data["time_limit"] == test.time_limit
@@ -2593,7 +2523,6 @@ def test_get_test_by_id(
     assert response.status_code == 200
     assert data["id"] == test_2.id
     assert data["name"] == test_2.name
-    assert data["link"] == test_2.link
     assert data["no_of_random_questions"] == test_2.no_of_random_questions
     assert data["created_by_id"] == test_2.created_by_id
     assert data["is_template"] == test_2.is_template
@@ -2637,7 +2566,6 @@ def test_update_test(
         completion_message=random_lower_string(),
         start_instructions=random_lower_string(),
         marks_level=None,
-        link=random_lower_string(),
         no_of_attempts=1,
         shuffle=False,
         random_questions=False,
@@ -2692,7 +2620,6 @@ def test_update_test(
         "marks": 100,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "link": random_lower_string(),
         "no_of_attempts": 3,
         "shuffle": True,
         "random_questions": True,
@@ -2726,7 +2653,6 @@ def test_update_test(
     assert data["marks"] == payload["marks"]
     assert data["completion_message"] == payload["completion_message"]
     assert data["start_instructions"] == payload["start_instructions"]
-    assert data["link"] == payload["link"]
     assert data["no_of_attempts"] == payload["no_of_attempts"]
     assert data["shuffle"] == payload["shuffle"]
     assert data["random_questions"] == payload["random_questions"]
@@ -2823,7 +2749,6 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
         f"{settings.API_V1_STR}/test/{test.id}",
         json={
             "name": test.name,
-            "link": test.link,
             "is_template": False,
             "question_revision_ids": [question_revision_two.id],
             "locale": "en-US",
@@ -2873,7 +2798,6 @@ def test_update_test_can_replace_flat_membership_with_question_sets(
         f"{settings.API_V1_STR}/test/{test.id}",
         json={
             "name": test.name,
-            "link": test.link,
             "is_template": False,
             "locale": "en-US",
             "question_sets": [
@@ -2954,7 +2878,6 @@ def test_update_test_rejects_mandatory_questions_exceeding_attempt_limit(
         f"{settings.API_V1_STR}/test/{test.id}",
         json={
             "name": test.name,
-            "link": test.link,
             "is_template": False,
             "locale": "en-US",
             "question_sets": [
@@ -3253,7 +3176,8 @@ def test_get_public_test_info(
     db.commit()
 
     # Test public endpoint - no authentication required, uses link UUID
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
 
     assert response.status_code == 200
@@ -3308,7 +3232,8 @@ def test_get_public_test_info_with_random_tag_count(
     db.add_all([test_question_one, test_question_two])
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
 
     assert response.status_code == 200
@@ -3390,7 +3315,8 @@ def test_get_public_test_info_includes_question_set_summaries(
     )
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
 
     assert response.status_code == 200
@@ -3451,7 +3377,8 @@ def test_get_public_test_info_with_random_questions(
     db.add_all([test_question_one, test_question_two])
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
 
     assert response.status_code == 200
@@ -3494,7 +3421,9 @@ def test_get_public_test_info_with_tag_count_only(
     db.commit()
     db.refresh(test)
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
 
     assert response.status_code == 200
@@ -3516,7 +3445,8 @@ def test_get_public_test_info_inactive(client: TestClient, db: SessionDep) -> No
     db.add(test)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     assert response.status_code == 404
     assert "Test not found or not active" in response.json()["detail"]
 
@@ -3530,16 +3460,16 @@ def test_get_public_test_info_deleted(client: TestClient, db: SessionDep) -> Non
         description=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        link=random_lower_string(),
     )
     db.add(test)
     db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test.id, user.id)
+    uuid = test_link.uuid
     db.delete(test)
     db.commit()
-
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    response = client.get(f"{settings.API_V1_STR}/test/public/{uuid}")
     assert response.status_code == 404
-    assert "Test not found or not active" in response.json()["detail"]
 
 
 def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -> None:
@@ -3558,8 +3488,9 @@ def test_get_time_before_test_start_public(client: TestClient, db: SessionDep) -
         db.add(test)
         db.commit()
         db.refresh(test)
+        test_link = get_test_link(db, test.id, test.created_by_id)
         response = client.get(
-            f"{settings.API_V1_STR}/test/public/time_left/{test.link}"
+            f"{settings.API_V1_STR}/test/public/time_left/{test_link.uuid}"
         )
         assert response.status_code == 200
         data = response.json()
@@ -3576,7 +3507,6 @@ def test_public_timer_when_test_already_started(
     with patch("app.api.routes.test.get_current_time", return_value=fake_current_time):
         test = Test(
             name="Public Start Timer Test",
-            link="public-test-uuid1",
             is_active=True,
             start_time=datetime(2024, 5, 24, 9, 0, 0),
             end_time=fake_current_time + timedelta(days=1),
@@ -3585,8 +3515,9 @@ def test_public_timer_when_test_already_started(
         db.add(test)
         db.commit()
         db.refresh(test)
+        test_link = get_test_link(db, test.id, test.created_by_id)
         response = client.get(
-            f"{settings.API_V1_STR}/test/public/time_left/{test.link}"
+            f"{settings.API_V1_STR}/test/public/time_left/{test_link.uuid}"
         )
         assert response.status_code == 200
         data = response.json()
@@ -3607,7 +3538,6 @@ def test_public_timer_test_not_found_or_not_active(
         user = create_random_user(db)
         deleted_test = Test(
             name="Deleted Test",
-            link="deleted-test-link",
             start_time=fake_current_time + timedelta(minutes=10),
             end_time=fake_current_time + timedelta(hours=2),
             time_limit=60,
@@ -3616,10 +3546,14 @@ def test_public_timer_test_not_found_or_not_active(
         )
         db.add(deleted_test)
         db.commit()
+        test_link = get_test_link(db, deleted_test.id, deleted_test.created_by_id)
+        test_uuid = test_link.uuid
+
         db.delete(deleted_test)
         db.commit()
+
         response = client.get(
-            f"{settings.API_V1_STR}/test/public/time_left/{deleted_test.link}"
+            f"{settings.API_V1_STR}/test/public/time_left/{test_uuid}"
         )
         assert response.status_code == 404
         assert response.json()["detail"] == "Test not found or not active"
@@ -3630,7 +3564,6 @@ def test_public_timer_returns_zero_if_start_time_none(
 ) -> None:
     test = Test(
         name="Test with no start time",
-        link="test-no-start-time",
         is_active=True,
         start_time=None,  # This is the key for this test
         created_by_id=create_random_user(db).id,
@@ -3638,7 +3571,10 @@ def test_public_timer_returns_zero_if_start_time_none(
     db.add(test)
     db.commit()
     db.refresh(test)
-    response = client.get(f"{settings.API_V1_STR}/test/public/time_left/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(
+        f"{settings.API_V1_STR}/test/public/time_left/{test_link.uuid}"
+    )
     assert response.status_code == 200
     data = response.json()
     assert data == {"time_left": 0}
@@ -3763,8 +3699,6 @@ def test_clone_test(
     assert data["is_template"] == test.is_template
     assert data["created_by_id"] != test.created_by_id
     assert data["created_by_id"] == superadmin["id"]
-    assert data["link"] is not None
-    assert data["link"] == test.link
     assert len(data["tags"]) == 2
     tag_ids = [tag["id"] for tag in data["tags"]]
     assert set(tag_ids) == {tag_hindi.id, tag_marathi.id}
@@ -5295,7 +5229,6 @@ def test_get_public_test_info_expire_test(
         description=random_lower_string(),
         marks=80,
         start_instructions="Test instructions",
-        link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
         start_time=get_current_time() - timedelta(hours=1),
@@ -5313,7 +5246,8 @@ def test_get_public_test_info_expire_test(
     db.add_all([test_question_one, test_question_two])
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
     assert response.status_code == 400
     assert data["detail"] == "Test has already ended"
@@ -5694,7 +5628,6 @@ def test_get_public_test(
         time_limit=45,
         marks=100,
         start_instructions="Test instructions",
-        link=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
         random_questions=True,
@@ -5732,7 +5665,9 @@ def test_get_public_test(
         db.add(tq)
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test.link}")
+    test_link = get_test_link(db, test.id, test.created_by_id)
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     data = response.json()
     assert response.status_code == 200
     assert data["id"] == test.id
@@ -5919,7 +5854,6 @@ def test_create_test_marks_level_test(
         "marks": 4,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "link": random_lower_string(),
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
@@ -5943,7 +5877,6 @@ def test_create_test_marks_level_test(
     assert data["name"] == payload["name"]
     assert data["description"] == payload["description"]
     assert data["marks_level"] == "test"
-    assert data["link"] == payload["link"]
     revision1 = db.get(QuestionRevision, question1_data_id)
     revision2 = db.get(QuestionRevision, question2_data_id)
     expected_scheme1 = {"correct": 5.0, "wrong": 0, "skipped": 0}
@@ -5959,7 +5892,6 @@ def test_create_test_marks_level_test(
         "marks": 4,
         "completion_message": random_lower_string(),
         "start_instructions": random_lower_string(),
-        "link": random_lower_string(),
         "no_of_attempts": 1,
         "shuffle": False,
         "random_questions": False,
@@ -6679,7 +6611,6 @@ def test_clone_test_with_organization_id(
         "time_limit": 30,
         "marks": 100,
         "start_instructions": random_lower_string(),
-        "link": random_lower_string(),
         "is_active": True,
         "question_revision_ids": [revision.id],
     }
@@ -6707,7 +6638,6 @@ def test_clone_test_with_organization_id(
     assert data["time_limit"] == test_payload["time_limit"]
     assert data["marks"] == test_payload["marks"]
     assert data["start_instructions"] == test_payload["start_instructions"]
-    assert data["link"] == test_payload["link"]
     assert data["is_active"] == test_payload["is_active"]
     user_data = get_current_user_data(client, get_user_superadmin_token)
     assert data["organization_id"] == user_data["organization_id"]

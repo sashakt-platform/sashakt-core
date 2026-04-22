@@ -1344,7 +1344,6 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
         name=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        link=random_lower_string(),
         organization_id=org.id,
     )
     db.add(test)
@@ -10628,7 +10627,6 @@ def test_start_test_candidate_with_organization(
         json={
             "name": "Org Test",
             "is_active": True,
-            "link": random_lower_string(),
         },
     )
     assert test_response.status_code == 200
@@ -10636,7 +10634,6 @@ def test_start_test_candidate_with_organization(
     assert "id" in test_data
     assert "name" in test_data
     assert "is_active" in test_data
-    assert "link" in test_data
     assert "organization_id" in test_data
     assert test_data["organization_id"] is not None
 

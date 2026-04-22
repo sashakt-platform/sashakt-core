@@ -872,7 +872,11 @@ def test_public_landing_reflects_disabled_feature(
     disabled.mark_for_review.value.default = False
     _put_settings(client, get_user_superadmin_token, org_id, disabled)
 
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test_data['link']}")
+    test_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
+
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["omr"] == "NEVER"
