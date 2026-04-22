@@ -676,6 +676,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         ),
         form=form_public,
         nomenclature=nomenclature,
+        link=test_uuid,
     )
 
 

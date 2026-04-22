@@ -465,6 +465,7 @@ class TestPublicLimited(TestBase):
     """Limited public information for test landing page"""
 
     id: int
+    link: str
     total_questions: int
     question_sets: list["QuestionSetSummaryPublic"] | None = None
     form: "FormPublic | None" = None
