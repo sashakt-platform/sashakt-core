@@ -23,8 +23,10 @@ NOMENCLATURE_DEFAULTS: dict[str, str] = {
     "test_templates": "Test Templates",
     "test_template": "Test Template",
     "tests": "Tests",
+    "test": "Test",
     "tag_management": "Tag Management",
     "tags": "Tags",
+    "tag": "Tag",
     "tag_types": "Tag Types",
     "tag_type": "Tag Type",
     "forms": "Forms",
@@ -173,8 +175,10 @@ class PlatformNomenclatureValue(BaseModel):
     test_templates: str = ""
     test_template: str = ""
     tests: str = ""
+    test: str = ""
     tag_management: str = ""
     tags: str = ""
+    tag: str = ""
     tag_types: str = ""
     tag_type: str = ""
     forms: str = ""
