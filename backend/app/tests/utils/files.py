@@ -56,3 +56,49 @@ def create_text_file() -> io.BytesIO:
     text_bytes.seek(0)
     text_bytes.name = "test.txt"
     return text_bytes
+
+
+def create_test_pdf() -> io.BytesIO:
+    """
+    Create a minimal but valid PDF for upload tests. libmagic detects this as
+    application/pdf via the `%PDF-` header + trailer.
+    """
+    pdf_content = (
+        b"%PDF-1.4\n"
+        b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+        b"2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n"
+        b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 72 72]>>endobj\n"
+        b"xref\n0 4\n"
+        b"0000000000 65535 f \n"
+        b"0000000009 00000 n \n"
+        b"0000000052 00000 n \n"
+        b"0000000101 00000 n \n"
+        b"trailer<</Size 4/Root 1 0 R>>\n"
+        b"startxref\n160\n%%EOF\n"
+    )
+    buf = io.BytesIO(pdf_content)
+    buf.seek(0)
+    buf.name = "test_guide.pdf"
+    return buf
+
+
+def create_large_test_pdf(size_mb: float = 11) -> io.BytesIO:
+    """Create an oversize PDF (valid header + padding) to trigger size limit."""
+    header = (
+        b"%PDF-1.4\n"
+        b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+        b"2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj\n"
+    )
+    trailer = (
+        b"\nxref\n0 3\n"
+        b"0000000000 65535 f \n"
+        b"0000000009 00000 n \n"
+        b"0000000052 00000 n \n"
+        b"trailer<</Size 3/Root 1 0 R>>\nstartxref\n100\n%%EOF\n"
+    )
+    target = int(size_mb * 1024 * 1024)
+    padding = b"0" * max(0, target - len(header) - len(trailer))
+    buf = io.BytesIO(header + padding + trailer)
+    buf.seek(0)
+    buf.name = "large.pdf"
+    return buf
