@@ -7912,6 +7912,131 @@ def test_get_tests_list_returns_show_mark_for_review(
     data = list_response.json()
     assert "items" in data
     assert len(data["items"]) > 0
+    assert "bookmark" in data["items"][0]
+
+
+def test_get_test_status(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user = create_random_user(db, organization_id=org_id)
+
+    now = get_current_time()
+
+    # No start/end times → In Progress
+    test_always_in_progress = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+    )
+    # Both start/end times → In Progress
+    test_current_in_progress = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+        start_time=now - timedelta(days=1),
+        end_time=now + timedelta(days=1),
+    )
+    # start_time in the future → Scheduled
+    test_scheduled = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+        start_time=now + timedelta(days=1),
+    )
+    # end_time in the past → Completed
+    test_completed = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+        end_time=now - timedelta(days=1),
+    )
+    test_is_template = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        organization_id=org_id,
+        is_template=True,
+    )
+    db.add_all(
+        [
+            test_always_in_progress,
+            test_current_in_progress,
+            test_scheduled,
+            test_completed,
+            test_is_template,
+        ]
+    )
+    db.commit()
+
+    for test, expected_status in [
+        (test_always_in_progress, "In Progress"),
+        (test_current_in_progress, "In Progress"),
+        (test_scheduled, "Scheduled"),
+        (test_completed, "Completed"),
+        (test_is_template, None),
+    ]:
+        response = client.get(
+            f"{settings.API_V1_STR}/test/{test.id}",
+            headers=get_user_superadmin_token,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["status"] == expected_status
+
+
+def test_get_test_status_changes_with_time(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """A single test transitions Scheduled → In Progress → Completed as time advances."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = create_random_user(db, organization_id=user_data["organization_id"])
+
+    start = datetime(2025, 6, 1, 10, 0, 0)
+    end = datetime(2025, 6, 1, 12, 0, 0)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user_data["organization_id"],
+        start_time=start,
+        end_time=end,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    def get_status(mocked_now: datetime) -> str:
+        with patch("app.api.routes.test.get_current_time", return_value=mocked_now):
+            response = client.get(
+                f"{settings.API_V1_STR}/test/{test.id}",
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == status.HTTP_200_OK
+        return str(response.json()["status"])
+
+    # Before start_time → Scheduled
+    assert get_status(datetime(2025, 5, 31, 9, 0, 0)) == "Scheduled"
+
+    # After start_time, before end_time → In Progress
+    assert get_status(datetime(2025, 6, 1, 11, 0, 0)) == "In Progress"
+
+    # After end_time → Completed
+    assert get_status(datetime(2025, 6, 1, 13, 0, 0)) == "Completed"
 
 
 def test_create_test_with_show_marks_true(
