@@ -8027,7 +8027,7 @@ def test_get_test_status_changes_with_time(
                 headers=get_user_superadmin_token,
             )
         assert response.status_code == status.HTTP_200_OK
-        return response.json()["status"]
+        return str(response.json()["status"])
 
     # Before start_time → Scheduled
     assert get_status(datetime(2025, 5, 31, 9, 0, 0)) == "Scheduled"
