@@ -1287,6 +1287,7 @@ def get_test_summary(
     end_date: datetime | None = Query(
         None, description="End date in YYYY-MM-DD format"
     ),
+    test_id: int | None = Query(None, description="Filter summary to a specific test"),
 ) -> TestStatusSummary:
     """
     Get Summary of Tests: total submitted, not submitted (active/inactive)
@@ -1334,6 +1335,9 @@ def get_test_summary(
                 col(TestState.state_id).in_(current_user_state_ids)
             )
             query = query.where(col(Test.id).in_(state_test_ids))
+
+    if test_id is not None:
+        query = query.where(CandidateTest.test_id == test_id)
 
     if start_date and Test.start_time is not None:
         query = query.where(Test.start_time >= start_date)

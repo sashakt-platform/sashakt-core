@@ -10600,6 +10600,109 @@ def test_candidate_summary_invalid_date_range(
     assert data["detail"] == "End date must be after start date"
 
 
+def test_summary_filtered_by_test_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Summary with test_id filter returns counts only for that test."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+
+    fake_now = datetime(2025, 9, 29, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        # Two tests belonging to the same org/user
+        test_a = Test(
+            name=random_lower_string(),
+            created_by_id=user_id,
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+        )
+        test_b = Test(
+            name=random_lower_string(),
+            created_by_id=user_id,
+            start_time=datetime(2025, 9, 28, 10, 0),
+            end_time=datetime(2025, 9, 30, 12, 0),
+        )
+        db.add_all([test_a, test_b])
+        db.commit()
+        db.refresh(test_a)
+        db.refresh(test_b)
+        assert test_a.id is not None
+        assert test_b.id is not None
+
+        candidate_a = Candidate(user_id=user_id)
+        candidate_b = Candidate(user_id=user_id)
+        db.add_all([candidate_a, candidate_b])
+        db.commit()
+        db.refresh(candidate_a)
+        db.refresh(candidate_b)
+
+        # One not-submitted attempt on test_a, one submitted attempt on test_b
+        db.add_all(
+            [
+                CandidateTest(
+                    admin_id=user_id,
+                    test_id=test_a.id,
+                    candidate_id=candidate_a.id,
+                    is_submitted=False,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=None,
+                    device="laptop",
+                    consent=True,
+                ),
+                CandidateTest(
+                    admin_id=user_id,
+                    test_id=test_b.id,
+                    candidate_id=candidate_b.id,
+                    is_submitted=True,
+                    start_time=datetime(2025, 9, 29, 11, 0),
+                    end_time=datetime(2025, 9, 29, 11, 30),
+                    device="laptop",
+                    consent=True,
+                ),
+            ]
+        )
+        db.commit()
+
+        # Without filter — both tests contribute (use >= since other test data may exist)
+        resp_all = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+        )
+        assert resp_all.status_code == 200
+        summary_all = resp_all.json()
+        assert summary_all["total_test_submitted"] >= 1
+        assert summary_all["total_test_not_submitted"] >= 1
+        assert summary_all["not_submitted_active"] >= 1
+        assert summary_all["not_submitted_inactive"] >= 0
+
+        # With test_id=test_a.id — not-submitted, within end_time window, no time_limit
+        # → active=1, inactive=0
+        resp_a = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+            params={"test_id": test_a.id},
+        )
+        assert resp_a.status_code == 200
+        summary_a = resp_a.json()
+        assert summary_a["total_test_submitted"] == 0
+        assert summary_a["total_test_not_submitted"] == 1
+        assert summary_a["not_submitted_active"] == 1
+        assert summary_a["not_submitted_inactive"] == 0
+
+        # With test_id=test_b.id — submitted → all not_submitted counts are 0
+        resp_b = client.get(
+            f"{settings.API_V1_STR}/candidate/summary",
+            headers=get_user_superadmin_token,
+            params={"test_id": test_b.id},
+        )
+        assert resp_b.status_code == 200
+        summary_b = resp_b.json()
+        assert summary_b["total_test_submitted"] == 1
+        assert summary_b["total_test_not_submitted"] == 0
+        assert summary_b["not_submitted_active"] == 0
+        assert summary_b["not_submitted_inactive"] == 0
+
+
 def test_create_candidate_with_organization(
     client: TestClient,
     get_user_candidate_token: dict[str, str],
