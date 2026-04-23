@@ -133,6 +133,10 @@ class CandidateTestBase(SQLModel):
         sa_column=Column(JSON),
         description="Certificate data snapshot (token, candidate_name, test_name, score, completion_date)",
     )
+    admin_id: int = Field(
+        foreign_key="user.id",
+        description="ID of the admin whose test link the candidate used to start the test.",
+    )
 
 
 class CandidateTest(CandidateTestBase, table=True):
@@ -314,7 +318,7 @@ class TestStatusSummary(SQLModel):
 
 
 class StartTestRequest(SQLModel):
-    test_id: int
+    test_link_uuid: str
     device_info: str | None = None
     form_responses: dict[str, Any] | None = None
 

@@ -69,7 +69,7 @@ from app.models.question import (
     QuestionType,
 )
 from app.models.tag import Tag
-from app.models.test import OMRMode, TestDistrict, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestLink, TestState, TestTag
 from app.models.user import User
 from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
@@ -592,8 +592,15 @@ def start_test_for_candidate(
     Creates a candidate when they start a test, links them to the test.
     Returns the candidate UUID for verification.
     """
-    # Find the test by ID
-    test = session.get(Test, start_test_request.test_id)
+    # Resolve test and admin from the UUID — TestLink takes precedence over legacy Test.link
+    test_link = session.exec(
+        select(TestLink).where(TestLink.uuid == start_test_request.test_link_uuid)
+    ).first()
+    if test_link:
+        test = session.get(Test, test_link.test_id)
+        admin_id: int = test_link.created_by_id
+    else:
+        raise HTTPException(status_code=404, detail="Test Link Not Found")
     if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
     test_id = get_persisted_test_id(test)
@@ -726,6 +733,7 @@ def start_test_for_candidate(
         is_submitted=False,
         question_revision_ids=question_revision_ids,
         question_set_ids=question_set_ids,
+        admin_id=admin_id,
     )
     session.add(candidate_test)
     session.commit()
@@ -1120,6 +1128,7 @@ def submit_test_for_qr_candidate(
         created_date=candidate_test.created_date,
         modified_date=candidate_test.modified_date,
         answers=answers_with_feedback,
+        admin_id=candidate_test.admin_id,
     )
 
 
@@ -1215,6 +1224,13 @@ def get_test_questions(
         gcs_service=gcs_service,
     )
 
+    test_link = session.exec(
+        select(TestLink).where(
+            TestLink.test_id == test_id,
+            TestLink.created_by_id == candidate_test.admin_id,
+        )
+    ).first()
+
     return TestCandidatePublic(
         **test_data,
         question_revisions=candidate_questions,
@@ -1224,6 +1240,7 @@ def get_test_questions(
         total_questions=len(candidate_questions),
         candidate_test=candidate_test,
         nomenclature=nomenclature,
+        link=test_link.uuid if test_link else None,
     )
 
 

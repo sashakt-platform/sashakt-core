@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.models.form import FormResponse
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
+from app.tests.utils.test import get_test_link
 from app.tests.utils.user import get_current_user_data
 from app.tests.utils.utils import random_lower_string
 
@@ -529,13 +530,8 @@ def test_public_test_includes_form(
         headers=get_user_superadmin_token,
     )
 
-    # Create a test with form_id
-    import uuid
-
-    test_uuid = str(uuid.uuid4())
     test = Test(
         name=random_lower_string(),
-        link=test_uuid,
         form_id=form_id,
         organization_id=user_data["organization_id"],
         created_by_id=user_data["id"],
@@ -544,8 +540,9 @@ def test_public_test_includes_form(
     db.commit()
     db.refresh(test)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     # Get public test info
-    response = client.get(f"{settings.API_V1_STR}/test/public/{test_uuid}")
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
 
     assert response.status_code == 200
     response_data = response.json()
@@ -598,8 +595,11 @@ def test_start_test_with_form_responses(
     db.refresh(test)
 
     # Start test with form responses
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+
     start_request = {
-        "test_id": test.id,
+        "test_link_uuid": test_link.uuid,
         "device_info": "test_device",
         "form_responses": {
             "full_name": "John Doe",
