@@ -7999,6 +7999,46 @@ def test_get_test_status(
         assert response.json()["status"] == expected_status
 
 
+def test_get_test_status_changes_with_time(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """A single test transitions Scheduled → In Progress → Completed as time advances."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = create_random_user(db, organization_id=user_data["organization_id"])
+
+    start = datetime(2025, 6, 1, 10, 0, 0)
+    end = datetime(2025, 6, 1, 12, 0, 0)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user_data["organization_id"],
+        start_time=start,
+        end_time=end,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    def get_status(mocked_now: datetime) -> str:
+        with patch("app.api.routes.test.get_current_time", return_value=mocked_now):
+            response = client.get(
+                f"{settings.API_V1_STR}/test/{test.id}",
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == status.HTTP_200_OK
+        return response.json()["status"]
+
+    # Before start_time → Scheduled
+    assert get_status(datetime(2025, 5, 31, 9, 0, 0)) == "Scheduled"
+
+    # After start_time, before end_time → In Progress
+    assert get_status(datetime(2025, 6, 1, 11, 0, 0)) == "In Progress"
+
+    # After end_time → Completed
+    assert get_status(datetime(2025, 6, 1, 13, 0, 0)) == "Completed"
+
+
 def test_create_test_with_show_marks_true(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
