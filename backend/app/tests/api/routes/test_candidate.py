@@ -36,6 +36,7 @@ from app.models.test import (
 )
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.test import get_test_link
 from app.tests.utils.user import (
     authentication_token_from_email,
     create_random_user,
@@ -390,6 +391,7 @@ def test_create_candidate_test(
             "start_time": start_time,
             "end_time": end_time,
             "is_submitted": False,
+            "admin_id": user.id,
         },
         headers=get_user_candidate_token,
     )
@@ -447,6 +449,7 @@ def test_read_candidate_test(
         start_time=start_time,
         end_time=end_time,
         is_submitted=False,
+        admin_id=user.id,
     )
 
     db.add(candidate_test)
@@ -502,6 +505,7 @@ def test_read_candidate_test_by_id(
     end_time_a = "2025-03-16T12:00:00Z"
 
     candidate_a_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate_a.id,
         device=device_a,
@@ -526,6 +530,7 @@ def test_read_candidate_test_by_id(
         start_time=start_time_b,
         end_time=end_time_b,
         is_submitted=False,
+        admin_id=user.id,
     )
 
     db.add(candidate_b_test)
@@ -592,6 +597,7 @@ def test_update_candidate_test_by_id(
         start_time=start_time_a,
         end_time=end_time_a,
         is_submitted=is_submitted,
+        admin_id=user.id,
     )
 
     db.add(candidate_a_test)
@@ -609,6 +615,7 @@ def test_update_candidate_test_by_id(
         start_time=start_time_b,
         end_time=end_time_b,
         is_submitted=False,
+        admin_id=user.id,
     )
 
     db.add(candidate_b_test)
@@ -748,6 +755,7 @@ def test_create_candidate_test_answers(
         start_time=start_time,
         end_time=end_time,
         is_submitted=is_submitted,
+        admin_id=user.id,
     )
 
     db.add(candidate_test)
@@ -849,6 +857,7 @@ def test_read_candidate_test_answer(
         start_time=start_time,
         end_time=end_time,
         is_submitted=is_submitted,
+        admin_id=user.id,
     )
 
     db.add(candidate_test)
@@ -986,6 +995,7 @@ def test_read_candidate_test_answer_by_id(
     is_submitted = False
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device=device,
@@ -1120,6 +1130,7 @@ def test_update_candidate_test_answer(
     is_submitted = False
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device=device,
@@ -1219,7 +1230,10 @@ def test_update_candidate_test_answer(
     assert data["time_spent"] == 56
 
 
-def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
+def test_start_test_for_candidate(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
     """Test the start_test endpoint that creates anonymous candidates."""
     user = create_random_user(db)
 
@@ -1238,8 +1252,13 @@ def test_start_test_for_candidate(client: TestClient, db: SessionDep) -> None:
     db.commit()
     db.refresh(test)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
     # Test start_test endpoint - no authentication required
-    payload = {"test_id": test.id, "device_info": "Chrome Browser on MacOS"}
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Chrome Browser on MacOS",
+    }
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     data = response.json()
@@ -1279,7 +1298,8 @@ def test_start_test_inactive_test(client: TestClient, db: SessionDep) -> None:
     db.add(test)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
 
     assert response.status_code == 404
@@ -1324,7 +1344,6 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
         name=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        link=random_lower_string(),
         organization_id=org.id,
     )
     db.add(test)
@@ -1340,7 +1359,8 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     db.commit()
 
     # Create candidate and candidate_test using start_test endpoint
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -1454,10 +1474,10 @@ def test_get_test_questions_returns_question_sets_for_sectioned_test(
         )
     )
     db.commit()
-
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     assert start_response.status_code == 200
@@ -1531,8 +1551,9 @@ def test_get_test_questions_omr_optional_yes(
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     payload = {
-        "test_id": test.id,
+        "test_link_uuid": test_link.uuid,
         "device_info": "Test Device",
     }
     start_response = client.post(
@@ -1605,7 +1626,8 @@ def test_get_test_questions_omr_mode(client: TestClient, db: SessionDep) -> None
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -1687,7 +1709,8 @@ def test_get_test_questions_normal_mode(client: TestClient, db: SessionDep) -> N
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -1737,7 +1760,8 @@ def test_get_test_questions_invalid_uuid(client: TestClient, db: SessionDep) -> 
     db.commit()
 
     # Start test to create candidate_test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -1810,7 +1834,8 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     # Start test (creates candidate with UUID)
-    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -1940,10 +1965,10 @@ def test_submit_answer_enforces_question_set_attempt_limit(
         )
     )
     db.commit()
-
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "QR Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -2055,9 +2080,10 @@ def test_submit_answer_allows_updating_existing_attempt_in_full_section(
     )
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "QR Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -2129,9 +2155,10 @@ def test_submit_answer_for_unassigned_question_revision_returns_403(
     db.add(TestQuestion(test_id=test.id, question_revision_id=assigned_revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "QR Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -2219,9 +2246,10 @@ def test_start_test_rejects_mixed_question_set_membership(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision_two.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "QR Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"},
     )
 
     assert response.status_code == 422
@@ -2276,7 +2304,8 @@ def test_submit_answer_for_subjective_qr_candidate(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2326,7 +2355,8 @@ def test_submit_answer_invalid_uuid(client: TestClient, db: SessionDep) -> None:
     db.commit()
 
     # Start test to get candidate_test_id
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2399,7 +2429,8 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id, "device_info": "Update Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Update Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2467,7 +2498,8 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id, "device_info": "Submit Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Submit Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2559,7 +2591,8 @@ def test_submit_test_fails_with_unanswered_mandatory_question(
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2627,7 +2660,8 @@ def test_submit_test_fails_with_bookmarked_but_unanswered_mandatory_question(
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2710,7 +2744,8 @@ def test_submit_test_succeeds_with_answered_mandatory_question(
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2803,7 +2838,8 @@ def test_submit_test_hides_correct_answer_when_feedback_disabled(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -2885,7 +2921,8 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -3018,7 +3055,8 @@ def test_get_test_result(
     db.add(test_question1)
     db.add(test_question2)
     db.commit()
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -3166,9 +3204,10 @@ def test_get_test_result_uses_section_marking_precedence(
     )
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Result Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Result Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -3273,6 +3312,7 @@ def test_get_test_questions_rejects_mixed_question_set_membership(
     db.refresh(candidate)
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="QR Test Device",
@@ -3360,6 +3400,7 @@ def test_get_test_result_rejects_mixed_question_set_membership(
     db.refresh(candidate)
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="QR Test Device",
@@ -3577,8 +3618,12 @@ def test_overall_avg_score_two_tests(
         },
     }
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     for cand_label, answers in candidate_answers.items():
-        payload = {"test_id": test.id, "device_info": f"{cand_label}-device"}
+        payload = {
+            "test_link_uuid": test_link.uuid,
+            "device_info": f"{cand_label}-device",
+        }
         start_response = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         )
@@ -3701,9 +3746,12 @@ def test_overall_avg_score_two_tests(
             5: [2],
         },
     }
-
+    test2_link = get_test_link(db, test_id=test2.id, admin_id=test2.created_by_id)
     for cand_label, answers in candidate_answers2.items():
-        payload = {"test_id": test2.id, "device_info": f"{cand_label}-device"}
+        payload = {
+            "test_link_uuid": test2_link.uuid,
+            "device_info": f"{cand_label}-device",
+        }
         start_response = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         )
@@ -3808,8 +3856,12 @@ def test_overall_avg_score_two_tests(
         "cand4": {1: [2], 2: [2], 3: [2], 4: [2]},
     }
 
+    test3_link = get_test_link(db, test_id=test3.id, admin_id=test3.created_by_id)
     for cand_label, answers in candidate_answers3.items():
-        payload = {"test_id": test3.id, "device_info": f"{cand_label}-device"}
+        payload = {
+            "test_link_uuid": test3_link.uuid,
+            "device_info": f"{cand_label}-device",
+        }
         start_response = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         )
@@ -3913,8 +3965,12 @@ def test_overall_avg_score_two_tests(
         "cand3": {1: [2], 2: [2]},
         "cand4": {1: [2], 2: [2], 3: [2], 4: [2]},
     }
+    test4_link = get_test_link(db, test_id=test4.id, admin_id=test4.created_by_id)
     for cand_label, answers in candidate_answers4.items():
-        payload = {"test_id": test4.id, "device_info": f"{cand_label}-device"}
+        payload = {
+            "test_link_uuid": test4_link.uuid,
+            "device_info": f"{cand_label}-device",
+        }
         start_response = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         )
@@ -4017,10 +4073,11 @@ def test_overall_avg_time_two_tests(
     t1_durations = [10, 12, 14, 25]
     t2_durations = [32, 20, 41, 45]
 
+    test1_link = get_test_link(db, test_id=test1.id, admin_id=test1.created_by_id)
     for idx, mins in enumerate(t1_durations, start=1):
         resp = client.post(
             f"{settings.API_V1_STR}/candidate/start_test",
-            json={"test_id": test1.id, "device_info": f"T1-cand{idx}"},
+            json={"test_link_uuid": test1_link.uuid, "device_info": f"T1-cand{idx}"},
         )
         assert resp.status_code == 200
         cand_data = resp.json()
@@ -4036,10 +4093,11 @@ def test_overall_avg_time_two_tests(
         db.add(ct)
         db.commit()
 
+    test2_link = get_test_link(db, test_id=test2.id, admin_id=test2.created_by_id)
     for idx, mins in enumerate(t2_durations, start=1):
         resp = client.post(
             f"{settings.API_V1_STR}/candidate/start_test",
-            json={"test_id": test2.id, "device_info": f"T2-cand{idx}"},
+            json={"test_link_uuid": test2_link.uuid, "device_info": f"T2-cand{idx}"},
         )
         assert resp.status_code == 200
         cand_data = resp.json()
@@ -4191,8 +4249,13 @@ def test_overall_avg_score_state_admin_location_restricted(
         "cand2": {1: [2], 2: [1]},
         "cand3": {1: [1], 2: [1]},
     }
+
+    test1_link = get_test_link(db, test_id=test1.id, admin_id=test1.created_by_id)
     for cand_label, answers in answers_test1.items():
-        payload = {"test_id": test1.id, "device_info": f"{cand_label}-device"}
+        payload = {
+            "test_link_uuid": test1_link.uuid,
+            "device_info": f"{cand_label}-device",
+        }
         start_data = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         ).json()
@@ -4221,7 +4284,8 @@ def test_overall_avg_score_state_admin_location_restricted(
             headers=get_user_superadmin_token,
         )
 
-    payload = {"test_id": test2.id, "device_info": "cand-outside"}
+    test2_link = get_test_link(db, test_id=test2.id, admin_id=test2.created_by_id)
+    payload = {"test_link_uuid": test2_link.uuid, "device_info": "cand-outside"}
     start_data = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     ).json()
@@ -4337,10 +4401,11 @@ def test_overall_avg_time_state_admin_location_restricted(
     t1_durations = [10, 15, 20]
     t2_durations = [30, 40, 50]
 
+    test1_link = get_test_link(db, test_id=test1.id, admin_id=test1.created_by_id)
     for idx, mins in enumerate(t1_durations, start=1):
         resp = client.post(
             f"{settings.API_V1_STR}/candidate/start_test",
-            json={"test_id": test1.id, "device_info": f"T1-cand{idx}"},
+            json={"test_link_uuid": test1_link.uuid, "device_info": f"T1-cand{idx}"},
         )
         cand_data = resp.json()
         cand_test_id = cand_data["candidate_test_id"]
@@ -4353,10 +4418,11 @@ def test_overall_avg_time_state_admin_location_restricted(
         db.add(ct)
         db.commit()
 
+    test2_link = get_test_link(db, test_id=test2.id, admin_id=test2.created_by_id)
     for idx, mins in enumerate(t2_durations, start=1):
         resp = client.post(
             f"{settings.API_V1_STR}/candidate/start_test",
-            json={"test_id": test2.id, "device_info": f"T2-cand{idx}"},
+            json={"test_link_uuid": test2_link.uuid, "device_info": f"T2-cand{idx}"},
         )
         cand_data = resp.json()
         cand_test_id = cand_data["candidate_test_id"]
@@ -4452,6 +4518,7 @@ def test_result_with_no_answers(
     db.commit()
     db.refresh(revision2)
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -4561,6 +4628,7 @@ def test_result_with_subjective_attempted(
     db.refresh(revision_2)
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -4665,6 +4733,7 @@ def test_result_with_subjective_attempted_but_empty_response(
     db.refresh(revision)
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -4753,6 +4822,7 @@ def test_result_with_subjective_not_attempted(
     db.refresh(revision)
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -4843,7 +4913,8 @@ def test_result_with_mixed_answers_test_level_marking(
         test_question = TestQuestion(test_id=test.id, question_revision_id=rev.id)
         db.add(test_question)
         db.commit()
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -4956,9 +5027,10 @@ def test_result_partial_correct_only(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_res = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": random_lower_string()},
+        json={"test_link_uuid": test_link.uuid, "device_info": random_lower_string()},
     )
     candidate_test_id = start_res.json()["candidate_test_id"]
     candidate_uuid = start_res.json()["candidate_uuid"]
@@ -5034,9 +5106,10 @@ def test_result_partial_marks_with_none_scheme(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_res = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "device"},
     )
     candidate_test_id = start_res.json()["candidate_test_id"]
     candidate_uuid = start_res.json()["candidate_uuid"]
@@ -5109,9 +5182,10 @@ def test_result_skipped_question(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_res = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": random_lower_string()},
+        json={"test_link_uuid": test_link.uuid, "device_info": random_lower_string()},
     )
     candidate_test_id = start_res.json()["candidate_test_id"]
     candidate_uuid = start_res.json()["candidate_uuid"]
@@ -5179,9 +5253,10 @@ def test_result_all_wrong(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_res = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": random_lower_string()},
+        json={"test_link_uuid": test_link.uuid, "device_info": random_lower_string()},
     )
     candidate_test_id = start_res.json()["candidate_test_id"]
     candidate_uuid = start_res.json()["candidate_uuid"]
@@ -5290,9 +5365,10 @@ def test_result_full_correct(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision2.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_res = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": random_lower_string()},
+        json={"test_link_uuid": test_link.uuid, "device_info": random_lower_string()},
     )
     candidate_test_id = start_res.json()["candidate_test_id"]
     candidate_uuid = start_res.json()["candidate_uuid"]
@@ -5386,9 +5462,10 @@ def test_result_partial_correct_with_test_level_marking(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_res = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "dev"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "dev"},
     )
     candidate_test_id = start_res.json()["candidate_test_id"]
     candidate_uuid = start_res.json()["candidate_uuid"]
@@ -5486,7 +5563,8 @@ def test_result_with_mixed_answers_question_level_marking(
         test_question = TestQuestion(test_id=test.id, question_revision_id=rev.id)
         db.add(test_question)
         db.commit()
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -5592,6 +5670,7 @@ def test_result_with_default_question_level_when_test_marks_level_not_set(
         db.refresh(revision)
         revisions.append(revision)
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Device",
@@ -5710,6 +5789,7 @@ def test_result_with_Marks_level_None(
         db.refresh(revision)
         revisions.append(revision)
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Device",
@@ -5827,6 +5907,7 @@ def test_result_with_some_questions_marks_scheme_None(
         db.refresh(revision)
         revisions.append(revision)
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Device",
@@ -5960,7 +6041,8 @@ def test_randomized_question_selection_and_result_calculation_with_mixed_answers
         test_question = TestQuestion(test_id=test.id, question_revision_id=revision.id)
         db.add(test_question)
         db.commit()
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -6076,6 +6158,7 @@ def test_convert_to_list_with_int_response(
     db.commit()
     db.refresh(revision2)
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -6191,7 +6274,8 @@ def test_submit_batch_answers_for_qr_candidate(
     db.commit()
 
     # Start test to create candidate and candidate_test
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -6292,9 +6376,10 @@ def test_submit_batch_answers_for_unassigned_question_revision_returns_403(
     db.add(TestQuestion(test_id=test.id, question_revision_id=assigned_revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "QR Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -6423,9 +6508,10 @@ def test_submit_batch_answers_enforces_question_set_attempt_limit(
     )
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "QR Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -6531,9 +6617,10 @@ def test_submit_batch_answers_for_qr_candidate_with_subjective(
     db.add(TestQuestion(test_id=test.id, question_revision_id=qr_2.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -6639,9 +6726,10 @@ def test_submit_batch_answers_for_qr_candidate_subjective_exceeds_limit(
     db.add(TestQuestion(test_id=test.id, question_revision_id=qr_2.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_uuid = start_data["candidate_uuid"]
@@ -6688,7 +6776,8 @@ def test_submit_batch_answers_invalid_uuid(client: TestClient, db: SessionDep) -
     db.commit()
 
     # Start test to create candidate_test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -6724,7 +6813,8 @@ def test_submit_batch_answers_empty_list(client: TestClient, db: SessionDep) -> 
     db.commit()
 
     # Start test to create candidate_test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -6785,7 +6875,8 @@ def test_submit_batch_answers_update_existing(
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -6869,6 +6960,7 @@ def test_candidate_timer_with_specific_dates(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -6936,6 +7028,7 @@ def test_candidate_timer_end_time_takes_priority(
         db.commit()
         db.refresh(test)
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             created_by_id=user.id,
@@ -6987,6 +7080,7 @@ def test_candidate_timer_timelimit_and_end_time_not_set(
         db.refresh(candidate)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7040,6 +7134,7 @@ def test_candidate_timer_with_only_time_limit(
         db.commit()
         db.refresh(test)
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             created_by_id=user.id,
             candidate_id=candidate.id,
@@ -7084,6 +7179,7 @@ def test_candidate_timer_only_end_time(client: TestClient, db: SessionDep) -> No
         db.commit()
         db.refresh(test)
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             created_by_id=user.id,
@@ -7129,6 +7225,7 @@ def test_candidate_timer_no_start_time(client: TestClient, db: SessionDep) -> No
         db.commit()
         db.refresh(test)
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             created_by_id=user.id,
@@ -7175,6 +7272,7 @@ def test_candidate_timer_no_start_time_only_end_time(
         db.commit()
         db.refresh(test)
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             created_by_id=user.id,
@@ -7227,6 +7325,7 @@ def test_result_not_visible(
     db.refresh(candidate)
     # Create a candidate test
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test phone",
@@ -7347,7 +7446,11 @@ def test_start_test_before_start_time(client: TestClient, db: SessionDep) -> Non
     db.commit()
     db.refresh(test)
 
-    payload = {"test_id": test.id, "device_info": "Browser on MacOS Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Browser on MacOS Chrome",
+    }
     fake_now = datetime(2025, 7, 5, 12, 0, 0)
     with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
         response = client.post(
@@ -7405,7 +7508,11 @@ def test_candidate_test_question_ids_are_shuffled(
         db.add(tq)
         db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome Browser on ubuntu"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Chrome Browser on ubuntu",
+    }
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     data = response.json()
@@ -7503,7 +7610,11 @@ def test_candidate_test_question_ids_are_random(
         db.add(tq)
         db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome Browser on Ubuntu"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Chrome Browser on Ubuntu",
+    }
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -7628,7 +7739,8 @@ def test_candidate_test_question_ids_tag_randomize(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -7703,7 +7815,8 @@ def test_start_test_skips_inactive_questions(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -7812,7 +7925,8 @@ def test_candidate_test_question_ids_tag_randomize_max_count_two_candidates(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response_1 = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -7926,7 +8040,8 @@ def test_candidate_tag_random_count_update(
     data = response.json()
     assert response.status_code == 200
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -8068,7 +8183,8 @@ def test_candidate_question_ids_random_and_tag_combined_two_candidates(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
 
     # Candidate 1
     response_1 = client.post(
@@ -8226,7 +8342,8 @@ def test_candidate_question_ids_random_tag_with_all_test_questions(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
 
     # Candidate 1
     response_1 = client.post(
@@ -8361,7 +8478,8 @@ def test_candidate_test_question_ids_tag_randomize_with_dual_tag(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -8479,7 +8597,8 @@ def test_random_questions_by_tag_skipping_selected_questions(
 
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Chrome"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -8557,8 +8676,10 @@ def test_candidate_test_question_ids_in_order(
     assert test_response.status_code == 200
     test_data = test_response.json()
     assert test_data["id"] is not None
-
-    payload = {"test_id": test_data["id"], "device_info": "Test Device"}
+    test_data_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
+    payload = {"test_link_uuid": test_data_link.uuid, "device_info": "Test Device"}
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -8648,7 +8769,11 @@ def test_get_test_result_with_random_question_true(
         db.add(tq)
         db.commit()
 
-    payload = {"test_id": test.id, "device_info": "Chrome Browser on Ubuntu"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Chrome Browser on Ubuntu",
+    }
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
     assert response.status_code == 200
     data = response.json()
@@ -8748,7 +8873,8 @@ def test_submit_answer_for_single_choice_with_multiple_options_should_fail(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -8825,7 +8951,8 @@ def test_submit_answer_for_multi_choice_with_valid_response_should_pass(
     )
     db.add(test_question)
     db.commit()
-    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -8896,7 +9023,8 @@ def test_submit_answer_for_multi_choice_with_invalid_response_should_fail(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -8947,7 +9075,8 @@ def test_submit_answer_for_multi_choice_with_none_revision(
     db.add(test)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": "QR Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "QR Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -9023,7 +9152,11 @@ def test_test_level_marking_scheme_applied_on_questions(
     db.commit()
 
     # Create candidate and candidate_test using start_test endpoint
-    payload = {"test_id": test.id, "device_info": " Test Marks level Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": " Test Marks level Device",
+    }
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -9106,7 +9239,11 @@ def test_question_level_marking_scheme_applied_on_questions(
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id, "device_info": "Question Marks level Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Question Marks level Device",
+    }
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -9127,6 +9264,157 @@ def test_question_level_marking_scheme_applied_on_questions(
 
     for question_data in data["question_revisions"]:
         assert question_data["marking_scheme"] == question_level_scheme
+
+
+def test_show_marks_false_hides_marking_scheme_from_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """When show_marks=False, marking_scheme must be None in the candidate question payload."""
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+        show_marks=False,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "show_marks false device",
+    }
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert isinstance(data["question_revisions"], list)
+    assert len(data["question_revisions"]) > 0
+    for question_data in data["question_revisions"]:
+        assert question_data["marking_scheme"] is None
+
+
+def test_show_marks_true_exposes_marking_scheme_to_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """When show_marks=True, marking_scheme must be present in the candidate question payload."""
+    user = create_random_user(db)
+    org = create_random_organization(db)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    expected_scheme = {"correct": 5, "wrong": -2, "skipped": 0}
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        marking_scheme=expected_scheme,
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+        show_marks=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "show_marks true device",
+    }
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    identity = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": identity},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert isinstance(data["question_revisions"], list)
+    assert len(data["question_revisions"]) > 0
+    for question_data in data["question_revisions"]:
+        assert question_data["marking_scheme"] == expected_scheme
 
 
 def test_submitted_candidate_with_end_time(
@@ -9162,6 +9450,7 @@ def test_submitted_candidate_with_end_time(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=True,
@@ -9220,6 +9509,7 @@ def test_candidate_active_before_end_time(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -9280,6 +9570,7 @@ def test_candidate_active_inside_time_limit(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -9380,6 +9671,7 @@ def test_summary_filtered_by_state(
         db.add_all(
             [
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_x.id,
                     candidate_id=candidate_x.id,
                     is_submitted=False,
@@ -9389,6 +9681,7 @@ def test_summary_filtered_by_state(
                     consent=True,
                 ),
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_y.id,
                     candidate_id=candidate_y.id,
                     is_submitted=False,
@@ -9507,6 +9800,7 @@ def test_summary_filtered_by_district(
         db.add_all(
             [
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_x1_x2.id,
                     candidate_id=candidate_x1_x2.id,
                     is_submitted=False,
@@ -9516,6 +9810,7 @@ def test_summary_filtered_by_district(
                     consent=True,
                 ),
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_x3.id,
                     candidate_id=candidate_x3.id,
                     is_submitted=False,
@@ -9623,6 +9918,7 @@ def test_summary_active_submitted_by_state(
         db.add_all(
             [
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_x.id,
                     candidate_id=candidate_x.id,
                     is_submitted=True,
@@ -9632,6 +9928,7 @@ def test_summary_active_submitted_by_state(
                     consent=True,
                 ),
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_y.id,
                     candidate_id=candidate_y.id,
                     is_submitted=True,
@@ -9747,6 +10044,7 @@ def test_summary_active_submitted_by_district(
         db.add_all(
             [
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_x1.id,
                     candidate_id=candidate_x.id,
                     is_submitted=True,
@@ -9756,6 +10054,7 @@ def test_summary_active_submitted_by_district(
                     consent=True,
                 ),
                 CandidateTest(
+                    admin_id=user_id,
                     test_id=test_x2.id,
                     candidate_id=candidate_y.id,
                     is_submitted=True,
@@ -9824,6 +10123,7 @@ def test_candidate_active_no_start_end(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -9885,6 +10185,7 @@ def test_candidate_active_inside_60_min_before_end(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -9946,6 +10247,7 @@ def test_candidate_inactive_past_end_time(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -10007,6 +10309,7 @@ def test_candidate_inactive_time_limit_exceeded(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -10068,6 +10371,7 @@ def test_candidate_inactive_time_limit_exceeded_no_test_end(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -10129,6 +10433,7 @@ def test_candidate_inactive_past_end_time_no_time_limit(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -10190,6 +10495,7 @@ def test_candidate_with_end_time_counted_as_submitted(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -10251,6 +10557,7 @@ def test_candidate_inactive_due_to_time_limit_exceeded(
 
         db.add(
             CandidateTest(
+                admin_id=user_id,
                 test_id=active_test.id,
                 candidate_id=candidate.id,
                 is_submitted=False,
@@ -10320,7 +10627,6 @@ def test_start_test_candidate_with_organization(
         json={
             "name": "Org Test",
             "is_active": True,
-            "link": random_lower_string(),
         },
     )
     assert test_response.status_code == 200
@@ -10328,14 +10634,16 @@ def test_start_test_candidate_with_organization(
     assert "id" in test_data
     assert "name" in test_data
     assert "is_active" in test_data
-    assert "link" in test_data
     assert "organization_id" in test_data
     assert test_data["organization_id"] is not None
 
+    test_data_link = get_test_link(
+        db, test_id=test_data["id"], admin_id=test_data["created_by_id"]
+    )
     candidate_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
         json={
-            "test_id": test_data["id"],
+            "test_link_uuid": test_data_link.uuid,
             "device_info": "Test Device Info",
         },
     )
@@ -10405,7 +10713,8 @@ def test_submit_answer_with_bookmark(client: TestClient, db: SessionDep) -> None
     db.commit()
 
     # Start test (creates candidate with UUID)
-    payload = {"test_id": test.id, "device_info": "Bookmark Test Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": "Bookmark Test Device"}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -10491,7 +10800,8 @@ def test_submit_answer_bookmark_default_false(
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -10569,7 +10879,8 @@ def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> No
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -10683,7 +10994,8 @@ def test_batch_submit_answers_with_bookmark(client: TestClient, db: SessionDep) 
     db.commit()
 
     # Start test
-    payload = {"test_id": test.id}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -10763,6 +11075,7 @@ def test_update_candidate_test_answer_with_bookmark(
     db.commit()
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -10860,6 +11173,7 @@ def test_update_answer_retains_bookmark_when_not_passed(
     db.commit()
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="Test Device",
@@ -10985,7 +11299,11 @@ def test_bookmark_question_without_answering(
     db.commit()
 
     # Start test (creates candidate with UUID)
-    payload = {"test_id": test.id, "device_info": "Bookmark Without Answer Device"}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {
+        "test_link_uuid": test_link.uuid,
+        "device_info": "Bookmark Without Answer Device",
+    }
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11107,9 +11425,10 @@ def test_get_test_result_with_only_numerical_decimal_questions(
     )
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -11176,7 +11495,11 @@ def test_submit_test_after_expiry(
         db.commit()
         db.refresh(test)
 
-        payload = {"test_id": test.id, "device_info": random_lower_string()}
+        test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+        payload = {
+            "test_link_uuid": test_link.uuid,
+            "device_info": random_lower_string(),
+        }
         start_response = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         )
@@ -11257,7 +11580,11 @@ def test_submit_test_with_unanswered_mandatory_questions(
             db.add(test_question)
             db.commit()
 
-        payload = {"test_id": test.id, "device_info": random_lower_string()}
+        test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+        payload = {
+            "test_link_uuid": test_link.uuid,
+            "device_info": random_lower_string(),
+        }
         start_response = client.post(
             f"{settings.API_V1_STR}/candidate/start_test", json=payload
         )
@@ -11327,7 +11654,8 @@ def test_submit_answer_blocks_update_when_reviewed(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11441,9 +11769,10 @@ def test_get_test_result_with_numerical_decimal_tolerance(
     )
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -11534,7 +11863,8 @@ def test_submit_answer_saves_is_reviewed_field(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11613,7 +11943,8 @@ def test_submit_answer_is_reviewed_defaults_to_false(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11691,7 +12022,8 @@ def test_batch_submit_blocks_update_when_reviewed(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11797,7 +12129,8 @@ def test_get_review_feedback_during_test_with_immediate_feedback(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11879,7 +12212,8 @@ def test_get_review_feedback_during_test_fails_without_immediate_feedback(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -11945,7 +12279,8 @@ def test_get_review_feedback_after_completion_with_feedback_enabled(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12035,7 +12370,8 @@ def test_get_review_feedback_after_completion_fails_without_feedback_enabled(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12109,7 +12445,8 @@ def test_get_review_feedback_marks_answers_as_reviewed(
     db.add(test_question)
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12202,7 +12539,8 @@ def test_get_review_feedback_with_specific_question_ids(
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision2.id))
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12292,7 +12630,8 @@ def test_get_review_feedback_invalid_uuid(client: TestClient, db: SessionDep) ->
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12364,7 +12703,8 @@ def test_get_review_feedback_unanswered_questions(
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12430,7 +12770,8 @@ def test_answer_cannot_be_modified_after_review_feedback(
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
     db.commit()
 
-    payload = {"test_id": test.id, "device_info": random_lower_string()}
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test", json=payload
     )
@@ -12538,9 +12879,10 @@ def test_result_includes_certificate_download_url(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -12612,9 +12954,10 @@ def test_result_no_certificate_download_url_when_test_has_no_certificate(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -12695,9 +13038,10 @@ def test_result_certificate_token_reused_on_repeated_calls(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -12787,9 +13131,10 @@ def test_result_certificate_data_snapshot_persisted(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -12878,9 +13223,10 @@ def test_result_certificate_score_formatted_with_marks(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -12948,9 +13294,10 @@ def test_result_certificate_score_na_when_no_questions(
     db.commit()
     db.refresh(test)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -13033,9 +13380,10 @@ def test_result_certificate_completion_date_formatted(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -13146,9 +13494,10 @@ def test_result_certificate_data_includes_form_response_fields(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -13260,9 +13609,10 @@ def test_result_certificate_data_form_fields_default_na_when_no_form_response(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -13335,9 +13685,10 @@ def test_result_certificate_data_not_set_when_no_certificate(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     assert start_response.status_code == 200
     start_data = start_response.json()
@@ -13362,9 +13713,10 @@ def test_get_test_result_matrix_match_all_rows_correct(
     """Candidate matches all rows correctly → counted as correct, full marks awarded."""
     test, revision = create_matrix_match_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13403,9 +13755,10 @@ def test_get_test_result_matrix_match_all_rows_incorrect(
     """Candidate selects wrong columns for all rows → counted as incorrect, wrong marks applied."""
     test, revision = create_matrix_match_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13444,9 +13797,10 @@ def test_get_test_result_matrix_match_not_attempted(
     """Candidate does not answer the matrix-match question → counted as mandatory not attempted."""
     test, revision = create_matrix_match_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13528,9 +13882,10 @@ def test_get_test_result_matrix_match_partial_marks(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13569,9 +13924,10 @@ def test_get_test_result_matrix_match_invalid_response(
     """Candidate submits a non-JSON / non-dict response → counted as incorrect."""
     test, revision = create_matrix_match_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13670,9 +14026,10 @@ def test_get_test_result_matrix_match_mixed_correct_and_incorrect(
     )
     db.commit()
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13719,9 +14076,10 @@ def test_get_test_result_matrix_match_without_json_dumps(
 ) -> None:
     test, revision = create_matrix_match_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13756,9 +14114,10 @@ def test_get_test_result_matrix_match_partial_one_correct_one_wrong_column(
 ) -> None:
     test, revision = create_matrix_match_test_setup(db, correct_answer={"1": [20, 30]})
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13795,9 +14154,10 @@ def test_get_test_result_matrix_match_partial_only_one_column_of_two_submitted(
 ) -> None:
     test, revision = create_matrix_match_test_setup(db, correct_answer={"1": [20, 30]})
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13848,9 +14208,10 @@ def test_get_test_result_matrix_match_partial_scheme_with_wrong_column_in_row(
         db, marking_scheme=partial_marking_scheme, correct_answer=correct_answer
     )
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -13966,9 +14327,10 @@ def test_get_test_result_matrix_rating_attempted(
     """Candidate submits any response for matrix-rating → counted as correct, full marks awarded."""
     test, revision = create_matrix_rating_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -14007,9 +14369,10 @@ def test_get_test_result_matrix_rating_not_attempted(
     """Candidate does not answer the matrix-rating question → counted as mandatory not attempted."""
     test, revision = create_matrix_rating_test_setup(db)
 
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_id": test.id, "device_info": "Test Device"},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
     )
     start_data = start_response.json()
     candidate_test_id = start_data["candidate_test_id"]
@@ -14029,3 +14392,147 @@ def test_get_test_result_matrix_rating_not_attempted(
     assert data["total_questions"] == 1
     assert data["marks_obtained"] == 0
     assert data["marks_maximum"] == 4
+
+
+# ---------------------------------------------------------------------------
+# POST /candidate/start_test — test_link_uuid payload
+# ---------------------------------------------------------------------------
+
+
+def test_start_test_invalid_uuid(client: TestClient) -> None:
+    """start_test returns 404 when the test_link_uuid does not exist."""
+    payload = {"test_link_uuid": str(uuid.uuid4()), "device_info": "Chrome"}
+    response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test Link Not Found"
+
+
+def test_start_test_stores_admin_id(client: TestClient, db: SessionDep) -> None:
+    """admin_id on the CandidateTest matches the admin from the TestLink used."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    candidate_test = db.get(CandidateTest, data["candidate_test_id"])
+    assert candidate_test is not None
+    assert candidate_test.admin_id == user.id
+
+
+# ---------------------------------------------------------------------------
+# GET /candidate/test_questions — link field
+# ---------------------------------------------------------------------------
+
+
+def test_get_test_questions_returns_link(client: TestClient, db: SessionDep) -> None:
+    """test_questions response includes the link UUID of the TestLink used to start."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 1+1?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "1"},
+            {"id": 2, "key": "B", "value": "2"},
+        ],
+        correct_answer=[2],
+    )
+    db.add(question_revision)
+    db.flush()
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{start_data['candidate_test_id']}",
+        params={"candidate_uuid": start_data["candidate_uuid"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["link"] == test_link.uuid
+
+
+# ---------------------------------------------------------------------------
+# POST /candidate/submit_test — admin_id in response
+# ---------------------------------------------------------------------------
+
+
+def test_submit_test_returns_admin_id(client: TestClient, db: SessionDep) -> None:
+    """submit_test response includes the admin_id from the TestLink used to start."""
+    user = create_random_user(db)
+    assert user.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    assert response.json()["admin_id"] == user.id

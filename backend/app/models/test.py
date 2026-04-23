@@ -138,6 +138,30 @@ class TestDistrict(SQLModel, table=True):
     district_id: int = Field(foreign_key="district.id", ondelete="CASCADE")
 
 
+class TestLink(SQLModel, table=True):
+    __tablename__ = "test_link"
+    __test__ = False
+    __table_args__ = (UniqueConstraint("test_id", "created_by_id"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
+    uuid: str = Field(
+        nullable=False,
+        index=True,
+        unique=True,
+        description="UUID used in the shareable URL for this (test, admin) pair.",
+    )
+    test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
+    created_by_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
+
+    test: "Test" = Relationship(back_populates="test_links")
+    created_by_user: "User" = Relationship(back_populates="test_links")
+
+
+class TestLinkPublic(SQLModel):
+    uuid: str
+
+
 class TestBase(SQLModel):
     name: str = Field(
         index=True,
@@ -184,11 +208,6 @@ class TestBase(SQLModel):
         default=None,
         title="Start Instructions",
         description="Instructions to be shown to the candidate before starting the test.",
-    )
-    link: str | None = Field(
-        default=None,
-        title="Test Link",
-        description="Link to the test shared with the candidate. Auto-generated if not provided.",
     )
     no_of_attempts: int | None = Field(
         nullable=False,
@@ -293,6 +312,12 @@ class TestBase(SQLModel):
         nullable=True,
         description="Form to be filled when candidate_profile is enabled",
     )
+    show_marks: bool = Field(
+        default=True,
+        title="Show Marks",
+        description="Whether marks should be visible to the candidate during the test.",
+        sa_column_kwargs={"server_default": "true"},
+    )
 
 
 class Test(TestBase, table=True):
@@ -349,6 +374,9 @@ class Test(TestBase, table=True):
     )
 
     organization: Optional["Organization"] = Relationship(back_populates="tests")
+    test_links: list["TestLink"] | None = Relationship(
+        back_populates="test", cascade_delete=True
+    )
 
 
 class TestCreate(TestBase):
@@ -361,9 +389,7 @@ class TestCreate(TestBase):
     locale: LocaleEnum = DEFAULT_LOCALE
 
     @model_validator(mode="after")
-    def check_link_for_template(self) -> Self:
-        if self.is_template and self.link:
-            raise ValueError("Templates should not have a link.")
+    def check_question_set_validity(self) -> Self:
         if self.question_sets and self.question_revision_ids:
             raise ValueError(
                 "Use either question_revision_ids or question_sets, not both."
@@ -445,6 +471,8 @@ class TestPublicLimited(TestBase):
     """Limited public information for test landing page"""
 
     id: int
+    link: str
     total_questions: int
     question_sets: list["QuestionSetSummaryPublic"] | None = None
     form: "FormPublic | None" = None
+    nomenclature: dict[str, str] = Field(default_factory=dict)

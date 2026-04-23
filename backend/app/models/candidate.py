@@ -133,6 +133,10 @@ class CandidateTestBase(SQLModel):
         sa_column=Column(JSON),
         description="Certificate data snapshot (token, candidate_name, test_name, score, completion_date)",
     )
+    admin_id: int = Field(
+        foreign_key="user.id",
+        description="ID of the admin whose test link the candidate used to start the test.",
+    )
 
 
 class CandidateTest(CandidateTestBase, table=True):
@@ -273,6 +277,11 @@ class TestCandidatePublic(SQLModel):
     created_date: datetime
     modified_date: datetime
     is_active: bool | None
+    omr: str
+    show_question_palette: bool
+    bookmark: bool
+    show_feedback_immediately: bool
+    show_feedback_on_completion: bool
 
     # Safe questions (no answers)
     question_revisions: list["QuestionCandidatePublic"]
@@ -285,6 +294,9 @@ class TestCandidatePublic(SQLModel):
 
     # Candidate test info
     candidate_test: "CandidateTestPublic"
+
+    # Resolved platform nomenclature for the test's organization
+    nomenclature: dict[str, str] = Field(default_factory=dict)
 
 
 class Result(SQLModel):
@@ -306,7 +318,7 @@ class TestStatusSummary(SQLModel):
 
 
 class StartTestRequest(SQLModel):
-    test_id: int
+    test_link_uuid: str
     device_info: str | None = None
     form_responses: dict[str, Any] | None = None
 

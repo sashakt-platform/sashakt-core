@@ -14,6 +14,7 @@ from app.models.form import Form, FormField
 from app.models.location import Block, Country, District, State
 from app.models.test import Test, TestDistrict
 from app.tests.api.routes.test_tag import setup_user_organization
+from app.tests.utils.test import get_test_link
 from app.tests.utils.user import create_random_user, get_current_user_data
 from app.tests.utils.utils import (
     assert_paginated_response,
@@ -1342,9 +1343,9 @@ def test_delete_linked_entity_should_fail(
     db.add(test)
     db.commit()
     db.refresh(test)
-
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     payload = {
-        "test_id": test.id,
+        "test_link_uuid": test_link.uuid,
         "device_info": "example",
         "form_responses": {"entity_id": entity.id},
     }

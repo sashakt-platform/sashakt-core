@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         Test,
     )
     from app.models.form import Form
+    from app.models.test import TestLink
 
 
 class UserState(SQLModel, table=True):
@@ -123,6 +124,9 @@ class User(UserBase, table=True):
     created_by_id: int | None = Field(default=None, foreign_key="user.id")
     organization_id: int = Field(foreign_key="organization.id")
     tests: list["Test"] | None = Relationship(back_populates="created_by")
+    test_links: list["TestLink"] | None = Relationship(
+        back_populates="created_by_user", cascade_delete=True
+    )
     candidates: list["Candidate"] = Relationship(back_populates="user")
     tag_types: list["TagType"] = Relationship(back_populates="created_by")
     tags: list["Tag"] = Relationship(back_populates="created_by")

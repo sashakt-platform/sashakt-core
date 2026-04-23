@@ -28,6 +28,7 @@ from app.core.question_sets import (
 )
 from app.core.roles import state_admin, test_admin
 from app.core.timezone import get_timezone_aware_now
+from app.crud import organization_settings as crud_settings
 from app.models import (
     BatchAnswerSubmitRequest,
     Candidate,
@@ -68,10 +69,15 @@ from app.models.question import (
     QuestionType,
 )
 from app.models.tag import Tag
-from app.models.test import OMRMode, TestDistrict, TestState, TestTag
+from app.models.test import OMRMode, TestDistrict, TestLink, TestState, TestTag
 from app.models.user import User
 from app.models.utils import MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
+from app.services.organization_nomenclature import resolve_nomenclature_for_test
+from app.services.organization_settings_mapper import (
+    check_org_time_window,
+    get_effective_test_flags,
+)
 from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/candidate", tags=["Candidate"])
@@ -270,15 +276,20 @@ def build_candidate_question_payload(
         question_set = question_sets_by_id.get(
             question_set_id_by_revision.get(question_revision_id) or -1
         )
-        safe_question = build_candidate_safe_question(
-            question_revision,
-            hide_question_text=hide_question_text,
-            marking_scheme=get_effective_marking_scheme(
+        effective_marking_scheme = (
+            get_effective_marking_scheme(
                 test,
                 question_revision,
                 question_set=question_set,
                 sectioned=sectioned,
-            ),
+            )
+            if test.show_marks
+            else None
+        )
+        safe_question = build_candidate_safe_question(
+            question_revision,
+            hide_question_text=hide_question_text,
+            marking_scheme=effective_marking_scheme,
             gcs_service=gcs_service,
         )
         candidate_questions.append(safe_question)
@@ -310,7 +321,7 @@ def build_candidate_question_payload(
                 description=question_set.description,
                 display_order=question_set.display_order,
                 max_questions_allowed_to_attempt=question_set.max_questions_allowed_to_attempt,
-                marking_scheme=question_set.marking_scheme,
+                marking_scheme=question_set.marking_scheme if test.show_marks else None,
                 question_revisions=[
                     candidate_questions_by_id[question_id]
                     for question_id in question_ids
@@ -331,7 +342,7 @@ def build_candidate_question_payload(
                 description=None,
                 display_order=fallback_display_order + orphan_index,
                 max_questions_allowed_to_attempt=len(question_ids),
-                marking_scheme=test.marking_scheme,
+                marking_scheme=test.marking_scheme if test.show_marks else None,
                 question_revisions=[
                     candidate_questions_by_id[question_id]
                     for question_id in question_ids
@@ -581,8 +592,15 @@ def start_test_for_candidate(
     Creates a candidate when they start a test, links them to the test.
     Returns the candidate UUID for verification.
     """
-    # Find the test by ID
-    test = session.get(Test, start_test_request.test_id)
+    # Resolve test and admin from the UUID — TestLink takes precedence over legacy Test.link
+    test_link = session.exec(
+        select(TestLink).where(TestLink.uuid == start_test_request.test_link_uuid)
+    ).first()
+    if test_link:
+        test = session.get(Test, test_link.test_id)
+        admin_id: int = test_link.created_by_id
+    else:
+        raise HTTPException(status_code=404, detail="Test Link Not Found")
     if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
     test_id = get_persisted_test_id(test)
@@ -675,6 +693,23 @@ def start_test_for_candidate(
             detail="Test has not started yet. Please wait until the scheduled start time.",
         )
 
+    if test.organization_id is not None:
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=test.organization_id
+        )
+        if settings_payload is not None:
+            outside_window = check_org_time_window(settings_payload, current_time)
+            if outside_window is not None:
+                window_start, window_end = outside_window
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Tests can only be started between "
+                        f"{window_start.strftime('%H:%M')} and "
+                        f"{window_end.strftime('%H:%M')}."
+                    ),
+                )
+
     # Create a new anonymous candidate with UUID
     candidate = Candidate(
         identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
@@ -698,6 +733,7 @@ def start_test_for_candidate(
         is_submitted=False,
         question_revision_ids=question_revision_ids,
         question_set_ids=question_set_ids,
+        admin_id=admin_id,
     )
     session.add(candidate_test)
     session.commit()
@@ -1043,7 +1079,11 @@ def submit_test_for_qr_candidate(
     session.refresh(candidate_test)
 
     test = session.get(Test, candidate_test.test_id)
-    show_feedback = test.show_feedback_on_completion if test else False
+    show_feedback = (
+        bool(get_effective_test_flags(session, test)["show_feedback_on_completion"])
+        if test
+        else False
+    )
 
     answers_with_feedback = None
     if show_feedback:
@@ -1088,6 +1128,7 @@ def submit_test_for_qr_candidate(
         created_date=candidate_test.created_date,
         modified_date=candidate_test.modified_date,
         answers=answers_with_feedback,
+        admin_id=candidate_test.admin_id,
     )
 
 
@@ -1154,7 +1195,9 @@ def get_test_questions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    omr_mode = getattr(test, "omr", OMRMode.NEVER)
+    test_data = get_effective_test_flags(session, test)
+    nomenclature = resolve_nomenclature_for_test(session, test)
+    omr_mode = OMRMode(test_data.get("omr", OMRMode.NEVER))
 
     if omr_mode == OMRMode.NEVER:
         hide_question_text = False
@@ -1181,14 +1224,23 @@ def get_test_questions(
         gcs_service=gcs_service,
     )
 
+    test_link = session.exec(
+        select(TestLink).where(
+            TestLink.test_id == test_id,
+            TestLink.created_by_id == candidate_test.admin_id,
+        )
+    ).first()
+
     return TestCandidatePublic(
-        **test.model_dump(),
+        **test_data,
         question_revisions=candidate_questions,
         question_sets=candidate_question_sets,
         tags=tags,
         states=states,
         total_questions=len(candidate_questions),
         candidate_test=candidate_test,
+        nomenclature=nomenclature,
+        link=test_link.uuid if test_link else None,
     )
 
 
@@ -1956,8 +2008,9 @@ def get_review_feedback(
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    show_instant_feedback = test.show_feedback_immediately
-    show_feedback_on_completion = test.show_feedback_on_completion
+    effective = get_effective_test_flags(session, test)
+    show_instant_feedback = bool(effective["show_feedback_immediately"])
+    show_feedback_on_completion = bool(effective["show_feedback_on_completion"])
 
     if candidate_test.end_time is None and not show_instant_feedback:
         raise HTTPException(

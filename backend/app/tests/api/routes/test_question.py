@@ -2445,6 +2445,7 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
         consent=True,
         start_time=start_time,
         end_time=end_time,
+        admin_id=user.id,
     )
     db.add(candidate_test)
     db.flush()

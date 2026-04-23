@@ -25,6 +25,7 @@ from app.core.sorting import (
     TestSortConfig,
     create_sorting_dependency,
 )
+from app.crud import organization_settings as crud_settings
 from app.models import (
     Message,
     QuestionRevision,
@@ -54,10 +55,17 @@ from app.models.test import (
     TagRandomCreate,
     TagRandomPublic,
     TestDistrict,
+    TestLink,
+    TestLinkPublic,
     TestStatus,
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.organization_nomenclature import resolve_nomenclature_for_test
+from app.services.organization_settings_mapper import (
+    fixed_overrides_for_test,
+    get_effective_test_flags,
+)
 
 router = APIRouter(prefix="/test", tags=["Test"])
 
@@ -619,6 +627,17 @@ def validate_test_time_config(
                 )
 
 
+def resolve_test_by_uuid(session: SessionDep, test_uuid: str) -> Test | None:
+    """
+    Look up a Test by a UUID that may be either a TestLink.uuid or the
+    legacy Test.link value. TestLink takes precedence.
+    """
+    test_link = session.exec(select(TestLink).where(TestLink.uuid == test_uuid)).first()
+    if test_link:
+        return session.get(Test, test_link.test_id)
+    return None
+
+
 # Public endpoint to get basic test information (for landing page)
 @router.get("/public/{test_uuid}", response_model=TestPublicLimited)
 def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimited:
@@ -627,7 +646,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
     This endpoint is for the test landing page before starting the test.
     No authentication required.
     """
-    test = session.exec(select(Test).where(Test.link == test_uuid)).first()
+    test = resolve_test_by_uuid(session, test_uuid)
     if not test or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     current_time = get_current_time()
@@ -657,14 +676,22 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
                 fields=fields_public,
             )
 
+    # Apply org-settings runtime overrides so a feature the admin has since
+    # disabled (e.g. mark_for_review) is reflected in the landing payload even
+    # when the test row was created before the admin's change.
+    test_data = get_effective_test_flags(session, test)
+    nomenclature = resolve_nomenclature_for_test(session, test)
+
     return TestPublicLimited(
-        **test.model_dump(),
+        **test_data,
         total_questions=total_questions,
         question_sets=build_question_set_summary_publics(
             test_questions=test_questions,
             question_sets=question_sets,
         ),
         form=form_public,
+        nomenclature=nomenclature,
+        link=test_uuid,
     )
 
 
@@ -696,9 +723,14 @@ def create_test(
     )
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
-    # Auto-generate UUID for link if not provided
-    if not test_data["is_template"] and not test_data["link"]:
-        test_data["link"] = str(uuid.uuid4())
+
+    if current_user.organization_id is not None:
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=current_user.organization_id
+        )
+        if settings_payload is not None:
+            test_data.update(fixed_overrides_for_test(settings_payload))
+
     validate_test_time_config(
         test_data.get("start_time"),
         test_data.get("end_time"),
@@ -989,6 +1021,45 @@ def get_test(
 
 
 @router.get(
+    "/{test_id}/link",
+    response_model=TestLinkPublic,
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
+def get_or_create_test_link(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> TestLinkPublic:
+    """
+    Return the unique shareable link UUID for the current admin and this test.
+    If none exists yet, one is generated and persisted. Idempotent.
+    """
+    test = session.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if test.is_template:
+        raise HTTPException(
+            status_code=400, detail="Templates do not have shareable links."
+        )
+    assert current_user.id is not None
+    existing = session.exec(
+        select(TestLink).where(
+            TestLink.test_id == test_id, TestLink.created_by_id == current_user.id
+        )
+    ).first()
+    if existing:
+        return TestLinkPublic.model_validate(existing)
+    new_link = TestLink(
+        uuid=str(uuid.uuid4()), test_id=test_id, created_by_id=current_user.id
+    )
+    session.add(new_link)
+    session.commit()
+    session.refresh(new_link)
+    assert new_link.id is not None
+    return TestLinkPublic.model_validate(new_link)
+
+
+@router.get(
     "/{test_id}",
     response_model=TestPublic,
     dependencies=[Depends(permission_dependency("read_test"))],
@@ -1196,6 +1267,12 @@ def update_test(
             "district_ids",
         },
     )
+    if test.organization_id is not None:
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=test.organization_id
+        )
+        if settings_payload is not None:
+            test_data.update(fixed_overrides_for_test(settings_payload))
     test.sqlmodel_update(test_data)
     session.add(test)
     session.commit()
@@ -1316,7 +1393,7 @@ def bulk_delete_question(
 
 @router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)
 def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> TimeLeft:
-    test = session.exec(select(Test).where(Test.link == test_uuid)).first()
+    test = resolve_test_by_uuid(session, test_uuid)
     if not test or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
     if test.start_time is None:
@@ -1349,8 +1426,6 @@ def clone_test(
     test_data["name"] = f"Copy of {original.name}"
     test_data["created_by_id"] = current_user.id
     test_data["organization_id"] = current_user.organization_id
-    if not original.is_template:
-        test_data["link"] = str(uuid.uuid4())
 
     new_test = Test.model_validate(test_data)
     session.add(new_test)
@@ -1388,9 +1463,11 @@ def clone_test(
             TestQuestion(
                 test_id=new_test.id,
                 question_revision_id=ql.question_revision_id,
-                question_set_id=question_set_id_map.get(ql.question_set_id)
-                if ql.question_set_id is not None
-                else None,
+                question_set_id=(
+                    question_set_id_map.get(ql.question_set_id)
+                    if ql.question_set_id is not None
+                    else None
+                ),
             )
         )
     state_links = session.exec(

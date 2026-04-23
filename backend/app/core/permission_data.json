@@ -162,6 +162,24 @@
     "candidate": false
   },
   {
+    "name": "update_organization_settings",
+    "description": "Update Settings for Any Organization",
+    "super_admin": true,
+    "system_admin": false,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
+    "name": "update_my_organization_settings",
+    "description": "Update Settings for Own Organization",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
     "name": "delete_organization",
     "description": "Delete Existing Organization",
     "super_admin": true,
