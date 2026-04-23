@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
 
 
-ORGANIZATION_SETTINGS_SCHEMA_VERSION = 2
+ORGANIZATION_SETTINGS_SCHEMA_VERSION = 3
 
 
 NOMENCLATURE_DEFAULTS: dict[str, str] = {
@@ -215,6 +215,48 @@ class PlatformNomenclatureSetting(BaseModel):
     )
 
 
+class PlatformGuideValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str | None = None
+
+
+class PlatformGuideSetting(BaseModel):
+    """Uploaded PDF guide exposed as a sidebar link. `file_path` is an internal
+    relative path; the API layer resolves it to an absolute URL before returning
+    and the file itself is managed through dedicated upload/delete endpoints."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: PlatformGuideValue = PydanticField(default_factory=PlatformGuideValue)
+
+
+class AnalyticsLinkValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if v == "":
+            return None
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("analytics_link.url must start with http:// or https://")
+        return v
+
+
+class AnalyticsLinkSetting(BaseModel):
+    """External analytics dashboard URL exposed as a sidebar link."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: AnalyticsLinkValue = PydanticField(default_factory=AnalyticsLinkValue)
+
+
 class OrganizationSettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -227,6 +269,12 @@ class OrganizationSettingsPayload(BaseModel):
     mark_for_review: MarkForReviewSetting
     omr_mode: OMRModeSetting
     platform_nomenclature: PlatformNomenclatureSetting
+    platform_guide: PlatformGuideSetting = PydanticField(
+        default_factory=PlatformGuideSetting
+    )
+    analytics_link: AnalyticsLinkSetting = PydanticField(
+        default_factory=AnalyticsLinkSetting
+    )
 
     @field_validator("version")
     @classmethod
@@ -268,6 +316,8 @@ def default_organization_settings() -> OrganizationSettingsPayload:
             value=OMRModeValue(default=False),
         ),
         platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
+        platform_guide=PlatformGuideSetting(),
+        analytics_link=AnalyticsLinkSetting(),
     )
 
 
