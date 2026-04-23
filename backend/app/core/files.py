@@ -14,6 +14,7 @@ from app.core.config import settings
 # Configuration
 UPLOAD_ROOT = Path("/app/uploads")
 LOGO_DIR = UPLOAD_ROOT / "organizations" / "logos"
+PLATFORM_GUIDE_DIR = UPLOAD_ROOT / "organizations" / "platform_guides"
 
 # Validation configuration
 MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
@@ -28,6 +29,11 @@ MAX_DIMENSION = 4096  # pixels
 
 # Decompression bomb protection (89 megapixels max)
 MAX_IMAGE_PIXELS = 89_478_485
+
+# Platform guide PDF validation
+MAX_PLATFORM_GUIDE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_PDF_EXTENSIONS = {".pdf"}
+ALLOWED_PDF_MIME_TYPES = {"application/pdf"}
 
 
 # Validation functions
@@ -154,6 +160,7 @@ def init_upload_directories() -> None:
 
     """
     LOGO_DIR.mkdir(parents=True, exist_ok=True, mode=0o755)
+    PLATFORM_GUIDE_DIR.mkdir(parents=True, exist_ok=True, mode=0o755)
 
 
 def sanitize_organization_id(organization_id: int) -> int:
@@ -292,6 +299,122 @@ def get_absolute_logo_url(relative_path: str | None) -> str | None:
     Returns:
         Absolute URL or None if no path provided
     """
+    if not relative_path:
+        return None
+
+    scheme = "https" if settings.ENVIRONMENT != "local" else "http"
+    return f"{scheme}://{settings.DOMAIN}{relative_path}"
+
+
+# Platform guide PDF functions
+
+
+async def validate_platform_guide_upload(file: UploadFile) -> tuple[bytes, str]:
+    """
+    Validate platform guide PDF upload with security checks.
+
+    Args:
+        file: The uploaded file from FastAPI
+
+    Returns:
+        tuple: (file_content as bytes, file_extension as string)
+
+    Raises:
+        HTTPException: If validation fails
+    """
+    file_content = await file.read(MAX_PLATFORM_GUIDE_SIZE_BYTES + 1)
+
+    file_size = len(file_content)
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+    if file_size > MAX_PLATFORM_GUIDE_SIZE_BYTES:
+        size_mb = file_size / (1024 * 1024)
+        max_mb = MAX_PLATFORM_GUIDE_SIZE_BYTES / (1024 * 1024)
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size ({size_mb:.2f} MB) exceeds maximum allowed size ({max_mb} MB)",
+        )
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    file_extension = get_file_extension(file.filename)
+    if file_extension not in ALLOWED_PDF_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_PDF_EXTENSIONS)}",
+        )
+
+    mime_type = magic.from_buffer(file_content, mime=True)
+    if mime_type not in ALLOWED_PDF_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file content. Expected PDF file but got: {mime_type}",
+        )
+
+    return file_content, file_extension
+
+
+def generate_platform_guide_filename(organization_id: int, file_extension: str) -> str:
+    safe_org_id = sanitize_organization_id(organization_id)
+    unique_id = uuid.uuid4()
+    return f"org_{safe_org_id}_{unique_id}{file_extension}"
+
+
+def save_platform_guide_file(
+    organization_id: int, file_content: bytes, file_extension: str
+) -> str:
+    """Save platform guide PDF atomically. Returns relative path for DB storage."""
+    init_upload_directories()
+
+    filename = generate_platform_guide_filename(organization_id, file_extension)
+    file_path = PLATFORM_GUIDE_DIR / filename
+
+    temp_path = file_path.with_suffix(f"{file_extension}.tmp")
+    try:
+        temp_path.write_bytes(file_content)
+        os.chmod(temp_path, 0o644)
+        temp_path.rename(file_path)
+    except Exception:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise
+
+    return f"/uploads/organizations/platform_guides/{filename}"
+
+
+def delete_platform_guide_file(guide_path: str | None) -> None:
+    """Delete platform guide PDF from disk with path-traversal safety checks."""
+    if not guide_path:
+        return
+
+    if not guide_path.startswith("/uploads/organizations/platform_guides/"):
+        raise ValueError(f"Invalid platform guide path: {guide_path}")
+
+    if ".." in guide_path or guide_path.startswith(".."):
+        raise ValueError(f"Path traversal attempt detected: {guide_path}")
+
+    relative_path = guide_path.removeprefix("/uploads/")
+    file_path = UPLOAD_ROOT / relative_path
+
+    try:
+        resolved_path = file_path.resolve()
+    except OSError:
+        return
+
+    if not resolved_path.is_relative_to(UPLOAD_ROOT.resolve()):
+        raise ValueError(f"Path escapes upload directory: {guide_path}")
+
+    if file_path.exists() and file_path.is_file():
+        try:
+            file_path.unlink()
+        except OSError:
+            pass
+
+
+def get_absolute_platform_guide_url(relative_path: str | None) -> str | None:
+    """Convert a relative platform guide path to an absolute URL."""
     if not relative_path:
         return None
 

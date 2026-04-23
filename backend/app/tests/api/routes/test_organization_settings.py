@@ -42,6 +42,11 @@ from app.services.organization_settings_mapper import (
     check_org_time_window,
     fixed_overrides_for_test,
 )
+from app.tests.utils.files import (
+    create_large_test_pdf,
+    create_test_image,
+    create_test_pdf,
+)
 from app.tests.utils.organization_settings import (
     flexible_settings_payload,
     make_current_user_org_flexible,
@@ -1355,3 +1360,248 @@ def test_candidate_response_includes_custom_nomenclature(
     )
     assert body["nomenclature"]["tests"] == "Exams"
     assert body["nomenclature"]["users"] == NOMENCLATURE_DEFAULTS["users"]
+
+
+# ---------- Schema v3: platform_guide + analytics_link defaults ----------
+
+
+def test_default_settings_include_platform_guide_and_analytics_link() -> None:
+    payload = OrganizationSettingsPayload.model_validate(DEFAULT_ORGANIZATION_SETTINGS)
+    assert payload.platform_guide.value.file_path is None
+    assert payload.analytics_link.value.url is None
+
+
+# ---------- analytics_link validation via settings PUT ----------
+
+
+def test_put_settings_accepts_analytics_link_url(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings()
+    payload.analytics_link.value.url = "https://lookerstudio.example.com/abc"
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+    assert response.status_code == 200
+    assert (
+        response.json()["settings"]["analytics_link"]["value"]["url"]
+        == "https://lookerstudio.example.com/abc"
+    )
+
+
+def test_put_settings_empty_analytics_link_clears_to_null(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["analytics_link"]["value"]["url"] = ""
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"]["analytics_link"]["value"]["url"] is None
+
+
+def test_put_settings_rejects_analytics_link_without_scheme(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["analytics_link"]["value"]["url"] = "lookerstudio.in"
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+# ---------- platform_guide upload/delete ----------
+
+
+def test_upload_platform_guide_success(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    pdf = create_test_pdf()
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("guide.pdf", pdf, "application/pdf")},
+    )
+    assert response.status_code == 200, response.text
+    file_path = response.json()["settings"]["platform_guide"]["value"]["file_path"]
+    assert file_path is not None
+    assert "/uploads/organizations/platform_guides/" in file_path
+    # Response is an absolute URL (scheme + domain prefix before the path).
+    assert file_path.startswith(("http://", "https://"))
+
+
+def test_upload_platform_guide_rejects_non_pdf(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    png = create_test_image(width=100, height=100, format="PNG")
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("not_pdf.png", png, "image/png")},
+    )
+    assert response.status_code == 400
+
+
+def test_upload_platform_guide_rejects_oversize(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    big = create_large_test_pdf(size_mb=11)
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("big.pdf", big, "application/pdf")},
+    )
+    assert response.status_code == 400
+
+
+def test_upload_platform_guide_replaces_previous(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    first = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("first.pdf", create_test_pdf(), "application/pdf")},
+    )
+    assert first.status_code == 200, first.text
+    first_path = first.json()["settings"]["platform_guide"]["value"]["file_path"]
+
+    second = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("second.pdf", create_test_pdf(), "application/pdf")},
+    )
+    assert second.status_code == 200, second.text
+    second_path = second.json()["settings"]["platform_guide"]["value"]["file_path"]
+
+    assert second_path != first_path
+
+
+def test_upload_platform_guide_other_org_forbidden(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    other_org_id = _get_org_id(client, get_user_superadmin_token)
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/{other_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("g.pdf", create_test_pdf(), "application/pdf")},
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_upload_platform_guide_low_privilege_forbidden(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+    get_user_candidate_token: dict[str, str],
+) -> None:
+    target_org_id = _get_org_id(client, get_user_superadmin_token)
+    for headers in (
+        get_user_stateadmin_token,
+        get_user_testadmin_token,
+        get_user_candidate_token,
+    ):
+        response = client.post(
+            f"{settings.API_V1_STR}/organization/{target_org_id}/platform_guide",
+            headers=headers,
+            files={"file": ("g.pdf", create_test_pdf(), "application/pdf")},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_delete_platform_guide_clears_field(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    upload = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("g.pdf", create_test_pdf(), "application/pdf")},
+    )
+    assert upload.status_code == 200, upload.text
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"]["platform_guide"]["value"]["file_path"] is None
+
+
+def test_delete_platform_guide_404_when_none_set(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    # Fresh test — no upload performed, so file_path is None.
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    response = client.delete(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 404
+
+
+# ---------- Settings PUT guard: client cannot change file_path ----------
+
+
+def test_put_settings_ignores_client_platform_guide_file_path(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    # Upload a real file so server has a known path.
+    upload = client.post(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/platform_guide",
+        headers=get_user_systemadmin_token,
+        files={"file": ("g.pdf", create_test_pdf(), "application/pdf")},
+    )
+    assert upload.status_code == 200, upload.text
+
+    # Now attempt to overwrite file_path via the generic settings PUT.
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["platform_guide"]["value"]["file_path"] = (
+        "/uploads/organizations/platform_guides/malicious.pdf"
+    )
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert put_resp.status_code == 200
+
+    # Server retained its own path; client's change was ignored.
+    returned = put_resp.json()["settings"]["platform_guide"]["value"]["file_path"]
+    assert returned is not None
+    assert "malicious.pdf" not in returned
+    assert "/uploads/organizations/platform_guides/" in returned
