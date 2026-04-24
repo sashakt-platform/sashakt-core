@@ -1,7 +1,7 @@
 """add pause timer fields
 
 Revision ID: aa4fc4afb4ff
-Revises: 57ac4abbbad5
+Revises: 951c45c3eba3
 Create Date: 2026-04-21 18:35:00.000000
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "aa4fc4afb4ff"
-down_revision: str | Sequence[str] | None = "57ac4abbbad5"
+down_revision: str | Sequence[str] | None = "951c45c3eba3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
