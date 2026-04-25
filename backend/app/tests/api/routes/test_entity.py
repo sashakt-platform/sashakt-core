@@ -3,6 +3,7 @@ import csv
 import io
 import os
 import tempfile
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -12,7 +13,8 @@ from app.models.candidate import Candidate, CandidateTest
 from app.models.entity import Entity, EntityType
 from app.models.form import Form, FormField
 from app.models.location import Block, Country, District, State
-from app.models.test import Test, TestDistrict
+from app.models.test import Test, TestDistrict, TestState
+from app.models.user import UserDistrict, UserState
 from app.tests.api.routes.test_tag import setup_user_organization
 from app.tests.utils.test import get_test_link
 from app.tests.utils.user import create_random_user, get_current_user_data
@@ -2281,140 +2283,281 @@ def test_sort_entity_by_state_district_block(
     )
 
 
-def test_get_entities_filtered_by_test_id(client: TestClient, db: SessionDep) -> None:
-    """Entities are filtered by test's district assignments."""
-    user = create_random_user(db)
+def _setup_entity_scope_scene(db: SessionDep) -> dict[str, Any]:
+    """Builds a reusable scene for entity-scope tests.
+
+    Layout: country → state_1, state_2; state_1 has districts d_a, d_b;
+    state_2 has district d_c. Three entities, one in each district, all in
+    the same org. A test and a second admin (`creator`) are created; tests
+    add the appropriate TestState/TestDistrict and UserState/UserDistrict
+    rows, then generate the TestLink with the scene's helper.
+    """
+    owner = create_random_user(db)
+
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
     db.refresh(country)
 
-    state = State(name=random_lower_string(), country_id=country.id)
-    db.add(state)
+    state_1 = State(name=random_lower_string(), country_id=country.id)
+    state_2 = State(name=random_lower_string(), country_id=country.id)
+    db.add_all([state_1, state_2])
     db.commit()
-    db.refresh(state)
+    db.refresh(state_1)
+    db.refresh(state_2)
 
-    district_a = District(name=random_lower_string(), state_id=state.id)
-    district_b = District(name=random_lower_string(), state_id=state.id)
-    db.add_all([district_a, district_b])
+    d_a = District(name=random_lower_string(), state_id=state_1.id)
+    d_b = District(name=random_lower_string(), state_id=state_1.id)
+    d_c = District(name=random_lower_string(), state_id=state_2.id)
+    db.add_all([d_a, d_b, d_c])
     db.commit()
-    db.refresh(district_a)
-    db.refresh(district_b)
+    for d in (d_a, d_b, d_c):
+        db.refresh(d)
 
     entity_type = EntityType(
         name=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=user.organization_id,
+        created_by_id=owner.id,
+        organization_id=owner.organization_id,
     )
     db.add(entity_type)
     db.commit()
     db.refresh(entity_type)
 
-    entity_a = Entity(
+    e_a = Entity(
         name=random_lower_string(),
         entity_type_id=entity_type.id,
-        created_by_id=user.id,
-        district_id=district_a.id,
+        created_by_id=owner.id,
+        state_id=state_1.id,
+        district_id=d_a.id,
     )
-    entity_b = Entity(
+    e_b = Entity(
         name=random_lower_string(),
         entity_type_id=entity_type.id,
-        created_by_id=user.id,
-        district_id=district_b.id,
+        created_by_id=owner.id,
+        state_id=state_1.id,
+        district_id=d_b.id,
     )
-    db.add_all([entity_a, entity_b])
+    e_c = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=owner.id,
+        state_id=state_2.id,
+        district_id=d_c.id,
+    )
+    db.add_all([e_a, e_b, e_c])
     db.commit()
-    db.refresh(entity_a)
-    db.refresh(entity_b)
+    for e in (e_a, e_b, e_c):
+        db.refresh(e)
 
     test = Test(
         name=random_lower_string(),
         link=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=user.organization_id,
+        created_by_id=owner.id,
+        organization_id=owner.organization_id,
         is_active=True,
     )
     db.add(test)
     db.commit()
     db.refresh(test)
 
-    db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
-    db.commit()
+    creator = create_random_user(db, organization_id=owner.organization_id)
 
-    response = client.get(
-        f"{settings.API_V1_STR}/entity/?test_id={test.id}",
-    )
+    return {
+        "owner": owner,
+        "creator": creator,
+        "state_1": state_1,
+        "state_2": state_2,
+        "d_a": d_a,
+        "d_b": d_b,
+        "d_c": d_c,
+        "e_a": e_a,
+        "e_b": e_b,
+        "e_c": e_c,
+        "test": test,
+        "entity_type": entity_type,
+    }
+
+
+def _get_returned_ids(response_json: dict[str, Any]) -> set[int]:
+    return {item["id"] for item in response_json["items"]}
+
+
+def test_get_entities_intersection_both_districts(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test districts {A, B}, creator districts {B, C} → only B returned."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestDistrict(test_id=s["test"].id, district_id=s["d_a"].id))
+    db.add(TestDistrict(test_id=s["test"].id, district_id=s["d_b"].id))
+    db.add(UserDistrict(user_id=s["creator"].id, district_id=s["d_b"].id))
+    db.add(UserDistrict(user_id=s["creator"].id, district_id=s["d_c"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
     assert response.status_code == 200
-    data = response.json()
-    returned_ids = {item["id"] for item in data["items"]}
-    assert entity_a.id in returned_ids
-    assert entity_b.id not in returned_ids
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_b"].id}
 
 
-def test_get_entities_by_test_id_no_auth(client: TestClient, db: SessionDep) -> None:
-    """Entity endpoint works without auth when test_id is provided."""
-    user = create_random_user(db)
-    country = Country(name=random_lower_string(), is_active=True)
-    db.add(country)
+def test_get_entities_intersection_test_districts_user_states(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test district d_a (in state_1); creator has state_1 → entity in d_a only."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestDistrict(test_id=s["test"].id, district_id=s["d_a"].id))
+    db.add(UserState(user_id=s["creator"].id, state_id=s["state_1"].id))
     db.commit()
-    db.refresh(country)
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    state = State(name=random_lower_string(), country_id=country.id)
-    db.add(state)
-    db.commit()
-    db.refresh(state)
-
-    district = District(name=random_lower_string(), state_id=state.id)
-    db.add(district)
-    db.commit()
-    db.refresh(district)
-
-    entity_type = EntityType(
-        name=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=user.organization_id,
-    )
-    db.add(entity_type)
-    db.commit()
-    db.refresh(entity_type)
-
-    entity = Entity(
-        name=random_lower_string(),
-        entity_type_id=entity_type.id,
-        created_by_id=user.id,
-        district_id=district.id,
-    )
-    db.add(entity)
-    db.commit()
-    db.refresh(entity)
-
-    test = Test(
-        name=random_lower_string(),
-        link=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=user.organization_id,
-        is_active=True,
-    )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
-
-    db.add(TestDistrict(test_id=test.id, district_id=district.id))
-    db.commit()
-
-    # Call without auth headers
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_id={test.id}")
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
     assert response.status_code == 200
-    data = response.json()
-    assert any(item["id"] == entity.id for item in data["items"])
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_a"].id}
 
 
-def test_get_entities_no_auth_no_test_id(
+def test_get_entities_intersection_test_states_user_districts(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test has state_1; creator has d_b → entity in d_b only."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestState(test_id=s["test"].id, state_id=s["state_1"].id))
+    db.add(UserDistrict(user_id=s["creator"].id, district_id=s["d_b"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_b"].id}
+
+
+def test_get_entities_intersection_both_states(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Both only have state_1 → all entities in state_1 returned."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestState(test_id=s["test"].id, state_id=s["state_1"].id))
+    db.add(UserState(user_id=s["creator"].id, state_id=s["state_1"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_a"].id, s["e_b"].id}
+
+
+def test_get_entities_intersection_disjoint_returns_empty(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test on state_1, creator on state_2 → no overlap, 0 entities."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestState(test_id=s["test"].id, state_id=s["state_1"].id))
+    db.add(UserState(user_id=s["creator"].id, state_id=s["state_2"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+
+
+def test_get_entities_creator_has_no_locations_falls_back_to_test(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Creator has no locations → filter reduces to test-only scope."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestDistrict(test_id=s["test"].id, district_id=s["d_a"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_a"].id}
+
+
+def test_get_entities_test_has_no_locations_falls_back_to_creator(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Test has no locations → filter reduces to creator-only scope."""
+    s = _setup_entity_scope_scene(db)
+    db.add(UserDistrict(user_id=s["creator"].id, district_id=s["d_c"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_c"].id}
+
+
+def test_get_entities_both_empty_returns_all_org_entities(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Neither test nor creator have locations → no location filter."""
+    s = _setup_entity_scope_scene(db)
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_a"].id, s["e_b"].id, s["e_c"].id}
+
+
+def test_get_entities_unknown_test_link_returns_404(
     client: TestClient,
 ) -> None:
-    """Entity endpoint returns 401 without auth and without test_id."""
+    response = client.get(f"{settings.API_V1_STR}/entity/?test_link=does-not-exist")
+    assert response.status_code == 404
+
+
+def test_get_entities_no_auth_no_test_link_returns_401(
+    client: TestClient,
+) -> None:
+    """Unauthenticated callers must supply test_link to scope the org."""
     response = client.get(f"{settings.API_V1_STR}/entity/")
     assert response.status_code == 401
+
+
+def test_get_entities_org_is_always_test_org(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """An authenticated caller from a different org still sees the test's
+    org entities — /entity/ is scoped by the test_link's test, not by the
+    caller's organization."""
+    s = _setup_entity_scope_scene(db)
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    # superadmin belongs to a different (seed) organization
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?test_link={link.uuid}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_a"].id, s["e_b"].id, s["e_c"].id}
+
+
+def test_get_entities_name_filter_combines_with_scope(
+    client: TestClient, db: SessionDep
+) -> None:
+    """name filter still AND-s with scope filter."""
+    s = _setup_entity_scope_scene(db)
+    db.add(TestState(test_id=s["test"].id, state_id=s["state_1"].id))
+    db.commit()
+    link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
+
+    # Filter by e_a's exact name; only e_a matches both name and scope.
+    response = client.get(
+        f"{settings.API_V1_STR}/entity/?test_link={link.uuid}&name={s['e_a'].name}"
+    )
+    assert response.status_code == 200
+    ids = _get_returned_ids(response.json())
+    assert ids == {s["e_a"].id}
 
 
 def test_get_entitytype_filter_by_is_active(
