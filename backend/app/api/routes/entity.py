@@ -16,7 +16,11 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
-from app.api.routes.utils import clean_value, get_test_location_scope
+from app.api.routes.utils import (
+    clean_value,
+    get_test_location_scope,
+    get_user_location_scope,
+)
 from app.core.sorting import (
     EntitySortConfig,
     SortingParams,
@@ -36,6 +40,7 @@ from app.models import (
     Message,
     Organization,
     Test,
+    TestLink,
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.entity import EntityBulkUploadResponse
@@ -301,6 +306,17 @@ def create_entity(
     )
 
 
+def build_entity_location_filter(state_ids: list[int], district_ids: list[int]) -> Any:
+    """Builds an Entity filter clause at the finest available location level
+    (district > state). Returns None when the scope imposes no restriction.
+    """
+    if district_ids:
+        return col(Entity.district_id).in_(district_ids)
+    if state_ids:
+        return col(Entity.state_id).in_(state_ids)
+    return None
+
+
 # Get all Entities
 @router_entity.get(
     "/",
@@ -313,21 +329,29 @@ def get_entities(
     params: Pagination = Depends(),
     name: str | None = None,
     entity_type_id: int | None = None,
-    test_id: int | None = Query(None),
+    test_link: str | None = Query(None, description="UUID of the TestLink (QR code)"),
     is_active: bool | None = Query(None),
 ) -> Page[EntityPublic]:
-    # Determine organization scope
+    link: TestLink | None = None
+    if test_link is not None:
+        link = session.exec(select(TestLink).where(TestLink.uuid == test_link)).first()
+        if link is None:
+            raise HTTPException(status_code=404, detail="Test link not found")
+
+    # When test_link is supplied (candidate flow on this open endpoint), org
+    # is derived from the test. Otherwise the authenticated admin's org.
     org_id: int | None = None
-    if current_user:
+    if link is not None:
+        test = session.get(Test, link.test_id)
+        if test is None:
+            raise HTTPException(status_code=404, detail="Test not found")
+        org_id = test.organization_id
+    elif current_user is not None:
         org_id = current_user.organization_id
-    elif test_id is not None:
-        test = session.get(Test, test_id)
-        if test:
-            org_id = test.organization_id
     if org_id is None:
         raise HTTPException(
             status_code=401,
-            detail="Authentication required or test_id must be provided",
+            detail="Authentication required or test_link must be provided",
         )
 
     query = (
@@ -354,13 +378,18 @@ def get_entities(
     if is_active is not None:
         query = query.where(Entity.is_active == is_active)
 
-    # Filter by test location scope
-    if test_id is not None:
-        test_state_ids, test_district_ids = get_test_location_scope(session, test_id)
-        if test_district_ids:
-            query = query.where(col(Entity.district_id).in_(test_district_ids))
-        elif test_state_ids:
-            query = query.where(col(Entity.state_id).in_(test_state_ids))
+    if link is not None:
+        test_filter = build_entity_location_filter(
+            *get_test_location_scope(session, link.test_id)
+        )
+        if test_filter is not None:
+            query = query.where(test_filter)
+
+        creator_filter = build_entity_location_filter(
+            *get_user_location_scope(session, link.created_by_id)
+        )
+        if creator_filter is not None:
+            query = query.where(creator_filter)
 
     # apply default sorting if no sorting was specified
     sorting_with_default = sorting.apply_default_if_none("name", SortOrder.ASC)
