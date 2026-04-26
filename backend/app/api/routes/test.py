@@ -860,11 +860,26 @@ def get_test(
                 .distinct()
             )
 
-            # show unassigned tests OR tests matching users district
+            # tests assigned to the state(s) the user's districts belong to
+            current_user_state_ids_from_districts = [
+                district.state_id
+                for district in (current_user.districts or [])
+                if district.state_id is not None
+            ]
+            state_subquery = (
+                select(TestState.test_id)
+                .where(
+                    col(TestState.state_id).in_(current_user_state_ids_from_districts)
+                )
+                .distinct()
+            )
+
+            # show unassigned tests OR tests matching users district OR tests matching users state
             query = query.where(
                 or_(
                     no_location_assigned,
                     col(Test.id).in_(district_subquery),
+                    col(Test.id).in_(state_subquery),
                 )
             )
         else:

@@ -7712,7 +7712,8 @@ def test_get_tests_by_district_user(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) == 1
+    # district user sees their own district's tests + tests assigned to their state
+    assert len(items) == 2
 
 
 def test_create_test_show_mark_for_review_true(
