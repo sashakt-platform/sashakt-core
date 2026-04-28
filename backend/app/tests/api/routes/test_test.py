@@ -7687,7 +7687,7 @@ def test_get_tests_by_district_user(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    data = response.json()
+    test_1_name = response.json()["name"]
 
     response = client.post(
         f"{settings.API_V1_STR}/test/",
@@ -7695,7 +7695,7 @@ def test_get_tests_by_district_user(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    data = response.json()
+    test_11_name = response.json()["name"]
 
     response = client.post(
         f"{settings.API_V1_STR}/test/",
@@ -7703,7 +7703,26 @@ def test_get_tests_by_district_user(
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
-    data = response.json()
+    test_2_name = response.json()["name"]
+
+    # test assigned to state_1 only (no district) — should be visible to user in district_1
+    test_state_only_payload = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "time_limit": 30,
+        "marks": 10,
+        "link": random_lower_string(),
+        "is_active": True,
+        "locale": "en-US",
+        "state_ids": [state_1.id],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=test_state_only_payload,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    test_state_only_name = response.json()["name"]
 
     response = client.get(
         f"{settings.API_V1_STR}/test/",
@@ -7712,7 +7731,14 @@ def test_get_tests_by_district_user(
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
-    assert len(items) == 1
+    returned_names = {item["name"] for item in items}
+    # district user sees: test_1 (own district) + test_state_only (state, no district)
+    # test_11 (same state but different district) and test_2 (different state) are excluded
+    assert len(items) == 2
+    assert test_1_name in returned_names
+    assert test_state_only_name in returned_names
+    assert test_11_name not in returned_names
+    assert test_2_name not in returned_names
 
 
 def test_create_test_show_mark_for_review_true(
