@@ -871,6 +871,13 @@ def get_test(
                 .where(
                     col(TestState.state_id).in_(current_user_state_ids_from_districts)
                 )
+                .where(
+                    ~exists(
+                        select(TestDistrict.test_id).where(
+                            TestDistrict.test_id == TestState.test_id
+                        )
+                    )
+                )
                 .distinct()
             )
 
