@@ -9,6 +9,7 @@ from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core.timezone import get_timezone_aware_now
 from app.models import Message
 from app.models.test import TestDistrict, TestState
+from app.models.user import UserDistrict, UserState
 from app.utils import generate_test_email, send_email
 
 router = APIRouter(prefix="/utils", tags=["utils"])
@@ -83,6 +84,23 @@ def get_test_location_scope(
     district_ids = list(
         session.exec(
             select(TestDistrict.district_id).where(TestDistrict.test_id == test_id)
+        ).all()
+    )
+    return state_ids, district_ids
+
+
+def get_user_location_scope(
+    session: SessionDep, user_id: int
+) -> tuple[list[int], list[int]]:
+    """Returns (state_ids, district_ids) assigned to a user."""
+    state_ids = list(
+        session.exec(
+            select(UserState.state_id).where(UserState.user_id == user_id)
+        ).all()
+    )
+    district_ids = list(
+        session.exec(
+            select(UserDistrict.district_id).where(UserDistrict.user_id == user_id)
         ).all()
     )
     return state_ids, district_ids
