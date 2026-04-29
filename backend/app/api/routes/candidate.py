@@ -88,19 +88,29 @@ router_candidate_test_answer = APIRouter(
 
 
 def validate_subjective_answer_limit(
-    answer_limit: int,
+    answer_limit: int | None,
+    min_length: int | None,
     response: str | None,
 ) -> None:
     """
     Validates the response length for a subjective question.
-    Assumes answer_limit is provided (not None).
     """
-    if response and len(response) > answer_limit:
+    if not response:
+        return
+    if answer_limit is not None and len(response) > answer_limit:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Answer exceeds character limit of "
                 f"{answer_limit}. "
+                f"Current length: {len(response)}"
+            ),
+        )
+    if min_length is not None and len(response) < min_length:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Answer must be at least {min_length} characters. "
                 f"Current length: {len(response)}"
             ),
         )
@@ -242,6 +252,7 @@ def build_candidate_safe_question(
         question_type=question_revision.question_type,
         options=safe_options,
         subjective_answer_limit=question_revision.subjective_answer_limit,
+        subjective_answer_min_length=question_revision.subjective_answer_min_length,
         is_mandatory=question_revision.is_mandatory,
         media=enrich_media_with_signed_urls(question_revision.media, gcs_service),
         marking_scheme=marking_scheme,
@@ -805,12 +816,10 @@ def submit_answer_for_qr_candidate(
             detail="Question revision is not assigned to this candidate test.",
         )
 
-    if (
-        question_revision.question_type == QuestionType.subjective
-        and question_revision.subjective_answer_limit is not None
-    ):
+    if question_revision.question_type == QuestionType.subjective:
         validate_subjective_answer_limit(
             answer_limit=question_revision.subjective_answer_limit,
+            min_length=question_revision.subjective_answer_min_length,
             response=answer_request.response,
         )
 
@@ -936,12 +945,10 @@ def submit_batch_answers_for_qr_candidate(
                 detail=f"Question revision {answer.question_revision_id} not found",
             )
 
-        if (
-            question_revision.question_type == QuestionType.subjective
-            and question_revision.subjective_answer_limit is not None
-        ):
+        if question_revision.question_type == QuestionType.subjective:
             validate_subjective_answer_limit(
                 answer_limit=question_revision.subjective_answer_limit,
+                min_length=question_revision.subjective_answer_min_length,
                 response=answer.response,
             )
 

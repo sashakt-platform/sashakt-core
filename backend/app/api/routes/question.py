@@ -368,6 +368,7 @@ def build_question_response(
         options=options_dict,
         correct_answer=revision.correct_answer,
         subjective_answer_limit=revision.subjective_answer_limit,
+        subjective_answer_min_length=revision.subjective_answer_min_length,
         is_mandatory=revision.is_mandatory,
         marking_scheme=marking_scheme_dict,
         solution=revision.solution,
@@ -473,6 +474,7 @@ def create_question(
         options=options,
         correct_answer=question_create.correct_answer,
         subjective_answer_limit=question_create.subjective_answer_limit,
+        subjective_answer_min_length=question_create.subjective_answer_min_length,
         is_mandatory=question_create.is_mandatory,
         marking_scheme=marking_scheme,
         solution=question_create.solution,
@@ -559,6 +561,7 @@ class RevisionDetailDict(TypedDict):
     options: list[Option] | MatrixMatchOptions | MatrixInputOptions | None
     correct_answer: Any
     subjective_answer_limit: int | None
+    subjective_answer_min_length: int | None
     is_mandatory: bool
     marking_scheme: MarkingScheme | None  # Updated type to float
     solution: str | None
@@ -1000,6 +1003,7 @@ def create_question_revision(
         options=options,  # Now serialized
         correct_answer=revision_data.correct_answer,
         subjective_answer_limit=revision_data.subjective_answer_limit,
+        subjective_answer_min_length=revision_data.subjective_answer_min_length,
         is_mandatory=revision_data.is_mandatory,
         marking_scheme=marking_scheme,  # Now serialized
         solution=revision_data.solution,
@@ -1121,6 +1125,7 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
         options=options_dict,
         correct_answer=revision.correct_answer,
         subjective_answer_limit=revision.subjective_answer_limit,
+        subjective_answer_min_length=revision.subjective_answer_min_length,
         is_mandatory=revision.is_mandatory,
         marking_scheme=marking_scheme_dict,
         solution=revision.solution,
@@ -1551,6 +1556,7 @@ async def upload_questions_csv(
                     options=options,
                     correct_answer=question_create.correct_answer,
                     subjective_answer_limit=question_create.subjective_answer_limit,
+                    subjective_answer_min_length=question_create.subjective_answer_min_length,
                     is_mandatory=question_create.is_mandatory,
                     marking_scheme=marking_scheme,
                     solution=question_create.solution,

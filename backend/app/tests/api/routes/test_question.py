@@ -158,6 +158,66 @@ def test_create_subjective_question_with_options_should_fail(
     assert "Subjective questions should not have options." in data["detail"][0]["msg"]
 
 
+def test_create_subjective_question_with_min_length(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    org_id = org_response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org_id,
+            "question_text": random_lower_string(),
+            "question_type": QuestionType.subjective,
+            "is_mandatory": True,
+            "subjective_answer_min_length": 50,
+            "subjective_answer_limit": 200,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["subjective_answer_min_length"] == 50
+    assert data["subjective_answer_limit"] == 200
+
+
+def test_create_subjective_question_min_length_exceeds_max_should_fail(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    org_response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    org_id = org_response.json()["id"]
+
+    response = client.post(
+        f"{settings.API_V1_STR}/questions/",
+        json={
+            "organization_id": org_id,
+            "question_text": random_lower_string(),
+            "question_type": QuestionType.subjective,
+            "is_mandatory": True,
+            "subjective_answer_min_length": 300,
+            "subjective_answer_limit": 100,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 422
+    data = response.json()
+    assert (
+        "subjective_answer_min_length must be less than or equal to subjective_answer_limit"
+        in data["detail"][0]["msg"]
+    )
+
+
 def test_read_questions(
     client: TestClient,
     db: SessionDep,

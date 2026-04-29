@@ -167,6 +167,11 @@ class QuestionBase(SQLModel):
         nullable=True,
         description="Character limit for subjective answers",
     )
+    subjective_answer_min_length: int | None = Field(
+        default=None,
+        nullable=True,
+        description="Minimum character length for subjective answers",
+    )
     is_mandatory: bool = Field(
         default=True,
         nullable=False,
@@ -220,6 +225,14 @@ class QuestionBase(SQLModel):
         elif question_type == QuestionType.subjective:
             if options is not None and len(options) > 0:
                 raise ValueError("Subjective questions should not have options.")
+            if (
+                self.subjective_answer_min_length is not None
+                and self.subjective_answer_limit is not None
+                and self.subjective_answer_min_length > self.subjective_answer_limit
+            ):
+                raise ValueError(
+                    "subjective_answer_min_length must be less than or equal to subjective_answer_limit."
+                )
 
         elif question_type in [
             QuestionType.numerical_integer,
@@ -598,7 +611,10 @@ class QuestionPublic(SQLModel):
     )
     correct_answer: CorrectAnswerType = Field(description="The correct answer(s)")
     subjective_answer_limit: int | None = Field(
-        description="Character limit for subjective answers"
+        default=None, description="Character limit for subjective answers"
+    )
+    subjective_answer_min_length: int | None = Field(
+        default=None, description="Minimum character length for subjective answers"
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
     marking_scheme: MarkingScheme | None = Field(description="Scoring rules")
@@ -630,7 +646,10 @@ class QuestionCandidatePublic(SQLModel):
         description="Available options for choice questions (option.value excluded in OMR mode)"
     )
     subjective_answer_limit: int | None = Field(
-        description="Character limit for subjective answers"
+        default=None, description="Character limit for subjective answers"
+    )
+    subjective_answer_min_length: int | None = Field(
+        default=None, description="Minimum character length for subjective answers"
     )
     is_mandatory: bool = Field(description="Whether the question must be answered")
     media: dict[str, Any] | None = Field(description="Associated media")

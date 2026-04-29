@@ -6766,6 +6766,142 @@ def test_submit_batch_answers_for_qr_candidate_subjective_exceeds_limit(
     assert str(qr_2.subjective_answer_limit) in data["detail"]
 
 
+def test_submit_batch_answers_for_qr_candidate_subjective_below_min_length(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    qr = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        subjective_answer_min_length=50,
+    )
+    db.add(qr)
+    db.flush()
+    question.last_revision_id = qr.id
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qr.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": qr.id,
+                "response": "Too short",
+                "visited": True,
+                "time_spent": 10,
+            }
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+    assert "at least" in data["detail"]
+    assert str(qr.subjective_answer_min_length) in data["detail"]
+
+
+def test_submit_batch_answers_for_qr_candidate_subjective_meets_min_length(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    qr = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.subjective,
+        subjective_answer_min_length=10,
+    )
+    db.add(qr)
+    db.flush()
+    question.last_revision_id = qr.id
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.add(TestQuestion(test_id=test.id, question_revision_id=qr.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    long_enough_response = "This answer is long enough to meet the minimum."
+
+    batch_request = {
+        "answers": [
+            {
+                "question_revision_id": qr.id,
+                "response": long_enough_response,
+                "visited": True,
+                "time_spent": 20,
+            }
+        ]
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answers/{candidate_test_id}",
+        json=batch_request,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["response"] == long_enough_response
+
+
 def test_submit_batch_answers_invalid_uuid(client: TestClient, db: SessionDep) -> None:
     """Test submitting batch answers with invalid UUID"""
     user = create_random_user(db)
