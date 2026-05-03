@@ -8351,99 +8351,180 @@ def test_get_tests_my_tests_filter(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    """my_tests=True returns only tests at the user's lowest location (district),
-    my_tests=False excludes those tests and returns org-level and state-level ones."""
-    org = create_random_organization(db)
-    db.add(org)
-    db.commit()
-    db.refresh(org)
+    """my_tests=True/False filters by the user's lowest assigned location (district or state)."""
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
     db.refresh(country)
 
-    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
-    db.add(state)
-    db.commit()
-    db.refresh(state)
+    # --- district-level user ---
 
-    district = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    org_district = create_random_organization(db)
+    db.add(org_district)
+    db.commit()
+    db.refresh(org_district)
+
+    state_d = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_d)
+    db.commit()
+    db.refresh(state_d)
+
+    district = District(name=random_lower_string(), is_active=True, state_id=state_d.id)
     db.add(district)
     db.commit()
     db.refresh(district)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
-
-    email = random_email()
+    email_district = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
         json={
-            "email": email,
+            "email": email_district,
             "password": random_lower_string(),
             "phone": random_lower_string(),
             "full_name": random_lower_string(),
             "role_id": test_admin_role.id,
-            "organization_id": org.id,
+            "organization_id": org_district.id,
             "district_ids": [district.id],
         },
         headers=get_user_superadmin_token,
     )
-    token_headers = authentication_token_from_email(client=client, email=email, db=db)
-    user_data = get_current_user_data(client, token_headers)
-    user_id = user_data["id"]
-
-    # Org-level test: no location assigned
-    test_org = Test(
-        name=random_lower_string(), created_by_id=user_id, organization_id=org.id
+    district_user_headers = authentication_token_from_email(
+        client=client, email=email_district, db=db
     )
-    db.add(test_org)
-    db.flush()
-    db.refresh(test_org)
+    district_user_id = get_current_user_data(client, district_user_headers)["id"]
 
-    # State-level test: assigned to user's state, no district assignment
-    test_state_level = Test(
-        name=random_lower_string(), created_by_id=user_id, organization_id=org.id
+    # org-level: no location
+    d_test_org = Test(
+        name=random_lower_string(),
+        created_by_id=district_user_id,
+        organization_id=org_district.id,
     )
-    db.add(test_state_level)
+    db.add(d_test_org)
     db.flush()
-    db.refresh(test_state_level)
-    db.add(TestState(test_id=test_state_level.id, state_id=state.id))
+    db.refresh(d_test_org)
 
-    # District-level test: assigned to user's district
-    test_district_level = Test(
-        name=random_lower_string(), created_by_id=user_id, organization_id=org.id
+    # state-level: assigned to user's state, no district
+    d_test_state = Test(
+        name=random_lower_string(),
+        created_by_id=district_user_id,
+        organization_id=org_district.id,
     )
-    db.add(test_district_level)
+    db.add(d_test_state)
     db.flush()
-    db.refresh(test_district_level)
-    db.add(TestDistrict(test_id=test_district_level.id, district_id=district.id))
+    db.refresh(d_test_state)
+    db.add(TestState(test_id=d_test_state.id, state_id=state_d.id))
+
+    # district-level: assigned to user's district
+    d_test_district = Test(
+        name=random_lower_string(),
+        created_by_id=district_user_id,
+        organization_id=org_district.id,
+    )
+    db.add(d_test_district)
+    db.flush()
+    db.refresh(d_test_district)
+    db.add(TestDistrict(test_id=d_test_district.id, district_id=district.id))
 
     db.commit()
 
-    assert test_org.id is not None
-    assert test_state_level.id is not None
-    assert test_district_level.id is not None
+    assert d_test_org.id is not None
+    assert d_test_state.id is not None
+    assert d_test_district.id is not None
 
-    # my_tests=True: only the district-level test
     response = client.get(
         f"{settings.API_V1_STR}/test/?my_tests=true",
-        headers=token_headers,
+        headers=district_user_headers,
     )
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert test_district_level.id in returned_ids
-    assert test_org.id not in returned_ids
-    assert test_state_level.id not in returned_ids
+    assert d_test_district.id in returned_ids
+    assert d_test_org.id not in returned_ids
+    assert d_test_state.id not in returned_ids
 
-    # my_tests=False: org-level and state-level tests, not district-level
     response = client.get(
         f"{settings.API_V1_STR}/test/?my_tests=false",
-        headers=token_headers,
+        headers=district_user_headers,
     )
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert test_district_level.id not in returned_ids
-    assert test_org.id in returned_ids
-    assert test_state_level.id in returned_ids
+    assert d_test_district.id not in returned_ids
+    assert d_test_org.id in returned_ids
+    assert d_test_state.id in returned_ids
+
+    # --- state-level user ---
+
+    org_state = create_random_organization(db)
+    db.add(org_state)
+    db.commit()
+    db.refresh(org_state)
+
+    state_s = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_s)
+    db.commit()
+    db.refresh(state_s)
+
+    email_state = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_state,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org_state.id,
+            "state_ids": [state_s.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_user_headers = authentication_token_from_email(
+        client=client, email=email_state, db=db
+    )
+    state_user_id = get_current_user_data(client, state_user_headers)["id"]
+
+    # org-level: no location
+    s_test_org = Test(
+        name=random_lower_string(),
+        created_by_id=state_user_id,
+        organization_id=org_state.id,
+    )
+    db.add(s_test_org)
+    db.flush()
+    db.refresh(s_test_org)
+
+    # state-level: assigned to user's state
+    s_test_state = Test(
+        name=random_lower_string(),
+        created_by_id=state_user_id,
+        organization_id=org_state.id,
+    )
+    db.add(s_test_state)
+    db.flush()
+    db.refresh(s_test_state)
+    db.add(TestState(test_id=s_test_state.id, state_id=state_s.id))
+
+    db.commit()
+
+    assert s_test_org.id is not None
+    assert s_test_state.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true",
+        headers=state_user_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert s_test_state.id in returned_ids
+    assert s_test_org.id not in returned_ids
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false",
+        headers=state_user_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert s_test_state.id not in returned_ids
+    assert s_test_org.id in returned_ids
