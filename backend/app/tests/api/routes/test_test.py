@@ -8344,3 +8344,106 @@ def test_clone_test_does_not_generate_test_link(
 
     links = db.exec(select(TestLink).where(TestLink.test_id == cloned_id)).all()
     assert links == []
+
+
+def test_get_tests_my_tests_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """my_tests=True returns only tests at the user's lowest location (district),
+    my_tests=False excludes those tests and returns org-level and state-level ones."""
+    org = create_random_organization(db)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org.id,
+            "district_ids": [district.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+    user_data = get_current_user_data(client, token_headers)
+    user_id = user_data["id"]
+
+    # Org-level test: no location assigned
+    test_org = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org.id
+    )
+    db.add(test_org)
+    db.flush()
+    db.refresh(test_org)
+
+    # State-level test: assigned to user's state, no district assignment
+    test_state_level = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org.id
+    )
+    db.add(test_state_level)
+    db.flush()
+    db.refresh(test_state_level)
+    db.add(TestState(test_id=test_state_level.id, state_id=state.id))
+
+    # District-level test: assigned to user's district
+    test_district_level = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org.id
+    )
+    db.add(test_district_level)
+    db.flush()
+    db.refresh(test_district_level)
+    db.add(TestDistrict(test_id=test_district_level.id, district_id=district.id))
+
+    db.commit()
+
+    assert test_org.id is not None
+    assert test_state_level.id is not None
+    assert test_district_level.id is not None
+
+    # my_tests=True: only the district-level test
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert test_district_level.id in returned_ids
+    assert test_org.id not in returned_ids
+    assert test_state_level.id not in returned_ids
+
+    # my_tests=False: org-level and state-level tests, not district-level
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert test_district_level.id not in returned_ids
+    assert test_org.id in returned_ids
+    assert test_state_level.id in returned_ids
