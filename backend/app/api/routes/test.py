@@ -826,6 +826,7 @@ def get_test(
     state_ids: list[int] | None = Query(None),
     district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
+    my_tests: bool | None = None,
 ) -> Page[TestPublic]:
     query = (
         select(Test)
@@ -1030,6 +1031,33 @@ def get_test(
             .distinct()
         )
         query = query.where(col(Test.id).in_(district_subquery))
+
+    if my_tests is not None:
+        user_districts = current_user.districts or []
+        user_states = current_user.states or []
+
+        if user_districts:
+            lowest_district_ids = [d.id for d in user_districts if d.id is not None]
+            location_subquery = (
+                select(TestDistrict.test_id)
+                .where(col(TestDistrict.district_id).in_(lowest_district_ids))
+                .distinct()
+            )
+        elif user_states:
+            lowest_state_ids = [s.id for s in user_states if s.id is not None]
+            location_subquery = (
+                select(TestState.test_id)
+                .where(col(TestState.state_id).in_(lowest_state_ids))
+                .distinct()
+            )
+        else:
+            location_subquery = None
+
+        if location_subquery is not None:
+            if my_tests:
+                query = query.where(col(Test.id).in_(location_subquery))
+            else:
+                query = query.where(col(Test.id).not_in(location_subquery))
 
     # let's get the tests with custom transformer
     tests: Page[TestPublic] = paginate(
