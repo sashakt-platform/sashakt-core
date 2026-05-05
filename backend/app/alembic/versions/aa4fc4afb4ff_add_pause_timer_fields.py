@@ -32,8 +32,7 @@ def upgrade() -> None:
         sa.Column(
             "active_time_spent_seconds",
             sa.Integer(),
-            nullable=False,
-            server_default="0",
+            nullable=True,
         ),
     )
     op.add_column(

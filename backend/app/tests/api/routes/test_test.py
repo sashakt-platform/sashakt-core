@@ -2763,6 +2763,55 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
     )
 
 
+def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        pause_timer_when_inactive=False,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": test.name,
+            "link": test.link,
+            "is_template": False,
+            "pause_timer_when_inactive": True,
+            "locale": "en-US",
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Cannot update pause timer setting after candidate tests have been created."
+    )
+
+
 def test_update_test_can_replace_flat_membership_with_question_sets(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:

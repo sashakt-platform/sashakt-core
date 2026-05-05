@@ -7517,6 +7517,60 @@ def test_sync_timer_heartbeat_updates_active_window_for_pause_enabled_test(
         assert candidate_test.last_heartbeat_at == fake_current_time
 
 
+def test_sync_timer_heartbeat_starts_active_window_for_pause_enabled_test(
+    client: TestClient, db: SessionDep
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+    with patch(
+        "app.api.routes.candidate.get_current_time", return_value=fake_current_time
+    ):
+        user = create_random_user(db)
+        candidate = Candidate(identity=uuid.uuid4())
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
+
+        test = Test(
+            name="Initial Heartbeat Timer Test",
+            time_limit=30,
+            pause_timer_when_inactive=True,
+            is_active=True,
+            created_by_id=user.id,
+        )
+        db.add(test)
+        db.commit()
+        db.refresh(test)
+
+        candidate_test = CandidateTest(
+            test_id=test.id,
+            candidate_id=candidate.id,
+            device="Laptop",
+            consent=True,
+            start_time=fake_current_time - timedelta(minutes=20),
+            is_submitted=False,
+            active_time_spent_seconds=300,
+            last_timer_started_at=None,
+            last_heartbeat_at=None,
+        )
+        db.add(candidate_test)
+        db.commit()
+        db.refresh(candidate_test)
+
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/timer_sync/{candidate_test.id}",
+            params={"candidate_uuid": str(candidate.identity)},
+            json={"event": "heartbeat"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["time_left"] == 1500
+
+        db.refresh(candidate_test)
+        assert candidate_test.active_time_spent_seconds == 300
+        assert candidate_test.last_timer_started_at == fake_current_time
+        assert candidate_test.last_heartbeat_at == fake_current_time
+
+
 def test_sync_timer_heartbeat_with_small_delay_does_not_restart_active_window(
     client: TestClient, db: SessionDep
 ) -> None:

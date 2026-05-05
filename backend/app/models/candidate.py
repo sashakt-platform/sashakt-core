@@ -154,11 +154,7 @@ class CandidateTest(CandidateTestBase, table=True):
     __test__ = False
     __table_args__ = (UniqueConstraint("test_id", "candidate_id"),)
     id: int | None = Field(default=None, primary_key=True)
-    active_time_spent_seconds: int = Field(
-        default=0,
-        nullable=False,
-        sa_column_kwargs={"server_default": "0"},
-    )
+    active_time_spent_seconds: int | None = Field(default=None, nullable=True)
     last_timer_started_at: datetime | None = Field(default=None, nullable=True)
     last_heartbeat_at: datetime | None = Field(default=None, nullable=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)

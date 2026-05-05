@@ -56,6 +56,7 @@ from app.models import (
 )
 from app.models.candidate import (
     CandidateReviewResponse,
+    CandidateTimerEventType,
     CandidateTimerSyncRequest,
     OverallTestAnalyticsResponse,
     Result,
@@ -87,7 +88,6 @@ router_candidate_test_answer = APIRouter(
     prefix="/candidate_test_answer", tags=["Candidate-Test Answer"]
 )
 
-HEARTBEAT_INTERVAL = timedelta(seconds=15)
 HEARTBEAT_STALE_THRESHOLD = timedelta(seconds=20)
 
 
@@ -153,7 +153,7 @@ def get_candidate_test_elapsed_time(
     if not test.pause_timer_when_inactive:
         return max(time_now - candidate_test.start_time, timedelta())
 
-    elapsed_seconds = max(candidate_test.active_time_spent_seconds, 0)
+    elapsed_seconds = max(candidate_test.active_time_spent_seconds or 0, 0)
     if not candidate_test.last_timer_started_at:
         return timedelta(seconds=elapsed_seconds)
 
@@ -184,6 +184,8 @@ def settle_candidate_test_timer(
 def start_candidate_test_timer(
     candidate_test: CandidateTest, time_now: datetime
 ) -> None:
+    if candidate_test.active_time_spent_seconds is None:
+        candidate_test.active_time_spent_seconds = 0
     candidate_test.last_timer_started_at = time_now
     candidate_test.last_heartbeat_at = time_now
 
@@ -829,7 +831,7 @@ def start_test_for_candidate(
         question_revision_ids=question_revision_ids,
         question_set_ids=question_set_ids,
         admin_id=admin_id,
-        active_time_spent_seconds=0,
+        active_time_spent_seconds=0 if test.pause_timer_when_inactive else None,
         last_timer_started_at=start_time if test.pause_timer_when_inactive else None,
         last_heartbeat_at=start_time if test.pause_timer_when_inactive else None,
     )
@@ -2120,7 +2122,7 @@ def sync_timer(
 
     time_now = get_current_time()
     if test.pause_timer_when_inactive:
-        if timer_sync_request.event.value == "resume":
+        if timer_sync_request.event is CandidateTimerEventType.resume:
             settle_candidate_test_timer(candidate_test, test, time_now)
             if not is_candidate_test_expired(
                 session,
@@ -2130,7 +2132,13 @@ def sync_timer(
             ):
                 start_candidate_test_timer(candidate_test, time_now)
         elif candidate_test.last_timer_started_at is None:
-            start_candidate_test_timer(candidate_test, time_now)
+            if not is_candidate_test_expired(
+                session,
+                candidate_test,
+                test=test,
+                time_now=time_now,
+            ):
+                start_candidate_test_timer(candidate_test, time_now)
         elif is_candidate_test_timer_stale(candidate_test, time_now):
             settle_candidate_test_timer(candidate_test, test, time_now)
             if not is_candidate_test_expired(
