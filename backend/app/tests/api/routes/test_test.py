@@ -2767,11 +2767,12 @@ def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     user = create_random_user(db)
+    test_link = random_lower_string()
     test = Test(
         name=random_lower_string(),
         created_by_id=user.id,
         is_active=True,
-        link=random_lower_string(),
+        link=test_link,
         pause_timer_when_inactive=False,
     )
     db.add(test)
@@ -2797,7 +2798,7 @@ def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
         f"{settings.API_V1_STR}/test/{test.id}",
         json={
             "name": test.name,
-            "link": test.link,
+            "link": test_link,
             "is_template": False,
             "pause_timer_when_inactive": True,
             "locale": "en-US",
