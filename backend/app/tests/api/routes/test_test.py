@@ -2733,6 +2733,7 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
     db.refresh(candidate)
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="test-device",
@@ -2740,7 +2741,6 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
         start_time=get_current_time(),
         question_revision_ids=[question_revision_one.id],
         question_set_ids=[None],
-        admin_id=user.id,
     )
     db.add(candidate_test)
     db.commit()
@@ -2787,6 +2787,7 @@ def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
     assert candidate.id is not None
 
     candidate_test = CandidateTest(
+        admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
         device="test-device",

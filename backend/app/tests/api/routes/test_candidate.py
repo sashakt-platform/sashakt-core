@@ -2574,6 +2574,7 @@ def test_submit_test_for_paused_timer_uses_confirmed_heartbeat_time(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7384,6 +7385,7 @@ def test_candidate_timer_pause_when_inactive_uses_active_time_spent(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7432,6 +7434,7 @@ def test_sync_timer_resume_restarts_active_window_for_pause_enabled_test(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7486,6 +7489,7 @@ def test_sync_timer_heartbeat_updates_active_window_for_pause_enabled_test(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7542,6 +7546,7 @@ def test_sync_timer_heartbeat_starts_active_window_for_pause_enabled_test(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7596,6 +7601,7 @@ def test_sync_timer_heartbeat_with_small_delay_does_not_restart_active_window(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7652,6 +7658,7 @@ def test_candidate_timer_stops_at_last_heartbeat_when_stream_goes_stale(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
@@ -7700,6 +7707,7 @@ def test_sync_timer_heartbeat_restarts_after_stale_gap(
         db.refresh(test)
 
         candidate_test = CandidateTest(
+            admin_id=user.id,
             test_id=test.id,
             candidate_id=candidate.id,
             device="Laptop",
