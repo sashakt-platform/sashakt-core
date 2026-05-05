@@ -7737,6 +7737,151 @@ def test_sync_timer_heartbeat_restarts_after_stale_gap(
         assert candidate_test.last_heartbeat_at == fake_current_time
 
 
+def create_timer_test_attempt(
+    db: SessionDep,
+    *,
+    start_time: datetime,
+    time_limit: int | None = 30,
+    pause_timer_when_inactive: bool = True,
+    is_submitted: bool = False,
+    active_time_spent_seconds: int | None = None,
+    last_timer_started_at: datetime | None = None,
+    last_heartbeat_at: datetime | None = None,
+) -> tuple[Candidate, CandidateTest]:
+    user = create_random_user(db)
+    candidate = Candidate(identity=uuid.uuid4())
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    test = Test(
+        name="Timer Sync Test",
+        time_limit=time_limit,
+        pause_timer_when_inactive=pause_timer_when_inactive,
+        is_active=True,
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate_test = CandidateTest(
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="Laptop",
+        consent=True,
+        start_time=start_time,
+        is_submitted=is_submitted,
+        active_time_spent_seconds=active_time_spent_seconds,
+        last_timer_started_at=last_timer_started_at,
+        last_heartbeat_at=last_heartbeat_at,
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+    return candidate, candidate_test
+
+
+def test_sync_timer_rejects_submitted_candidate_test(
+    client: TestClient, db: SessionDep
+) -> None:
+    candidate, candidate_test = create_timer_test_attempt(
+        db,
+        start_time=datetime(2024, 5, 24, 10, 55, 0),
+        is_submitted=True,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/timer_sync/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+        json={"event": "heartbeat"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Test already submitted"
+
+
+def test_sync_timer_for_pause_disabled_test_keeps_existing_timer_behavior(
+    client: TestClient, db: SessionDep
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+    with patch(
+        "app.api.routes.candidate.get_current_time", return_value=fake_current_time
+    ):
+        candidate, candidate_test = create_timer_test_attempt(
+            db,
+            start_time=fake_current_time - timedelta(minutes=5),
+            pause_timer_when_inactive=False,
+        )
+
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/timer_sync/{candidate_test.id}",
+            params={"candidate_uuid": str(candidate.identity)},
+            json={"event": "heartbeat"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["time_left"] == 1500
+
+        db.refresh(candidate_test)
+        assert candidate_test.active_time_spent_seconds is None
+        assert candidate_test.last_timer_started_at is None
+        assert candidate_test.last_heartbeat_at is None
+
+
+def test_candidate_timer_pause_when_inactive_without_limits_has_no_time_left(
+    client: TestClient, db: SessionDep
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+    with patch(
+        "app.api.routes.candidate.get_current_time", return_value=fake_current_time
+    ):
+        candidate, candidate_test = create_timer_test_attempt(
+            db,
+            start_time=fake_current_time - timedelta(minutes=5),
+            time_limit=None,
+            active_time_spent_seconds=120,
+        )
+
+        response = client.get(
+            f"{settings.API_V1_STR}/candidate/time_left/{candidate_test.id}",
+            params={"candidate_uuid": str(candidate.identity)},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["time_left"] is None
+
+
+def test_sync_timer_does_not_restart_expired_pause_enabled_test(
+    client: TestClient, db: SessionDep
+) -> None:
+    fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
+    with patch(
+        "app.api.routes.candidate.get_current_time", return_value=fake_current_time
+    ):
+        candidate, candidate_test = create_timer_test_attempt(
+            db,
+            start_time=fake_current_time - timedelta(minutes=20),
+            time_limit=5,
+            active_time_spent_seconds=300,
+        )
+
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/timer_sync/{candidate_test.id}",
+            params={"candidate_uuid": str(candidate.identity)},
+            json={"event": "resume"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["time_left"] == 0
+
+        db.refresh(candidate_test)
+        assert candidate_test.active_time_spent_seconds == 300
+        assert candidate_test.last_timer_started_at is None
+        assert candidate_test.last_heartbeat_at is None
+
+
 def test_result_not_visible(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
