@@ -871,7 +871,7 @@ def test_create_sectioned_test_rejects_mandatory_questions_exceeding_attempt_lim
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Question set max_questions_allowed_to_attempt cannot be less than the number of mandatory questions in that set."
+        "Question set 'Physics' has 2 mandatory question(s), but only 1 question(s) can be attempted."
     )
 
 
@@ -2898,7 +2898,7 @@ def test_update_test_rejects_mandatory_questions_exceeding_attempt_limit(
 
     assert response.status_code == 400
     assert response.json()["detail"] == (
-        "Question set max_questions_allowed_to_attempt cannot be less than the number of mandatory questions in that set."
+        "Question set 'Physics' has 2 mandatory question(s), but only 1 question(s) can be attempted."
     )
 
 

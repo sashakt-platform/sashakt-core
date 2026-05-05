@@ -490,8 +490,10 @@ def validate_test_membership_payload(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "Question set max_questions_allowed_to_attempt cannot be less "
-                        "than the number of mandatory questions in that set."
+                        f"Question set '{question_set.title}' has "
+                        f"{mandatory_question_count} mandatory question(s), but only "
+                        f"{question_set.max_questions_allowed_to_attempt} question(s) "
+                        "can be attempted."
                     ),
                 )
 
