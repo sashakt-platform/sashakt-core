@@ -189,12 +189,9 @@ def check_linked_question(session: SessionDep, test_id: int) -> bool:
 
 
 def test_has_candidate_tests(session: SessionDep, test_id: int) -> bool:
-    return (
-        session.exec(
-            select(CandidateTest.id).where(CandidateTest.test_id == test_id)
-        ).first()
-        is not None
-    )
+    query = select(exists().where(col(CandidateTest.test_id) == test_id))
+    result = session.scalar(query)
+    return bool(result)
 
 
 def get_persisted_test_id(test: Test) -> int:

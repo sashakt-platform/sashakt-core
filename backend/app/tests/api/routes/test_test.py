@@ -2778,11 +2778,13 @@ def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
     db.add(test)
     db.commit()
     db.refresh(test)
+    assert test.id is not None
 
     candidate = Candidate()
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
+    assert candidate.id is not None
 
     candidate_test = CandidateTest(
         test_id=test.id,
