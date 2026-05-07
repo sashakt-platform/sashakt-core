@@ -1058,6 +1058,11 @@ def get_test(
                 query = query.where(col(Test.id).in_(location_subquery))
             else:
                 query = query.where(col(Test.id).not_in(location_subquery))
+        else:
+            if my_tests:
+                query = query.where(Test.created_by_id == current_user.id)
+            else:
+                query = query.where(Test.created_by_id != current_user.id)
 
     # let's get the tests with custom transformer
     tests: Page[TestPublic] = paginate(

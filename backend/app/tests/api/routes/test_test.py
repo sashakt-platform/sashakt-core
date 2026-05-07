@@ -8528,3 +8528,66 @@ def test_get_tests_my_tests_filter(
     returned_ids = {item["id"] for item in response.json()["items"]}
     assert s_test_state.id not in returned_ids
     assert s_test_org.id in returned_ids
+
+
+def test_get_tests_my_tests_filter_no_location_user(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    """When a user has no location assigned, my_tests=True returns only tests
+    created by that user; my_tests=False excludes them."""
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    other_user = create_random_user(db, org_id)
+    assert other_user.id is not None
+
+    my_test_1 = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org_id
+    )
+    my_test_2 = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org_id
+    )
+    other_test_1 = Test(
+        name=random_lower_string(), created_by_id=other_user.id, organization_id=org_id
+    )
+    other_test_2 = Test(
+        name=random_lower_string(), created_by_id=other_user.id, organization_id=org_id
+    )
+    db.add_all([my_test_1, my_test_2, other_test_1, other_test_2])
+    db.commit()
+    db.refresh(my_test_1)
+    db.refresh(my_test_2)
+    db.refresh(other_test_1)
+    db.refresh(other_test_2)
+
+    assert my_test_1.id is not None
+    assert my_test_2.id is not None
+    assert other_test_1.id is not None
+    assert other_test_2.id is not None
+
+    # my_tests=True: only tests created by the current user
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert my_test_1.id in returned_ids
+    assert my_test_2.id in returned_ids
+    assert other_test_1.id not in returned_ids
+    assert other_test_2.id not in returned_ids
+
+    # my_tests=False: tests NOT created by the current user
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert my_test_1.id not in returned_ids
+    assert my_test_2.id not in returned_ids
+    assert other_test_1.id in returned_ids
+    assert other_test_2.id in returned_ids
