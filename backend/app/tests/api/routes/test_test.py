@@ -8351,7 +8351,8 @@ def test_get_tests_my_tests_filter(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    """my_tests=True/False filters by the user's lowest assigned location (district or state)."""
+    """my_tests=True returns only tests created by the current user;
+    my_tests=False excludes them — regardless of location assignment."""
     test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert test_admin_role is not None
 
@@ -8396,43 +8397,43 @@ def test_get_tests_my_tests_filter(
     )
     district_user_id = get_current_user_data(client, district_user_headers)["id"]
 
-    # org-level: no location
-    d_test_org = Test(
+    # another user in the same org to own the "other" tests
+    d_other_user = create_random_user(db, org_district.id)
+    assert d_other_user.id is not None
+
+    # tests created by the district admin
+    d_my_test_1 = Test(
         name=random_lower_string(),
         created_by_id=district_user_id,
         organization_id=org_district.id,
     )
-    db.add(d_test_org)
-    db.flush()
-    db.refresh(d_test_org)
-
-    # state-level: assigned to user's state, no district
-    d_test_state = Test(
+    d_my_test_2 = Test(
         name=random_lower_string(),
         created_by_id=district_user_id,
         organization_id=org_district.id,
     )
-    db.add(d_test_state)
-    db.flush()
-    db.refresh(d_test_state)
-    db.add(TestState(test_id=d_test_state.id, state_id=state_d.id))
-
-    # district-level: assigned to user's district
-    d_test_district = Test(
+    # tests created by another user (no location → visible to the district admin)
+    d_other_test_1 = Test(
         name=random_lower_string(),
-        created_by_id=district_user_id,
+        created_by_id=d_other_user.id,
         organization_id=org_district.id,
     )
-    db.add(d_test_district)
-    db.flush()
-    db.refresh(d_test_district)
-    db.add(TestDistrict(test_id=d_test_district.id, district_id=district.id))
-
+    d_other_test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=d_other_user.id,
+        organization_id=org_district.id,
+    )
+    db.add_all([d_my_test_1, d_my_test_2, d_other_test_1, d_other_test_2])
     db.commit()
+    db.refresh(d_my_test_1)
+    db.refresh(d_my_test_2)
+    db.refresh(d_other_test_1)
+    db.refresh(d_other_test_2)
 
-    assert d_test_org.id is not None
-    assert d_test_state.id is not None
-    assert d_test_district.id is not None
+    assert d_my_test_1.id is not None
+    assert d_my_test_2.id is not None
+    assert d_other_test_1.id is not None
+    assert d_other_test_2.id is not None
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?my_tests=true",
@@ -8440,9 +8441,10 @@ def test_get_tests_my_tests_filter(
     )
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert d_test_district.id in returned_ids
-    assert d_test_org.id not in returned_ids
-    assert d_test_state.id not in returned_ids
+    assert d_my_test_1.id in returned_ids
+    assert d_my_test_2.id in returned_ids
+    assert d_other_test_1.id not in returned_ids
+    assert d_other_test_2.id not in returned_ids
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?my_tests=false",
@@ -8450,9 +8452,10 @@ def test_get_tests_my_tests_filter(
     )
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert d_test_district.id not in returned_ids
-    assert d_test_org.id in returned_ids
-    assert d_test_state.id in returned_ids
+    assert d_my_test_1.id not in returned_ids
+    assert d_my_test_2.id not in returned_ids
+    assert d_other_test_1.id in returned_ids
+    assert d_other_test_2.id in returned_ids
 
     # --- state-level user ---
 
@@ -8485,31 +8488,43 @@ def test_get_tests_my_tests_filter(
     )
     state_user_id = get_current_user_data(client, state_user_headers)["id"]
 
-    # org-level: no location
-    s_test_org = Test(
+    # another user in the same org to own the "other" tests
+    s_other_user = create_random_user(db, org_state.id)
+    assert s_other_user.id is not None
+
+    # tests created by the state admin
+    s_my_test_1 = Test(
         name=random_lower_string(),
         created_by_id=state_user_id,
         organization_id=org_state.id,
     )
-    db.add(s_test_org)
-    db.flush()
-    db.refresh(s_test_org)
-
-    # state-level: assigned to user's state
-    s_test_state = Test(
+    s_my_test_2 = Test(
         name=random_lower_string(),
         created_by_id=state_user_id,
         organization_id=org_state.id,
     )
-    db.add(s_test_state)
-    db.flush()
-    db.refresh(s_test_state)
-    db.add(TestState(test_id=s_test_state.id, state_id=state_s.id))
-
+    # tests created by another user (no location → visible to the state admin)
+    s_other_test_1 = Test(
+        name=random_lower_string(),
+        created_by_id=s_other_user.id,
+        organization_id=org_state.id,
+    )
+    s_other_test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=s_other_user.id,
+        organization_id=org_state.id,
+    )
+    db.add_all([s_my_test_1, s_my_test_2, s_other_test_1, s_other_test_2])
     db.commit()
+    db.refresh(s_my_test_1)
+    db.refresh(s_my_test_2)
+    db.refresh(s_other_test_1)
+    db.refresh(s_other_test_2)
 
-    assert s_test_org.id is not None
-    assert s_test_state.id is not None
+    assert s_my_test_1.id is not None
+    assert s_my_test_2.id is not None
+    assert s_other_test_1.id is not None
+    assert s_other_test_2.id is not None
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?my_tests=true",
@@ -8517,8 +8532,10 @@ def test_get_tests_my_tests_filter(
     )
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert s_test_state.id in returned_ids
-    assert s_test_org.id not in returned_ids
+    assert s_my_test_1.id in returned_ids
+    assert s_my_test_2.id in returned_ids
+    assert s_other_test_1.id not in returned_ids
+    assert s_other_test_2.id not in returned_ids
 
     response = client.get(
         f"{settings.API_V1_STR}/test/?my_tests=false",
@@ -8526,8 +8543,10 @@ def test_get_tests_my_tests_filter(
     )
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert s_test_state.id not in returned_ids
-    assert s_test_org.id in returned_ids
+    assert s_my_test_1.id not in returned_ids
+    assert s_my_test_2.id not in returned_ids
+    assert s_other_test_1.id in returned_ids
+    assert s_other_test_2.id in returned_ids
 
 
 def test_get_tests_my_tests_filter_no_location_user(
