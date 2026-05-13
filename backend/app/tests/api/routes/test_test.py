@@ -8129,11 +8129,28 @@ def test_test_admin_with_district_can_see_state_level_test(
     assert haryana_test_response.status_code == 200
     haryana_test_id = haryana_test_response.json()["id"]
 
+    # State-admin creates a test scoped specifically to Rohtak (different district)
+    rohtak_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [rohtak.id],
+        },
+        headers=state_admin_token,
+    )
+    assert rohtak_test_response.status_code == 200
+    rohtak_test_id = rohtak_test_response.json()["id"]
+
     response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
     assert haryana_test_id in item_ids
+    assert rohtak_test_id not in item_ids
 
 
 def test_state_admin_cannot_see_district_level_test(
@@ -8374,6 +8391,85 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
     assert district_a_test_id in item_ids
     # Viewer (district_a) cannot see the test scoped to district_b
     assert district_b_test_id not in item_ids
+
+
+def test_district_user_cannot_see_general_test_no_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to a district must NOT see General Tests (tests with no
+    state or district mapping) created by other users.
+    Tests explicitly mapped to their district must still be visible.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    district_user_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": district_user_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    district_user_token = authentication_token_from_email(
+        client=client, email=district_user_email, db=db
+    )
+
+    other_user = create_random_user(db, new_organization.id)
+    db.commit()
+
+    # General test — no state, no district — created by another user in the same org
+    general_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(general_test)
+
+    # District-mapped test — should still be visible to the district user
+    district_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(district_test)
+    db.flush()
+    db.refresh(district_test)
+    db.add(TestDistrict(test_id=district_test.id, district_id=district.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=district_user_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert general_test.id not in item_ids
+    assert district_test.id in item_ids
 
 
 def test_create_test_show_mark_for_review_true(
