@@ -4973,7 +4973,7 @@ def test_update_test_time_limit_exceeds_duration(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_current_user_data(get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     test = Test(
         name=random_lower_string(),
         created_by_id=user_data["id"],
