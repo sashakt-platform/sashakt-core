@@ -8136,6 +8136,246 @@ def test_test_admin_with_district_can_see_state_level_test(
     assert haryana_test_id in item_ids
 
 
+def test_state_admin_cannot_see_district_level_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A state_admin scoped to Haryana should NOT see tests created specifically
+    for a district (e.g. Ambala) even though Ambala belongs to Haryana.
+    State-level tests for Haryana must remain visible.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    haryana = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(haryana)
+    db.commit()
+    db.refresh(haryana)
+
+    ambala = District(name=random_lower_string(), is_active=True, state_id=haryana.id)
+    db.add(ambala)
+    db.commit()
+    db.refresh(ambala)
+
+    # Create state_admin scoped to Haryana
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    state_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [haryana.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_admin_token = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    # Create test_admin scoped to Ambala district
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+    test_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": test_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [ambala.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    test_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # test_admin creates a test scoped to Ambala district
+    ambala_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [ambala.id],
+        },
+        headers=test_admin_token,
+    )
+    assert ambala_test_response.status_code == 200
+    ambala_test_id = ambala_test_response.json()["id"]
+
+    # state_admin creates a state-level test for Haryana
+    haryana_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "state_ids": [haryana.id],
+        },
+        headers=state_admin_token,
+    )
+    assert haryana_test_response.status_code == 200
+    haryana_test_id = haryana_test_response.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=state_admin_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert haryana_test_id in item_ids
+    assert ambala_test_id not in item_ids
+
+
+def test_district_user_can_see_test_created_by_peer_in_same_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to district A should be able to see a test created by
+    another test_admin who is also scoped to district A.
+    Tests created for a different district must remain invisible.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    district_b = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    # First test_admin — scoped to district_a (creator)
+    creator_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": creator_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    creator_token = authentication_token_from_email(
+        client=client, email=creator_email, db=db
+    )
+
+    # Second test_admin — scoped to the same district_a (viewer)
+    viewer_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": viewer_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    viewer_token = authentication_token_from_email(
+        client=client, email=viewer_email, db=db
+    )
+
+    # Third test_admin — scoped to district_b (different district, same state)
+    other_district_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": other_district_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_b.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    other_district_token = authentication_token_from_email(
+        client=client, email=other_district_email, db=db
+    )
+
+    # Creator creates a test for district_a
+    district_a_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [district_a.id],
+        },
+        headers=creator_token,
+    )
+    assert district_a_test_response.status_code == 200
+    district_a_test_id = district_a_test_response.json()["id"]
+
+    # Other-district user creates a test for district_b
+    district_b_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [district_b.id],
+        },
+        headers=other_district_token,
+    )
+    assert district_b_test_response.status_code == 200
+    district_b_test_id = district_b_test_response.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=viewer_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    # Viewer (district_a) can see the test created by their peer in district_a
+    assert district_a_test_id in item_ids
+    # Viewer (district_a) cannot see the test scoped to district_b
+    assert district_b_test_id not in item_ids
+
+
 def test_create_test_show_mark_for_review_true(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
