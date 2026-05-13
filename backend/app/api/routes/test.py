@@ -828,6 +828,7 @@ def get_test(
     state_ids: list[int] | None = Query(None),
     district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
+    my_tests: bool | None = None,
 ) -> Page[TestPublic]:
     query = (
         select(Test)
@@ -1032,6 +1033,12 @@ def get_test(
             .distinct()
         )
         query = query.where(col(Test.id).in_(district_subquery))
+
+    if my_tests is not None:
+        if my_tests:
+            query = query.where(Test.created_by_id == current_user.id)
+        else:
+            query = query.where(Test.created_by_id != current_user.id)
 
     # let's get the tests with custom transformer
     tests: Page[TestPublic] = paginate(

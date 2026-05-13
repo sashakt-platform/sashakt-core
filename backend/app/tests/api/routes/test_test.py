@@ -8344,3 +8344,269 @@ def test_clone_test_does_not_generate_test_link(
 
     links = db.exec(select(TestLink).where(TestLink.test_id == cloned_id)).all()
     assert links == []
+
+
+def test_get_tests_my_tests_filter(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """my_tests=True returns only tests created by the current user;
+    my_tests=False excludes them — regardless of location assignment."""
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    # --- district-level user ---
+
+    org_district = create_random_organization(db)
+    db.add(org_district)
+    db.commit()
+    db.refresh(org_district)
+
+    state_d = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_d)
+    db.commit()
+    db.refresh(state_d)
+
+    district = District(name=random_lower_string(), is_active=True, state_id=state_d.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    email_district = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_district,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org_district.id,
+            "district_ids": [district.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    district_user_headers = authentication_token_from_email(
+        client=client, email=email_district, db=db
+    )
+    district_user_id = get_current_user_data(client, district_user_headers)["id"]
+
+    # another user in the same org to own the "other" tests
+    d_other_user = create_random_user(db, org_district.id)
+    assert d_other_user.id is not None
+
+    # tests created by the district admin
+    d_my_test_1 = Test(
+        name=random_lower_string(),
+        created_by_id=district_user_id,
+        organization_id=org_district.id,
+    )
+    d_my_test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=district_user_id,
+        organization_id=org_district.id,
+    )
+    # tests created by another user (no location → visible to the district admin)
+    d_other_test_1 = Test(
+        name=random_lower_string(),
+        created_by_id=d_other_user.id,
+        organization_id=org_district.id,
+    )
+    d_other_test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=d_other_user.id,
+        organization_id=org_district.id,
+    )
+    db.add_all([d_my_test_1, d_my_test_2, d_other_test_1, d_other_test_2])
+    db.commit()
+    db.refresh(d_my_test_1)
+    db.refresh(d_my_test_2)
+    db.refresh(d_other_test_1)
+    db.refresh(d_other_test_2)
+
+    assert d_my_test_1.id is not None
+    assert d_my_test_2.id is not None
+    assert d_other_test_1.id is not None
+    assert d_other_test_2.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true",
+        headers=district_user_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert d_my_test_1.id in returned_ids
+    assert d_my_test_2.id in returned_ids
+    assert d_other_test_1.id not in returned_ids
+    assert d_other_test_2.id not in returned_ids
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false",
+        headers=district_user_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert d_my_test_1.id not in returned_ids
+    assert d_my_test_2.id not in returned_ids
+    assert d_other_test_1.id in returned_ids
+    assert d_other_test_2.id in returned_ids
+
+    # --- state-level user ---
+
+    org_state = create_random_organization(db)
+    db.add(org_state)
+    db.commit()
+    db.refresh(org_state)
+
+    state_s = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_s)
+    db.commit()
+    db.refresh(state_s)
+
+    email_state = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_state,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org_state.id,
+            "state_ids": [state_s.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_user_headers = authentication_token_from_email(
+        client=client, email=email_state, db=db
+    )
+    state_user_id = get_current_user_data(client, state_user_headers)["id"]
+
+    # another user in the same org to own the "other" tests
+    s_other_user = create_random_user(db, org_state.id)
+    assert s_other_user.id is not None
+
+    # tests created by the state admin
+    s_my_test_1 = Test(
+        name=random_lower_string(),
+        created_by_id=state_user_id,
+        organization_id=org_state.id,
+    )
+    s_my_test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=state_user_id,
+        organization_id=org_state.id,
+    )
+    # tests created by another user (no location → visible to the state admin)
+    s_other_test_1 = Test(
+        name=random_lower_string(),
+        created_by_id=s_other_user.id,
+        organization_id=org_state.id,
+    )
+    s_other_test_2 = Test(
+        name=random_lower_string(),
+        created_by_id=s_other_user.id,
+        organization_id=org_state.id,
+    )
+    db.add_all([s_my_test_1, s_my_test_2, s_other_test_1, s_other_test_2])
+    db.commit()
+    db.refresh(s_my_test_1)
+    db.refresh(s_my_test_2)
+    db.refresh(s_other_test_1)
+    db.refresh(s_other_test_2)
+
+    assert s_my_test_1.id is not None
+    assert s_my_test_2.id is not None
+    assert s_other_test_1.id is not None
+    assert s_other_test_2.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true",
+        headers=state_user_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert s_my_test_1.id in returned_ids
+    assert s_my_test_2.id in returned_ids
+    assert s_other_test_1.id not in returned_ids
+    assert s_other_test_2.id not in returned_ids
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false",
+        headers=state_user_headers,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert s_my_test_1.id not in returned_ids
+    assert s_my_test_2.id not in returned_ids
+    assert s_other_test_1.id in returned_ids
+    assert s_other_test_2.id in returned_ids
+
+
+def test_get_tests_my_tests_filter_no_location_user(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    """When a user has no location assigned, my_tests=True returns only tests
+    created by that user; my_tests=False excludes them."""
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    other_user = create_random_user(db, org_id)
+    assert other_user.id is not None
+
+    my_test_1 = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org_id
+    )
+    my_test_2 = Test(
+        name=random_lower_string(), created_by_id=user_id, organization_id=org_id
+    )
+    other_test_1 = Test(
+        name=random_lower_string(), created_by_id=other_user.id, organization_id=org_id
+    )
+    other_test_2 = Test(
+        name=random_lower_string(), created_by_id=other_user.id, organization_id=org_id
+    )
+    db.add_all([my_test_1, my_test_2, other_test_1, other_test_2])
+    db.commit()
+    db.refresh(my_test_1)
+    db.refresh(my_test_2)
+    db.refresh(other_test_1)
+    db.refresh(other_test_2)
+
+    assert my_test_1.id is not None
+    assert my_test_2.id is not None
+    assert other_test_1.id is not None
+    assert other_test_2.id is not None
+
+    # my_tests=True: only tests created by the current user
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert my_test_1.id in returned_ids
+    assert my_test_2.id in returned_ids
+    assert other_test_1.id not in returned_ids
+    assert other_test_2.id not in returned_ids
+
+    # my_tests=False: tests NOT created by the current user
+    response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert my_test_1.id not in returned_ids
+    assert my_test_2.id not in returned_ids
+    assert other_test_1.id in returned_ids
+    assert other_test_2.id in returned_ids
