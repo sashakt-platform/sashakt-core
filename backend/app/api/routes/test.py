@@ -1117,6 +1117,11 @@ def update_test(
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    if test.created_by_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only update tests created by you.",
+        )
     membership_fields = {"question_revision_ids", "question_sets"}
     membership_update_requested = bool(
         membership_fields.intersection(test_update.model_fields_set)
