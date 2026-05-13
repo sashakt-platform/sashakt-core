@@ -2759,7 +2759,7 @@ def test_update_test_blocks_membership_changes_after_candidate_test_exists(
     assert response.status_code == 409
     assert (
         response.json()["detail"]
-        == "Cannot update test membership after candidate tests have been created."
+        == "This test cannot be updated because candidates have already attempted it."
     )
 
 
