@@ -954,7 +954,7 @@ def test_create_state_admin_without_state_id_district_id(
         data = response.json()
         assert (
             data["detail"]
-            == "A user with 'State Admin' role must be associated with a state or a district."
+            == "A location must be selected to create a user with the State Admin role"
         )
 
 
@@ -1766,7 +1766,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     error = patch_response.json()
     assert (
         error["detail"]
-        == "A user with 'State Admin' role must be associated with a state or a district."
+        == "A location must be selected to create a user with the State Admin role"
     )
 
 
@@ -1831,7 +1831,7 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
     error = patch_response.json()
     assert (
         error["detail"]
-        == "A user with 'State Admin' role must be associated with a state or a district."
+        == "A location must be selected to create a user with the State Admin role"
     )
 
 
