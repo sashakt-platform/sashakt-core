@@ -6760,12 +6760,315 @@ def test_test_list_state_user(
     )
     data = response.json()
     assert response.status_code == 200
-    # state admin should see:
-    # - tests assigned to their state (3 + 2 = 5)
-    # - tests with no state assigned (2)
-    # Total: 7 tests
-    assert data["total"] == 7
-    assert len(data["items"]) == 7
+    # state admin sees only tests explicitly mapped to their state (no general/unassigned tests)
+    # - tests assigned to state_x only (3) + tests assigned to state_x AND state_y (2) = 5
+    assert data["total"] == 5
+    assert len(data["items"]) == 5
+
+
+def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_x)
+    db.commit()
+    db.refresh(state_x)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email_a = random_email()
+    response_a = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_a,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_x.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_a.status_code == 200
+    token_headers_a = authentication_token_from_email(
+        client=client, email=email_a, db=db
+    )
+
+    email_b = random_email()
+    response_b = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_b,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_x.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_b.status_code == 200
+    creator_id = response_b.json()["id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=creator_id,
+        organization_id=new_organization.id,
+    )
+    db.add(test)
+    db.flush()
+    db.refresh(test)
+    db.add(TestState(test_id=test.id, state_id=state_x.id))
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test",
+        headers=token_headers_a,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    item_ids = [item["id"] for item in data["items"]]
+    assert test.id in item_ids
+
+
+def test_state_admin_cannot_see_general_test_no_location(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_x)
+    db.commit()
+    db.refresh(state_x)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_x.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    other_user = create_random_user(db, new_organization.id)
+    db.commit()
+
+    # General test — no state, no district — created by another user in the same org
+    general_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(general_test)
+
+    # State-mapped test — should still be visible
+    state_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(state_test)
+    db.flush()
+    db.refresh(state_test)
+    db.add(TestState(test_id=state_test.id, state_id=state_x.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test", headers=token_headers)
+    assert response.status_code == 200
+    data = response.json()
+    item_ids = [item["id"] for item in data["items"]]
+    assert general_test.id not in item_ids
+    assert state_test.id in item_ids
+
+
+def test_state_admin_cannot_see_district_only_test(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_x)
+    db.commit()
+    db.refresh(state_x)
+
+    district_x = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    db.add(district_x)
+    db.commit()
+    db.refresh(district_x)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    creator = create_random_user(db, new_organization.id)
+    db.commit()
+
+    district_only_test = Test(
+        name=random_lower_string(),
+        created_by_id=creator.id,
+        organization_id=new_organization.id,
+    )
+    db.add(district_only_test)
+    db.flush()
+    db.refresh(district_only_test)
+    db.add(TestDistrict(test_id=district_only_test.id, district_id=district_x.id))
+
+    state_only_test = Test(
+        name=random_lower_string(),
+        created_by_id=creator.id,
+        organization_id=new_organization.id,
+    )
+    db.add(state_only_test)
+    db.flush()
+    db.refresh(state_only_test)
+    db.add(TestState(test_id=state_only_test.id, state_id=state_x.id))
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    item_ids = [item["id"] for item in data["items"]]
+    assert state_only_test.id in item_ids
+    assert district_only_test.id not in item_ids
+
+
+def test_state_admin_cannot_see_state_and_district_test(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state_x)
+    db.commit()
+    db.refresh(state_x)
+
+    district_x = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    db.add(district_x)
+    db.commit()
+    db.refresh(district_x)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+
+    email = random_email()
+    state_admin_payload = {
+        "email": email,
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "full_name": random_lower_string(),
+        "role_id": state_admin_role.id,
+        "organization_id": new_organization.id,
+        "state_ids": [state_x.id],
+    }
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json=state_admin_payload,
+        headers=get_user_superadmin_token,
+    )
+    token_headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    creator = create_random_user(db, new_organization.id)
+    db.commit()
+
+    state_and_district_test = Test(
+        name=random_lower_string(),
+        created_by_id=creator.id,
+        organization_id=new_organization.id,
+    )
+    db.add(state_and_district_test)
+    db.flush()
+    db.refresh(state_and_district_test)
+    db.add(TestState(test_id=state_and_district_test.id, state_id=state_x.id))
+    db.add(TestDistrict(test_id=state_and_district_test.id, district_id=district_x.id))
+
+    state_only_test = Test(
+        name=random_lower_string(),
+        created_by_id=creator.id,
+        organization_id=new_organization.id,
+    )
+    db.add(state_only_test)
+    db.flush()
+    db.refresh(state_only_test)
+    db.add(TestState(test_id=state_only_test.id, state_id=state_x.id))
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test",
+        headers=token_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    item_ids = [item["id"] for item in data["items"]]
+    assert state_only_test.id in item_ids
+    assert state_and_district_test.id not in item_ids
 
 
 def test_state_admin_cannot_delete_general_test(
@@ -7739,6 +8042,638 @@ def test_get_tests_by_district_user(
     assert test_state_only_name in returned_names
     assert test_11_name not in returned_names
     assert test_2_name not in returned_names
+
+
+def test_test_admin_with_district_can_see_state_level_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to Ambala district should see tests created by a
+    state_admin for Haryana (state-level, no district), but NOT tests created
+    specifically for a different district (e.g. Rohtak).
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    haryana = State(name="Haryana", is_active=True, country_id=country.id)
+    db.add(haryana)
+    db.commit()
+    db.refresh(haryana)
+
+    ambala = District(name="Ambala", is_active=True, state_id=haryana.id)
+    rohtak = District(name="Rohtak", is_active=True, state_id=haryana.id)
+    db.add_all([ambala, rohtak])
+    db.commit()
+    db.refresh(ambala)
+    db.refresh(rohtak)
+
+    # Create state_admin scoped to Haryana
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    state_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [haryana.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_admin_token = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    # Create test_admin scoped to Ambala district
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+    test_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": test_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [ambala.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    test_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # State-admin creates a test for Haryana (state-level, no district)
+    haryana_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "state_ids": [haryana.id],
+        },
+        headers=state_admin_token,
+    )
+    assert haryana_test_response.status_code == 200
+    haryana_test_id = haryana_test_response.json()["id"]
+
+    # State-admin creates a test scoped specifically to Rohtak (different district)
+    rohtak_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [rohtak.id],
+        },
+        headers=state_admin_token,
+    )
+    assert rohtak_test_response.status_code == 200
+    rohtak_test_id = rohtak_test_response.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert haryana_test_id in item_ids
+    assert rohtak_test_id not in item_ids
+
+
+def test_state_admin_cannot_see_district_level_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A state_admin scoped to Haryana should NOT see tests created specifically
+    for a district (e.g. Ambala) even though Ambala belongs to Haryana.
+    State-level tests for Haryana must remain visible.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    haryana = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(haryana)
+    db.commit()
+    db.refresh(haryana)
+
+    ambala = District(name=random_lower_string(), is_active=True, state_id=haryana.id)
+    db.add(ambala)
+    db.commit()
+    db.refresh(ambala)
+
+    # Create state_admin scoped to Haryana
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    state_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [haryana.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_admin_token = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    # Create test_admin scoped to Ambala district
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+    test_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": test_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [ambala.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    test_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # test_admin creates a test scoped to Ambala district
+    ambala_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [ambala.id],
+        },
+        headers=test_admin_token,
+    )
+    assert ambala_test_response.status_code == 200
+    ambala_test_id = ambala_test_response.json()["id"]
+
+    # state_admin creates a state-level test for Haryana
+    haryana_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "state_ids": [haryana.id],
+        },
+        headers=state_admin_token,
+    )
+    assert haryana_test_response.status_code == 200
+    haryana_test_id = haryana_test_response.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=state_admin_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert haryana_test_id in item_ids
+    assert ambala_test_id not in item_ids
+
+
+def test_district_user_can_see_test_created_by_peer_in_same_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to district A should be able to see a test created by
+    another test_admin who is also scoped to district A.
+    Tests created for a different district must remain invisible.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    district_b = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    # First test_admin — scoped to district_a (creator)
+    creator_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": creator_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    creator_token = authentication_token_from_email(
+        client=client, email=creator_email, db=db
+    )
+
+    # Second test_admin — scoped to the same district_a (viewer)
+    viewer_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": viewer_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    viewer_token = authentication_token_from_email(
+        client=client, email=viewer_email, db=db
+    )
+
+    # Third test_admin — scoped to district_b (different district, same state)
+    other_district_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": other_district_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_b.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    other_district_token = authentication_token_from_email(
+        client=client, email=other_district_email, db=db
+    )
+
+    # Creator creates a test for district_a
+    district_a_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [district_a.id],
+        },
+        headers=creator_token,
+    )
+    assert district_a_test_response.status_code == 200
+    district_a_test_id = district_a_test_response.json()["id"]
+
+    # Other-district user creates a test for district_b
+    district_b_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "district_ids": [district_b.id],
+        },
+        headers=other_district_token,
+    )
+    assert district_b_test_response.status_code == 200
+    district_b_test_id = district_b_test_response.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=viewer_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    # Viewer (district_a) can see the test created by their peer in district_a
+    assert district_a_test_id in item_ids
+    # Viewer (district_a) cannot see the test scoped to district_b
+    assert district_b_test_id not in item_ids
+
+
+def test_district_user_cannot_see_general_test_no_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to a district must NOT see General Tests (tests with no
+    state or district mapping) created by other users.
+    Tests explicitly mapped to their district must still be visible.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    district_user_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": district_user_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    district_user_token = authentication_token_from_email(
+        client=client, email=district_user_email, db=db
+    )
+
+    other_user = create_random_user(db, new_organization.id)
+    db.commit()
+
+    # General test — no state, no district — created by another user in the same org
+    general_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(general_test)
+
+    # District-mapped test — should still be visible to the district user
+    district_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(district_test)
+    db.flush()
+    db.refresh(district_test)
+    db.add(TestDistrict(test_id=district_test.id, district_id=district.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=district_user_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert general_test.id not in item_ids
+    assert district_test.id in item_ids
+
+
+def test_district_user_cannot_see_test_from_state_admin_of_different_state(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to a district in state X must NOT see tests created by
+    a state_admin scoped to state B (a different state), even when both users
+    belong to the same organization.
+    State-level tests for state X must still be visible to the district user.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_x = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_b = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_x, state_b])
+    db.commit()
+    db.refresh(state_x)
+    db.refresh(state_b)
+
+    district_x = District(
+        name=random_lower_string(), is_active=True, state_id=state_x.id
+    )
+    db.add(district_x)
+    db.commit()
+    db.refresh(district_x)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    # state_admin scoped to state X
+    state_admin_x_email = random_email()
+    response_x = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_x_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_x.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_x.status_code == 200
+    state_admin_x_token = authentication_token_from_email(
+        client=client, email=state_admin_x_email, db=db
+    )
+
+    # state_admin scoped to state B (different state, same org)
+    state_admin_b_email = random_email()
+    response_b = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_b_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_b.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_b.status_code == 200
+    state_admin_b_token = authentication_token_from_email(
+        client=client, email=state_admin_b_email, db=db
+    )
+
+    # test_admin scoped to district in state X
+    test_admin_email = random_email()
+    response_ta = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": test_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_x.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_ta.status_code == 200
+    test_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # state_admin B creates a state-level test for state B
+    state_b_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "state_ids": [state_b.id],
+        },
+        headers=state_admin_b_token,
+    )
+    assert state_b_test_response.status_code == 200
+    state_b_test_id = state_b_test_response.json()["id"]
+
+    # state_admin X creates a state-level test for state X (positive control)
+    state_x_test_response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "locale": "en-US",
+            "state_ids": [state_x.id],
+        },
+        headers=state_admin_x_token,
+    )
+    assert state_x_test_response.status_code == 200
+    state_x_test_id = state_x_test_response.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert state_x_test_id in item_ids
+    assert state_b_test_id not in item_ids
+
+
+def test_unscoped_test_admin_can_see_all_org_tests(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin with no district or state assigned is not location-restricted
+    and must be able to see all tests in their organization.
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+
+    # test_admin with no district or state assigned
+    unscoped_email = random_email()
+    response_unscoped = client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": unscoped_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response_unscoped.status_code == 200
+    unscoped_token = authentication_token_from_email(
+        client=client, email=unscoped_email, db=db
+    )
+
+    other_user = create_random_user(db, new_organization.id)
+    db.commit()
+
+    # State-mapped test created by another user in the same org
+    org_test = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=new_organization.id,
+    )
+    db.add(org_test)
+    db.flush()
+    db.refresh(org_test)
+    db.add(TestState(test_id=org_test.id, state_id=state.id))
+    db.commit()
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=unscoped_token)
+    assert response.status_code == 200
+    item_ids = [item["id"] for item in response.json()["items"]]
+
+    assert org_test.id in item_ids
 
 
 def test_create_test_show_mark_for_review_true(

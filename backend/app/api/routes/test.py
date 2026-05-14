@@ -851,11 +851,6 @@ def get_test(
             else []
         )
         if current_user_district_ids:
-            # tests with no district AND no state assigned
-            no_location_assigned = ~exists(
-                select(TestDistrict.test_id).where(TestDistrict.test_id == Test.id)
-            ) & ~exists(select(TestState.test_id).where(TestState.test_id == Test.id))
-
             # tests assigned to current users district
             district_subquery = (
                 select(TestDistrict.test_id)
@@ -884,10 +879,10 @@ def get_test(
                 .distinct()
             )
 
-            # show unassigned tests OR tests matching users district OR tests matching users state
+            # show only tests matching users district OR tests matching users state
+            # general (unmapped) tests are intentionally excluded for district-scoped users
             query = query.where(
                 or_(
-                    no_location_assigned,
                     col(Test.id).in_(district_subquery),
                     col(Test.id).in_(state_subquery),
                 )
@@ -899,25 +894,22 @@ def get_test(
                 else []
             )
             if current_user_state_ids:
-                # tests with no state assigned
-                no_state_assigned = ~exists(
-                    select(TestState.test_id).where(TestState.test_id == Test.id)
-                )
-
-                # tests assigned to current users state
+                # tests assigned to current users state but NOT also assigned to any district
                 state_subquery = (
                     select(TestState.test_id)
                     .where(col(TestState.state_id).in_(current_user_state_ids))
+                    .where(
+                        ~exists(
+                            select(TestDistrict.test_id).where(
+                                TestDistrict.test_id == TestState.test_id
+                            )
+                        )
+                    )
                     .distinct()
                 )
 
-                # show unassigned tests OR tests matching users state
-                query = query.where(
-                    or_(
-                        no_state_assigned,
-                        col(Test.id).in_(state_subquery),
-                    )
-                )
+                # only show tests explicitly mapped to the user's state
+                query = query.where(col(Test.id).in_(state_subquery))
 
         # if no district or state assigned, show all tests (no filter applied)
 
