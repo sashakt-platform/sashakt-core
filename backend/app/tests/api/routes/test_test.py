@@ -4075,6 +4075,14 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
     assert create_response_two.status_code == 200
     created_test_id_two = create_response_two.json()["id"]
 
+    state_admin_user = get_current_user_data(client, token_headers)
+    for test_id in (created_test_id_one, created_test_id_two):
+        test_obj = db.get(Test, test_id)
+        assert test_obj is not None
+        test_obj.created_by_id = state_admin_user["id"]
+        db.add(test_obj)
+    db.commit()
+
     delete_resp = client.request(
         "DELETE",
         f"{settings.API_V1_STR}/test/",
@@ -4973,10 +4981,10 @@ def test_update_test_time_limit_exceeds_duration(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     test = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_data["id"],
         start_time="2025-07-19T10:00:00Z",
         end_time="2025-07-19T10:30:00Z",
         time_limit=30,
@@ -5027,6 +5035,145 @@ def test_update_test_not_available(
     assert data["detail"] == "Test is not available"
 
 
+def test_update_test_not_created_by_user(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role
+    org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+
+    email_a = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_a,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org,
+        },
+        headers=get_user_systemadmin_token,
+    )
+    token_a = authentication_token_from_email(client=client, email=email_a, db=db)
+
+    email_b = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_b,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": org,
+        },
+        headers=get_user_systemadmin_token,
+    )
+    token_b = authentication_token_from_email(client=client, email=email_b, db=db)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
+        headers=token_a,
+    )
+    assert response.status_code == 200
+    test_id = response.json()["id"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json={"name": random_lower_string(), "locale": "en-US"},
+        headers=token_b,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "You can only update tests created by you."
+
+
+def test_update_test_same_role_different_user_forbidden(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role
+
+    org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+
+    country = Country(name=random_lower_string())
+    db.add(country)
+    db.commit()
+    state = State(name=random_lower_string(), country_id=country.id)
+    db.add(state)
+    db.commit()
+    district = District(name=random_lower_string(), state_id=state.id, is_active=True)
+    db.add(district)
+    db.commit()
+
+    shared_location = {
+        "state_id": [state.id],
+        "district_ids": [district.id],
+    }
+
+    email_a = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_a,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": org,
+            **shared_location,
+        },
+        headers=get_user_systemadmin_token,
+    )
+    token_a = authentication_token_from_email(client=client, email=email_a, db=db)
+
+    email_b = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": email_b,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": org,
+            **shared_location,
+        },
+        headers=get_user_systemadmin_token,
+    )
+    token_b = authentication_token_from_email(client=client, email=email_b, db=db)
+
+    # User A creates a test in the shared location
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "locale": "en-US",
+            **shared_location,
+        },
+        headers=token_a,
+    )
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+
+    # User B (same role, same location) tries to update User A's test
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json={"name": random_lower_string(), "locale": "en-US"},
+        headers=token_b,
+    )
+
+    assert update_resp.status_code == 403
+    assert update_resp.json()["detail"] == "You can only update tests created by you."
+
+
 def test_get_test_by_id_not_available(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
@@ -5050,10 +5197,10 @@ def test_update_test_end_time_before_start_time(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    user = create_random_user(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
     test = Test(
         name=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_data["id"],
         start_time="2025-07-19T10:00:00Z",
         end_time="2025-07-19T11:00:00Z",
         time_limit=60,
@@ -7123,6 +7270,15 @@ def test_state_admin_cannot_delete_general_test(
     )
     test_id = response.json()["id"]
 
+    state_admin_id = client.get(
+        f"{settings.API_V1_STR}/users/me", headers=token_headers
+    ).json()["id"]
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_id
+    db.add(test_obj)
+    db.commit()
+
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
@@ -7181,6 +7337,15 @@ def test_state_admin_can_delete_test_in_their_state(
         headers=get_user_superadmin_token,
     )
     test_id = response.json()["id"]
+
+    state_admin_id = client.get(
+        f"{settings.API_V1_STR}/users/me", headers=token_headers
+    ).json()["id"]
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_id
+    db.add(test_obj)
+    db.commit()
 
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -7243,6 +7408,13 @@ def test_state_admin_cannot_delete_test_outside_their_state(
     )
     test_id = response.json()["id"]
 
+    state_admin_user = get_current_user_data(client, token_headers)
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_user["id"]
+    db.add(test_obj)
+    db.commit()
+
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
@@ -7304,6 +7476,14 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
         headers=get_user_superadmin_token,
     )
     test_id = response.json()["id"]
+
+    state_admin_user = get_current_user_data(client, token_headers)
+
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_user["id"]
+    db.add(test_obj)
+    db.commit()
 
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -7371,6 +7551,13 @@ def test_state_admin_can_delete_test_connected_via_district(
         headers=get_user_superadmin_token,
     )
     test_id = response.json()["id"]
+
+    state_admin_user = get_current_user_data(client, token_headers)
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_user["id"]
+    db.add(test_obj)
+    db.commit()
 
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -7449,6 +7636,13 @@ def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_match
         headers=get_user_superadmin_token,
     )
     test_id = response.json()["id"]
+
+    state_admin_user = get_current_user_data(client, token_headers)
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_user["id"]
+    db.add(test_obj)
+    db.commit()
 
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -7830,7 +8024,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=test_payload,
-        headers=get_user_systemadmin_token,
+        headers=token_headers,
     )
 
     assert response.status_code == 200
@@ -7870,6 +8064,15 @@ def test_district_user_cannot_modify_out_of_scope_test(
     data = response.json()
     assert data["districts"] is not None
     test_id = data["id"]
+
+    # Reassign ownership to state_admin so ownership check passes;
+    # the location check then fires because district_2 is outside their scope.
+    state_admin_user = get_current_user_data(client, token_headers)
+    test_obj = db.get(Test, test_id)
+    assert test_obj is not None
+    test_obj.created_by_id = state_admin_user["id"]
+    db.add(test_obj)
+    db.commit()
 
     response = client.put(
         f"{settings.API_V1_STR}/test/{test_id}",

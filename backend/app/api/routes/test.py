@@ -18,7 +18,7 @@ from app.api.deps import (
 )
 from app.api.routes.utils import get_current_time, get_current_user_location_ids
 from app.core.question_sets import is_sectioned_test
-from app.core.roles import state_admin, test_admin
+from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
     SortingParams,
     SortOrder,
@@ -150,6 +150,24 @@ def check_test_permission(
                 403,
                 exception_message,
             )
+
+
+def check_test_ownership(
+    session: SessionDep,
+    current_user: CurrentUser,
+    test: Test,
+    action: str = "update",
+    role: Role | None = None,
+) -> Role | None:
+    if role is None:
+        role = session.get(Role, current_user.role_id)
+    if role and role.name not in (super_admin.name, system_admin.name):
+        if test.created_by_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You can only {action} tests created by you.",
+            )
+    return role
 
 
 def add_test_to_failure_list(
@@ -1117,6 +1135,7 @@ def update_test(
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    role = check_test_ownership(session, current_user, test)
     membership_fields = {"question_revision_ids", "question_sets"}
     membership_update_requested = bool(
         membership_fields.intersection(test_update.model_fields_set)
@@ -1131,7 +1150,6 @@ def update_test(
     else:
         question_revision_ids = []
         question_sets = []
-    role = session.get(Role, current_user.role_id)
     if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
 
@@ -1312,11 +1330,13 @@ def update_test(
 def visibility_test(
     test_id: int,
     session: SessionDep,
+    current_user: CurrentUser,
     is_active: bool = Query(False, description="Set visibility of Test"),
 ) -> TestPublic:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    check_test_ownership(session, current_user, test)
 
     test.is_active = is_active
     session.add(test)
@@ -1336,7 +1356,7 @@ def delete_test(
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    role = session.get(Role, current_user.role_id)
+    role = check_test_ownership(session, current_user, test, action="delete")
     if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
 
@@ -1390,6 +1410,9 @@ def bulk_delete_question(
         )
     for test in db_test:
         try:
+            check_test_ownership(
+                session, current_user, test, action="delete", role=role
+            )
             if admin_location_ids:
                 check_test_permission(
                     session,
