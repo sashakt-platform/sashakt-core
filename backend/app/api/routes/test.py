@@ -554,7 +554,7 @@ def replace_test_question_membership(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Cannot update test membership after candidate tests have been created."
+                "This test cannot be updated because candidates have already attempted it."
             ),
         )
 
