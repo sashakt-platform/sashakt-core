@@ -9336,7 +9336,7 @@ def test_get_tests_my_tests_filter(
     d_other_user = create_random_user(db, org_district.id)
     assert d_other_user.id is not None
 
-    # tests created by the district admin
+    # tests created by the district admin — assigned to the same district
     d_my_test_1 = Test(
         name=random_lower_string(),
         created_by_id=district_user_id,
@@ -9347,7 +9347,7 @@ def test_get_tests_my_tests_filter(
         created_by_id=district_user_id,
         organization_id=org_district.id,
     )
-    # tests created by another user (no location → visible to the district admin)
+    # tests created by another user — assigned to the same district
     d_other_test_1 = Test(
         name=random_lower_string(),
         created_by_id=d_other_user.id,
@@ -9364,6 +9364,16 @@ def test_get_tests_my_tests_filter(
     db.refresh(d_my_test_2)
     db.refresh(d_other_test_1)
     db.refresh(d_other_test_2)
+
+    db.add_all(
+        [
+            TestDistrict(test_id=d_my_test_1.id, district_id=district.id),
+            TestDistrict(test_id=d_my_test_2.id, district_id=district.id),
+            TestDistrict(test_id=d_other_test_1.id, district_id=district.id),
+            TestDistrict(test_id=d_other_test_2.id, district_id=district.id),
+        ]
+    )
+    db.commit()
 
     assert d_my_test_1.id is not None
     assert d_my_test_2.id is not None
@@ -9427,7 +9437,7 @@ def test_get_tests_my_tests_filter(
     s_other_user = create_random_user(db, org_state.id)
     assert s_other_user.id is not None
 
-    # tests created by the state admin
+    # tests created by the state admin - assigned to the same state
     s_my_test_1 = Test(
         name=random_lower_string(),
         created_by_id=state_user_id,
@@ -9438,7 +9448,7 @@ def test_get_tests_my_tests_filter(
         created_by_id=state_user_id,
         organization_id=org_state.id,
     )
-    # tests created by another user (no location → visible to the state admin)
+    # tests created by another user — assigned to the same state
     s_other_test_1 = Test(
         name=random_lower_string(),
         created_by_id=s_other_user.id,
@@ -9455,6 +9465,16 @@ def test_get_tests_my_tests_filter(
     db.refresh(s_my_test_2)
     db.refresh(s_other_test_1)
     db.refresh(s_other_test_2)
+
+    db.add_all(
+        [
+            TestState(test_id=s_my_test_1.id, state_id=state_s.id),
+            TestState(test_id=s_my_test_2.id, state_id=state_s.id),
+            TestState(test_id=s_other_test_1.id, state_id=state_s.id),
+            TestState(test_id=s_other_test_2.id, state_id=state_s.id),
+        ]
+    )
+    db.commit()
 
     assert s_my_test_1.id is not None
     assert s_my_test_2.id is not None
