@@ -1102,7 +1102,7 @@ def test_get_current_organization(
     db.refresh(org)
 
     email_with_org = random_email()
-    role = db.exec(select(Role).where(Role.name == "candidate")).first()
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert role is not None
 
     user_payload = {
