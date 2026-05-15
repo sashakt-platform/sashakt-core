@@ -13514,6 +13514,9 @@ def test_get_review_feedback_matrix_match_correct_answer_as_json_string(
     db.add(test)
     db.commit()
 
+    assert test.id is not None
+    assert test.created_by_id is not None
+    assert revision.id is not None
     test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
@@ -13559,6 +13562,9 @@ def test_submit_test_matrix_match_feedback_correct_answer_as_json_string(
     db.add(test)
     db.commit()
 
+    assert test.id is not None
+    assert test.created_by_id is not None
+    assert revision.id is not None
     test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
     start_response = client.post(
         f"{settings.API_V1_STR}/candidate/start_test",
@@ -13593,8 +13599,8 @@ def test_submit_test_matrix_match_feedback_correct_answer_as_json_string(
     item = answers[0]
     assert item["question_revision_id"] == revision.id
     assert item["response"] == candidate_response
-    assert isinstance(item["correct_answer"], dict)
-    assert item["correct_answer"] == MATRIX_MATCH_CORRECT_ANSWER
+    assert isinstance(item["correct_answer"], str)
+    assert json.loads(item["correct_answer"]) == MATRIX_MATCH_CORRECT_ANSWER
 
 
 def test_result_includes_certificate_download_url(
