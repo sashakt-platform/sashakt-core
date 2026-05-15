@@ -2226,13 +2226,20 @@ def get_review_feedback(
                 candidate_answer.is_reviewed = True
                 session.add(candidate_answer)
 
+            correct_answer = question_revision.correct_answer
+            if (
+                question_revision.question_type == QuestionType.matrix_match
+                and isinstance(correct_answer, dict)
+            ):
+                correct_answer = json.dumps(correct_answer)
+
             feedback_list.append(
                 CandidateReviewResponse(
                     question_revision_id=question_id,
                     submitted_answer=(
                         candidate_answer.response if candidate_answer else None
                     ),
-                    correct_answer=question_revision.correct_answer,
+                    correct_answer=correct_answer,
                 )
             )
 

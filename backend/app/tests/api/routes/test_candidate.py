@@ -13505,6 +13505,98 @@ def test_answer_cannot_be_modified_after_review_feedback(
     assert "Cannot modify answer after it has been reviewed" in data["detail"]
 
 
+def test_get_review_feedback_matrix_match_correct_answer_as_json_string(
+    client: TestClient, db: SessionDep
+) -> None:
+    """review-feedback returns correct_answer as a JSON string for matrix-match questions."""
+    test, revision = create_matrix_match_test_setup(db)
+    test.show_feedback_immediately = True
+    db.add(test)
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    candidate_response = json.dumps({"1": [10], "2": [20], "3": [30]})
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=candidate_response,
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    assert len(data) == 1
+    item = data[0]
+    assert item["question_revision_id"] == revision.id
+    assert item["submitted_answer"] == candidate_response
+    assert isinstance(item["correct_answer"], str)
+    assert json.loads(item["correct_answer"]) == MATRIX_MATCH_CORRECT_ANSWER
+
+
+def test_submit_test_matrix_match_feedback_correct_answer_as_json_string(
+    client: TestClient, db: SessionDep
+) -> None:
+    """submit_test feedback returns correct_answer as a JSON string for matrix-match questions."""
+    test, revision = create_matrix_match_test_setup(db)
+    test.show_feedback_on_completion = True
+    db.add(test)
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    )
+    start_data = start_response.json()
+    candidate_test_id = start_data["candidate_test_id"]
+    candidate_uuid = start_data["candidate_uuid"]
+
+    candidate_response = json.dumps({"1": [10], "2": [20], "3": [30]})
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=candidate_response,
+            visited=True,
+            time_spent=30,
+        )
+    )
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    answers = data.get("answers")
+    assert answers is not None
+    assert len(answers) == 1
+    item = answers[0]
+    assert item["question_revision_id"] == revision.id
+    assert item["response"] == candidate_response
+    assert isinstance(item["correct_answer"], dict)
+    assert item["correct_answer"] == MATRIX_MATCH_CORRECT_ANSWER
+
+
 def test_result_includes_certificate_download_url(
     client: TestClient,
     db: SessionDep,
