@@ -386,16 +386,16 @@ def test_read_roles_super_admin_sees_all_roles(client: TestClient, db: Session) 
     assert response.status_code == 200
     content = response.json()
 
-    # super admin should see all roles
+    # super admin should see all roles except candidate
     role_names = [role["name"] for role in content["data"]]
     expected_roles = {
         "super_admin",
         "system_admin",
         "state_admin",
         "test_admin",
-        "candidate",
     }
     assert expected_roles.issubset(set(role_names))
+    assert "candidate" not in role_names
 
 
 def test_read_roles_system_admin_filtered(client: TestClient, db: Session) -> None:
@@ -417,10 +417,10 @@ def test_read_roles_system_admin_filtered(client: TestClient, db: Session) -> No
     assert "system_admin" in role_names
     assert "state_admin" in role_names
     assert "test_admin" in role_names
-    assert "candidate" in role_names
 
-    # they should not have access to super_admin role
+    # they should not have access to super_admin or candidate roles
     assert "super_admin" not in role_names
+    assert "candidate" not in role_names
 
 
 def test_read_roles_state_admin_filtered(client: TestClient, db: Session) -> None:
@@ -441,11 +441,11 @@ def test_read_roles_state_admin_filtered(client: TestClient, db: Session) -> Non
     # State admin should see these roles
     assert "state_admin" in role_names
     assert "test_admin" in role_names
-    assert "candidate" in role_names
 
-    # they should not see higher level roles
+    # they should not see higher level or candidate roles
     assert "super_admin" not in role_names
     assert "system_admin" not in role_names
+    assert "candidate" not in role_names
 
 
 def test_read_roles_test_admin_filtered(client: TestClient, db: Session) -> None:
@@ -463,14 +463,14 @@ def test_read_roles_test_admin_filtered(client: TestClient, db: Session) -> None
 
     role_names = [role["name"] for role in content["data"]]
 
-    # Test admin should see these roles
+    # Test admin should see only their own role
     assert "test_admin" in role_names
-    assert "candidate" in role_names
 
-    # they should not see higher level roles
+    # they should not see higher level or candidate roles
     assert "super_admin" not in role_names
     assert "system_admin" not in role_names
     assert "state_admin" not in role_names
+    assert "candidate" not in role_names
 
 
 def test_read_roles_candidate_no_access(client: TestClient, db: Session) -> None:
