@@ -86,7 +86,6 @@ class CandidateTestAnswerUpdate(SQLModel):
     visited: bool
     time_spent: int
     bookmarked: bool | None = None
-    is_reviewed: bool = False
 
 
 # QR Code Candidate Request Models
@@ -98,7 +97,6 @@ class CandidateAnswerSubmitRequest(SQLModel):
     visited: bool = False
     time_spent: int = 0
     bookmarked: bool = False
-    is_reviewed: bool = False
 
 
 class BatchAnswerSubmitRequest(SQLModel):
