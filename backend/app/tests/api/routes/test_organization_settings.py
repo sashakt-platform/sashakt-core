@@ -23,6 +23,8 @@ from app.models.organization_settings import (
     OMRModeValue,
     OrganizationSettings,
     OrganizationSettingsPayload,
+    PauseTestSetting,
+    PauseTestValue,
     PlatformNomenclatureSetting,
     PlatformNomenclatureValue,
     QuestionPaletteSetting,
@@ -85,6 +87,8 @@ def test_default_settings_match_schema() -> None:
     assert payload.mark_for_review.value.default is True
     assert payload.omr_mode.mode == "fixed"
     assert payload.omr_mode.value.default is False
+    assert payload.pause_test.mode == "fixed"
+    assert payload.pause_test.value.default is False
     assert payload.platform_nomenclature.mode == "default"
     assert all(
         getattr(payload.platform_nomenclature.value, term) == ""
@@ -439,6 +443,7 @@ def test_mapper_fixed_features_produce_overrides() -> None:
             mode="fixed", value=MarkForReviewValue(default=False)
         ),
         omr_mode=OMRModeSetting(mode="fixed", value=OMRModeValue(default=True)),
+        pause_test=PauseTestSetting(mode="fixed", value=PauseTestValue(default=True)),
         platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
     )
 
@@ -451,6 +456,7 @@ def test_mapper_fixed_features_produce_overrides() -> None:
     assert overrides["show_question_palette"] is True
     assert overrides["bookmark"] is False
     assert overrides["omr"] == OMRMode.ALWAYS
+    assert overrides["pause_timer_when_inactive"] is True
 
 
 def test_mapper_flexible_features_produce_no_overrides() -> None:
@@ -477,6 +483,33 @@ def test_mapper_omr_fixed_false_maps_to_never() -> None:
     payload.omr_mode = OMRModeSetting(mode="fixed", value=OMRModeValue(default=False))
     overrides = fixed_overrides_for_test(payload)
     assert overrides["omr"] == OMRMode.NEVER
+
+
+def test_mapper_pause_test_fixed_true_sets_pause_timer() -> None:
+    payload = default_organization_settings()
+    payload.pause_test = PauseTestSetting(
+        mode="fixed", value=PauseTestValue(default=True)
+    )
+    overrides = fixed_overrides_for_test(payload)
+    assert overrides["pause_timer_when_inactive"] is True
+
+
+def test_mapper_pause_test_fixed_false_disables_pause_timer() -> None:
+    payload = default_organization_settings()
+    payload.pause_test = PauseTestSetting(
+        mode="fixed", value=PauseTestValue(default=False)
+    )
+    overrides = fixed_overrides_for_test(payload)
+    assert overrides["pause_timer_when_inactive"] is False
+
+
+def test_mapper_pause_test_flexible_produces_no_override() -> None:
+    payload = default_organization_settings()
+    payload.pause_test = PauseTestSetting(
+        mode="flexible", value=PauseTestValue(default=True)
+    )
+    overrides = fixed_overrides_for_test(payload)
+    assert "pause_timer_when_inactive" not in overrides
 
 
 def test_check_org_time_window() -> None:
@@ -979,6 +1012,121 @@ def test_runtime_answer_review_disabled(
     )
     assert body["show_feedback_immediately"] is False
     assert body["show_feedback_on_completion"] is False
+
+
+def test_create_test_applies_pause_test_fixed_override(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """When org has pause_test fixed=True, new tests must have pause_timer_when_inactive=True."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+
+    locked = flexible_settings_payload()
+    locked.pause_test = PauseTestSetting(
+        mode="fixed", value=PauseTestValue(default=True)
+    )
+    _put_settings(client, get_user_superadmin_token, org_id, locked)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(pause_timer_when_inactive=False),
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["pause_timer_when_inactive"] is True
+
+
+def test_runtime_pause_test_disabled_overrides_existing_test(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """An existing test with pause_timer_when_inactive=True must read as False once org disables it."""
+    make_current_user_org_flexible(
+        client=client, session=db, auth_header=get_user_superadmin_token
+    )
+    org_id = _get_org_id(client, get_user_superadmin_token)
+
+    enabled = flexible_settings_payload()
+    enabled.pause_test = PauseTestSetting(
+        mode="fixed", value=PauseTestValue(default=True)
+    )
+    _put_settings(client, get_user_superadmin_token, org_id, enabled)
+
+    test_data = _create_startable_test(
+        client,
+        db,
+        get_user_superadmin_token,
+        payload=_create_test_payload(pause_timer_when_inactive=True),
+    )
+    assert test_data["pause_timer_when_inactive"] is True
+
+    disabled = flexible_settings_payload()
+    disabled.pause_test = PauseTestSetting(
+        mode="fixed", value=PauseTestValue(default=False)
+    )
+    _put_settings(client, get_user_superadmin_token, org_id, disabled)
+
+    body = _start_and_fetch_candidate_test(
+        client, db, test_data["id"], test_data["created_by_id"]
+    )
+    assert body["pause_timer_when_inactive"] is False
+
+
+def test_pause_test_fixed_to_flexible_true_passes_client_value_through(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org_id = _get_org_id(client, get_user_superadmin_token)
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/organization/{org_id}/settings",
+        headers=get_user_superadmin_token,
+    )
+    assert get_resp.status_code == 200
+    pause_test_initial = get_resp.json()["settings"]["pause_test"]
+    assert pause_test_initial["mode"] == "fixed"
+    assert pause_test_initial["value"]["default"] is False
+
+    updated_payload = default_organization_settings()
+    updated_payload.pause_test = PauseTestSetting(
+        mode="flexible", value=PauseTestValue(default=True)
+    )
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{org_id}/settings",
+        headers=get_user_superadmin_token,
+        json={"settings": updated_payload.model_dump(mode="json")},
+    )
+    assert put_resp.status_code == 200
+
+    get_resp2 = client.get(
+        f"{settings.API_V1_STR}/organization/{org_id}/settings",
+        headers=get_user_superadmin_token,
+    )
+    assert get_resp2.status_code == 200
+    pause_test_updated = get_resp2.json()["settings"]["pause_test"]
+    assert pause_test_updated["mode"] == "flexible"
+    assert pause_test_updated["value"]["default"] is True
+
+    resp_false = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(pause_timer_when_inactive=False),
+        headers=get_user_superadmin_token,
+    )
+    assert resp_false.status_code == 200, resp_false.text
+    assert resp_false.json()["pause_timer_when_inactive"] is False
+
+    resp_true = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json=_create_test_payload(pause_timer_when_inactive=True),
+        headers=get_user_superadmin_token,
+    )
+    assert resp_true.status_code == 200, resp_true.text
+    assert resp_true.json()["pause_timer_when_inactive"] is True
 
 
 def test_submit_test_honors_disabled_answer_review(

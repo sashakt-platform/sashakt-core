@@ -56,6 +56,9 @@ def fixed_overrides_for_test(
             OMRMode.ALWAYS if settings.omr_mode.value.default else OMRMode.NEVER
         )
 
+    if settings.pause_test.mode == "fixed":
+        overrides["pause_timer_when_inactive"] = settings.pause_test.value.default
+
     return overrides
 
 
@@ -129,5 +132,11 @@ def runtime_disabled_overrides(
     ):
         overrides["show_feedback_immediately"] = False
         overrides["show_feedback_on_completion"] = False
+
+    if (
+        settings.pause_test.mode == "fixed"
+        and settings.pause_test.value.default is False
+    ):
+        overrides["pause_timer_when_inactive"] = False
 
     return overrides

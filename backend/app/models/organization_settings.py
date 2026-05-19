@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
 
 
-ORGANIZATION_SETTINGS_SCHEMA_VERSION = 3
+ORGANIZATION_SETTINGS_SCHEMA_VERSION = 4
 
 
 NOMENCLATURE_DEFAULTS: dict[str, str] = {
@@ -167,6 +167,25 @@ class OMRModeSetting(BaseModel):
     value: OMRModeValue = PydanticField(default_factory=OMRModeValue)
 
 
+class PauseTestValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    default: bool = False
+
+
+class PauseTestSetting(BaseModel):
+    """
+    - fixed + value.default=True: pause timer always on for all tests
+    - fixed + value.default=False: pause timer disabled for all tests
+    - flexible + value.default: test admin can toggle; org default pre-fills the toggle
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["fixed", "flexible"]
+    value: PauseTestValue = PydanticField(default_factory=PauseTestValue)
+
+
 class PlatformNomenclatureValue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -268,6 +287,11 @@ class OrganizationSettingsPayload(BaseModel):
     question_palette: QuestionPaletteSetting
     mark_for_review: MarkForReviewSetting
     omr_mode: OMRModeSetting
+    pause_test: PauseTestSetting = PydanticField(
+        default_factory=lambda: PauseTestSetting(
+            mode="fixed", value=PauseTestValue(default=False)
+        )
+    )
     platform_nomenclature: PlatformNomenclatureSetting
     platform_guide: PlatformGuideSetting = PydanticField(
         default_factory=PlatformGuideSetting
@@ -314,6 +338,10 @@ def default_organization_settings() -> OrganizationSettingsPayload:
         omr_mode=OMRModeSetting(
             mode="fixed",
             value=OMRModeValue(default=False),
+        ),
+        pause_test=PauseTestSetting(
+            mode="fixed",
+            value=PauseTestValue(default=False),
         ),
         platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
         platform_guide=PlatformGuideSetting(),
