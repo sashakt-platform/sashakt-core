@@ -188,6 +188,12 @@ def check_linked_question(session: SessionDep, test_id: int) -> bool:
     return bool(result)
 
 
+def test_has_candidate_tests(session: SessionDep, test_id: int) -> bool:
+    query = select(exists().where(col(CandidateTest.test_id) == test_id))
+    result = session.scalar(query)
+    return bool(result)
+
+
 def get_persisted_test_id(test: Test) -> int:
     if test.id is None:
         raise HTTPException(status_code=500, detail="Test is missing a database id.")
@@ -565,10 +571,7 @@ def replace_test_question_membership(
     question_sets: list[QuestionSetCreate | QuestionSetUpdate],
 ) -> None:
     test_id = get_persisted_test_id(test)
-    existing_candidate_test_id = session.exec(
-        select(CandidateTest.id).where(CandidateTest.test_id == test_id)
-    ).first()
-    if existing_candidate_test_id is not None:
+    if test_has_candidate_tests(session, test_id):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -1152,6 +1155,18 @@ def update_test(
         question_sets = []
     if role and role.name in (state_admin.name, test_admin.name):
         check_test_permission(session, current_user, test)
+
+    if (
+        "pause_timer_when_inactive" in test_update.model_fields_set
+        and test_update.pause_timer_when_inactive != test.pause_timer_when_inactive
+        and test_has_candidate_tests(session, test_id)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cannot update pause timer setting after candidate tests have been created."
+            ),
+        )
 
     if (
         test_update.start_time is not None
