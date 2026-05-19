@@ -27,7 +27,6 @@ from app.core.question_sets import (
     normalize_question_set_ids,
 )
 from app.core.roles import state_admin, test_admin
-from app.core.timezone import get_timezone_aware_now
 from app.crud import organization_settings as crud_settings
 from app.models import (
     BatchAnswerSubmitRequest,
@@ -111,16 +110,12 @@ def validate_subjective_answer_limit(
 
 
 def is_candidate_test_expired(
-    session: SessionDep,
     candidate_test: CandidateTest,
     *,
-    test: Test | None = None,
+    test: Test,
     time_now: datetime | None = None,
 ) -> bool:
     if not candidate_test or not candidate_test.start_time:
-        return False
-    test = test or session.get(Test, candidate_test.test_id)
-    if not test:
         return False
 
     time_now = time_now or get_current_time()
@@ -817,7 +812,7 @@ def start_test_for_candidate(
     session.refresh(candidate)
 
     # Set start_time when test begins, end_time will be set when test is submitted
-    start_time = get_timezone_aware_now()
+    start_time = get_current_time()
 
     # Create CandidateTest link
     candidate_test = CandidateTest(
@@ -1138,14 +1133,9 @@ def submit_test_for_qr_candidate(
     if not test:
         raise HTTPException(status_code=404, detail="Associated test not found")
 
-    time_now = (
-        get_current_time()
-        if test.pause_timer_when_inactive
-        else get_timezone_aware_now()
-    )
+    time_now = get_current_time()
     settle_candidate_test_timer(candidate_test, test, time_now)
     test_expired = is_candidate_test_expired(
-        session,
         candidate_test,
         test=test,
         time_now=time_now,
@@ -2125,7 +2115,6 @@ def sync_timer(
         if timer_sync_request.event is CandidateTimerEventType.resume:
             settle_candidate_test_timer(candidate_test, test, time_now)
             if not is_candidate_test_expired(
-                session,
                 candidate_test,
                 test=test,
                 time_now=time_now,
@@ -2133,7 +2122,6 @@ def sync_timer(
                 start_candidate_test_timer(candidate_test, time_now)
         elif candidate_test.last_timer_started_at is None:
             if not is_candidate_test_expired(
-                session,
                 candidate_test,
                 test=test,
                 time_now=time_now,
@@ -2142,7 +2130,6 @@ def sync_timer(
         elif is_candidate_test_timer_stale(candidate_test, time_now):
             settle_candidate_test_timer(candidate_test, test, time_now)
             if not is_candidate_test_expired(
-                session,
                 candidate_test,
                 test=test,
                 time_now=time_now,

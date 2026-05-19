@@ -12166,7 +12166,7 @@ def test_submit_test_after_expiry(
 ) -> None:
     fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
 
-    with patch("app.api.routes.candidate.get_timezone_aware_now") as mocked_now:
+    with patch("app.api.routes.candidate.get_current_time") as mocked_now:
         mocked_now.return_value = fake_current_time
 
         user = create_random_user(db)
@@ -12212,7 +12212,7 @@ def test_submit_test_with_unanswered_mandatory_questions(
 ) -> None:
     fake_current_time = datetime(2024, 5, 24, 11, 0, 0)
 
-    with patch("app.api.routes.candidate.get_timezone_aware_now") as mocked_now:
+    with patch("app.api.routes.candidate.get_current_time") as mocked_now:
         mocked_now.return_value = fake_current_time
 
         user = create_random_user(db)
