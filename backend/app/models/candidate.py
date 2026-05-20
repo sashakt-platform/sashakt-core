@@ -295,6 +295,7 @@ class TestCandidatePublic(SQLModel):
     bookmark: bool
     show_feedback_immediately: bool
     show_feedback_on_completion: bool
+    pause_timer_when_inactive: bool
 
     # Safe questions (no answers)
     question_revisions: list["QuestionCandidatePublic"]
