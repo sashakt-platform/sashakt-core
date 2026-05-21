@@ -9,3 +9,5 @@ node_modules/
 
 .env
 .DS_Store
+
+/load_tests/__pycache__/
