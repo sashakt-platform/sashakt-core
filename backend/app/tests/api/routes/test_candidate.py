@@ -12508,7 +12508,7 @@ def test_get_test_result_with_numerical_decimal_tolerance(
 def test_submit_answer_saves_is_reviewed_field(
     client: TestClient, db: SessionDep
 ) -> None:
-    """Test that is_reviewed field is correctly saved when submitting an answer."""
+    """Test that is_reviewed cannot be set via the submit answer API; it always defaults to False."""
     user = create_random_user(db)
 
     org = Organization(name=random_lower_string())
@@ -12566,7 +12566,6 @@ def test_submit_answer_saves_is_reviewed_field(
         "response": "[1]",
         "visited": True,
         "time_spent": 30,
-        "is_reviewed": True,
     }
 
     response = client.post(
@@ -12582,7 +12581,7 @@ def test_submit_answer_saves_is_reviewed_field(
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).first()
     assert answer is not None
-    assert answer.is_reviewed is True
+    assert answer.is_reviewed is False
 
 
 def test_submit_answer_is_reviewed_defaults_to_false(
