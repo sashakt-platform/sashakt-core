@@ -72,7 +72,7 @@ from app.models.question import (
 from app.models.tag import Tag
 from app.models.test import OMRMode, TestDistrict, TestLink, TestState, TestTag
 from app.models.user import User
-from app.models.utils import MarkingScheme, TimeLeft
+from app.models.utils import CorrectAnswerType, MarkingScheme, TimeLeft
 from app.services.certificate_tokens import resolve_form_response_values
 from app.services.organization_nomenclature import resolve_nomenclature_for_test
 from app.services.organization_settings_mapper import (
@@ -1205,26 +1205,33 @@ def submit_test_for_qr_candidate(
         ).all()
 
         question_revision_ids = [answer.question_revision_id for answer in answers]
-        correct_answers_map = {}
+        revisions_by_id: dict[int, QuestionRevision] = {}
         if question_revision_ids:
             question_revisions = session.exec(
                 select(QuestionRevision).where(
                     col(QuestionRevision.id).in_(question_revision_ids)
                 )
             ).all()
-            correct_answers_map = {
-                question_revision.id: question_revision.correct_answer
-                for question_revision in question_revisions
-            }
+            revisions_by_id = {rev.id: rev for rev in question_revisions if rev.id}
 
-        answers_with_feedback = [
-            CandidateTestAnswerFeedback(
-                question_revision_id=answer.question_revision_id,
-                response=answer.response,
-                correct_answer=correct_answers_map.get(answer.question_revision_id),
+        answers_with_feedback = []
+        for answer in answers:
+            revision = revisions_by_id.get(answer.question_revision_id)
+            correct_answer: CorrectAnswerType = None
+            if revision:
+                if revision.question_type == QuestionType.matrix_match and isinstance(
+                    revision.correct_answer, dict
+                ):
+                    correct_answer = json.dumps(revision.correct_answer)
+                else:
+                    correct_answer = revision.correct_answer
+            answers_with_feedback.append(
+                CandidateTestAnswerFeedback(
+                    question_revision_id=answer.question_revision_id,
+                    response=answer.response,
+                    correct_answer=correct_answer,
+                )
             )
-            for answer in answers
-        ]
 
     return CandidateTestPublic(
         id=candidate_test.id,
@@ -2224,13 +2231,20 @@ def get_review_feedback(
                 candidate_answer.is_reviewed = True
                 session.add(candidate_answer)
 
+            correct_answer = question_revision.correct_answer
+            if (
+                question_revision.question_type == QuestionType.matrix_match
+                and isinstance(correct_answer, dict)
+            ):
+                correct_answer = json.dumps(correct_answer)
+
             feedback_list.append(
                 CandidateReviewResponse(
                     question_revision_id=question_id,
                     submitted_answer=(
                         candidate_answer.response if candidate_answer else None
                     ),
-                    correct_answer=question_revision.correct_answer,
+                    correct_answer=correct_answer,
                 )
             )
 
