@@ -1,5 +1,6 @@
 import copy
-from typing import Any, cast
+from collections.abc import Sequence
+from typing import cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi_pagination import Page
@@ -46,22 +47,22 @@ def _get_user_count_map(session: SessionDep, org_ids: list[int]) -> dict[int, in
         return {}
     rows = session.exec(
         select(col(User.organization_id), func.count(col(User.id)))
-        .where(col(User.organization_id).in_(org_ids))
+        .where(
+            col(User.organization_id).in_(org_ids),
+            User.is_active == True,  # noqa: E712
+        )
         .group_by(col(User.organization_id))
     ).all()
     return dict(rows)
 
 
 def transform_organizations_to_public(
-    items: list[Organization] | Any,
+    items: Sequence[Organization],
     user_count_map: dict[int, int] | None = None,
 ) -> list[OrganizationPublic]:
     result: list[OrganizationPublic] = []
-    organization_list: list[Organization] = (
-        list(items) if not isinstance(items, list) else items
-    )
 
-    for organization in organization_list:
+    for organization in items:
         org_data = organization.model_dump()
         org_data["logo"] = get_absolute_logo_url(org_data.get("logo"))
         if user_count_map is not None and organization.id is not None:
@@ -72,12 +73,11 @@ def transform_organizations_to_public(
 
 
 def _org_page_transformer(
-    session: SessionDep, items: list[Organization] | Any
+    session: SessionDep, items: Sequence[Organization]
 ) -> list[OrganizationPublic]:
-    org_list: list[Organization] = list(items) if not isinstance(items, list) else items
-    org_ids = [org.id for org in org_list if org.id is not None]
+    org_ids = [org.id for org in items if org.id is not None]
     count_map = _get_user_count_map(session, org_ids)
-    return transform_organizations_to_public(org_list, count_map)
+    return transform_organizations_to_public(items, count_map)
 
 
 @router.get(

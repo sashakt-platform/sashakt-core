@@ -1648,3 +1648,134 @@ def test_update_organization_logo_no_filename(
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_read_organization_list_includes_users_count(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    user_a = create_random_user(db, org.id)
+    user_b = create_random_user(db, org.id)
+    db.add_all([user_a, user_b])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    items = response.json()["items"]
+
+    org_item = next((item for item in items if item["id"] == org.id), None)
+    assert org_item is not None
+    assert org_item["users_count"] == 2
+
+
+def test_read_organization_list_users_count_multiple_orgs(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org_a = Organization(name=random_lower_string())
+    org_b = Organization(name=random_lower_string())
+    db.add_all([org_a, org_b])
+    db.commit()
+    db.refresh(org_a)
+    db.refresh(org_b)
+
+    for _ in range(3):
+        db.add(create_random_user(db, org_a.id))
+    db.add(create_random_user(db, org_b.id))
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    items = response.json()["items"]
+
+    item_a = next((item for item in items if item["id"] == org_a.id), None)
+    item_b = next((item for item in items if item["id"] == org_b.id), None)
+    assert item_a is not None
+    assert item_b is not None
+    assert item_a["users_count"] == 3
+    assert item_b["users_count"] == 1
+
+
+def test_read_organization_list_users_count_zero_for_empty_org(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    items = response.json()["items"]
+
+    org_item = next((item for item in items if item["id"] == org.id), None)
+    assert org_item is not None
+    assert org_item["users_count"] == 0
+
+
+def test_read_organization_list_users_count_excludes_inactive_users(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    active_user = create_random_user(db, org.id)
+    inactive_user = create_random_user(db, org.id)
+    inactive_user.is_active = False
+    db.add_all([active_user, inactive_user])
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    items = response.json()["items"]
+
+    org_item = next((item for item in items if item["id"] == org.id), None)
+    assert org_item is not None
+    assert org_item["users_count"] == 1
+
+
+def test_read_organization_by_id_users_count_is_none(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    create_random_user(db, org.id)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["users_count"] is None
