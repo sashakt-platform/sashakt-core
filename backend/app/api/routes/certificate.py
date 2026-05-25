@@ -159,6 +159,15 @@ def update_certificate(
     return certificate
 
 
+def _check_certificate_has_associated_test(
+    session: SessionDep, certificate_id: int
+) -> bool:
+    return (
+        session.exec(select(Test).where(Test.certificate_id == certificate_id)).first()
+        is not None
+    )
+
+
 # Delete Certificate
 @router.delete(
     "/{certificate_id}",
@@ -174,12 +183,7 @@ def delete_certificate(
     if not certificate or certificate.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Certificate not found")
 
-    # check for associated tests before deleting
-    related_tests = session.exec(
-        select(Test).where(Test.certificate_id == certificate_id)
-    ).first()
-
-    if related_tests:
+    if _check_certificate_has_associated_test(session, certificate_id):
         raise HTTPException(
             status_code=400,
             detail="Certificate has associated tests and cannot be deleted",
@@ -219,11 +223,9 @@ def bulk_delete_certificate(
         )
 
     for certificate in db_certificates:
-        related_test = session.exec(
-            select(Test).where(Test.certificate_id == certificate.id)
-        ).first()
-
-        if related_test:
+        if certificate.id is not None and _check_certificate_has_associated_test(
+            session, certificate.id
+        ):
             failure_list.append(CertificatePublic(**certificate.model_dump()))
         else:
             session.delete(certificate)
