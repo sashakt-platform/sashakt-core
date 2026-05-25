@@ -427,6 +427,160 @@ def test_delete_certificate_with_associated_tests(
     assert response.status_code == 200
 
 
+def test_bulk_delete_certificates_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    cert_a = Certificate(
+        name=random_lower_string(),
+        url=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    cert_b = Certificate(
+        name=random_lower_string(),
+        url=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add_all([cert_a, cert_b])
+    db.commit()
+    db.refresh(cert_a)
+    db.refresh(cert_b)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/certificate/",
+        json=[cert_a.id, cert_b.id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
+
+    assert db.get(Certificate, cert_a.id) is None
+    assert db.get(Certificate, cert_b.id) is None
+
+
+def test_bulk_delete_certificates_partial_failure_due_to_associated_tests(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    cert_free = Certificate(
+        name=random_lower_string(),
+        url=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    cert_with_test = Certificate(
+        name=random_lower_string(),
+        url=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add_all([cert_free, cert_with_test])
+    db.commit()
+    db.refresh(cert_free)
+    db.refresh(cert_with_test)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        certificate_id=cert_with_test.id,
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/certificate/",
+        json=[cert_free.id, cert_with_test.id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 1
+    assert data["delete_failure_list"] is not None
+    assert len(data["delete_failure_list"]) == 1
+    assert data["delete_failure_list"][0]["id"] == cert_with_test.id
+
+    assert db.get(Certificate, cert_free.id) is None
+    assert db.get(Certificate, cert_with_test.id) is not None
+
+
+def test_bulk_delete_certificates_missing_ids_returns_404(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/certificate/",
+        json=[-1, -2],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 404
+    assert "invalid" in data["detail"].lower()
+
+
+def test_bulk_delete_certificates_all_blocked_by_tests(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    cert = Certificate(
+        name=random_lower_string(),
+        url=random_lower_string(),
+        organization_id=organization_id,
+        created_by_id=user_id,
+    )
+    db.add(cert)
+    db.commit()
+    db.refresh(cert)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        certificate_id=cert.id,
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/certificate/",
+        json=[cert.id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 0
+    assert data["delete_failure_list"] is not None
+    assert data["delete_failure_list"][0]["id"] == cert.id
+    assert db.get(Certificate, cert.id) is not None
+
+
 def test_download_certificate_invalid_token(
     client: TestClient,
 ) -> None:

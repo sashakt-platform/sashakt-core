@@ -61,3 +61,8 @@ class CertificatePublic(CertificateBase):
 
 class CertificateUpdate(CertificateBase):
     pass
+
+
+class DeleteCertificate(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[CertificatePublic] | None = None
