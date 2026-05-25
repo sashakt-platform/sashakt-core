@@ -288,3 +288,8 @@ class FormResponsePublic(FormResponseBase):
     candidate_test_id: int
     form_id: int
     created_date: datetime
+
+
+class DeleteForm(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[FormPublic] | None = None

@@ -1,14 +1,15 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.models import Message
 from app.models.form import (
+    DeleteForm,
     Form,
     FormCreate,
     FormField,
@@ -221,6 +222,19 @@ def update_form(
     return build_form_public(form)
 
 
+def _check_form_has_associated_tests(form: Form) -> bool:
+    return len(form.tests) > 0
+
+
+def _check_form_has_responses(session: SessionDep, form_id: int) -> bool:
+    return (
+        session.exec(
+            select(FormResponse).where(FormResponse.form_id == form_id)
+        ).first()
+        is not None
+    )
+
+
 @router.delete(
     "/{form_id}",
     dependencies=[Depends(permission_dependency("delete_form"))],
@@ -236,19 +250,13 @@ def delete_form(
     if not form or form.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    # Check if form is associated with any tests
-    if form.tests:
+    if _check_form_has_associated_tests(form):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete form because it is associated with tests. Remove the form from all tests first.",
         )
 
-    # Check if form has any responses
-    has_responses = session.exec(
-        select(FormResponse).where(FormResponse.form_id == form_id)
-    ).first()
-
-    if has_responses:
+    if _check_form_has_responses(session, form_id):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete form because it has submitted responses.",
@@ -258,6 +266,53 @@ def delete_form(
     session.commit()
 
     return Message(message="Form deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteForm,
+    dependencies=[Depends(permission_dependency("delete_form"))],
+)
+def bulk_delete_form(
+    session: SessionDep,
+    current_user: CurrentUser,
+    form_ids: list[int] = Body(...),
+) -> DeleteForm:
+    success_count = 0
+    failure_list: list[FormPublic] = []
+
+    db_forms = session.exec(
+        select(Form)
+        .where(
+            col(Form.id).in_(form_ids),
+            Form.organization_id == current_user.organization_id,
+        )
+        .options(selectinload(Form.tests), selectinload(Form.fields))  # type: ignore[arg-type]
+    ).all()
+
+    found_ids = {form.id for form in db_forms}
+    missing_ids = set(form_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Forms selected for deletion"
+        )
+
+    for form in db_forms:
+        if form.id is not None and (
+            _check_form_has_associated_tests(form)
+            or _check_form_has_responses(session, form.id)
+        ):
+            failure_list.append(build_form_public(form))
+        else:
+            session.delete(form)
+            success_count += 1
+
+    session.commit()
+
+    return DeleteForm(
+        delete_success_count=success_count,
+        delete_failure_list=failure_list or None,
+    )
 
 
 # ============== FormField Management Endpoints ==============
