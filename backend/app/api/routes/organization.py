@@ -201,6 +201,7 @@ def get_organization(
     description: str | None = Query(
         None, description="Filter by organization description", min_length=3
     ),
+    is_active: bool | None = Query(None, description="Filter by active status"),
     order_by: list[str] = Query(
         default=["created_date"],
         title="Order by",
@@ -210,7 +211,6 @@ def get_organization(
 ) -> Page[OrganizationPublic]:
     query = select(Organization).where(
         not_(Organization.is_deleted),
-        Organization.is_active == True,  # noqa: E712
     )
 
     if name:
@@ -218,6 +218,9 @@ def get_organization(
 
     if description:
         query = query.where(col(Organization.description).contains(description))
+
+    if is_active is not None:
+        query = query.where(Organization.is_active == is_active)  # noqa: E712
 
     for order in order_by:
         is_desc = order.startswith("-")
