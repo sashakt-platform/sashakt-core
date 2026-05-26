@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app import crud
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.core.roles import super_admin
+from app.core.roles import state_admin, super_admin, system_admin
 from app.core.security import verify_password
 from app.models import Permission, Role, RolePermission, User, UserCreate
 from app.models.location import Country, District, State
@@ -316,34 +316,13 @@ def test_create_user_existing_username(
 def test_retrieve_users(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    current_user = get_current_user_data(client, superuser_token_headers)
-    username = random_email()
-    password = random_lower_string()
-    user_in = UserCreate(
-        email=username,
-        password=password,
-        full_name=random_lower_string(),
-        phone=random_lower_string(),
-        role_id=create_random_role(db).id,
-        organization_id=current_user["organization_id"],
-    )
-    crud.create_user(session=db, user_create=user_in)
-
-    username2 = random_email()
-    password2 = random_lower_string()
-    user_in2 = UserCreate(
-        email=username2,
-        password=password2,
-        full_name=random_lower_string(),
-        phone=random_lower_string(),
-        role_id=create_random_role(db).id,
-        organization_id=current_user["organization_id"],
-    )
-    crud.create_user(session=db, user_create=user_in2)
+    super_admin_role = db.exec(
+        select(Role).where(Role.name == super_admin.name)
+    ).first()
+    assert super_admin_role is not None
 
     r = client.get(f"{settings.API_V1_STR}/users/", headers=superuser_token_headers)
     all_users = r.json()
-    assert len(all_users["items"]) > 2
 
     assert_paginated_response(r, min_expected_total=1)
     for item in all_users["items"]:
@@ -352,7 +331,106 @@ def test_retrieve_users(
         assert "phone" in item
         assert "role_id" in item
         assert "organization_id" in item
-        assert item["organization_id"] == current_user["organization_id"]
+
+
+def test_superadmin_sees_admin_users_across_all_orgs(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """super_admin sees super_admin and system_admin users from ALL orgs."""
+
+    system_admin_role = db.exec(
+        select(Role).where(Role.name == system_admin.name)
+    ).first()
+    assert system_admin_role is not None
+
+    other_org = create_random_organization(db)
+    other_email = random_email()
+    user_in = UserCreate(
+        email=other_email,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=system_admin_role.id,
+        organization_id=other_org.id,
+    )
+    crud.create_user(session=db, user_create=user_in)
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/",
+        params={"search": other_email},
+        headers=get_user_superadmin_token,
+    )
+    assert r.status_code == 200
+    returned_emails = [item["email"] for item in r.json()["items"]]
+
+    assert other_email in returned_emails
+
+
+def test_superadmin_excludes_lower_role_users_from_other_orgs(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Scenario 2: super_admin must NOT see state_admin/test_admin users from other orgs."""
+    state_admin_role = db.exec(
+        select(Role).where(Role.name == state_admin.name)
+    ).first()
+    assert state_admin_role is not None
+
+    other_org = create_random_organization(db)
+    lower_role_email = random_email()
+    user_in = UserCreate(
+        email=lower_role_email,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=state_admin_role.id,
+        organization_id=other_org.id,
+    )
+    crud.create_user(session=db, user_create=user_in)
+
+    res = client.get(
+        f"{settings.API_V1_STR}/users/",
+        params={"search": lower_role_email},
+        headers=get_user_superadmin_token,
+    )
+    assert res.status_code == 200
+    returned_emails = [item["email"] for item in res.json()["items"]]
+
+    assert lower_role_email not in returned_emails
+
+
+def test_non_superadmin_only_sees_own_org_users(
+    client: TestClient, db: Session, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    """Scenario 3: system_admin (non-super_admin) only sees users from their own org."""
+    caller = get_current_user_data(client, get_user_systemadmin_token)
+    caller_org_id = caller["organization_id"]
+
+    other_org = create_random_organization(db)
+    other_email = random_email()
+    other_role = create_random_role(db)
+    user_in = UserCreate(
+        email=other_email,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=other_role.id,
+        organization_id=other_org.id,
+    )
+    crud.create_user(session=db, user_create=user_in)
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/",
+        params={"search": other_email},
+        headers=get_user_systemadmin_token,
+    )
+    assert r.status_code == 200
+    data = r.json()
+
+    returned_emails = [item["email"] for item in data["items"]]
+    assert other_email not in returned_emails
+
+    for item in data["items"]:
+        assert item["organization_id"] == caller_org_id
 
 
 def test_update_user_me(

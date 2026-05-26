@@ -15,7 +15,13 @@ from app.api.deps import (
 )
 from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
-from app.core.roles import can_assign_role, state_admin, test_admin
+from app.core.roles import (
+    can_assign_role,
+    state_admin,
+    super_admin,
+    system_admin,
+    test_admin,
+)
 from app.core.security import get_password_hash, verify_password
 from app.core.sorting import (
     SortingParams,
@@ -146,7 +152,15 @@ def read_users(
     """
     current_user_organization_id = current_user.organization_id
 
-    statement = select(User).where(User.organization_id == current_user_organization_id)
+    if current_user.role.name == super_admin.name:
+        admin_role_ids = select(Role.id).where(
+            col(Role.name).in_([super_admin.name, system_admin.name])
+        )
+        statement = select(User).where(col(User.role_id).in_(admin_role_ids))
+    else:
+        statement = select(User).where(
+            User.organization_id == current_user_organization_id
+        )
 
     # apply role-based filtering
     if (
