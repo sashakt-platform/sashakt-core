@@ -7271,7 +7271,7 @@ def test_state_admin_cannot_see_state_and_district_test(
     assert state_and_district_test.id not in item_ids
 
 
-def test_state_admin_cannot_delete_general_test(
+def test_state_admin_can_delete_test_created_by_them(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -7336,8 +7336,7 @@ def test_state_admin_cannot_delete_general_test(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 200
 
 
 def test_state_admin_can_delete_test_in_their_state(
@@ -7461,19 +7460,12 @@ def test_state_admin_cannot_delete_test_outside_their_state(
     )
     test_id = response.json()["id"]
 
-    state_admin_user = get_current_user_data(client, token_headers)
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
 
 
 def test_state_admin_cannot_delete_multi_state_test_without_full_access(
@@ -7529,21 +7521,12 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
         headers=get_user_superadmin_token,
     )
     test_id = response.json()["id"]
-
-    state_admin_user = get_current_user_data(client, token_headers)
-
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
 
 
 def test_state_admin_can_delete_test_connected_via_district(
@@ -7621,7 +7604,7 @@ def test_state_admin_can_delete_test_connected_via_district(
     assert "deleted successfully" in delete_resp.json()["message"].lower()
 
 
-def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_matches(
+def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -7690,20 +7673,13 @@ def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_match
     )
     test_id = response.json()["id"]
 
-    state_admin_user = get_current_user_data(client, token_headers)
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
 
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
 
 
 def test_localization_list(
@@ -8118,15 +8094,6 @@ def test_district_user_cannot_modify_out_of_scope_test(
     assert data["districts"] is not None
     test_id = data["id"]
 
-    # Reassign ownership to state_admin so ownership check passes;
-    # the location check then fires because district_2 is outside their scope.
-    state_admin_user = get_current_user_data(client, token_headers)
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     response = client.put(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
@@ -8135,7 +8102,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
 
     assert response.status_code == 403
     data = response.json()
-    assert "cannot modify/delete" in data["detail"]
+    assert data["detail"] == "You can only update tests created by you."
 
     response = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -8144,7 +8111,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
 
     assert response.status_code == 403
     data = response.json()
-    assert "cannot modify/delete" in data["detail"]
+    assert data["detail"] == "You can only delete tests created by you."
 
 
 def test_get_tests_by_district_user(
