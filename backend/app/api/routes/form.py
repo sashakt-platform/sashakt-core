@@ -287,7 +287,7 @@ def bulk_delete_form(
             col(Form.id).in_(form_ids),
             Form.organization_id == current_user.organization_id,
         )
-        .options(selectinload(Form.tests), selectinload(Form.fields))  # type: ignore[arg-type]
+        .options(selectinload(Form.tests))  # type: ignore[arg-type]
     ).all()
 
     found_ids = {form.id for form in db_forms}
