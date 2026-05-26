@@ -2357,7 +2357,10 @@ def test_get_test_random_tag_count(
 def test_get_test_by_id(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
 
     country = Country(name=random_lower_string())
     db.add(country)
@@ -2533,6 +2536,57 @@ def test_get_test_by_id(
     assert data["tags"] == []
     assert data["states"] == []
     assert data["question_revisions"] == []
+
+
+def test_get_test_by_id_organization_restriction(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A user must not be able to fetch a test that belongs to a different organization,
+    even if they know the test ID.
+    """
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    own_org_id = user_data["organization_id"]
+
+    # Test belonging to the requesting user's organization — should be accessible
+    own_org_test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        question_pagination=1,
+        created_by_id=user_data["id"],
+        organization_id=own_org_id,
+    )
+    db.add(own_org_test)
+
+    # Test belonging to a completely different organization — should be blocked
+    other_org = create_random_organization(db)
+    other_user = create_random_user(db, organization_id=other_org.id)
+    other_org_test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        question_pagination=1,
+        created_by_id=other_user.id,
+        organization_id=other_org.id,
+    )
+    db.add(other_org_test)
+    db.commit()
+
+    # Can fetch a test from own organization
+    own_response = client.get(
+        f"{settings.API_V1_STR}/test/{own_org_test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert own_response.status_code == 200
+    assert own_response.json()["id"] == own_org_test.id
+
+    # Cannot fetch a test from a different organization
+    other_response = client.get(
+        f"{settings.API_V1_STR}/test/{other_org_test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert other_response.status_code == 403
 
 
 def test_update_test(
@@ -3001,7 +3055,10 @@ def test_visibility_test(
 def test_visibility_test_with_random_tag_count(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
     tag1 = create_random_tag(db)
     tag2 = create_random_tag(db)
 
@@ -3018,6 +3075,7 @@ def test_visibility_test_with_random_tag_count(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=organization_id,
         random_tag_count=[
             {"tag_id": tag1.id, "count": 3},
             {"tag_id": tag2.id, "count": 2},

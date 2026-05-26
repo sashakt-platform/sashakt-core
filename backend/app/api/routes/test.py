@@ -1038,10 +1038,18 @@ def get_or_create_test_link(
     response_model=TestPublic,
     dependencies=[Depends(permission_dependency("read_test"))],
 )
-def get_test_by_id(test_id: int, session: SessionDep) -> TestPublic:
+def get_test_by_id(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> TestPublic:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    if test.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this test"
+        )
 
     return build_test_public_response(session, test)
 
