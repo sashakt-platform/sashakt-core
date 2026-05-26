@@ -901,11 +901,13 @@ def get_test(
             )
 
             # show only tests matching users district OR tests matching users state
+            # OR tests created by the user (regardless of location)
             # general (unmapped) tests are intentionally excluded for district-scoped users
             query = query.where(
                 or_(
                     col(Test.id).in_(district_subquery),
                     col(Test.id).in_(state_subquery),
+                    Test.created_by_id == current_user.id,
                 )
             )
         else:
@@ -930,7 +932,13 @@ def get_test(
                 )
 
                 # only show tests explicitly mapped to the user's state
-                query = query.where(col(Test.id).in_(state_subquery))
+                # OR tests created by the user (regardless of location)
+                query = query.where(
+                    or_(
+                        col(Test.id).in_(state_subquery),
+                        Test.created_by_id == current_user.id,
+                    )
+                )
 
         # if no district or state assigned, show all tests (no filter applied)
 
