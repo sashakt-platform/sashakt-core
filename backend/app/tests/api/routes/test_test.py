@@ -9821,3 +9821,208 @@ def test_get_tests_my_tests_filter_no_location_user(
     assert my_test_2.id not in returned_ids
     assert other_test_1.id in returned_ids
     assert other_test_2.id in returned_ids
+
+
+def test_state_admin_can_see_tests_they_created_outside_their_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A state_admin scoped to state_A should see tests they personally created
+    even if those tests are mapped to state_B (outside their location scope).
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_b = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    state_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_admin_token = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    # state_admin creates a test mapped to state_B (outside their own state_A scope)
+    outside_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "state_ids": [state_b.id],
+        },
+        headers=state_admin_token,
+    )
+    assert outside_test_resp.status_code == 200
+    outside_test_id = outside_test_resp.json()["id"]
+
+    # state_admin creates a test mapped to their own state_A (within scope)
+    in_scope_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "state_ids": [state_a.id],
+        },
+        headers=state_admin_token,
+    )
+    assert in_scope_test_resp.status_code == 200
+    in_scope_test_id = in_scope_test_resp.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=state_admin_token)
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+
+    # Both tests must be visible: in-scope by location, out-of-scope because created by them
+    assert in_scope_test_id in returned_ids
+    assert outside_test_id in returned_ids
+
+    # my_tests=true: both tests are visible because the state_admin created them
+    my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true", headers=state_admin_token
+    )
+    assert my_tests_response.status_code == 200
+    my_tests_ids = {item["id"] for item in my_tests_response.json()["items"]}
+    assert in_scope_test_id in my_tests_ids
+    assert outside_test_id in my_tests_ids
+
+    # my_tests=false: neither test is visible because both were created by the state_admin
+    not_my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false", headers=state_admin_token
+    )
+    assert not_my_tests_response.status_code == 200
+    not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
+    assert in_scope_test_id not in not_my_tests_ids
+    assert outside_test_id not in not_my_tests_ids
+
+
+def test_test_admin_can_see_tests_they_created_outside_their_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to district_A should see tests they personally created
+    even if those tests are mapped to district_B (outside their location scope).
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    district_b = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+    test_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": test_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    test_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # test_admin creates a test mapped to district_B (outside their district_A scope)
+    outside_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "district_ids": [district_b.id],
+        },
+        headers=test_admin_token,
+    )
+    assert outside_test_resp.status_code == 200
+    outside_test_id = outside_test_resp.json()["id"]
+
+    # test_admin creates a test mapped to their own district_A (within scope)
+    in_scope_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "district_ids": [district_a.id],
+        },
+        headers=test_admin_token,
+    )
+    assert in_scope_test_resp.status_code == 200
+    in_scope_test_id = in_scope_test_resp.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+
+    # Both tests must be visible: in-scope by location, out-of-scope because created by them
+    assert in_scope_test_id in returned_ids
+    assert outside_test_id in returned_ids
+
+    # my_tests=true: both tests are visible because the test_admin created them
+    my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true", headers=test_admin_token
+    )
+    assert my_tests_response.status_code == 200
+    my_tests_ids = {item["id"] for item in my_tests_response.json()["items"]}
+    assert in_scope_test_id in my_tests_ids
+    assert outside_test_id in my_tests_ids
+
+    # my_tests=false: neither test is visible because both were created by the test_admin
+    not_my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false", headers=test_admin_token
+    )
+    assert not_my_tests_response.status_code == 200
+    not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
+    assert in_scope_test_id not in not_my_tests_ids
+    assert outside_test_id not in not_my_tests_ids
