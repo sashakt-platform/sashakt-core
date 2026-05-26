@@ -192,6 +192,45 @@ def test_delete_form(
     assert get_response.status_code == 404
 
 
+def test_delete_form_with_fields(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user, organization = setup_user_organization(db)
+
+    form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    form_id = form_response.json()["id"]
+
+    field_data = {
+        "field_type": "text",
+        "label": "Full Name",
+        "name": random_lower_string(),
+        "is_required": True,
+    }
+    field_response = client.post(
+        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        json=field_data,
+        headers=get_user_superadmin_token,
+    )
+    assert field_response.status_code == 200
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/form/{form_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "Form deleted successfully"
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/form/{form_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert get_response.status_code == 404
+
+
 # ============== Form Field Tests ==============
 
 
