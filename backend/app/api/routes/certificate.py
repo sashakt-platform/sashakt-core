@@ -1,9 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Response
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.core.provider_config import provider_config_service
@@ -14,6 +14,7 @@ from app.models.certificate import (
     CertificateCreate,
     CertificatePublic,
     CertificateUpdate,
+    DeleteCertificate,
 )
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.test import Test
@@ -158,6 +159,15 @@ def update_certificate(
     return certificate
 
 
+def _check_certificate_has_associated_test(
+    session: SessionDep, certificate_id: int
+) -> bool:
+    return (
+        session.exec(select(Test).where(Test.certificate_id == certificate_id)).first()
+        is not None
+    )
+
+
 # Delete Certificate
 @router.delete(
     "/{certificate_id}",
@@ -173,12 +183,7 @@ def delete_certificate(
     if not certificate or certificate.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Certificate not found")
 
-    # check for associated tests before deleting
-    related_tests = session.exec(
-        select(Test).where(Test.certificate_id == certificate_id)
-    ).first()
-
-    if related_tests:
+    if _check_certificate_has_associated_test(session, certificate_id):
         raise HTTPException(
             status_code=400,
             detail="Certificate has associated tests and cannot be deleted",
@@ -188,6 +193,50 @@ def delete_certificate(
     session.commit()
 
     return Message(message="Certificate deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteCertificate,
+    dependencies=[Depends(permission_dependency("delete_certificate"))],
+)
+def bulk_delete_certificate(
+    session: SessionDep,
+    current_user: CurrentUser,
+    certificate_ids: list[int] = Body(...),
+) -> DeleteCertificate:
+    success_count = 0
+    failure_list: list[CertificatePublic] = []
+
+    db_certificates = session.exec(
+        select(Certificate).where(
+            col(Certificate.id).in_(certificate_ids),
+            Certificate.organization_id == current_user.organization_id,
+        )
+    ).all()
+
+    found_ids = {cert.id for cert in db_certificates}
+    missing_ids = set(certificate_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Certificates selected for deletion"
+        )
+
+    for certificate in db_certificates:
+        if certificate.id is not None and _check_certificate_has_associated_test(
+            session, certificate.id
+        ):
+            failure_list.append(CertificatePublic(**certificate.model_dump()))
+        else:
+            session.delete(certificate)
+            success_count += 1
+
+    session.commit()
+
+    return DeleteCertificate(
+        delete_success_count=success_count,
+        delete_failure_list=failure_list or None,
+    )
 
 
 @router.get("/download/{token}")
