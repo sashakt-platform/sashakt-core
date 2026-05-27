@@ -126,6 +126,9 @@ def update_organization_settings(
     payload.settings.platform_guide.value.file_path = (
         current_payload.platform_guide.value.file_path
     )
+    # External login is deployment-controlled for now. Preserve the DB value so
+    # older Portal clients do not accidentally reset it while saving other settings.
+    payload.settings.external_login = current_payload.external_login
 
     row = crud_settings.upsert(
         session=session,

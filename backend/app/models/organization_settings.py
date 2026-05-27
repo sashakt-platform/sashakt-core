@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
 
 
-ORGANIZATION_SETTINGS_SCHEMA_VERSION = 4
+ORGANIZATION_SETTINGS_SCHEMA_VERSION = 5
 
 
 NOMENCLATURE_DEFAULTS: dict[str, str] = {
@@ -186,6 +186,27 @@ class PauseTestSetting(BaseModel):
     value: PauseTestValue = PydanticField(default_factory=PauseTestValue)
 
 
+class ExternalLoginValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    provider: str | None = None
+    block_anonymous_starts: bool = False
+
+
+class ExternalLoginSetting(BaseModel):
+    """Organization-level external launch control.
+
+    Kept org-scoped so Sashakt Portal does not need a visible per-test option
+    for partner-only login flows.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["fixed"] = "fixed"
+    value: ExternalLoginValue = PydanticField(default_factory=ExternalLoginValue)
+
+
 class PlatformNomenclatureValue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -292,6 +313,9 @@ class OrganizationSettingsPayload(BaseModel):
             mode="fixed", value=PauseTestValue(default=False)
         )
     )
+    external_login: ExternalLoginSetting = PydanticField(
+        default_factory=ExternalLoginSetting
+    )
     platform_nomenclature: PlatformNomenclatureSetting
     platform_guide: PlatformGuideSetting = PydanticField(
         default_factory=PlatformGuideSetting
@@ -343,6 +367,7 @@ def default_organization_settings() -> OrganizationSettingsPayload:
             mode="fixed",
             value=PauseTestValue(default=False),
         ),
+        external_login=ExternalLoginSetting(),
         platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
         platform_guide=PlatformGuideSetting(),
         analytics_link=AnalyticsLinkSetting(),
