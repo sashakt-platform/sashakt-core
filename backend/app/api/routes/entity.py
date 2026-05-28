@@ -592,7 +592,10 @@ def bulk_delete_entity(
     failure_list: list[EntityPublic] = []
 
     db_entities = session.exec(
-        select(Entity).where(col(Entity.id).in_(entity_ids))
+        select(Entity)
+        .join(EntityType, col(Entity.entity_type_id) == EntityType.id)
+        .where(col(Entity.id).in_(entity_ids))
+        .where(EntityType.organization_id == current_user.organization_id)
     ).all()
 
     found_ids = {entity.id for entity in db_entities}

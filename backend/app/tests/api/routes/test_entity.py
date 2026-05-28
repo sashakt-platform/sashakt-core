@@ -421,9 +421,9 @@ def test_bulk_delete_entitytype_success(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """all selected entity types have no associated entities — all deleted."""
-    caller = get_current_user_data(client, get_user_superadmin_token)
-    org_id = caller["organization_id"]
-    user_id = caller["id"]
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
 
     entity_type_ids = []
     for _ in range(3):
@@ -464,9 +464,9 @@ def test_bulk_delete_entitytype_partial_success(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """one entity type has associated entities (fails), one is free (deleted)."""
-    caller = get_current_user_data(client, get_user_superadmin_token)
-    org_id = caller["organization_id"]
-    user_id = caller["id"]
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
 
     # entity type with no associated entities — should be deleted
     safe_entity_type = EntityType(
@@ -529,9 +529,9 @@ def test_bulk_delete_entitytype_all_fail(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Scenario 3: all entity types have associated entities — none deleted."""
-    caller = get_current_user_data(client, get_user_superadmin_token)
-    org_id = caller["organization_id"]
-    user_id = caller["id"]
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
 
     entity_type_ids = []
     for _ in range(2):
@@ -1561,14 +1561,14 @@ def test_delete_entity_not_found(
     assert response_data["detail"] == "Entity not found"
 
 
-def create_referenced_entity(client: TestClient, db: SessionDep) -> Entity:
+def create_referenced_entity(
+    client: TestClient, db: SessionDep, org_id: int, user_id: int
+) -> Entity:
     """Create an entity that is referenced in a FormResponse via a candidate test start."""
-    user = create_random_user(db)
-
     entity_type = EntityType(
         name=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=user.organization_id,
+        created_by_id=user_id,
+        organization_id=org_id,
     )
     db.add(entity_type)
     db.commit()
@@ -1577,7 +1577,7 @@ def create_referenced_entity(client: TestClient, db: SessionDep) -> Entity:
     entity = Entity(
         name=random_lower_string(),
         entity_type_id=entity_type.id,
-        created_by_id=user.id,
+        created_by_id=user_id,
     )
     db.add(entity)
     db.commit()
@@ -1585,8 +1585,8 @@ def create_referenced_entity(client: TestClient, db: SessionDep) -> Entity:
 
     form = Form(
         name=random_lower_string(),
-        created_by_id=user.id,
-        organization_id=user.organization_id,
+        created_by_id=user_id,
+        organization_id=org_id,
     )
     db.add(form)
     db.commit()
@@ -1608,7 +1608,7 @@ def create_referenced_entity(client: TestClient, db: SessionDep) -> Entity:
         time_limit=60,
         marks=100,
         link=random_lower_string(),
-        created_by_id=user.id,
+        created_by_id=user_id,
         is_active=True,
         form_id=form.id,
     )
@@ -1636,12 +1636,12 @@ def test_bulk_delete_entity_success(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """all entities have no references — all deleted."""
-    user, organization = setup_user_organization(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
 
     entity_type = EntityType(
         name=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=user_data["organization_id"],
+        created_by_id=user_data["id"],
     )
     db.add(entity_type)
     db.commit()
@@ -1652,7 +1652,7 @@ def test_bulk_delete_entity_success(
         entity = Entity(
             name=random_lower_string(),
             entity_type_id=entity_type.id,
-            created_by_id=user.id,
+            created_by_id=user_data["id"],
         )
         db.add(entity)
         db.commit()
@@ -1685,12 +1685,12 @@ def test_bulk_delete_entity_partial_success(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """one entity is referenced (fails), one is free (deleted)."""
-    user, organization = setup_user_organization(db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
 
     entity_type = EntityType(
         name=random_lower_string(),
-        organization_id=organization.id,
-        created_by_id=user.id,
+        organization_id=user_data["organization_id"],
+        created_by_id=user_data["id"],
     )
     db.add(entity_type)
     db.commit()
@@ -1700,14 +1700,16 @@ def test_bulk_delete_entity_partial_success(
     safe_entity = Entity(
         name=random_lower_string(),
         entity_type_id=entity_type.id,
-        created_by_id=user.id,
+        created_by_id=user_data["id"],
     )
     db.add(safe_entity)
     db.commit()
     db.refresh(safe_entity)
 
     # referenced entity — should fail
-    blocked_entity = create_referenced_entity(client, db)
+    blocked_entity = create_referenced_entity(
+        client, db, org_id=user_data["organization_id"], user_id=user_data["id"]
+    )
 
     response = client.request(
         "DELETE",
@@ -1743,8 +1745,13 @@ def test_bulk_delete_entity_all_fail(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """Scenario 3: all entities are referenced — none deleted."""
-    blocked_entity_one = create_referenced_entity(client, db)
-    blocked_entity_two = create_referenced_entity(client, db)
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    blocked_entity_one = create_referenced_entity(
+        client, db, org_id=user_data["organization_id"], user_id=user_data["id"]
+    )
+    blocked_entity_two = create_referenced_entity(
+        client, db, org_id=user_data["organization_id"], user_id=user_data["id"]
+    )
 
     response = client.request(
         "DELETE",
