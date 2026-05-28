@@ -156,3 +156,13 @@ class EntityBulkUploadResponse(SQLModel):
     success_entities: int
     failed_entities: int
     error_log: str | None
+
+
+class DeleteEntity(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[EntityPublic] | None = None
+
+
+class DeleteEntityType(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[EntityTypePublic] | None = None

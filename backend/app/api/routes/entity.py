@@ -3,7 +3,7 @@ import csv
 from io import StringIO
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
@@ -43,7 +43,7 @@ from app.models import (
     TestLink,
 )
 from app.models.candidate import CandidateTestProfile
-from app.models.entity import EntityBulkUploadResponse
+from app.models.entity import DeleteEntity, DeleteEntityType, EntityBulkUploadResponse
 from app.models.form import FormResponse
 from app.models.location import Block, District, State
 from app.models.user import User
@@ -218,6 +218,60 @@ def update_entitytype(
     return entitytype
 
 
+def is_entitytype_referenced(session: SessionDep, entitytype: EntityType) -> bool:
+    """Return True if the entity type has any associated Entity records."""
+    return bool(
+        session.exec(
+            select(Entity).where(Entity.entity_type_id == entitytype.id)
+        ).first()
+    )
+
+
+@router_entitytype.delete(
+    "/",
+    response_model=DeleteEntityType,
+    dependencies=[Depends(permission_dependency("delete_entity"))],
+)
+def bulk_delete_entitytype(
+    session: SessionDep,
+    current_user: CurrentUser,
+    entitytype_ids: list[int] = Body(...),
+) -> DeleteEntityType:
+    success_count = 0
+    failure_list: list[EntityTypePublic] = []
+
+    db_entitytypes = session.exec(
+        select(EntityType)
+        .where(col(EntityType.id).in_(entitytype_ids))
+        .where(EntityType.organization_id == current_user.organization_id)
+    ).all()
+
+    found_ids = {entitytype.id for entitytype in db_entitytypes}
+    missing_ids = set(entitytype_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid EntityTypes selected for deletion"
+        )
+
+    for entitytype in db_entitytypes:
+        try:
+            if is_entitytype_referenced(session, entitytype):
+                failure_list.append(EntityTypePublic(**entitytype.model_dump()))
+            else:
+                session.delete(entitytype)
+                success_count += 1
+
+        except HTTPException:
+            failure_list.append(EntityTypePublic(**entitytype.model_dump()))
+
+    session.commit()
+
+    return DeleteEntityType(
+        delete_success_count=success_count,
+        delete_failure_list=failure_list or None,
+    )
+
+
 # Delete EntityType
 @router_entitytype.delete(
     "/{entitytype_id}", dependencies=[Depends(permission_dependency("delete_entity"))]
@@ -227,13 +281,7 @@ def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
     if not entitytype:
         raise HTTPException(status_code=404, detail="EntityType not found")
 
-    has_active_entities = session.exec(
-        select(Entity).where(
-            Entity.entity_type_id == entitytype_id,
-        )
-    ).first()
-
-    if has_active_entities:
+    if is_entitytype_referenced(session, entitytype):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete Entity as it has associated records.",
@@ -493,6 +541,90 @@ def update_entity(
     )
 
 
+def is_entity_referenced(session: SessionDep, entity: Entity) -> bool:
+    """Return True if the entity is referenced in FormResponse or CandidateTestProfile."""
+    form_response_ref = session.exec(
+        select(FormResponse).where(
+            FormResponse.responses["entity_id"].as_string() == str(entity.id)
+        )
+    ).first()
+    legacy_ref = session.exec(
+        select(CandidateTestProfile).where(CandidateTestProfile.entity_id == entity.id)
+    ).first()
+    return bool(form_response_ref or legacy_ref)
+
+
+def add_entity_to_failure_list(
+    entity: Entity, failure_list: list[EntityPublic], org_id: int
+) -> None:
+    entity_type: EntityType | None = (
+        entity.entity_type
+        if entity.entity_type and entity.entity_type.organization_id == org_id
+        else None
+    )
+    state = entity.state if entity.state_id else None
+    district = entity.district if entity.district_id else None
+    block = entity.block if entity.block_id else None
+    failure_list.append(
+        EntityPublic(
+            **entity.model_dump(
+                exclude={"entity_type_id", "state_id", "district_id", "block_id"}
+            ),
+            entity_type=entity_type,
+            state=state,
+            district=district,
+            block=block,
+        )
+    )
+
+
+@router_entity.delete(
+    "/",
+    response_model=DeleteEntity,
+    dependencies=[Depends(permission_dependency("delete_entity"))],
+)
+def bulk_delete_entity(
+    session: SessionDep,
+    current_user: CurrentUser,
+    entity_ids: list[int] = Body(...),
+) -> DeleteEntity:
+    success_count = 0
+    failure_list: list[EntityPublic] = []
+
+    db_entities = session.exec(
+        select(Entity).where(col(Entity.id).in_(entity_ids))
+    ).all()
+
+    found_ids = {entity.id for entity in db_entities}
+    missing_ids = set(entity_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Entities selected for deletion"
+        )
+
+    for entity in db_entities:
+        try:
+            if is_entity_referenced(session, entity):
+                add_entity_to_failure_list(
+                    entity, failure_list, current_user.organization_id
+                )
+            else:
+                session.delete(entity)
+                success_count += 1
+
+        except HTTPException:
+            add_entity_to_failure_list(
+                entity, failure_list, current_user.organization_id
+            )
+
+    session.commit()
+
+    return DeleteEntity(
+        delete_success_count=success_count,
+        delete_failure_list=failure_list or None,
+    )
+
+
 # Delete an Entity
 @router_entity.delete(
     "/{entity_id}", dependencies=[Depends(permission_dependency("delete_entity"))]
@@ -502,19 +634,7 @@ def delete_entity(entity_id: int, session: SessionDep) -> Message:
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    # Check form_response
-    form_response_ref = session.exec(
-        select(FormResponse).where(
-            FormResponse.responses["entity_id"].as_string() == str(entity.id)
-        )
-    ).first()
-
-    # Check legacy candidate_test_profile table
-    legacy_ref = session.exec(
-        select(CandidateTestProfile).where(CandidateTestProfile.entity_id == entity.id)
-    ).first()
-
-    if form_response_ref or legacy_ref:
+    if is_entity_referenced(session, entity):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete entity because it is referenced in Candidate Profile",
