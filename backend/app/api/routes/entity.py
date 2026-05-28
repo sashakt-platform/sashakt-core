@@ -545,7 +545,7 @@ def is_entity_referenced(session: SessionDep, entity: Entity) -> bool:
     """Return True if the entity is referenced in FormResponse or CandidateTestProfile."""
     form_response_ref = session.exec(
         select(FormResponse).where(
-            FormResponse.responses["entity_id"].as_string() == str(entity.id)
+            FormResponse.responses["entity"].as_string() == str(entity.id)
         )
     ).first()
     legacy_ref = session.exec(

@@ -1494,7 +1494,7 @@ def test_delete_linked_entity_should_fail(
         form_id=form.id,
         field_type="entity",
         label="Entity",
-        name="entity_id",
+        name="entity",
         order=1,
     )
     db.add(form_field)
@@ -1517,7 +1517,7 @@ def test_delete_linked_entity_should_fail(
     payload = {
         "test_link_uuid": test_link.uuid,
         "device_info": "example",
-        "form_responses": {"entity_id": entity.id},
+        "form_responses": {"entity": entity.id},
     }
 
     response = client.post(f"{settings.API_V1_STR}/candidate/start_test", json=payload)
@@ -1559,6 +1559,219 @@ def test_delete_entity_not_found(
 
     assert response.status_code == 404
     assert response_data["detail"] == "Entity not found"
+
+
+def create_referenced_entity(client: TestClient, db: SessionDep) -> Entity:
+    """Create an entity that is referenced in a FormResponse via a candidate test start."""
+    user = create_random_user(db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    form = Form(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    form_field = FormField(
+        form_id=form.id,
+        field_type="entity",
+        label="Entity",
+        name="entity",
+        order=1,
+    )
+    db.add(form_field)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={
+            "test_link_uuid": test_link.uuid,
+            "device_info": "example",
+            "form_responses": {"entity": entity.id},
+        },
+    )
+    assert response.status_code == 200
+
+    return entity
+
+
+def test_bulk_delete_entity_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """all entities have no references — all deleted."""
+    user, organization = setup_user_organization(db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity_ids = []
+    for _ in range(3):
+        entity = Entity(
+            name=random_lower_string(),
+            entity_type_id=entity_type.id,
+            created_by_id=user.id,
+        )
+        db.add(entity)
+        db.commit()
+        db.refresh(entity)
+        assert entity.id is not None
+        entity_ids.append(entity.id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entity/",
+        json=entity_ids,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 3
+    assert response_data["delete_failure_list"] is None
+
+    for entity_id in entity_ids:
+        get_response = client.get(
+            f"{settings.API_V1_STR}/entity/{entity_id}",
+            headers=get_user_superadmin_token,
+        )
+        assert get_response.status_code == 404
+
+
+def test_bulk_delete_entity_partial_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """one entity is referenced (fails), one is free (deleted)."""
+    user, organization = setup_user_organization(db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        organization_id=organization.id,
+        created_by_id=user.id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    # free entity — should be deleted
+    safe_entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user.id,
+    )
+    db.add(safe_entity)
+    db.commit()
+    db.refresh(safe_entity)
+
+    # referenced entity — should fail
+    blocked_entity = create_referenced_entity(client, db)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entity/",
+        json=[safe_entity.id, blocked_entity.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 1
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == blocked_entity.id
+
+    # safe entity must be gone
+    get_safe = client.get(
+        f"{settings.API_V1_STR}/entity/{safe_entity.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert get_safe.status_code == 404
+
+    # blocked entity must still exist
+    get_blocked = client.get(
+        f"{settings.API_V1_STR}/entity/{blocked_entity.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert get_blocked.status_code == 200
+
+
+def test_bulk_delete_entity_all_fail(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Scenario 3: all entities are referenced — none deleted."""
+    blocked_entity_one = create_referenced_entity(client, db)
+    blocked_entity_two = create_referenced_entity(client, db)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entity/",
+        json=[blocked_entity_one.id, blocked_entity_two.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 0
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_entity_invalid_ids(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Scenario 4: IDs that don't exist — returns 404."""
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entity/",
+        json=[-1, -2, -3],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Entities selected for deletion"
 
 
 def test_import_entities_reject_non_csv_file(
