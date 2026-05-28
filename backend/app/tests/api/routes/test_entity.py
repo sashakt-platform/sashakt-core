@@ -415,6 +415,174 @@ def test_delete_entitytype_not_found(
     assert response_data["detail"] == "EntityType not found"
 
 
+def test_bulk_delete_entitytype_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """all selected entity types have no associated entities — all deleted."""
+    caller = get_current_user_data(client, get_user_superadmin_token)
+    org_id = caller["organization_id"]
+    user_id = caller["id"]
+
+    entity_type_ids = []
+    for _ in range(3):
+        entity_type = EntityType(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            organization_id=org_id,
+            created_by_id=user_id,
+        )
+        db.add(entity_type)
+        db.commit()
+        db.refresh(entity_type)
+        assert entity_type.id is not None
+        entity_type_ids.append(entity_type.id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entitytype/",
+        json=entity_type_ids,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 3
+    assert response_data["delete_failure_list"] is None
+
+    for entity_type_id in entity_type_ids:
+        get_response = client.get(
+            f"{settings.API_V1_STR}/entitytype/{entity_type_id}",
+            headers=get_user_superadmin_token,
+        )
+        assert get_response.status_code == 404
+
+
+def test_bulk_delete_entitytype_partial_success(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """one entity type has associated entities (fails), one is free (deleted)."""
+    caller = get_current_user_data(client, get_user_superadmin_token)
+    org_id = caller["organization_id"]
+    user_id = caller["id"]
+
+    # entity type with no associated entities — should be deleted
+    safe_entity_type = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(safe_entity_type)
+
+    # entity type with an associated entity — should fail
+    blocked_entity_type = EntityType(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(blocked_entity_type)
+    db.commit()
+    db.refresh(safe_entity_type)
+    db.refresh(blocked_entity_type)
+
+    associated_entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=blocked_entity_type.id,
+        created_by_id=user_id,
+    )
+    db.add(associated_entity)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entitytype/",
+        json=[safe_entity_type.id, blocked_entity_type.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 1
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == blocked_entity_type.id
+
+    get_safe = client.get(
+        f"{settings.API_V1_STR}/entitytype/{safe_entity_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert get_safe.status_code == 404
+
+    get_blocked = client.get(
+        f"{settings.API_V1_STR}/entitytype/{blocked_entity_type.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert get_blocked.status_code == 200
+
+
+def test_bulk_delete_entitytype_all_fail(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Scenario 3: all entity types have associated entities — none deleted."""
+    caller = get_current_user_data(client, get_user_superadmin_token)
+    org_id = caller["organization_id"]
+    user_id = caller["id"]
+
+    entity_type_ids = []
+    for _ in range(2):
+        entity_type = EntityType(
+            name=random_lower_string(),
+            description=random_lower_string(),
+            organization_id=org_id,
+            created_by_id=user_id,
+        )
+        db.add(entity_type)
+        db.commit()
+        db.refresh(entity_type)
+
+        associated_entity = Entity(
+            name=random_lower_string(),
+            entity_type_id=entity_type.id,
+            created_by_id=user_id,
+        )
+        db.add(associated_entity)
+        db.commit()
+        assert entity_type.id is not None
+        entity_type_ids.append(entity_type.id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entitytype/",
+        json=entity_type_ids,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 0
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 2
+
+
+def test_bulk_delete_entitytype_invalid_ids(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Scenario 4: IDs that don't exist — returns 404."""
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entitytype/",
+        json=[-1, -2, -3],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid EntityTypes selected for deletion"
+
+
 def test_create_entity(
     client: TestClient,
     db: SessionDep,
