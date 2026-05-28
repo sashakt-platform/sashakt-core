@@ -920,15 +920,6 @@ def _require_avanti_provision_token(authorization: str | None) -> None:
         )
 
 
-def _get_candidate_by_uuid(session: SessionDep, candidate_uuid: uuid.UUID) -> Candidate:
-    candidate = session.exec(
-        select(Candidate).where(Candidate.identity == candidate_uuid)
-    ).first()
-    if candidate is None:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-    return candidate
-
-
 @router.post("/start_test", response_model=StartTestResponse)
 def start_test_for_candidate(
     session: SessionDep,

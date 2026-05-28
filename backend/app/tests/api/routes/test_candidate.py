@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlmodel import select
 
 from app.api.deps import SessionDep
@@ -15288,7 +15289,7 @@ def test_start_test_rejects_anonymous_for_external_login_org(
 
 
 def test_external_provision_requires_avanti_token(
-    client: TestClient, db: SessionDep, monkeypatch
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
     org = Organization(name=random_lower_string())
@@ -15319,9 +15320,92 @@ def test_external_provision_requires_avanti_token(
     assert response.status_code == 401
     assert response.json()["detail"] == "Missing provisioning token"
 
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid provisioning token"
+
+
+def test_external_provision_requires_backend_configuration(
+    client: TestClient, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", None)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": "test-link"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Avanti provisioning is not configured"
+
+
+def test_external_provision_requires_enabled_avanti_provider(
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "External login is not enabled for this organization"
+    )
+
+    payload = default_organization_settings()
+    payload.external_login.value.enabled = True
+    payload.external_login.value.provider = "other-provider"
+    payload.test_timings.value.start_time = time(0, 1)
+    payload.test_timings.value.end_time = time(23, 59)
+    db.add(
+        OrganizationSettings(
+            organization_id=org.id,
+            settings=payload.model_dump(mode="json"),
+        )
+    )
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "External login provider is not allowed for this organization"
+    )
+
 
 def test_external_provision_and_start_resume_same_attempt(
-    client: TestClient, db: SessionDep, monkeypatch
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
     org = Organization(name=random_lower_string())
@@ -15371,7 +15455,7 @@ def test_external_provision_and_start_resume_same_attempt(
 
 
 def test_external_start_rejects_candidate_test_for_other_test(
-    client: TestClient, db: SessionDep, monkeypatch
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
     org = Organization(name=random_lower_string())
