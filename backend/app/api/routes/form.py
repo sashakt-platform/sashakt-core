@@ -226,6 +226,10 @@ def _check_form_has_associated_tests(form: Form) -> bool:
     return len(form.tests) > 0
 
 
+def _check_form_has_fields(form: Form) -> bool:
+    return bool(form.fields)
+
+
 def _check_form_has_responses(session: SessionDep, form_id: int) -> bool:
     return (
         session.exec(
@@ -249,6 +253,12 @@ def delete_form(
 
     if not form or form.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Form not found")
+
+    if _check_form_has_fields(form):
+        raise HTTPException(
+            status_code=400,
+            detail="This form cannot be deleted while it has associated fields. Please remove all fields before deleting the form.",
+        )
 
     if _check_form_has_associated_tests(form):
         raise HTTPException(
@@ -299,7 +309,8 @@ def bulk_delete_form(
 
     for form in db_forms:
         if form.id is not None and (
-            _check_form_has_associated_tests(form)
+            _check_form_has_fields(form)
+            or _check_form_has_associated_tests(form)
             or _check_form_has_responses(session, form.id)
         ):
             failure_list.append(build_form_public(form))

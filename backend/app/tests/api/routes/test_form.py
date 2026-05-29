@@ -193,6 +193,33 @@ def test_delete_form(
     assert get_response.status_code == 404
 
 
+def test_delete_form_with_fields_fails(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    form_id = form_response.json()["id"]
+
+    client.post(
+        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        json={"field_type": "text", "label": "Name", "name": "name"},
+        headers=get_user_superadmin_token,
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/form/{form_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "This form cannot be deleted while it has associated fields. "
+        "Please remove all fields before deleting the form."
+    )
+
+
 def test_bulk_delete_forms_success(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
