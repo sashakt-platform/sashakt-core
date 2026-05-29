@@ -51,6 +51,12 @@ UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 
 
+def _admin_role_ids_subquery() -> Any:
+    return select(Role.id).where(
+        col(Role.name).in_([super_admin.name, system_admin.name])
+    )
+
+
 def _assign_locations(
     session: SessionDep,
     user_id: int,
@@ -153,10 +159,9 @@ def read_users(
     current_user_organization_id = current_user.organization_id
 
     if current_user.role.name == super_admin.name:
-        admin_role_ids = select(Role.id).where(
-            col(Role.name).in_([super_admin.name, system_admin.name])
+        statement = select(User).where(
+            col(User.role_id).in_(_admin_role_ids_subquery())
         )
-        statement = select(User).where(col(User.role_id).in_(admin_role_ids))
     else:
         statement = select(User).where(
             User.organization_id == current_user_organization_id
@@ -494,17 +499,10 @@ def read_user_by_id(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user.organization_id != current_user.organization_id:
-        admin_role_ids = set(
-            session.exec(
-                select(Role.id).where(
-                    col(Role.name).in_([super_admin.name, system_admin.name])
-                )
-            ).all()
-        )
-        if (
-            current_user.role.name != super_admin.name
-            or user.role_id not in admin_role_ids
-        ):
+        is_admin_role = session.exec(
+            _admin_role_ids_subquery().where(Role.id == user.role_id)
+        ).first()
+        if current_user.role.name != super_admin.name or not is_admin_role:
             raise HTTPException(status_code=404, detail="User not found")
 
     # check location based access for state/district admins
