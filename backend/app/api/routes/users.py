@@ -490,8 +490,22 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
-    if not user or user.organization_id != current_user.organization_id:
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user.organization_id != current_user.organization_id:
+        admin_role_ids = set(
+            session.exec(
+                select(Role.id).where(
+                    col(Role.name).in_([super_admin.name, system_admin.name])
+                )
+            ).all()
+        )
+        if (
+            current_user.role.name != super_admin.name
+            or user.role_id not in admin_role_ids
+        ):
+            raise HTTPException(status_code=404, detail="User not found")
 
     # check location based access for state/district admins
     # skip check if user is reading their own profile

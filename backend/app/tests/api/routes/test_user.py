@@ -433,6 +433,88 @@ def test_non_superadmin_only_sees_own_org_users(
         assert item["organization_id"] == caller_org_id
 
 
+def test_superadmin_can_read_system_admin_from_other_org(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """super_admin can fetch a system_admin by ID even from a different org."""
+    system_admin_role = db.exec(
+        select(Role).where(Role.name == system_admin.name)
+    ).first()
+    assert system_admin_role is not None
+
+    other_org = create_random_organization(db)
+    user_in = UserCreate(
+        email=random_email(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=system_admin_role.id,
+        organization_id=other_org.id,
+    )
+    other_admin = crud.create_user(session=db, user_create=user_in)
+    assert other_admin.id is not None
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/{other_admin.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert r.status_code == 200
+    assert r.json()["id"] == other_admin.id
+    assert r.json()["organization_id"] == other_org.id
+
+
+def test_superadmin_cannot_read_lower_role_user_from_other_org(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """super_admin cannot fetch a state_admin/test_admin by ID from a different org."""
+    state_admin_role = db.exec(
+        select(Role).where(Role.name == state_admin.name)
+    ).first()
+    assert state_admin_role is not None
+
+    other_org = create_random_organization(db)
+    user_in = UserCreate(
+        email=random_email(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=state_admin_role.id,
+        organization_id=other_org.id,
+    )
+    lower_role_user = crud.create_user(session=db, user_create=user_in)
+    assert lower_role_user.id is not None
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/{lower_role_user.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert r.status_code == 404
+
+
+def test_non_superadmin_cannot_read_user_from_other_org(
+    client: TestClient, db: Session, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    """system_admin cannot fetch a user from a different org by ID."""
+    other_org = create_random_organization(db)
+    other_role = create_random_role(db)
+    user_in = UserCreate(
+        email=random_email(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=other_role.id,
+        organization_id=other_org.id,
+    )
+    other_user = crud.create_user(session=db, user_create=user_in)
+    assert other_user.id is not None
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/{other_user.id}",
+        headers=get_user_systemadmin_token,
+    )
+    assert r.status_code == 404
+
+
 def test_update_user_me(
     client: TestClient, get_user_candidate_token: dict[str, str], db: Session
 ) -> None:
