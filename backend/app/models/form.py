@@ -100,7 +100,7 @@ class Form(FormBase, table=True):
     # Relationships
     fields: list["FormField"] = Relationship(
         back_populates="form",
-        sa_relationship_kwargs={"order_by": "FormField.order", "passive_deletes": True},
+        sa_relationship_kwargs={"order_by": "FormField.order"},
     )
     tests: list["Test"] = Relationship(back_populates="form")
     organization: "Organization" = Relationship(back_populates="forms")
