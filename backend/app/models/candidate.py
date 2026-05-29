@@ -29,7 +29,7 @@ class CandidateTestAnswerBase(SQLModel):
     )
     response: str | None = Field(nullable=True, default=None)
     visited: bool = Field(nullable=False, default=False)
-    time_spent: int = Field(nullable=True, default=0)
+    time_spent: int | None = Field(default=None, nullable=True)
     bookmarked: bool = Field(
         default=False,
         sa_column_kwargs={"server_default": "false"},
@@ -85,7 +85,7 @@ class CandidateReviewResponse(SQLModel):
 class CandidateTestAnswerUpdate(SQLModel):
     response: str | None
     visited: bool
-    time_spent: int
+    time_spent: int | None = None
     bookmarked: bool | None = None
 
 
@@ -96,7 +96,7 @@ class CandidateAnswerSubmitRequest(SQLModel):
     question_revision_id: int
     response: str | None = None
     visited: bool = False
-    time_spent: int = 0
+    time_spent: int | None = None
     bookmarked: bool = False
 
 
