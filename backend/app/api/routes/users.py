@@ -15,7 +15,13 @@ from app.api.deps import (
 )
 from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
-from app.core.roles import can_assign_role, state_admin, test_admin
+from app.core.roles import (
+    can_assign_role,
+    state_admin,
+    super_admin,
+    system_admin,
+    test_admin,
+)
 from app.core.security import get_password_hash, verify_password
 from app.core.sorting import (
     SortingParams,
@@ -43,6 +49,12 @@ router = APIRouter(prefix="/users", tags=["users"])
 # create sorting dependency
 UserSorting = create_sorting_dependency(UserSortConfig)
 UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
+
+
+def _admin_role_ids_subquery() -> Any:
+    return select(Role.id).where(
+        col(Role.name).in_([super_admin.name, system_admin.name])
+    )
 
 
 def _assign_locations(
@@ -146,7 +158,14 @@ def read_users(
     """
     current_user_organization_id = current_user.organization_id
 
-    statement = select(User).where(User.organization_id == current_user_organization_id)
+    if current_user.role.name == super_admin.name:
+        statement = select(User).where(
+            col(User.role_id).in_(_admin_role_ids_subquery())
+        )
+    else:
+        statement = select(User).where(
+            User.organization_id == current_user_organization_id
+        )
 
     # apply role-based filtering
     if (
@@ -476,8 +495,15 @@ def read_user_by_id(
     Get a specific user by id.
     """
     user = session.get(User, user_id)
-    if not user or user.organization_id != current_user.organization_id:
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user.organization_id != current_user.organization_id:
+        is_admin_role = session.exec(
+            _admin_role_ids_subquery().where(Role.id == user.role_id)
+        ).first()
+        if current_user.role.name != super_admin.name or not is_admin_role:
+            raise HTTPException(status_code=404, detail="User not found")
 
     # check location based access for state/district admins
     # skip check if user is reading their own profile

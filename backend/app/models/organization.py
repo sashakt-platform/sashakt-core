@@ -68,6 +68,7 @@ class OrganizationPublic(OrganizationBase):
     created_date: datetime | None
     modified_date: datetime | None
     is_deleted: bool
+    users_count: int | None = None
 
 
 class OrganizationUpdate(OrganizationBase):

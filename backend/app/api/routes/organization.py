@@ -1,5 +1,6 @@
 import copy
-from typing import Any, cast
+from collections.abc import Sequence
+from typing import cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi_pagination import Page
@@ -41,20 +42,42 @@ from app.models.user import UserDistrict, UserState
 router = APIRouter(prefix="/organization", tags=["Organization"])
 
 
+def _get_user_count_map(session: SessionDep, org_ids: list[int]) -> dict[int, int]:
+    if not org_ids:
+        return {}
+    rows = session.exec(
+        select(col(User.organization_id), func.count(col(User.id)))
+        .where(
+            col(User.organization_id).in_(org_ids),
+            User.is_active == True,  # noqa: E712
+        )
+        .group_by(col(User.organization_id))
+    ).all()
+    return dict(rows)
+
+
 def transform_organizations_to_public(
-    items: list[Organization] | Any,
+    items: Sequence[Organization],
+    user_count_map: dict[int, int] | None = None,
 ) -> list[OrganizationPublic]:
     result: list[OrganizationPublic] = []
-    organization_list: list[Organization] = (
-        list(items) if not isinstance(items, list) else items
-    )
 
-    for organization in organization_list:
+    for organization in items:
         org_data = organization.model_dump()
         org_data["logo"] = get_absolute_logo_url(org_data.get("logo"))
+        if user_count_map is not None and organization.id is not None:
+            org_data["users_count"] = user_count_map.get(organization.id, 0)
         result.append(OrganizationPublic(**org_data))
 
     return result
+
+
+def _org_page_transformer(
+    session: SessionDep, items: Sequence[Organization]
+) -> list[OrganizationPublic]:
+    org_ids = [org.id for org in items if org.id is not None]
+    count_map = _get_user_count_map(session, org_ids)
+    return transform_organizations_to_public(items, count_map)
 
 
 @router.get(
@@ -201,6 +224,7 @@ def get_organization(
     description: str | None = Query(
         None, description="Filter by organization description", min_length=3
     ),
+    is_active: bool | None = Query(None, description="Filter by active status"),
     order_by: list[str] = Query(
         default=["created_date"],
         title="Order by",
@@ -210,7 +234,6 @@ def get_organization(
 ) -> Page[OrganizationPublic]:
     query = select(Organization).where(
         not_(Organization.is_deleted),
-        Organization.is_active == True,  # noqa: E712
     )
 
     if name:
@@ -218,6 +241,9 @@ def get_organization(
 
     if description:
         query = query.where(col(Organization.description).contains(description))
+
+    if is_active is not None:
+        query = query.where(Organization.is_active == is_active)  # noqa: E712
 
     for order in order_by:
         is_desc = order.startswith("-")
@@ -234,7 +260,7 @@ def get_organization(
         session,
         query,  # type: ignore[arg-type]
         params,
-        transformer=lambda items: transform_organizations_to_public(items),
+        transformer=lambda items: _org_page_transformer(session, items),
     )
 
     return organizations
