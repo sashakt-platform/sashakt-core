@@ -2177,7 +2177,7 @@ def test_cannot_delete_user_if_linked_to_question(
     )
 
     assert delete_response.status_code == 400
-    assert "failed to delete user" in delete_response.json()["detail"].lower()
+    assert "cannot delete this user" in delete_response.json()["detail"].lower()
 
 
 def test_create_test_admin_auto_inherits_state_admin_states_and_districts(

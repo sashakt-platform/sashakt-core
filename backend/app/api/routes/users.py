@@ -30,9 +30,18 @@ from app.core.sorting import (
     create_sorting_dependency,
 )
 from app.models import (
+    CandidateTest,
+    Certificate,
     District,
+    Entity,
+    EntityType,
+    Form,
     Message,
+    QuestionRevision,
     State,
+    Tag,
+    TagType,
+    Test,
     UpdatePassword,
     User,
     UserCreate,
@@ -614,11 +623,39 @@ def update_user(
     return user_public
 
 
+def _is_user_referenced(session: SessionDep, user: User) -> bool:
+    """Return True if the user has associated records that block deletion."""
+    if user.id is None:
+        return False
+    uid = user.id
+    return bool(
+        session.exec(select(Tag.id).where(Tag.created_by_id == uid)).first()
+        or session.exec(select(TagType.id).where(TagType.created_by_id == uid)).first()
+        or session.exec(select(Entity.id).where(Entity.created_by_id == uid)).first()
+        or session.exec(
+            select(EntityType.id).where(EntityType.created_by_id == uid)
+        ).first()
+        or session.exec(select(Test.id).where(Test.created_by_id == uid)).first()
+        or session.exec(
+            select(QuestionRevision.id).where(QuestionRevision.created_by_id == uid)
+        ).first()
+        or session.exec(
+            select(Certificate.id).where(Certificate.created_by_id == uid)
+        ).first()
+        or session.exec(select(Form.id).where(Form.created_by_id == uid)).first()
+        or session.exec(
+            select(CandidateTest.id).where(CandidateTest.admin_id == uid)
+        ).first()
+    )
+
+
 def is_user_deletion_blocked(
     session: SessionDep, current_user: CurrentUser, target_user: User
 ) -> bool:
     """Return True if the target user cannot be deleted by the current user."""
     if target_user.id == current_user.id:
+        return True
+    if _is_user_referenced(session, target_user):
         return True
     role = session.get(Role, current_user.role_id)
     if role and role.name in (state_admin.name, test_admin.name):
@@ -682,6 +719,11 @@ def delete_user(
     if user.id == current_user.id:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
+        )
+    if _is_user_referenced(session, user):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete this user as they have associated records (tags, entities, tests, questions, certificates, etc.). Please reassign or remove these first.",
         )
     role = session.get(Role, current_user.role_id)
     if role and role.name in (state_admin.name, test_admin.name):
