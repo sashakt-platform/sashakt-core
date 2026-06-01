@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import SessionDep
 from app.core.certificate_token import FIXED_TOKENS
 from app.core.config import settings
+from app.models.candidate import Candidate, CandidateTest
 from app.models.form import FormResponse
 from app.models.test import Test
 from app.tests.api.routes.test_tag import setup_user_organization
@@ -190,6 +191,188 @@ def test_delete_form(
         headers=get_user_superadmin_token,
     )
     assert get_response.status_code == 404
+
+
+def test_delete_form_with_fields_fails(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    form_id = form_response.json()["id"]
+
+    client.post(
+        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        json={"field_type": "text", "label": "Name", "name": "name"},
+        headers=get_user_superadmin_token,
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/form/{form_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "This form cannot be deleted while it has associated fields. "
+        "Please remove all fields before deleting the form."
+    )
+
+
+def test_bulk_delete_forms_success(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    form_a_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    form_b_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    form_a_id = form_a_response.json()["id"]
+    form_b_id = form_b_response.json()["id"]
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/form/",
+        json=[form_a_id, form_b_id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
+
+
+def test_bulk_delete_forms_blocked_by_associated_test(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    free_form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    linked_form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    free_form_id = free_form_response.json()["id"]
+    linked_form_id = linked_form_response.json()["id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        form_id=linked_form_id,
+    )
+    db.add(test)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/form/",
+        json=[free_form_id, linked_form_id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 1
+    assert data["delete_failure_list"] is not None
+    assert len(data["delete_failure_list"]) == 1
+    assert data["delete_failure_list"][0]["id"] == linked_form_id
+
+
+def test_bulk_delete_forms_blocked_by_responses(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    free_form_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    form_with_responses_response = client.post(
+        f"{settings.API_V1_STR}/form/",
+        json={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    free_form_id = free_form_response.json()["id"]
+    form_with_responses_id = form_with_responses_response.json()["id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        admin_id=user_id,
+        device=random_lower_string(),
+        start_time="2025-01-01T10:00:00",
+    )
+    db.add(candidate_test)
+    db.commit()
+    db.refresh(candidate_test)
+
+    form_response = FormResponse(
+        form_id=form_with_responses_id,
+        candidate_test_id=candidate_test.id,
+        responses={},
+    )
+    db.add(form_response)
+    db.commit()
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/form/",
+        json=[free_form_id, form_with_responses_id],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 1
+    assert data["delete_failure_list"] is not None
+    assert data["delete_failure_list"][0]["id"] == form_with_responses_id
+
+
+def test_bulk_delete_forms_missing_ids_returns_404(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/form/",
+        json=[-1, -2],
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+
+    assert response.status_code == 404
+    assert "invalid" in data["detail"].lower()
 
 
 # ============== Form Field Tests ==============
