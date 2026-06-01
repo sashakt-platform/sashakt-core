@@ -3818,3 +3818,129 @@ def test_get_users_by_district_user(
     assert len(items) == 2
     assert any(user_1 == item["id"] for item in items)
     assert any(state_admin_user_id == item["id"] for item in items)
+
+
+def test_bulk_delete_users_success(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """All users are deletable — all deleted."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
+    user_ids = []
+    for _ in range(3):
+        user_in = UserCreate(
+            email=random_email(),
+            password=random_lower_string(),
+            full_name=random_lower_string(),
+            phone=random_lower_string(),
+            role_id=role.id,
+            organization_id=organization_id,
+        )
+        user = crud.create_user(session=db, user_create=user_in)
+        assert user.id is not None
+        user_ids.append(user.id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=user_ids,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 3
+    assert response_data["delete_failure_list"] is None
+
+    for user_id in user_ids:
+        assert db.get(User, user_id) is None
+
+
+def test_bulk_delete_users_self_deletion_fails(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Attempting to delete yourself is added to failure list, others are deleted."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    current_user_id = user_data["id"]
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
+    other_user_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=organization_id,
+    )
+    other_user = crud.create_user(session=db, user_create=other_user_in)
+    assert other_user.id is not None
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=[current_user_id, other_user.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 1
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == current_user_id
+
+    assert db.get(User, other_user.id) is None
+    assert db.get(User, current_user_id) is not None
+
+
+def test_bulk_delete_users_invalid_ids(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """IDs that do not exist or belong to another org return 404."""
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=[-1, -2, -3],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Users selected for deletion"
+
+
+def test_bulk_delete_users_out_of_org_ids_rejected(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """User IDs from a different organization are treated as invalid and return 404."""
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+    other_org = create_random_organization(db)
+
+    other_org_user_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=other_org.id,
+    )
+    other_org_user = crud.create_user(session=db, user_create=other_org_user_in)
+    assert other_org_user.id is not None
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=[other_org_user.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Users selected for deletion"
