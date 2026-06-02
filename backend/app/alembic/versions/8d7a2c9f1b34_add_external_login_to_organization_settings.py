@@ -1,7 +1,7 @@
 """add external_login to organization settings
 
 Revision ID: 8d7a2c9f1b34
-Revises: b3e9f2a1c047
+Revises: c2f7d9a4b8e1
 Create Date: 2026-05-28 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "8d7a2c9f1b34"
-down_revision: str = "b3e9f2a1c047"
+down_revision: str = "c2f7d9a4b8e1"
 branch_labels = None
 depends_on = None
 
