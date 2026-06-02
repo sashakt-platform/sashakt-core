@@ -70,6 +70,37 @@ def test_create_organization(
     assert data["detail"] == "User Not Permitted"
 
 
+def test_create_organization_with_logo(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    logo_file = create_test_image(width=200, height=200, format="PNG")
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        data={"name": random_lower_string()},
+        files={"logo": ("logo.png", logo_file, "image/png")},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_create_organization_without_logo(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        data={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is None
+
+
 def test_read_organization(
     client: TestClient,
     db: SessionDep,
@@ -417,6 +448,76 @@ def test_update_organization(
     assert data["name"] == jal_vikas.name
     assert data["id"] == jal_vikas.id
     assert data["description"] == updated_description
+
+
+def test_update_organization_by_id_with_logo(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    logo_file = create_test_image(width=200, height=200, format="PNG")
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"name": random_lower_string()},
+        files={"logo": ("logo.png", logo_file, "image/png")},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_update_organization_by_id_without_logo(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    existing_logo = "/uploads/organizations/logos/org_keep.png"
+    org = Organization(name=random_lower_string(), logo=existing_logo)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    new_name = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"name": new_name},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["name"] == new_name
+    assert data["logo"] == existing_logo
+
+
+def test_update_organization_by_id_logo_replaces_old(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    old_logo = "/uploads/organizations/logos/org_old.png"
+    org = Organization(name=random_lower_string(), logo=old_logo)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    new_logo = create_test_image(width=150, height=150, format="PNG")
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        files={"logo": ("new_logo.png", new_logo, "image/png")},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert data["logo"] != old_logo
+    assert "/uploads/organizations/logos/" in data["logo"]
 
 
 def test_visibility_organization(
