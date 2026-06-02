@@ -11503,7 +11503,6 @@ def test_submit_answer_bookmark_default_false(
         "question_revision_id": question_revision.id,
         "response": "[2]",
         "visited": True,
-        "time_spent": 15,
     }
 
     response = client.post(
@@ -11515,6 +11514,7 @@ def test_submit_answer_bookmark_default_false(
     assert response.status_code == 200
     data = response.json()
     assert data["bookmarked"] is False
+    assert data["time_spent"] is None
 
 
 def test_update_answer_bookmark_status(client: TestClient, db: SessionDep) -> None:
