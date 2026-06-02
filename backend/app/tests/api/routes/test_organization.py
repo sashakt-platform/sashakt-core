@@ -520,6 +520,88 @@ def test_update_organization_by_id_logo_replaces_old(
     assert "/uploads/organizations/logos/" in data["logo"]
 
 
+def test_update_organization_by_id_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/0",
+        data={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Organization not found"
+
+
+def test_update_organization_by_id_deleted_org(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string(), is_deleted=True)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Organization not found"
+
+
+def test_update_organization_by_id_is_active(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string(), is_active=True)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"is_active": "false"},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["is_active"] is False
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"is_active": "true"},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["is_active"] is True
+
+
+def test_update_organization_by_id_shortcode(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    shortcode = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"shortcode": shortcode},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["shortcode"] == shortcode
+
+
 def test_visibility_organization(
     client: TestClient,
     db: SessionDep,
