@@ -31,3 +31,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("UPDATE candidate_test_answer SET time_spent = 0 WHERE time_spent IS NULL")
+    op.alter_column(
+        "candidate_test_answer",
+        "time_spent",
+        existing_type=sa.Integer(),
+        nullable=False,
+        server_default=None,
+    )
