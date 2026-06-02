@@ -44,7 +44,7 @@ def test_create_organization(
     description = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={
+        data={
             "name": name,
             "description": description,
         },
@@ -59,7 +59,7 @@ def test_create_organization(
     assert data["is_active"] is True
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={
+        data={
             "name": name,
             "description": description,
         },
@@ -386,7 +386,7 @@ def test_update_organization(
     db.commit()
     response = client.put(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
-        json={"name": updated_name, "description": None},
+        data={"name": updated_name},
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -398,7 +398,7 @@ def test_update_organization(
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
-        json={"name": jal_vikas.name, "description": inital_description},
+        data={"name": jal_vikas.name, "description": inital_description},
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -409,7 +409,7 @@ def test_update_organization(
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
-        json={"name": jal_vikas.name, "description": updated_description},
+        data={"name": jal_vikas.name, "description": updated_description},
         headers=get_user_superadmin_token,
     )
     data = response.json()
