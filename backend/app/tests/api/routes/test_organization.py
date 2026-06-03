@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -85,6 +88,24 @@ def test_create_organization_with_logo(
     assert response.status_code == status.HTTP_200_OK
     assert data["logo"] is not None
     assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_create_organization_logo_cleanup_on_db_failure(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    logo_file = create_test_image(width=100, height=100, format="PNG")
+    with patch("app.api.routes.organization.delete_logo_file") as mock_delete:
+        with patch.object(db, "commit", side_effect=Exception("simulated DB failure")):
+            with pytest.raises(Exception, match="simulated DB failure"):
+                client.post(
+                    f"{settings.API_V1_STR}/organization/",
+                    data={"name": random_lower_string()},
+                    files={"logo": ("logo.png", logo_file, "image/png")},
+                    headers=get_user_superadmin_token,
+                )
+    mock_delete.assert_called_once()
 
 
 def test_create_organization_without_logo(
