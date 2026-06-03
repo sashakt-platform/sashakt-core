@@ -480,6 +480,7 @@ def test_update_organization_by_id_with_logo(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert org.id is not None
 
     logo_file = create_test_image(width=200, height=200, format="PNG")
     response = client.put(
@@ -504,6 +505,7 @@ def test_update_organization_by_id_without_logo(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert org.id is not None
 
     new_name = random_lower_string()
     response = client.put(
@@ -527,6 +529,7 @@ def test_update_organization_by_id_logo_replaces_old(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert org.id is not None
 
     new_logo = create_test_image(width=150, height=150, format="PNG")
     response = client.put(
@@ -563,6 +566,7 @@ def test_update_organization_by_id_deleted_org(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert org.id is not None
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{org.id}",
@@ -582,6 +586,7 @@ def test_update_organization_by_id_is_active(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert org.id is not None
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{org.id}",
@@ -611,6 +616,7 @@ def test_update_organization_by_id_shortcode(
     db.add(org)
     db.commit()
     db.refresh(org)
+    assert org.id is not None
 
     shortcode = random_lower_string()
     response = client.put(
