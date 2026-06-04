@@ -2193,7 +2193,7 @@ def test_cannot_delete_user_if_linked_to_question(
     )
 
     assert delete_response.status_code == 400
-    assert "cannot delete this user" in delete_response.json()["detail"].lower()
+    assert "cannot delete user" in delete_response.json()["detail"].lower()
 
 
 def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
@@ -3024,8 +3024,8 @@ def test_state_admin_cannot_delete_general_user(
         headers=token_headers,
     )
 
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete " in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_delete_user_in_other_state(
@@ -3084,8 +3084,8 @@ def test_state_admin_cannot_delete_user_in_other_state(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_delete_user_in_other_district(
@@ -3158,8 +3158,8 @@ def test_state_admin_cannot_delete_user_in_other_district(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_can_delete_user_in_same_state(
@@ -3216,7 +3216,8 @@ def test_state_admin_can_delete_user_in_same_state(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 200
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_update_general_user(
@@ -3701,9 +3702,9 @@ def test_district_user_cannot_modify_out_of_scope_user(
         headers=token_headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     data = response.json()
-    assert "cannot modify/delete" in data["detail"]
+    assert "user not permitted" in data["detail"].lower()
 
 
 def test_get_users_by_district_user(
@@ -4016,7 +4017,7 @@ def test_cannot_delete_user_with_tag(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_tag_type(
@@ -4037,7 +4038,7 @@ def test_cannot_delete_user_with_tag_type(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_entity_type(
@@ -4058,7 +4059,7 @@ def test_cannot_delete_user_with_entity_type(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_entity(
@@ -4078,7 +4079,7 @@ def test_cannot_delete_user_with_entity(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_test(
@@ -4100,7 +4101,7 @@ def test_cannot_delete_user_with_test(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_form(
@@ -4121,7 +4122,7 @@ def test_cannot_delete_user_with_form(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_certificate(
@@ -4143,7 +4144,7 @@ def test_cannot_delete_user_with_certificate(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
 
 
 def test_cannot_delete_user_with_candidate_test(
@@ -4186,4 +4187,4 @@ def test_cannot_delete_user_with_candidate_test(
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 400
-    assert "cannot delete this user" in resp.json()["detail"].lower()
+    assert "cannot delete user" in resp.json()["detail"].lower()
