@@ -10,7 +10,6 @@ from app.api.deps import (
     CurrentUser,
     Pagination,
     SessionDep,
-    get_current_active_superuser,
     permission_dependency,
 )
 from app.api.routes.utils import get_current_user_location_ids
@@ -669,7 +668,7 @@ def is_user_deletion_blocked(
 @router.delete(
     "/",
     response_model=DeleteUser,
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(permission_dependency("delete_user"))],
 )
 def bulk_delete_users(
     session: SessionDep,
@@ -706,7 +705,9 @@ def bulk_delete_users(
     )
 
 
-@router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
+@router.delete(
+    "/{user_id}", dependencies=[Depends(permission_dependency("delete_user"))]
+)
 def delete_user(
     session: SessionDep, current_user: CurrentUser, user_id: int
 ) -> Message:
@@ -723,7 +724,7 @@ def delete_user(
     if _is_user_referenced(session, user):
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete this user as they have associated records (tags, entities, tests, questions, certificates, etc.). Please reassign or remove these first.",
+            detail="Cannot delete user: associated records exist. Reassign or remove them first.",
         )
     role = session.get(Role, current_user.role_id)
     if role and role.name in (state_admin.name, test_admin.name):
