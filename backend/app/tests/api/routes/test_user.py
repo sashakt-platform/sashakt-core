@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -8,7 +9,22 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.core.roles import state_admin, super_admin, system_admin
 from app.core.security import verify_password
-from app.models import Permission, Role, RolePermission, User, UserCreate
+from app.models import (
+    Candidate,
+    CandidateTest,
+    Certificate,
+    Entity,
+    EntityType,
+    Form,
+    Permission,
+    Role,
+    RolePermission,
+    Tag,
+    TagType,
+    Test,
+    User,
+    UserCreate,
+)
 from app.models.location import Country, District, State
 from app.models.question import Question, QuestionRevision, QuestionType
 from app.models.user import UserState
@@ -2177,7 +2193,7 @@ def test_cannot_delete_user_if_linked_to_question(
     )
 
     assert delete_response.status_code == 400
-    assert "failed to delete user" in delete_response.json()["detail"].lower()
+    assert "cannot delete user" in delete_response.json()["detail"].lower()
 
 
 def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
@@ -3008,8 +3024,8 @@ def test_state_admin_cannot_delete_general_user(
         headers=token_headers,
     )
 
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete " in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_delete_user_in_other_state(
@@ -3068,8 +3084,8 @@ def test_state_admin_cannot_delete_user_in_other_state(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_delete_user_in_other_district(
@@ -3142,8 +3158,8 @@ def test_state_admin_cannot_delete_user_in_other_district(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_can_delete_user_in_same_state(
@@ -3200,7 +3216,8 @@ def test_state_admin_can_delete_user_in_same_state(
         f"{settings.API_V1_STR}/users/{user_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 200
+    assert delete_resp.status_code == 401
+    assert "user not permitted" in delete_resp.json()["detail"].lower()
 
 
 def test_state_admin_cannot_update_general_user(
@@ -3685,9 +3702,9 @@ def test_district_user_cannot_modify_out_of_scope_user(
         headers=token_headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     data = response.json()
-    assert "cannot modify/delete" in data["detail"]
+    assert "user not permitted" in data["detail"].lower()
 
 
 def test_get_users_by_district_user(
@@ -3818,3 +3835,356 @@ def test_get_users_by_district_user(
     assert len(items) == 2
     assert any(user_1 == item["id"] for item in items)
     assert any(state_admin_user_id == item["id"] for item in items)
+
+
+def test_bulk_delete_users_success(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """All users are deletable — all deleted."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
+    user_ids = []
+    for _ in range(3):
+        user_in = UserCreate(
+            email=random_email(),
+            password=random_lower_string(),
+            full_name=random_lower_string(),
+            phone=random_lower_string(),
+            role_id=role.id,
+            organization_id=organization_id,
+        )
+        user = crud.create_user(session=db, user_create=user_in)
+        assert user.id is not None
+        user_ids.append(user.id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=user_ids,
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 3
+    assert response_data["delete_failure_list"] is None
+
+    for user_id in user_ids:
+        assert db.get(User, user_id) is None
+
+
+def test_bulk_delete_users_self_deletion_fails(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Attempting to delete yourself is added to failure list, others are deleted."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    organization_id = user_data["organization_id"]
+    current_user_id = user_data["id"]
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+
+    other_user_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=organization_id,
+    )
+    other_user = crud.create_user(session=db, user_create=other_user_in)
+    assert other_user.id is not None
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=[current_user_id, other_user.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 1
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == current_user_id
+
+    assert db.get(User, other_user.id) is None
+    assert db.get(User, current_user_id) is not None
+
+
+def test_bulk_delete_users_invalid_ids(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """IDs that do not exist or belong to another org return 404."""
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=[-1, -2, -3],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Users selected for deletion"
+
+
+def test_bulk_delete_users_out_of_org_ids_rejected(
+    client: TestClient,
+    db: Session,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """User IDs from a different organization are treated as invalid and return 404."""
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+    other_org = create_random_organization(db)
+
+    other_org_user_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=other_org.id,
+    )
+    other_org_user = crud.create_user(session=db, user_create=other_org_user_in)
+    assert other_org_user.id is not None
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/users/",
+        json=[other_org_user.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Users selected for deletion"
+
+
+def _create_deletable_user(
+    client: TestClient,
+    token: dict[str, str],
+    db: Session,
+) -> tuple[int, int]:
+    """Create a system_admin user in a fresh org; return (user_id, org_id)."""
+    org = create_random_organization(db)
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert role is not None
+    resp = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=token,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "full_name": random_lower_string(),
+            "organization_id": org.id,
+        },
+    )
+    assert resp.status_code == 200
+    assert org.id is not None
+    return resp.json()["id"], org.id
+
+
+def test_cannot_delete_user_with_tag(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    tag_type = TagType(
+        name=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+
+    tag = Tag(
+        name=random_lower_string(),
+        tag_type_id=tag_type.id,
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_tag_type(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    tag_type = TagType(
+        name=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(tag_type)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_entity_type(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(entity_type)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_entity(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    entity = Entity(
+        name=random_lower_string(),
+        created_by_id=user_id,
+    )
+    db.add(entity)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_test(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+        locale="en",
+    )
+    db.add(test)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_form(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(form)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_certificate(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        url="https://example.com/cert.pdf",
+        organization_id=org_id,
+        created_by_id=user_id,
+    )
+    db.add(certificate)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_cannot_delete_user_with_candidate_test(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    user_id, org_id = _create_deletable_user(client, get_user_superadmin_token, db)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+        locale="en",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    candidate = Candidate(organization_id=org_id)
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    assert test.id is not None
+    assert candidate.id is not None
+    candidate_test = CandidateTest(
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device=random_lower_string(),
+        consent=True,
+        start_time=datetime.now(),
+        admin_id=user_id,
+        question_revision_ids=[],
+        question_set_ids=[],
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    resp = client.delete(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert resp.status_code == 400
+    assert "cannot delete user" in resp.json()["detail"].lower()

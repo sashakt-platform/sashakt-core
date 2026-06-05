@@ -1,6 +1,6 @@
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlmodel import col, func, or_, select
@@ -10,7 +10,6 @@ from app.api.deps import (
     CurrentUser,
     Pagination,
     SessionDep,
-    get_current_active_superuser,
     permission_dependency,
 )
 from app.api.routes.utils import get_current_user_location_ids
@@ -30,9 +29,18 @@ from app.core.sorting import (
     create_sorting_dependency,
 )
 from app.models import (
+    CandidateTest,
+    Certificate,
     District,
+    Entity,
+    EntityType,
+    Form,
     Message,
+    QuestionRevision,
     State,
+    Tag,
+    TagType,
+    Test,
     UpdatePassword,
     User,
     UserCreate,
@@ -41,7 +49,7 @@ from app.models import (
     UserUpdateMe,
 )
 from app.models.role import Role
-from app.models.user import UserDistrict, UserPublicMe, UserState
+from app.models.user import DeleteUser, UserDistrict, UserPublicMe, UserState
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -614,7 +622,92 @@ def update_user(
     return user_public
 
 
-@router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
+def _is_user_referenced(session: SessionDep, user: User) -> bool:
+    """Return True if the user has associated records that block deletion."""
+    if user.id is None:
+        return False
+    uid = user.id
+    return bool(
+        session.exec(select(Tag.id).where(Tag.created_by_id == uid)).first()
+        or session.exec(select(TagType.id).where(TagType.created_by_id == uid)).first()
+        or session.exec(select(Entity.id).where(Entity.created_by_id == uid)).first()
+        or session.exec(
+            select(EntityType.id).where(EntityType.created_by_id == uid)
+        ).first()
+        or session.exec(select(Test.id).where(Test.created_by_id == uid)).first()
+        or session.exec(
+            select(QuestionRevision.id).where(QuestionRevision.created_by_id == uid)
+        ).first()
+        or session.exec(
+            select(Certificate.id).where(Certificate.created_by_id == uid)
+        ).first()
+        or session.exec(select(Form.id).where(Form.created_by_id == uid)).first()
+        or session.exec(
+            select(CandidateTest.id).where(CandidateTest.admin_id == uid)
+        ).first()
+    )
+
+
+def is_user_deletion_blocked(
+    session: SessionDep, current_user: CurrentUser, target_user: User
+) -> bool:
+    """Return True if the target user cannot be deleted by the current user."""
+    if target_user.id == current_user.id:
+        return True
+    if _is_user_referenced(session, target_user):
+        return True
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        try:
+            check_user_permission(session, current_user, target_user)
+        except HTTPException:
+            return True
+    return False
+
+
+@router.delete(
+    "/",
+    response_model=DeleteUser,
+    dependencies=[Depends(permission_dependency("delete_user"))],
+)
+def bulk_delete_users(
+    session: SessionDep,
+    current_user: CurrentUser,
+    user_ids: list[int] = Body(...),
+) -> DeleteUser:
+    success_count = 0
+    failure_list: list[UserPublic] = []
+
+    db_users = session.exec(
+        select(User)
+        .where(col(User.id).in_(user_ids))
+        .where(User.organization_id == current_user.organization_id)
+    ).all()
+
+    found_ids = {user.id for user in db_users}
+    missing_ids = set(user_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Users selected for deletion"
+        )
+
+    for user in db_users:
+        if is_user_deletion_blocked(session, current_user, user):
+            failure_list.append(crud.get_user_public(db_user=user, session=session))
+            continue
+        session.delete(user)
+        success_count += 1
+
+    session.commit()
+    return DeleteUser(
+        delete_success_count=success_count,
+        delete_failure_list=failure_list or None,
+    )
+
+
+@router.delete(
+    "/{user_id}", dependencies=[Depends(permission_dependency("delete_user"))]
+)
 def delete_user(
     session: SessionDep, current_user: CurrentUser, user_id: int
 ) -> Message:
@@ -624,13 +717,18 @@ def delete_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
-        check_user_permission(session, current_user, user)
-    if user == current_user:
+    if user.id == current_user.id:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
+    if _is_user_referenced(session, user):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete user: associated records exist. Reassign or remove them first.",
+        )
+    role = session.get(Role, current_user.role_id)
+    if role and role.name in (state_admin.name, test_admin.name):
+        check_user_permission(session, current_user, user)
     try:
         session.delete(user)
         session.commit()
