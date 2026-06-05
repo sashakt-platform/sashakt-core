@@ -44,7 +44,7 @@ from app.models import (
 )
 from app.models.candidate import CandidateTestProfile
 from app.models.entity import DeleteEntity, DeleteEntityType, EntityBulkUploadResponse
-from app.models.form import FormResponse
+from app.models.form import FormField, FormFieldType, FormResponse
 from app.models.location import Block, District, State
 from app.models.user import User
 
@@ -543,11 +543,19 @@ def update_entity(
 
 def is_entity_referenced(session: SessionDep, entity: Entity) -> bool:
     """Return True if the entity is referenced in FormResponse or CandidateTestProfile."""
-    form_response_ref = session.exec(
-        select(FormResponse).where(
-            FormResponse.responses["entity"].as_string() == str(entity.id)
-        )
-    ).first()
+    entity_field_names = session.exec(
+        select(FormField.name).where(FormField.field_type == FormFieldType.ENTITY)
+    ).all()
+
+    form_response_ref = any(
+        session.exec(
+            select(FormResponse).where(
+                FormResponse.responses[field_name].as_string() == str(entity.id)
+            )
+        ).first()
+        for field_name in entity_field_names
+    )
+
     legacy_ref = session.exec(
         select(CandidateTestProfile).where(CandidateTestProfile.entity_id == entity.id)
     ).first()

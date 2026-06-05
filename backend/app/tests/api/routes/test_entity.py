@@ -1781,6 +1781,184 @@ def test_bulk_delete_entity_invalid_ids(
     assert response.json()["detail"] == "Invalid Entities selected for deletion"
 
 
+def test_delete_entity_referenced_by_custom_field_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Entity stored under a non-default ENTITY field name (e.g. 'my_school') must block deletion."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+
+    form = Form(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    db.add(
+        FormField(
+            form_id=form.id,
+            field_type="entity",
+            label="My School",
+            name="my_school",
+            order=1,
+        )
+    )
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    assert (
+        client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={
+                "test_link_uuid": test_link.uuid,
+                "device_info": "example",
+                "form_responses": {"my_school": entity.id},
+            },
+        ).status_code
+        == 200
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/entity/{entity.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 400
+    assert "Cannot delete" in response.json()["detail"]
+
+
+def test_bulk_delete_entity_referenced_by_custom_field_name(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Bulk delete: entity referenced under a custom ENTITY field name appears in failure list."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    user_id = user_data["id"]
+
+    entity_type = EntityType(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(entity_type)
+    db.commit()
+    db.refresh(entity_type)
+
+    referenced_entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+    )
+    safe_entity = Entity(
+        name=random_lower_string(),
+        entity_type_id=entity_type.id,
+        created_by_id=user_id,
+    )
+    db.add_all([referenced_entity, safe_entity])
+    db.commit()
+    db.refresh(referenced_entity)
+    db.refresh(safe_entity)
+
+    form = Form(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    db.add(
+        FormField(
+            form_id=form.id,
+            field_type="entity",
+            label="My School",
+            name="my_school",
+            order=1,
+        )
+    )
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        link=random_lower_string(),
+        created_by_id=user_id,
+        is_active=True,
+        form_id=form.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    assert (
+        client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            json={
+                "test_link_uuid": test_link.uuid,
+                "device_info": "example",
+                "form_responses": {"my_school": referenced_entity.id},
+            },
+        ).status_code
+        == 200
+    )
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/entity/",
+        json=[safe_entity.id, referenced_entity.id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["delete_success_count"] == 1
+    assert response_data["delete_failure_list"] is not None
+    assert len(response_data["delete_failure_list"]) == 1
+    assert response_data["delete_failure_list"][0]["id"] == referenced_entity.id
+
+
 def test_import_entities_reject_non_csv_file(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
