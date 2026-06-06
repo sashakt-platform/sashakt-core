@@ -2,7 +2,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page
@@ -16,7 +16,7 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
-from app.api.routes.utils import get_current_time, get_current_user_location_ids
+from app.api.routes.utils import get_current_time
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
@@ -72,84 +72,6 @@ router = APIRouter(prefix="/test", tags=["Test"])
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
-
-
-def check_test_permission(
-    session: SessionDep,
-    current_user: CurrentUser,
-    test: Test,
-    *,
-    cached_user_location_ids: set[int] | None = None,
-    cached_user_location_level: Literal["state", "district"] | None = None,
-) -> None:
-    """Check if the current user has permission to modify the test.
-    A district level user can only modify tests of same district.
-    A state level user can only modify tests of same state."""
-
-    user_location_level: Literal["state", "district"] | None = None
-    user_location_ids: set[int] | None = None
-    exception_message = "State/test-admin cannot modify/delete general tests or tests outside their location."
-
-    if cached_user_location_level and cached_user_location_ids:
-        user_location_level = cached_user_location_level
-        user_location_ids = cached_user_location_ids
-    else:
-        user_location_level, user_location_ids = get_current_user_location_ids(
-            current_user
-        )
-    # If the user has no scoped locations, deny (matches “cannot modify general/out of scope”)
-    if not user_location_level or not user_location_ids:
-        raise HTTPException(
-            403,
-            exception_message,
-        )
-    test_district_ids: set[int] = set()
-
-    if user_location_level == "district":
-        district_rows = session.exec(
-            select(TestDistrict.district_id).where(TestDistrict.test_id == test.id)
-        ).all()
-        for row in district_rows:
-            district_id = row[0] if isinstance(row, tuple) else row
-            if district_id is not None:
-                test_district_ids.add(int(district_id))
-
-        district_out_of_scope = (not test_district_ids) or (
-            not test_district_ids.issubset(user_location_ids)
-        )
-        if district_out_of_scope:
-            raise HTTPException(
-                403,
-                exception_message,
-            )
-    else:
-        test_state_ids: set[int] = set()
-        state_rows = session.exec(
-            select(TestState.state_id).where(TestState.test_id == test.id)
-        ).all()
-        for row in state_rows:
-            state_id = row[0] if isinstance(row, tuple) else row
-            if state_id is not None:
-                test_state_ids.add(int(state_id))
-        # also include states derived from test districts
-        district_state_rows = session.exec(
-            select(District.state_id)
-            .join(TestDistrict)
-            .where(TestDistrict.district_id == District.id)
-            .where(TestDistrict.test_id == test.id)
-        ).all()
-        for row in district_state_rows:
-            district_state_id = row[0] if isinstance(row, tuple) else row
-            if district_state_id is not None:
-                test_state_ids.add(int(district_state_id))
-        state_out_of_scope = (not test_state_ids) or (
-            not test_state_ids.issubset(user_location_ids)
-        )
-        if state_out_of_scope:
-            raise HTTPException(
-                403,
-                exception_message,
-            )
 
 
 def check_test_ownership(
@@ -901,11 +823,13 @@ def get_test(
             )
 
             # show only tests matching users district OR tests matching users state
+            # OR tests created by the user (regardless of location)
             # general (unmapped) tests are intentionally excluded for district-scoped users
             query = query.where(
                 or_(
                     col(Test.id).in_(district_subquery),
                     col(Test.id).in_(state_subquery),
+                    Test.created_by_id == current_user.id,
                 )
             )
         else:
@@ -930,7 +854,13 @@ def get_test(
                 )
 
                 # only show tests explicitly mapped to the user's state
-                query = query.where(col(Test.id).in_(state_subquery))
+                # OR tests created by the user (regardless of location)
+                query = query.where(
+                    or_(
+                        col(Test.id).in_(state_subquery),
+                        Test.created_by_id == current_user.id,
+                    )
+                )
 
         # if no district or state assigned, show all tests (no filter applied)
 
@@ -1109,16 +1039,17 @@ def get_or_create_test_link(
     dependencies=[Depends(permission_dependency("read_test"))],
 )
 def get_test_by_id(
-    test_id: int, session: SessionDep, current_user: CurrentUser
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
 ) -> TestPublic:
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-
-    # check location based access for state/district admins
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
-        check_test_permission(session, current_user, test)
+    if test.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this test"
+        )
 
     return build_test_public_response(session, test)
 
@@ -1138,7 +1069,7 @@ def update_test(
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    role = check_test_ownership(session, current_user, test)
+    check_test_ownership(session, current_user, test)
     membership_fields = {"question_revision_ids", "question_sets"}
     membership_update_requested = bool(
         membership_fields.intersection(test_update.model_fields_set)
@@ -1153,9 +1084,6 @@ def update_test(
     else:
         question_revision_ids = []
         question_sets = []
-    if role and role.name in (state_admin.name, test_admin.name):
-        check_test_permission(session, current_user, test)
-
     if (
         "pause_timer_when_inactive" in test_update.model_fields_set
         and test_update.pause_timer_when_inactive != test.pause_timer_when_inactive
@@ -1371,9 +1299,7 @@ def delete_test(
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
-    role = check_test_ownership(session, current_user, test, action="delete")
-    if role and role.name in (state_admin.name, test_admin.name):
-        check_test_permission(session, current_user, test)
+    check_test_ownership(session, current_user, test, action="delete")
 
     if check_linked_question(session, test_id):
         raise HTTPException(
@@ -1416,26 +1342,11 @@ def bulk_delete_question(
         )
 
     role = session.get(Role, current_user.role_id)
-    admin_location_ids: set[int] | None = None
-    admin_location_level: Literal["state", "district"] | None = None
-
-    if role and role.name in (state_admin.name, test_admin.name):
-        admin_location_level, admin_location_ids = get_current_user_location_ids(
-            current_user
-        )
     for test in db_test:
         try:
             check_test_ownership(
                 session, current_user, test, action="delete", role=role
             )
-            if admin_location_ids:
-                check_test_permission(
-                    session,
-                    current_user,
-                    test,
-                    cached_user_location_ids=admin_location_ids,
-                    cached_user_location_level=admin_location_level,
-                )
 
             if test.id is not None and check_linked_question(session, test.id):
                 add_test_to_failure_list(session, test, failure_list)
