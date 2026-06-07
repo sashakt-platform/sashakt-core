@@ -196,7 +196,7 @@ async def create_organization(
     logo: UploadFile | None = File(
         None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
     ),
-) -> Organization:
+) -> OrganizationPublic:
     organization = Organization(
         name=name,
         description=description,
@@ -230,7 +230,7 @@ async def create_organization(
             delete_logo_file(new_logo_path)
         raise
 
-    return organization
+    return transform_organizations_to_public([organization])[0]
 
 
 # Get all Organizations
@@ -392,11 +392,13 @@ def get_organization_aggregated_stats_for_current_user(
     response_model=OrganizationPublic,
     dependencies=[Depends(permission_dependency("read_organization"))],
 )
-def get_organization_by_id(organization_id: int, session: SessionDep) -> Organization:
+def get_organization_by_id(
+    organization_id: int, session: SessionDep
+) -> OrganizationPublic:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
-    return organization
+    return transform_organizations_to_public([organization])[0]
 
 
 # Update a Organization
@@ -416,7 +418,7 @@ async def update_organization(
     logo: UploadFile | None = File(
         None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
     ),
-) -> Organization:
+) -> OrganizationPublic:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -456,7 +458,7 @@ async def update_organization(
     if new_logo_path and old_logo_path and old_logo_path != new_logo_path:
         delete_logo_file(old_logo_path)
 
-    return organization
+    return transform_organizations_to_public([organization])[0]
 
 
 # Set Visibility of Organization
@@ -469,7 +471,7 @@ def visibility_organization(
     organization_id: int,
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of organization"),
-) -> Organization:
+) -> OrganizationPublic:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -477,7 +479,7 @@ def visibility_organization(
     session.add(organization)
     session.commit()
     session.refresh(organization)
-    return organization
+    return transform_organizations_to_public([organization])[0]
 
 
 # Delete a Organization

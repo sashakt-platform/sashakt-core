@@ -516,7 +516,8 @@ def test_update_organization_by_id_without_logo(
     data = response.json()
     assert response.status_code == status.HTTP_200_OK
     assert data["name"] == new_name
-    assert data["logo"] == existing_logo
+    assert data["logo"] is not None
+    assert data["logo"].endswith(existing_logo)
 
 
 def test_update_organization_by_id_logo_replaces_old(
