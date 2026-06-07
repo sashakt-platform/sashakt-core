@@ -302,8 +302,9 @@ def get_absolute_logo_url(relative_path: str | None) -> str | None:
     if not relative_path:
         return None
 
-    scheme = "https" if settings.ENVIRONMENT != "local" else "http"
-    return f"{scheme}://{settings.DOMAIN}{relative_path}"
+    if settings.ENVIRONMENT == "local":
+        return f"http://{settings.DOMAIN}:8000{relative_path}"
+    return f"https://{settings.DOMAIN}{relative_path}"
 
 
 # Platform guide PDF functions
@@ -418,5 +419,6 @@ def get_absolute_platform_guide_url(relative_path: str | None) -> str | None:
     if not relative_path:
         return None
 
-    scheme = "https" if settings.ENVIRONMENT != "local" else "http"
-    return f"{scheme}://{settings.DOMAIN}{relative_path}"
+    if settings.ENVIRONMENT == "local":
+        return f"http://{settings.DOMAIN}:8000{relative_path}"
+    return f"https://{settings.DOMAIN}{relative_path}"

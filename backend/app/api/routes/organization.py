@@ -26,10 +26,8 @@ from app.models import (
     AggregatedData,
     Message,
     Organization,
-    OrganizationCreate,
     OrganizationPublic,
     OrganizationSettings,
-    OrganizationUpdate,
     Question,
     Test,
     User,
@@ -188,22 +186,51 @@ async def delete_current_organization_logo(
     response_model=OrganizationPublic,
     dependencies=[Depends(permission_dependency("create_organization"))],
 )
-def create_organization(
-    organization_create: OrganizationCreate, session: SessionDep
-) -> Organization:
-    organization = Organization.model_validate(organization_create)
+async def create_organization(
+    *,
+    session: SessionDep,
+    name: str = Form(...),
+    description: str | None = Form(None),
+    is_active: bool = Form(True),
+    shortcode: str | None = Form(None),
+    logo: UploadFile | None = File(
+        None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
+    ),
+) -> OrganizationPublic:
+    organization = Organization(
+        name=name,
+        description=description,
+        is_active=is_active,
+        shortcode=shortcode,
+    )
     session.add(organization)
     session.flush()
     assert organization.id is not None
+
+    new_logo_path = None
+    if logo is not None:
+        file_content, file_ext = await validate_logo_upload(logo)
+        new_logo_path = save_logo_file(organization.id, file_content, file_ext)
+        organization.logo = new_logo_path
+        session.add(organization)
+
     session.add(
         OrganizationSettings(
             organization_id=organization.id,
             settings=copy.deepcopy(DEFAULT_ORGANIZATION_SETTINGS),
         )
     )
-    session.commit()
-    session.refresh(organization)
-    return organization
+
+    try:
+        session.commit()
+        session.refresh(organization)
+    except Exception:
+        session.rollback()
+        if new_logo_path:
+            delete_logo_file(new_logo_path)
+        raise
+
+    return transform_organizations_to_public([organization])[0]
 
 
 # Get all Organizations
@@ -365,11 +392,13 @@ def get_organization_aggregated_stats_for_current_user(
     response_model=OrganizationPublic,
     dependencies=[Depends(permission_dependency("read_organization"))],
 )
-def get_organization_by_id(organization_id: int, session: SessionDep) -> Organization:
+def get_organization_by_id(
+    organization_id: int, session: SessionDep
+) -> OrganizationPublic:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
-    return organization
+    return transform_organizations_to_public([organization])[0]
 
 
 # Update a Organization
@@ -378,20 +407,58 @@ def get_organization_by_id(organization_id: int, session: SessionDep) -> Organiz
     response_model=OrganizationPublic,
     dependencies=[Depends(permission_dependency("update_organization"))],
 )
-def update_organization(
+async def update_organization(
+    *,
     organization_id: int,
-    updated_data: OrganizationUpdate,
     session: SessionDep,
-) -> Organization:
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    is_active: bool | None = Form(None),
+    shortcode: str | None = Form(None),
+    logo: UploadFile | None = File(
+        None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
+    ),
+) -> OrganizationPublic:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
-    organization_data = updated_data.model_dump(exclude_unset=True)
-    organization.sqlmodel_update(organization_data)
-    session.add(organization)
-    session.commit()
-    session.refresh(organization)
-    return organization
+
+    old_logo_path = organization.logo
+    new_logo_path = None
+
+    if logo is not None:
+        file_content, file_ext = await validate_logo_upload(logo)
+        new_logo_path = save_logo_file(organization_id, file_content, file_ext)
+
+    update_data: dict[str, object] = {}
+    if name is not None:
+        update_data["name"] = name
+    if description is not None:
+        update_data["description"] = description
+    if is_active is not None:
+        update_data["is_active"] = is_active
+    if shortcode is not None:
+        update_data["shortcode"] = shortcode
+    if new_logo_path is not None:
+        update_data["logo"] = new_logo_path
+
+    if update_data:
+        organization.sqlmodel_update(update_data)
+        session.add(organization)
+
+    try:
+        session.commit()
+        session.refresh(organization)
+    except Exception:
+        session.rollback()
+        if new_logo_path:
+            delete_logo_file(new_logo_path)
+        raise
+
+    if new_logo_path and old_logo_path and old_logo_path != new_logo_path:
+        delete_logo_file(old_logo_path)
+
+    return transform_organizations_to_public([organization])[0]
 
 
 # Set Visibility of Organization
@@ -404,7 +471,7 @@ def visibility_organization(
     organization_id: int,
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of organization"),
-) -> Organization:
+) -> OrganizationPublic:
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -412,7 +479,7 @@ def visibility_organization(
     session.add(organization)
     session.commit()
     session.refresh(organization)
-    return organization
+    return transform_organizations_to_public([organization])[0]
 
 
 # Delete a Organization

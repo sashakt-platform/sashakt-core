@@ -110,7 +110,7 @@ def test_create_organization_initializes_settings_row(
     name = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={"name": name, "description": random_lower_string()},
+        data={"name": name, "description": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200

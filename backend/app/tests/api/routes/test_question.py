@@ -43,7 +43,7 @@ def test_create_question(
     org_name = random_lower_string()
     org_response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={"name": org_name},
+        data={"name": org_name},
         headers=get_user_superadmin_token,
     )
     org_data = org_response.json()
@@ -136,7 +136,7 @@ def test_create_subjective_question_with_options_should_fail(
 ) -> None:
     org_response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={"name": random_lower_string()},
+        data={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     org_id = org_response.json()["id"]

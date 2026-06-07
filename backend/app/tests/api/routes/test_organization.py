@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -44,7 +47,7 @@ def test_create_organization(
     description = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={
+        data={
             "name": name,
             "description": description,
         },
@@ -59,7 +62,7 @@ def test_create_organization(
     assert data["is_active"] is True
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={
+        data={
             "name": name,
             "description": description,
         },
@@ -68,6 +71,55 @@ def test_create_organization(
     data = response.json()
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert data["detail"] == "User Not Permitted"
+
+
+def test_create_organization_with_logo(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    logo_file = create_test_image(width=200, height=200, format="PNG")
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        data={"name": random_lower_string()},
+        files={"logo": ("logo.png", logo_file, "image/png")},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_create_organization_logo_cleanup_on_db_failure(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    logo_file = create_test_image(width=100, height=100, format="PNG")
+    with patch("app.api.routes.organization.delete_logo_file") as mock_delete:
+        with patch.object(db, "commit", side_effect=Exception("simulated DB failure")):
+            with pytest.raises(Exception, match="simulated DB failure"):
+                client.post(
+                    f"{settings.API_V1_STR}/organization/",
+                    data={"name": random_lower_string()},
+                    files={"logo": ("logo.png", logo_file, "image/png")},
+                    headers=get_user_superadmin_token,
+                )
+    mock_delete.assert_called_once()
+
+
+def test_create_organization_without_logo(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        data={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is None
 
 
 def test_read_organization(
@@ -386,7 +438,7 @@ def test_update_organization(
     db.commit()
     response = client.put(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
-        json={"name": updated_name, "description": None},
+        data={"name": updated_name},
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -398,7 +450,7 @@ def test_update_organization(
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
-        json={"name": jal_vikas.name, "description": inital_description},
+        data={"name": jal_vikas.name, "description": inital_description},
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -409,7 +461,7 @@ def test_update_organization(
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{jal_vikas.id}",
-        json={"name": jal_vikas.name, "description": updated_description},
+        data={"name": jal_vikas.name, "description": updated_description},
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -417,6 +469,165 @@ def test_update_organization(
     assert data["name"] == jal_vikas.name
     assert data["id"] == jal_vikas.id
     assert data["description"] == updated_description
+
+
+def test_update_organization_by_id_with_logo(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    logo_file = create_test_image(width=200, height=200, format="PNG")
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"name": random_lower_string()},
+        files={"logo": ("logo.png", logo_file, "image/png")},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_update_organization_by_id_without_logo(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    existing_logo = "/uploads/organizations/logos/org_keep.png"
+    org = Organization(name=random_lower_string(), logo=existing_logo)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    new_name = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"name": new_name},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["name"] == new_name
+    assert data["logo"] is not None
+    assert data["logo"].endswith(existing_logo)
+
+
+def test_update_organization_by_id_logo_replaces_old(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    old_logo = "/uploads/organizations/logos/org_old.png"
+    org = Organization(name=random_lower_string(), logo=old_logo)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    new_logo = create_test_image(width=150, height=150, format="PNG")
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        files={"logo": ("new_logo.png", new_logo, "image/png")},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["logo"] is not None
+    assert data["logo"] != old_logo
+    assert "/uploads/organizations/logos/" in data["logo"]
+
+
+def test_update_organization_by_id_not_found(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/0",
+        data={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Organization not found"
+
+
+def test_update_organization_by_id_deleted_org(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string(), is_deleted=True)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"name": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Organization not found"
+
+
+def test_update_organization_by_id_is_active(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string(), is_active=True)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"is_active": "false"},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["is_active"] is False
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"is_active": "true"},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["is_active"] is True
+
+
+def test_update_organization_by_id_shortcode(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    shortcode = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{org.id}",
+        data={"shortcode": shortcode},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == status.HTTP_200_OK
+    assert data["shortcode"] == shortcode
 
 
 def test_visibility_organization(
