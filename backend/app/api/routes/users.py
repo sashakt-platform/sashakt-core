@@ -535,7 +535,6 @@ def update_user(
     """
     Update a user.
     """
-
     db_user = session.get(User, user_id)
     if not db_user:
         raise HTTPException(
@@ -582,14 +581,17 @@ def update_user(
                 ).all()
             )
             db_user.states = creator_states
-            creator_districts = list(
-                session.exec(
-                    select(District)
-                    .join(UserDistrict)
-                    .where(UserDistrict.user_id == current_user.id)
-                ).all()
+            db_user.districts = (
+                list(
+                    session.exec(
+                        select(District).where(
+                            col(District.id).in_(user_in.district_ids)
+                        )
+                    ).all()
+                )
+                if user_in.district_ids
+                else []
             )
-            db_user.districts = creator_districts
         else:
             if not user_in.state_ids:
                 db_user.states = []

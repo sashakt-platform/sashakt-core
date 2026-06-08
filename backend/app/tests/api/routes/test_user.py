@@ -37,6 +37,7 @@ from app.tests.utils.user import (
     create_random_user,
     get_current_user_data,
     get_user_token,
+    user_authentication_headers,
 )
 from app.tests.utils.utils import (
     assert_paginated_response,
@@ -4188,3 +4189,119 @@ def test_cannot_delete_user_with_candidate_test(
     )
     assert resp.status_code == 400
     assert "cannot delete user" in resp.json()["detail"].lower()
+
+
+def test_state_admin_creates_and_updates_test_admin_district(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: Session,
+) -> None:
+    """
+    State admin of state X:
+    1. Creates a test admin scoped to district Y (in state X)
+    2. Updates the test admin's district from Y to Z (also in state X)
+    """
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        superadmin_data = get_current_user_data(client, get_user_superadmin_token)
+        org_id = superadmin_data["organization_id"]
+
+        # Set up geography: country → state X → districts Y and Z
+        country = Country(name=random_lower_string(), is_active=True)
+        db.add(country)
+        db.commit()
+        db.refresh(country)
+
+        state_x = State(
+            name=random_lower_string(), is_active=True, country_id=country.id
+        )
+        db.add(state_x)
+        db.commit()
+        db.refresh(state_x)
+
+        district_y = District(
+            name=random_lower_string(), is_active=True, state_id=state_x.id
+        )
+        district_z = District(
+            name=random_lower_string(), is_active=True, state_id=state_x.id
+        )
+        db.add_all([district_y, district_z])
+        db.commit()
+        db.refresh(district_y)
+        db.refresh(district_z)
+
+        # Create state admin scoped to state X
+        state_admin_role = db.exec(
+            select(Role).where(Role.name == "state_admin")
+        ).first()
+        assert state_admin_role is not None
+
+        state_admin_email = random_email()
+        state_admin_password = random_lower_string()
+
+        r = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=get_user_superadmin_token,
+            json={
+                "email": state_admin_email,
+                "password": state_admin_password,
+                "phone": random_lower_string(),
+                "full_name": random_lower_string(),
+                "role_id": state_admin_role.id,
+                "organization_id": org_id,
+                "state_ids": [state_x.id],
+            },
+        )
+        assert r.status_code == 200
+        assert {s["id"] for s in r.json()["states"]} == {state_x.id}
+
+        state_admin_headers = user_authentication_headers(
+            client=client,
+            email=state_admin_email,
+            password=state_admin_password,
+        )
+
+        # Step 1: state admin creates a test admin for district Y
+        test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert test_admin_role is not None
+
+        r = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=state_admin_headers,
+            json={
+                "email": random_email(),
+                "password": random_lower_string(),
+                "phone": random_lower_string(),
+                "full_name": random_lower_string(),
+                "role_id": test_admin_role.id,
+                "organization_id": org_id,
+                "district_ids": [district_y.id],
+            },
+        )
+        assert r.status_code == 200
+        test_admin_data = r.json()
+        test_admin_id = test_admin_data["id"]
+
+        assert {d["id"] for d in test_admin_data["districts"]} == {district_y.id}
+        assert {s["id"] for s in test_admin_data["states"]} == {state_x.id}
+
+        # Step 2: state admin updates test admin's district from Y to Z
+        r = client.patch(
+            f"{settings.API_V1_STR}/users/{test_admin_id}",
+            headers=state_admin_headers,
+            json={
+                "full_name": test_admin_data["full_name"],
+                "phone": test_admin_data["phone"],
+                "role_id": test_admin_role.id,
+                "district_ids": [district_z.id],
+            },
+        )
+        assert r.status_code == 200
+        updated = r.json()
+
+        assert {d["id"] for d in updated["districts"]} == {district_z.id}
+        assert district_y.id not in {d["id"] for d in updated["districts"]}
+        assert {s["id"] for s in updated["states"]} == {state_x.id}
