@@ -5250,6 +5250,34 @@ What is 10+10?,20,10,30,40,A,Math"""
             os.unlink(temp_file_path)
 
 
+def test_get_bulk_upload_template(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/bulk-upload/template",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "attachment" in response.headers["content-disposition"]
+
+    reader = csv.DictReader(io.StringIO(response.text))
+    expected_headers = [
+        "S.No",
+        "State",
+        "Questions",
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D",
+        "Correct Option",
+        "Tags",
+    ]
+    assert reader.fieldnames == expected_headers
+    rows = list(reader)
+    assert len(rows) == 1
+
+
 def test_bulk_upload_questions_with_extra_column(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:

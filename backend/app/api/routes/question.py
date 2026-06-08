@@ -15,6 +15,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
+from fastapi.responses import Response
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
@@ -1284,6 +1285,44 @@ def update_question_tags(
 
     # Return the new list of tags for the question
     return get_question_tags(question_id=question_id, session=session)
+
+
+@router.get("/bulk-upload/template")
+async def get_bulk_upload_template(_current_user: CurrentUser) -> Response:
+    headers = [
+        "S.No",
+        "State",
+        "Questions",
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D",
+        "Correct Option",
+        "Tags",
+    ]
+    sample = [
+        "1",
+        "Haryana",
+        "What is the capital of India?",
+        "Mumbai",
+        "Delhi",
+        "Chennai",
+        "Kolkata",
+        "B",
+        "difficulty:easy|subject:geography",
+    ]
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    writer.writerow(sample)
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=bulk_upload_template.csv"
+        },
+    )
 
 
 @router.post("/bulk-upload", response_model=BulkUploadQuestionsResponse)
