@@ -10,9 +10,14 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
+from app.crud import organization_settings as crud_settings
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
+from app.models.organization_settings import (
+    PlatformNomenclatureSetting,
+    PlatformNomenclatureValue,
+)
 from app.models.question import (
     Question,
     QuestionLocation,
@@ -5276,6 +5281,92 @@ def test_get_bulk_upload_template(
     assert reader.fieldnames == expected_headers
     rows = list(reader)
     assert len(rows) == 1
+
+
+def test_get_bulk_upload_template_custom_nomenclature(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    db: SessionDep,
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    row = crud_settings.get_or_create(session=db, organization_id=org_id)
+    payload = crud_settings.get_payload(session=db, organization_id=org_id)
+    assert payload is not None
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom", value=PlatformNomenclatureValue(tags="Labels")
+    )
+    row.settings = payload.model_dump(mode="json")
+    db.add(row)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/bulk-upload/template",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    reader = csv.DictReader(io.StringIO(response.text))
+    assert reader.fieldnames is not None
+    assert reader.fieldnames[-1] == "Labels"
+
+
+def test_bulk_upload_questions_with_custom_nomenclature_column(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+    state = State(name="Rajasthan", country_id=india.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+    tag_type = TagType(
+        name="Subject",
+        description="Subject tag type",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+
+    row = crud_settings.get_or_create(session=db, organization_id=org_id)
+    payload = crud_settings.get_payload(session=db, organization_id=org_id)
+    assert payload is not None
+    payload.platform_nomenclature = PlatformNomenclatureSetting(
+        mode="custom", value=PlatformNomenclatureValue(tags="Labels")
+    )
+    row.settings = payload.model_dump(mode="json")
+    db.add(row)
+    db.commit()
+
+    csv_content = "Questions,Option A,Option B,Option C,Option D,Correct Option,Labels,State\nWhat is 2+2?,4,3,5,8,A,Subject:Math,Rajasthan\n"
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success_questions"] == 1
+        assert data["failed_questions"] == 0
+    finally:
+        import os
+
+        os.unlink(temp_file_path)
 
 
 def test_bulk_upload_questions_with_extra_column(
