@@ -126,7 +126,7 @@ def get_countries(
     params: Pagination = Depends(),
     is_active: bool | None = None,
 ) -> Page[CountryPublic]:
-    """List all countries, optionally filtered by active status."""
+    """List countries."""
     query = select(Country)
 
     if is_active is not None:
@@ -217,7 +217,7 @@ def get_state(
     country: int | None = None,
     test_id: int | None = Query(None),
 ) -> Page[StatePublic]:
-    """List states with optional filters; scoped by role or test location."""
+    """List states."""
     query = select(State)
 
     if is_active is not None:
@@ -348,7 +348,7 @@ def get_district(
     state_ids: list[int] | None = Query(None),
     test_id: int | None = Query(None),
 ) -> Page[DistrictPublic]:
-    """List districts with optional filters; scoped by role or test location."""
+    """List districts."""
     query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
@@ -467,7 +467,7 @@ def get_block(
     district_ids: list[int] | None = Query(None),
     test_id: int | None = Query(None),
 ) -> Page[BlockPublic]:
-    """List blocks with optional filters; optionally scoped to a test's location."""
+    """List blocks."""
     query = select(Block)
 
     if is_active is not None:
@@ -554,7 +554,7 @@ async def import_blocks_from_csv(
         ..., description="CSV file with block_name, district_name, state_name"
     ),
 ) -> BlockBulkUploadResponse:
-    """Bulk-import blocks from a CSV file (columns: block_name, district_name, state_name)."""
+    """Bulk-import blocks from a CSV file."""
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are allowed")
 

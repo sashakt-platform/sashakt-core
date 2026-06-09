@@ -141,7 +141,7 @@ def create_tagtype(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TagType:
-    """Create a new tag type for the organization."""
+    """Create a new tag type."""
     normalized_name = tagtype_create.name.strip().lower()
     existing = session.exec(
         select(TagType)
@@ -176,7 +176,7 @@ def get_tagtype(
     params: Pagination = Depends(),
     name: str | None = None,
 ) -> Page[TagTypePublicWithTags]:
-    """List tag types (with their tags) for the current organization."""
+    """List tag types."""
     query = (
         select(TagType)
         .options(selectinload(TagType.tags))  # type: ignore[arg-type]
@@ -261,7 +261,7 @@ def visibility_tagtype(
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of TagType"),
 ) -> TagType:
-    """Toggle the active/inactive visibility of a tag type."""
+    """Set tag type visibility."""
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype:
         raise HTTPException(status_code=404, detail="Tag Type not found")
@@ -276,7 +276,7 @@ def visibility_tagtype(
     "/{tagtype_id}", dependencies=[Depends(permission_dependency("delete_tag"))]
 )
 def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
-    """Delete a tag type (fails if it still has associated tags)."""
+    """Delete a tag type."""
     tagtype = session.get(TagType, tagtype_id)
     if not tagtype:
         raise HTTPException(status_code=404, detail="Tag Type not found")
@@ -345,7 +345,7 @@ def create_tag(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TagPublic:
-    """Create a new tag, optionally associated with a tag type."""
+    """Create a new tag."""
     tag_type = None
     tag_type_id = tag_create.tag_type_id
     if tag_type_id is not None:
@@ -405,7 +405,7 @@ def get_tags(
     name: str | None = None,
     tag_type_ids: list[int] | None = Query(None),
 ) -> Page[TagPublic]:
-    """List active tags for the current organization, with optional name/type filters."""
+    """List tags."""
     query = (
         select(Tag)
         .options(selectinload(Tag.tag_type))
@@ -514,7 +514,7 @@ def visibility_tag(
     current_user: CurrentUser,
     is_active: bool = Query(False, description="Set visibility of Tag"),
 ) -> TagPublic:
-    """Toggle the active/inactive visibility of a tag."""
+    """Set tag visibility."""
     tag = session.get(Tag, tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -536,7 +536,7 @@ def visibility_tag(
     "/{tag_id}", dependencies=[Depends(permission_dependency("delete_tag"))]
 )
 def delete_tag(tag_id: int, session: SessionDep) -> Message:
-    """Delete a tag (fails if linked to a question or test)."""
+    """Delete a tag."""
     tag = session.get(Tag, tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -561,7 +561,7 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
 def bulk_delete_tag(
     session: SessionDep, current_user: CurrentUser, tag_ids: list[int] = Body(...)
 ) -> DeleteTag:
-    """Delete multiple tags; skips any linked to questions or tests."""
+    """Delete multiple tags."""
     success_count = 0
     failure_list = []
     db_tag = session.exec(

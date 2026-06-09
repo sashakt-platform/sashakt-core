@@ -110,7 +110,7 @@ def update_organization_settings(
     current_user: CurrentUser,
     permissions: list[str] = Depends(get_user_permissions),
 ) -> OrganizationSettingsPublic:
-    """Update configurable settings for an organization (file path is preserved; use dedicated endpoints for files)."""
+    """Update organization settings."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_update_permission_and_scope(
         current_user=current_user,
@@ -150,7 +150,7 @@ async def upload_platform_guide(
         ..., description="Platform guide PDF (max 10 MB, application/pdf)"
     ),
 ) -> OrganizationSettingsPublic:
-    """Upload or replace the platform guide PDF for an organization."""
+    """Upload the platform guide."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_update_permission_and_scope(
         current_user=current_user,
@@ -193,7 +193,7 @@ def delete_platform_guide(
     current_user: CurrentUser,
     permissions: list[str] = Depends(get_user_permissions),
 ) -> OrganizationSettingsPublic:
-    """Remove the platform guide PDF for an organization."""
+    """Delete the platform guide."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_update_permission_and_scope(
         current_user=current_user,
