@@ -118,6 +118,7 @@ def create_entitytype(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> EntityType:
+    """Create a new entity type for the current user's organization."""
     normalized_name = entitytype_create.name.strip().lower()
     organization_id = current_user.organization_id
     existing = session.exec(
@@ -154,6 +155,7 @@ def get_entitytype(
     name: str | None = None,
     is_active: bool | None = Query(None),
 ) -> Page[EntityTypeListPublic]:
+    """List entity types for the current organization, with entity count per type."""
     query = (
         select(EntityType, func.count(col(Entity.id)).label("total_records"))
         .outerjoin(Entity, col(Entity.entity_type_id) == EntityType.id)
@@ -188,6 +190,7 @@ def get_entitytype_by_id(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> EntityType:
+    """Retrieve an entity type by ID."""
     entitytype = session.get(EntityType, entitytype_id)
     if not entitytype or entitytype.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="EntityType not found")
@@ -205,6 +208,7 @@ def update_entitytype(
     updated_data: EntityTypeUpdate,
     session: SessionDep,
 ) -> EntityType:
+    """Update an entity type's fields."""
     entitytype = session.get(EntityType, entitytype_id)
     if not entitytype:
         raise HTTPException(status_code=404, detail="EntityType not found")
@@ -237,6 +241,7 @@ def bulk_delete_entitytype(
     current_user: CurrentUser,
     entitytype_ids: list[int] = Body(...),
 ) -> DeleteEntityType:
+    """Delete multiple entity types; skips any that still have associated entities."""
     success_count = 0
     failure_list: list[EntityTypePublic] = []
 
@@ -277,6 +282,7 @@ def bulk_delete_entitytype(
     "/{entitytype_id}", dependencies=[Depends(permission_dependency("delete_entity"))]
 )
 def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
+    """Delete an entity type (fails if it still has associated entities)."""
     entitytype = session.get(EntityType, entitytype_id)
     if not entitytype:
         raise HTTPException(status_code=404, detail="EntityType not found")
@@ -303,6 +309,7 @@ def create_entity(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> EntityPublic:
+    """Create a new entity under a given entity type."""
     entity_type_id = entity_create.entity_type_id
     if entity_type_id is None:
         raise HTTPException(
@@ -380,6 +387,7 @@ def get_entities(
     test_link: str | None = Query(None, description="UUID of the TestLink (QR code)"),
     is_active: bool | None = Query(None),
 ) -> Page[EntityPublic]:
+    """List entities scoped to the organization or a test link (open candidate flow)."""
     link: TestLink | None = None
     if test_link is not None:
         link = session.exec(select(TestLink).where(TestLink.uuid == test_link)).first()
@@ -466,6 +474,7 @@ def get_entity_by_id(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> EntityPublic:
+    """Retrieve a single entity by ID."""
     entity = session.get(Entity, entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -504,6 +513,7 @@ def update_entity(
     updated_data: EntityUpdate,
     session: SessionDep,
 ) -> EntityPublic:
+    """Update an entity's fields."""
     entity = session.get(Entity, entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -596,6 +606,7 @@ def bulk_delete_entity(
     current_user: CurrentUser,
     entity_ids: list[int] = Body(...),
 ) -> DeleteEntity:
+    """Delete multiple entities; skips any that are still referenced by candidate profiles or form responses."""
     success_count = 0
     failure_list: list[EntityPublic] = []
 
@@ -641,6 +652,7 @@ def bulk_delete_entity(
     "/{entity_id}", dependencies=[Depends(permission_dependency("delete_entity"))]
 )
 def delete_entity(entity_id: int, session: SessionDep) -> Message:
+    """Delete an entity (fails if referenced by a candidate profile or form response)."""
     entity = session.get(Entity, entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -670,6 +682,7 @@ async def import_entities_from_csv(
         description="CSV file with entity_name, entity_type_name, block_name, district_name, state_name",
     ),
 ) -> EntityBulkUploadResponse:
+    """Bulk-import entities from a CSV file (columns: entity_name, entity_type_name, block_name, district_name, state_name)."""
     user_id = current_user.id
     user = session.get(User, user_id)
     if not user:

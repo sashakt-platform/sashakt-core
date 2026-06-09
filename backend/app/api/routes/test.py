@@ -651,6 +651,7 @@ def create_test(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TestPublic:
+    """Create a new test with questions, settings, and optional location scoping."""
     question_revision_ids, question_sets = validate_test_membership_payload(
         session,
         question_revision_ids=test_create.question_revision_ids or [],
@@ -773,6 +774,7 @@ def get_test(
     is_active: bool | None = None,
     my_tests: bool | None = None,
 ) -> Page[TestPublic]:
+    """List tests for the current organization with rich filtering and sorting support."""
     query = (
         select(Test)
         .options(
@@ -1043,6 +1045,7 @@ def get_test_by_id(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TestPublic:
+    """Retrieve a test by ID."""
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
@@ -1065,6 +1068,7 @@ def update_test(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TestPublic:
+    """Update a test's configuration, questions, and location scoping."""
     test = session.get(Test, test_id)
 
     if not test:
@@ -1276,6 +1280,7 @@ def visibility_test(
     current_user: CurrentUser,
     is_active: bool = Query(False, description="Set visibility of Test"),
 ) -> TestPublic:
+    """Toggle the active/inactive visibility of a test."""
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
@@ -1296,6 +1301,7 @@ def visibility_test(
 def delete_test(
     test_id: int, session: SessionDep, current_user: CurrentUser
 ) -> Message:
+    """Delete a test (fails if candidates have already started or submitted it)."""
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
@@ -1365,6 +1371,7 @@ def bulk_delete_question(
 
 @router.get("/public/time_left/{test_uuid}", response_model=TimeLeft)
 def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> TimeLeft:
+    """Return time remaining until the test's scheduled start (public, no auth required)."""
     test = resolve_test_by_uuid(session, test_uuid)
     if not test or test.is_active is False:
         raise HTTPException(status_code=404, detail="Test not found or not active")
@@ -1388,6 +1395,7 @@ def clone_test(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> TestPublic:
+    """Duplicate an existing test, creating an independent copy owned by the current user."""
     # Fetch the original test
     original = session.get(Test, test_id)
     if not original:

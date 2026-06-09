@@ -288,6 +288,7 @@ def bulk_delete_form(
     current_user: CurrentUser,
     form_ids: list[int] = Body(...),
 ) -> DeleteForm:
+    """Delete multiple forms; skips any linked to active tests."""
     success_count = 0
     failure_list: list[FormPublic] = []
 

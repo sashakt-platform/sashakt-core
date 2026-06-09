@@ -822,6 +822,7 @@ def delete_question(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Message:
+    """Delete a question (fails if it is linked to an existing test)."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -848,6 +849,7 @@ def delete_question(
 def bulk_delete_question(
     session: SessionDep, current_user: CurrentUser, question_ids: list[int] = Body(...)
 ) -> DeleteQuestion:
+    """Delete multiple questions; skips any linked to existing tests."""
     success_count = 0
     failure_list: list[QuestionPublic] = []
     db_questions = session.exec(

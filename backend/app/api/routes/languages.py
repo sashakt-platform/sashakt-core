@@ -12,4 +12,5 @@ router = APIRouter(prefix="/languages", tags=["Languages"])
     dependencies=[Depends(permission_dependency("create_test"))],
 )
 def get_localization() -> dict[str, str]:
+    """Return the map of supported locale codes to their display names."""
     return SUPPORTED_LOCALES

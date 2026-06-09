@@ -107,6 +107,7 @@ def create_country(
     country: CountryCreate,
     session: SessionDep,
 ) -> Country:
+    """Create a new country."""
     db_country = Country.model_validate(country)
     session.add(db_country)
     session.commit()
@@ -125,6 +126,7 @@ def get_countries(
     params: Pagination = Depends(),
     is_active: bool | None = None,
 ) -> Page[CountryPublic]:
+    """List all countries, optionally filtered by active status."""
     query = select(Country)
 
     if is_active is not None:
@@ -149,6 +151,7 @@ def get_country_by_id(
     country_id: int,
     session: SessionDep,
 ) -> Country:
+    """Retrieve a country by ID."""
     country = session.get(Country, country_id)
     if not country:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -166,6 +169,7 @@ def update_country(
     country: CountryUpdate,
     session: SessionDep,
 ) -> Country:
+    """Update a country's fields."""
     country_db = session.get(Country, country_id)
     if not country_db:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -191,6 +195,7 @@ def create_state(
     state_create: StateCreate,
     session: SessionDep,
 ) -> Any:
+    """Create a new state."""
     state = State.model_validate(state_create)
     session.add(state)
     session.commit()
@@ -212,6 +217,7 @@ def get_state(
     country: int | None = None,
     test_id: int | None = Query(None),
 ) -> Page[StatePublic]:
+    """List states with optional filters; scoped by role or test location."""
     query = select(State)
 
     if is_active is not None:
@@ -275,6 +281,7 @@ def get_state_by_id(
     state_id: int,
     session: SessionDep,
 ) -> State:
+    """Retrieve a state by ID."""
     state = session.get(State, state_id)
     if not state:
         raise HTTPException(status_code=404, detail="State not found")
@@ -293,6 +300,7 @@ def update_state(
     state_update: StateUpdate,
     session: SessionDep,
 ) -> Any:
+    """Update a state's fields."""
     state_db = session.get(State, state_id)
     if not state_db:
         raise HTTPException(status_code=404, detail="State not found")
@@ -318,6 +326,7 @@ def create_district(
     district_create: DistrictCreate,
     session: SessionDep,
 ) -> Any:
+    """Create a new district."""
     district = District.model_validate(district_create)
     session.add(district)
     session.commit()
@@ -339,6 +348,7 @@ def get_district(
     state_ids: list[int] | None = Query(None),
     test_id: int | None = Query(None),
 ) -> Page[DistrictPublic]:
+    """List districts with optional filters; scoped by role or test location."""
     query = select(District, State).join(State).where(District.state_id == State.id)
 
     if is_active is not None:
@@ -392,6 +402,7 @@ def get_district_by_id(
     district_id: int,
     session: SessionDep,
 ) -> District:
+    """Retrieve a district by ID."""
     district = session.get(District, district_id)
     if not district:
         raise HTTPException(status_code=404, detail="District not found")
@@ -410,6 +421,7 @@ def update_district(
     district_update: DistrictUpdate,
     session: SessionDep,
 ) -> District:
+    """Update a district's fields."""
     district_db = session.get(District, district_id)
     if not district_db:
         raise HTTPException(status_code=404, detail="District not found")
@@ -435,6 +447,7 @@ def create_block(
     block_create: BlockCreate,
     session: SessionDep,
 ) -> Any:
+    """Create a new block."""
     block = Block.model_validate(block_create)
     session.add(block)
     session.commit()
@@ -454,6 +467,7 @@ def get_block(
     district_ids: list[int] | None = Query(None),
     test_id: int | None = Query(None),
 ) -> Page[BlockPublic]:
+    """List blocks with optional filters; optionally scoped to a test's location."""
     query = select(Block)
 
     if is_active is not None:
@@ -497,6 +511,7 @@ def get_block_by_id(
     block_id: int,
     session: SessionDep,
 ) -> Block:
+    """Retrieve a block by ID."""
     block = session.get(Block, block_id)
     if not block:
         raise HTTPException(status_code=404, detail="Block not found")
@@ -515,6 +530,7 @@ def update_block(
     block_update: BlockUpdate,
     session: SessionDep,
 ) -> Block:
+    """Update a block's fields."""
     block_db = session.get(Block, block_id)
     if not block_db:
         raise HTTPException(status_code=404, detail="Block not found")
@@ -538,6 +554,7 @@ async def import_blocks_from_csv(
         ..., description="CSV file with block_name, district_name, state_name"
     ),
 ) -> BlockBulkUploadResponse:
+    """Bulk-import blocks from a CSV file (columns: block_name, district_name, state_name)."""
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are allowed")
 
