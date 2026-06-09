@@ -1290,9 +1290,13 @@ def update_question_tags(
     return get_question_tags(question_id=question_id, session=session)
 
 
-@router.get("/bulk-upload/template")
+@router.get(
+    "/bulk-upload/template",
+    dependencies=[Depends(permission_dependency("create_question"))],
+)
 async def get_bulk_upload_template(
-    session: SessionDep, current_user: CurrentUser
+    session: SessionDep,
+    current_user: CurrentUser,
 ) -> Response:
     settings_payload = crud_settings.get_payload(
         session=session, organization_id=current_user.organization_id
@@ -1338,7 +1342,11 @@ async def get_bulk_upload_template(
     )
 
 
-@router.post("/bulk-upload", response_model=BulkUploadQuestionsResponse)
+@router.post(
+    "/bulk-upload",
+    response_model=BulkUploadQuestionsResponse,
+    dependencies=[Depends(permission_dependency("create_question"))],
+)
 async def upload_questions_csv(
     session: SessionDep,
     current_user: CurrentUser,
