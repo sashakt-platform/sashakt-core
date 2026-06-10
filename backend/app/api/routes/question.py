@@ -1298,6 +1298,7 @@ async def get_bulk_upload_template(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Response:
+    """Download CSV file template for creating questions in bulk."""
     settings_payload = crud_settings.get_payload(
         session=session, organization_id=current_user.organization_id
     )
