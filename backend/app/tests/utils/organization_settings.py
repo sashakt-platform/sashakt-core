@@ -5,6 +5,7 @@ from app.crud import organization_settings as crud_settings
 from app.models.organization_settings import (
     AnswerReviewSetting,
     AnswerReviewValue,
+    CompletionMessageSetting,
     MarkForReviewSetting,
     MarkForReviewValue,
     MarkingSchemeSetting,
@@ -14,6 +15,7 @@ from app.models.organization_settings import (
     PauseTestSetting,
     PauseTestValue,
     PlatformNomenclatureSetting,
+    PreTestInstructionsSetting,
     QuestionPaletteSetting,
     QuestionPaletteValue,
     QuestionsPerPageSetting,
@@ -51,6 +53,8 @@ def flexible_settings_payload() -> OrganizationSettingsPayload:
             mode="flexible", value=PauseTestValue(default=False)
         ),
         platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
+        pre_test_instructions=PreTestInstructionsSetting(),
+        completion_message=CompletionMessageSetting(),
     )
 
 
