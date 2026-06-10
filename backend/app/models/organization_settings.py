@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
 
 
-ORGANIZATION_SETTINGS_SCHEMA_VERSION = 4
+ORGANIZATION_SETTINGS_SCHEMA_VERSION = 5
 
 
 NOMENCLATURE_DEFAULTS: dict[str, str] = {
@@ -276,6 +276,40 @@ class AnalyticsLinkSetting(BaseModel):
     value: AnalyticsLinkValue = PydanticField(default_factory=AnalyticsLinkValue)
 
 
+class PreTestInstructionsValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str | None = None
+
+
+class PreTestInstructionsSetting(BaseModel):
+    """Default pre-test instructions pre-populated on the test config page.
+    Test admins can always edit or clear this value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: PreTestInstructionsValue = PydanticField(
+        default_factory=PreTestInstructionsValue
+    )
+
+
+class CompletionMessageValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str | None = None
+
+
+class CompletionMessageSetting(BaseModel):
+    """Default completion message pre-populated on the test config page.
+    Test admins can always edit or clear this value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: CompletionMessageValue = PydanticField(
+        default_factory=CompletionMessageValue
+    )
+
+
 class OrganizationSettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -298,6 +332,12 @@ class OrganizationSettingsPayload(BaseModel):
     )
     analytics_link: AnalyticsLinkSetting = PydanticField(
         default_factory=AnalyticsLinkSetting
+    )
+    pre_test_instructions: PreTestInstructionsSetting = PydanticField(
+        default_factory=PreTestInstructionsSetting
+    )
+    completion_message: CompletionMessageSetting = PydanticField(
+        default_factory=CompletionMessageSetting
     )
 
     @field_validator("version")
@@ -346,6 +386,8 @@ def default_organization_settings() -> OrganizationSettingsPayload:
         platform_nomenclature=PlatformNomenclatureSetting(mode="default"),
         platform_guide=PlatformGuideSetting(),
         analytics_link=AnalyticsLinkSetting(),
+        pre_test_instructions=PreTestInstructionsSetting(),
+        completion_message=CompletionMessageSetting(),
     )
 
 
