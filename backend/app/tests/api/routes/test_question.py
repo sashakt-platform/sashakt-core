@@ -5370,23 +5370,9 @@ def test_bulk_upload_questions_with_custom_nomenclature_column(
 
 
 def test_bulk_upload_questions_with_extra_column(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    india = Country(name="India")
-    db.add(india)
-    db.commit()
-    db.refresh(india)
-
-    punjab = State(name="Punjab", country_id=india.id)
-    db.add(punjab)
-    db.commit()
-    db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Tags,State,ABCD
-What is 10+10?,20,10,30,40,A,ABCD,Math,Punjab
-What is the color of the sky?,Blue,Green,Red,Yellow,A,ABCD,Science,Punjab
-Which option is missing?,25,10,20,30,A,ABCD,Math,Punjab
-What is 2 + 2?,4,5,6,7,A,ABCD,Math,Punjab
-Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Punjab"""
+    csv_content = "Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Tags,State\nWhat is 10+10?,20,10,30,40,A,ABCD,Math,Punjab\n"
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -5400,12 +5386,8 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,D,ABCD,Math,Pu
                 headers=get_user_superadmin_token,
             )
 
-        data = response.json()
-        assert response.status_code == 200
-        assert data["uploaded_questions"] == 5
-        assert data["success_questions"] == 5
-        assert data["failed_questions"] == 0
-        assert data["error_log"] is None
+        assert response.status_code == 400
+        assert "ABCD" in response.json()["detail"]
     finally:
         import os
 

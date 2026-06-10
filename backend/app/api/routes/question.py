@@ -1359,7 +1359,7 @@ async def upload_questions_csv(
     - Questions: The question text
     - Option A, Option B, Option C, Option D: The options
     - Correct Option: Which option is correct (A, B, C, D)
-    - Training Tags: Comma-separated list of tags (optional) of the form tag_type:tag_name
+    - Tags: Comma-separated list of tags (optional) of the form tag_type:tag_name
     - State: State name or comma-separated list of states (optional)
     """
     # Verify user exists
@@ -1419,6 +1419,14 @@ async def upload_questions_csv(
             if settings_payload is not None
             else NOMENCLATURE_DEFAULTS["tags"]
         )
+        allowed_columns = set(required_columns) | {"S.No", "State", tags_label}
+        unknown = {k for k in first_row.keys() if k} - allowed_columns
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown column(s): {', '.join(sorted(unknown))}",
+            )
+
         rows: list[dict[str, Any]] = list(csv_reader)
         if tags_label != "Tags":
             rows = [
