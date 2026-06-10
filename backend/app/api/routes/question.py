@@ -15,6 +15,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
+from fastapi.responses import Response
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import desc, func
@@ -32,6 +33,7 @@ from app.core.sorting import (
     SortOrder,
     create_sorting_dependency,
 )
+from app.crud import organization_settings as crud_settings
 from app.models import (
     CandidateTest,
     Organization,
@@ -53,6 +55,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.organization_settings import NOMENCLATURE_DEFAULTS
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
     BulkUploadQuestionsResponse,
@@ -68,6 +71,7 @@ from app.models.role import Role
 from app.models.test import TestQuestion
 from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
+from app.services.organization_nomenclature import resolve_label
 from app.services.storage.gcs import GCSStorageService
 
 logger = logging.getLogger(__name__)
@@ -1288,7 +1292,64 @@ def update_question_tags(
     return get_question_tags(question_id=question_id, session=session)
 
 
-@router.post("/bulk-upload", response_model=BulkUploadQuestionsResponse)
+@router.get(
+    "/bulk-upload/template",
+    dependencies=[Depends(permission_dependency("create_question"))],
+)
+async def get_bulk_upload_template(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Response:
+    """Download CSV file template for creating questions in bulk."""
+    settings_payload = crud_settings.get_payload(
+        session=session, organization_id=current_user.organization_id
+    )
+    tags_label = (
+        resolve_label(settings_payload, "tags")
+        if settings_payload is not None
+        else NOMENCLATURE_DEFAULTS["tags"]
+    )
+    headers = [
+        "S.No",
+        "State",
+        "Questions",
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D",
+        "Correct Option",
+        tags_label,
+    ]
+    sample = [
+        "1",
+        "Haryana",
+        "What is the capital of India?",
+        "Mumbai",
+        "Delhi",
+        "Chennai",
+        "Kolkata",
+        "B",
+        "difficulty:easy|subject:geography",
+    ]
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    writer.writerow(sample)
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=bulk_upload_template.csv"
+        },
+    )
+
+
+@router.post(
+    "/bulk-upload",
+    response_model=BulkUploadQuestionsResponse,
+    dependencies=[Depends(permission_dependency("create_question"))],
+)
 async def upload_questions_csv(
     session: SessionDep,
     current_user: CurrentUser,
@@ -1300,7 +1361,7 @@ async def upload_questions_csv(
     - Questions: The question text
     - Option A, Option B, Option C, Option D: The options
     - Correct Option: Which option is correct (A, B, C, D)
-    - Training Tags: Comma-separated list of tags (optional) of the form tag_type:tag_name
+    - Tags: Comma-separated list of tags (optional) of the form tag_type:tag_name
     - State: State name or comma-separated list of states (optional)
     """
     # Verify user exists
@@ -1350,8 +1411,30 @@ async def upload_questions_csv(
                     status_code=400, detail=f"Missing required column: {column}"
                 )
 
-        # Reset the reader
+        # Reset the reader and normalise any custom tags-column label → "Tags"
         csv_reader = csv.DictReader(StringIO(csv_text))
+        settings_payload = crud_settings.get_payload(
+            session=session, organization_id=current_user.organization_id
+        )
+        tags_label = (
+            resolve_label(settings_payload, "tags")
+            if settings_payload is not None
+            else NOMENCLATURE_DEFAULTS["tags"]
+        )
+        allowed_columns = set(required_columns) | {"S.No", "State", tags_label}
+        unknown = {k for k in first_row.keys() if k} - allowed_columns
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown column(s): {', '.join(sorted(unknown))}",
+            )
+
+        rows: list[dict[str, Any]] = list(csv_reader)
+        if tags_label != "Tags":
+            rows = [
+                {("Tags" if k == tags_label else k): v for k, v in row.items()}
+                for row in rows
+            ]
 
         # Start processing rows
         questions_created = 0
@@ -1363,7 +1446,7 @@ async def upload_questions_csv(
         failed_states = set()
         failed_tagtypes = set()
 
-        for row_number, row in enumerate(csv_reader, start=1):
+        for row_number, row in enumerate(rows, start=1):
             try:
                 # Skip empty rows
                 if not row.get("Questions", "").strip():
