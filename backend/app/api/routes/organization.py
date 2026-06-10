@@ -86,6 +86,7 @@ def _org_page_transformer(
 def get_current_organization(
     current_user: User = Depends(get_current_user),
 ) -> OrganizationPublic:
+    """Get the current user's organization."""
     organization = current_user.organization
 
     return transform_organizations_to_public([organization])[0]
@@ -106,6 +107,7 @@ async def update_current_organization(
         None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
     ),
 ) -> OrganizationPublic:
+    """Update the current organization."""
     organization = current_user.organization
 
     old_logo_path = organization.logo
@@ -162,6 +164,7 @@ async def delete_current_organization_logo(
     session: SessionDep,
     current_user: User = Depends(get_current_user),
 ) -> OrganizationPublic:
+    """Delete the current organization logo."""
     organization = current_user.organization
 
     if not organization.logo:
@@ -197,6 +200,7 @@ async def create_organization(
         None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
     ),
 ) -> OrganizationPublic:
+    """Create a new organization."""
     organization = Organization(
         name=name,
         description=description,
@@ -259,6 +263,7 @@ def get_organization(
         examples=["-created_date", "name"],
     ),
 ) -> Page[OrganizationPublic]:
+    """List all organizations."""
     query = select(Organization).where(
         not_(Organization.is_deleted),
     )
@@ -302,6 +307,7 @@ def get_organization_aggregated_stats_for_current_user(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> AggregatedData:
+    """Get aggregated stats for the current user's organization."""
     organization_id = current_user.organization_id
 
     current_user_state_ids: list[int] = []
@@ -395,6 +401,7 @@ def get_organization_aggregated_stats_for_current_user(
 def get_organization_by_id(
     organization_id: int, session: SessionDep
 ) -> OrganizationPublic:
+    """Retrieve an organization by ID."""
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -419,6 +426,7 @@ async def update_organization(
         None, description="Organization logo (PNG, JPG, WebP, max 2MB)"
     ),
 ) -> OrganizationPublic:
+    """Update an organization."""
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -472,6 +480,7 @@ def visibility_organization(
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of organization"),
 ) -> OrganizationPublic:
+    """Set organization visibility."""
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -488,6 +497,7 @@ def visibility_organization(
     dependencies=[Depends(permission_dependency("delete_organization"))],
 )
 def delete_organization(organization_id: int, session: SessionDep) -> Message:
+    """Delete an organization."""
     organization = session.get(Organization, organization_id)
     if not organization or organization.is_deleted is True:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -507,6 +517,7 @@ def get_public_organization_by_shortcode(
     org_shortcode: str,
     session: SessionDep,
 ) -> OrganizationPublicMinimal:
+    """Get public organization info by shortcode."""
     organization = session.exec(
         select(Organization).where(
             Organization.shortcode == org_shortcode,

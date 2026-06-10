@@ -677,6 +677,7 @@ def bulk_delete_users(
     current_user: CurrentUser,
     user_ids: list[int] = Body(...),
 ) -> DeleteUser:
+    """Delete multiple users."""
     success_count = 0
     failure_list: list[UserPublic] = []
 

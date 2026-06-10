@@ -47,6 +47,7 @@ def create_certificate(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Certificate:
+    """Create a new certificate template."""
     # organization_id should be set to the current user's organization
     certificate = Certificate(
         **certificate_create.model_dump(exclude={"organization_id"}),
@@ -71,6 +72,7 @@ def get_certificates(
     name: str | None = None,
     is_active: bool | None = None,
 ) -> Page[CertificatePublic]:
+    """List certificate templates."""
     query = select(Certificate).where(
         Certificate.organization_id == current_user.organization_id,
     )
@@ -121,6 +123,7 @@ def get_certificate_by_id(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Certificate:
+    """Retrieve a certificate template by ID."""
     certificate = session.get(Certificate, certificate_id)
 
     if not certificate or certificate.organization_id != current_user.organization_id:
@@ -141,6 +144,7 @@ def update_certificate(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Certificate:
+    """Update a certificate template's fields."""
     certificate = session.get(Certificate, certificate_id)
 
     if not certificate or certificate.organization_id != current_user.organization_id:
@@ -178,6 +182,7 @@ def delete_certificate(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Message:
+    """Delete a certificate template."""
     certificate = session.get(Certificate, certificate_id)
 
     if not certificate or certificate.organization_id != current_user.organization_id:
@@ -205,6 +210,7 @@ def bulk_delete_certificate(
     current_user: CurrentUser,
     certificate_ids: list[int] = Body(...),
 ) -> DeleteCertificate:
+    """Delete multiple certificate templates."""
     success_count = 0
     failure_list: list[CertificatePublic] = []
 

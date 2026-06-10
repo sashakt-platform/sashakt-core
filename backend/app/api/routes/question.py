@@ -822,6 +822,7 @@ def delete_question(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Message:
+    """Delete a question."""
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -848,6 +849,7 @@ def delete_question(
 def bulk_delete_question(
     session: SessionDep, current_user: CurrentUser, question_ids: list[int] = Body(...)
 ) -> DeleteQuestion:
+    """Delete multiple questions."""
     success_count = 0
     failure_list: list[QuestionPublic] = []
     db_questions = session.exec(
