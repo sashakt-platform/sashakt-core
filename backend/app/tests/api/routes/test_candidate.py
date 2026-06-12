@@ -3030,6 +3030,24 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
     assert response2.json()["response"] == "[10]"  # Updated response
     assert response2.json()["time_spent"] == 40  # Updated time
 
+    # Updating the answer without time_spent should not clear the tracked time.
+    third_answer = {
+        "question_revision_id": question_revision.id,
+        "response": "[1]",
+        "visited": True,
+    }
+
+    response3 = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=third_answer,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response3.status_code == 200
+    assert response3.json()["id"] == first_answer_id
+    assert response3.json()["response"] == "[1]"
+    assert response3.json()["time_spent"] == 40
+
     # Verify only one answer exists in database
     answers = db.exec(
         select(CandidateTestAnswer)
@@ -3037,7 +3055,8 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
         .where(CandidateTestAnswer.question_revision_id == question_revision.id)
     ).all()
     assert len(answers) == 1
-    assert answers[0].response == "[10]"
+    assert answers[0].response == "[1]"
+    assert answers[0].time_spent == 40
 
 
 def test_get_test_result(

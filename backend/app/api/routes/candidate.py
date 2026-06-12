@@ -940,7 +940,8 @@ def submit_answer_for_qr_candidate(
         # Update existing answer
         existing_answer.response = answer_request.response
         existing_answer.visited = answer_request.visited
-        existing_answer.time_spent = answer_request.time_spent
+        if "time_spent" in answer_request.model_fields_set:
+            existing_answer.time_spent = answer_request.time_spent
         existing_answer.bookmarked = answer_request.bookmarked
         session.add(existing_answer)
         session.commit()
@@ -1064,7 +1065,8 @@ def submit_batch_answers_for_qr_candidate(
             # Update existing answer
             existing_answer.response = answer.response
             existing_answer.visited = answer.visited
-            existing_answer.time_spent = answer.time_spent
+            if "time_spent" in answer.model_fields_set:
+                existing_answer.time_spent = answer.time_spent
             existing_answer.bookmarked = answer.bookmarked
             session.add(existing_answer)
             results.append(existing_answer)
