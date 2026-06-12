@@ -1,11 +1,12 @@
 import json
 import random
+import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from sqlmodel import and_, col, not_, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
@@ -16,7 +17,7 @@ from app.api.routes.question import (
 )
 from app.api.routes.utils import get_current_time
 from app.core.certificate_token import generate_certificate_token
-from app.core.config import TOLERANCE
+from app.core.config import TOLERANCE, settings
 from app.core.question_sets import (
     build_assigned_question_membership,
     build_question_set_id_map,
@@ -57,6 +58,8 @@ from app.models.candidate import (
     CandidateReviewResponse,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
+    ExternalProvisionRequest,
+    ExternalStartRequest,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -675,26 +678,54 @@ def get_overall_tests_analytics(
     )
 
 
-@router.post("/start_test", response_model=StartTestResponse)
-def start_test_for_candidate(
-    session: SessionDep,
-    start_test_request: StartTestRequest = Body(...),
-) -> StartTestResponse:
-    """
-    Creates a candidate when they start a test, links them to the test.
-    Returns the candidate UUID for verification.
-    """
-    # Resolve test and admin from the UUID — TestLink takes precedence over legacy Test.link
+def _resolve_active_test_link(
+    session: SessionDep, test_link_uuid: str
+) -> tuple[Test, int]:
     test_link = session.exec(
-        select(TestLink).where(TestLink.uuid == start_test_request.test_link_uuid)
+        select(TestLink).where(TestLink.uuid == test_link_uuid)
     ).first()
-    if test_link:
-        test = session.get(Test, test_link.test_id)
-        admin_id: int = test_link.created_by_id
-    else:
+    if not test_link:
         raise HTTPException(status_code=404, detail="Test Link Not Found")
+
+    test = session.get(Test, test_link.test_id)
     if not test or (test.is_active is False):
         raise HTTPException(status_code=404, detail="Test not found or not active")
+    return test, test_link.created_by_id
+
+
+def _validate_test_start_window(session: SessionDep, test: Test) -> None:
+    current_time = get_current_time()
+    if test.start_time and test.start_time > current_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test has not started yet. Please wait until the scheduled start time.",
+        )
+
+    if test.organization_id is None:
+        return
+
+    settings_payload = crud_settings.get_payload(
+        session=session, organization_id=test.organization_id
+    )
+    if settings_payload is None:
+        return
+
+    outside_window = check_org_time_window(settings_payload, current_time)
+    if outside_window is not None:
+        window_start, window_end = outside_window
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Tests can only be started between "
+                f"{window_start.strftime('%H:%M')} and "
+                f"{window_end.strftime('%H:%M')}."
+            ),
+        )
+
+
+def _build_assigned_question_ids(
+    session: SessionDep, test: Test
+) -> tuple[list[int], list[int | None]]:
     test_id = get_persisted_test_id(test)
     test_questions = get_test_question_links(session, test_id)
     question_sets = get_test_question_sets(session, test_id)
@@ -778,50 +809,28 @@ def start_test_for_candidate(
         ]
         question_set_ids = [question_set_id for _, question_set_id in combined]
 
-    current_time = get_current_time()
-    if test.start_time and test.start_time > current_time:
-        raise HTTPException(
-            status_code=400,
-            detail="Test has not started yet. Please wait until the scheduled start time.",
-        )
+    return question_revision_ids, question_set_ids
 
-    if test.organization_id is not None:
-        settings_payload = crud_settings.get_payload(
-            session=session, organization_id=test.organization_id
-        )
-        if settings_payload is not None:
-            outside_window = check_org_time_window(settings_payload, current_time)
-            if outside_window is not None:
-                window_start, window_end = outside_window
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Tests can only be started between "
-                        f"{window_start.strftime('%H:%M')} and "
-                        f"{window_end.strftime('%H:%M')}."
-                    ),
-                )
 
-    # Create a new anonymous candidate with UUID
-    candidate = Candidate(
-        identity=uuid.uuid4(),  # Generate UUID for anonymous candidate
-        organization_id=test.organization_id,
+def _create_candidate_test(
+    session: SessionDep,
+    *,
+    test: Test,
+    candidate: Candidate,
+    admin_id: int,
+    start_test_request: StartTestRequest,
+) -> CandidateTest:
+    question_revision_ids, question_set_ids = _build_assigned_question_ids(
+        session, test
     )
-    session.add(candidate)
-    session.commit()
-    session.refresh(candidate)
-
-    # Set start_time when test begins, end_time will be set when test is submitted
     start_time = get_current_time()
-
-    # Create CandidateTest link
     candidate_test = CandidateTest(
         test_id=test.id,
         candidate_id=candidate.id,
         device=start_test_request.device_info or "unknown",
         consent=True,
         start_time=start_time,
-        end_time=None,  # Will be set when test is actually submitted
+        end_time=None,
         is_submitted=False,
         question_revision_ids=question_revision_ids,
         question_set_ids=question_set_ids,
@@ -834,7 +843,6 @@ def start_test_for_candidate(
     session.commit()
     session.refresh(candidate_test)
 
-    # Handle form responses
     if start_test_request.form_responses and test.form_id:
         form_response = FormResponse(
             candidate_test_id=candidate_test.id,
@@ -844,9 +852,158 @@ def start_test_for_candidate(
         session.add(form_response)
         session.commit()
 
+    return candidate_test
+
+
+def _create_anonymous_candidate(session: SessionDep, test: Test) -> Candidate:
+    candidate = Candidate(
+        identity=uuid.uuid4(),
+        organization_id=test.organization_id,
+    )
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+    return candidate
+
+
+def _get_external_login_value(session: SessionDep, test: Test) -> Any | None:
+    if test.organization_id is None:
+        return None
+    settings_payload = crud_settings.get_payload(
+        session=session, organization_id=test.organization_id
+    )
+    if settings_payload is None:
+        return None
+    return settings_payload.external_login.value
+
+
+def _should_block_anonymous_start(session: SessionDep, test: Test) -> bool:
+    external_login = _get_external_login_value(session, test)
+    return bool(
+        external_login
+        and external_login.enabled
+        and external_login.block_anonymous_starts
+    )
+
+
+def _require_external_login_enabled(session: SessionDep, test: Test) -> None:
+    external_login = _get_external_login_value(session, test)
+    if external_login is None or not external_login.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="External login is not enabled for this organization",
+        )
+    if external_login.provider and external_login.provider != "avanti":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="External login provider is not allowed for this organization",
+        )
+
+
+def _require_avanti_provision_token(authorization: str | None) -> None:
+    expected = settings.AVANTI_SASHAKT_PROVISION_TOKEN
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Avanti provisioning is not configured",
+        )
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing provisioning token",
+        )
+    if not secrets.compare_digest(token, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid provisioning token",
+        )
+
+
+@router.post("/start_test", response_model=StartTestResponse)
+def start_test_for_candidate(
+    session: SessionDep,
+    start_test_request: StartTestRequest = Body(...),
+) -> StartTestResponse:
+    """
+    Creates a candidate when they start a test, links them to the test.
+    Returns the candidate UUID for verification.
+    """
+    test, admin_id = _resolve_active_test_link(
+        session, start_test_request.test_link_uuid
+    )
+    if _should_block_anonymous_start(session, test):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This test must be started from the external login flow.",
+        )
+    _validate_test_start_window(session, test)
+    candidate = _create_anonymous_candidate(session, test)
+    candidate_test = _create_candidate_test(
+        session,
+        test=test,
+        candidate=candidate,
+        admin_id=admin_id,
+        start_test_request=start_test_request,
+    )
+
     return StartTestResponse(
         candidate_uuid=candidate.identity,
         candidate_test_id=candidate_test.id,
+    )
+
+
+@router.post("/external/provision", response_model=StartTestResponse)
+def provision_external_candidate_test(
+    session: SessionDep,
+    provision_request: ExternalProvisionRequest = Body(...),
+    authorization: str | None = Header(default=None),
+) -> StartTestResponse:
+    """Create the Sashakt candidate and attempt Avanti will map to its user."""
+    _require_avanti_provision_token(authorization)
+    test, admin_id = _resolve_active_test_link(
+        session, provision_request.test_link_uuid
+    )
+    _require_external_login_enabled(session, test)
+    _validate_test_start_window(session, test)
+
+    candidate = _create_anonymous_candidate(session, test)
+    candidate_test = _create_candidate_test(
+        session,
+        test=test,
+        candidate=candidate,
+        admin_id=admin_id,
+        start_test_request=provision_request,
+    )
+
+    return StartTestResponse(
+        candidate_uuid=candidate.identity,
+        candidate_test_id=candidate_test.id,
+    )
+
+
+@router.post("/external/start_test", response_model=StartTestResponse)
+def start_external_candidate_test(
+    session: SessionDep,
+    start_request: ExternalStartRequest = Body(...),
+) -> StartTestResponse:
+    """Resume an externally provisioned attempt using Sashakt-owned IDs."""
+    test, _admin_id = _resolve_active_test_link(session, start_request.test_link_uuid)
+    _require_external_login_enabled(session, test)
+    _validate_test_start_window(session, test)
+
+    candidate_test = verify_candidate_uuid_access(
+        session, start_request.candidate_test_id, start_request.candidate_uuid
+    )
+    if candidate_test.test_id != test.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidate test not found for this test link",
+        )
+
+    return StartTestResponse(
+        candidate_uuid=start_request.candidate_uuid,
+        candidate_test_id=start_request.candidate_test_id,
     )
 
 

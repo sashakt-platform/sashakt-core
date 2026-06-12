@@ -1,10 +1,11 @@
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Any
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlmodel import select
 
 from app.api.deps import SessionDep
@@ -22,6 +23,10 @@ from app.models import (
 from app.models.certificate import Certificate
 from app.models.form import Form, FormField, FormFieldType, FormResponse
 from app.models.location import Country, District, State
+from app.models.organization_settings import (
+    OrganizationSettings,
+    default_organization_settings,
+)
 from app.models.question import QuestionTag, QuestionType
 from app.models.role import Role
 from app.models.tag import Tag, TagType
@@ -86,6 +91,34 @@ def create_single_choice_question_revision(
     db.commit()
     db.refresh(revision)
     return revision
+
+
+def enable_avanti_external_login(
+    db: SessionDep, *, organization_id: int
+) -> OrganizationSettings:
+    payload = default_organization_settings()
+    payload.external_login.value.enabled = True
+    payload.external_login.value.provider = "avanti"
+    payload.external_login.value.block_anonymous_starts = True
+    payload.test_timings.value.start_time = time(0, 1)
+    payload.test_timings.value.end_time = time(23, 59)
+
+    row = db.exec(
+        select(OrganizationSettings).where(
+            OrganizationSettings.organization_id == organization_id
+        )
+    ).first()
+    if row is None:
+        row = OrganizationSettings(
+            organization_id=organization_id,
+            settings=payload.model_dump(mode="json"),
+        )
+    else:
+        row.settings = payload.model_dump(mode="json")
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def test_create_candidate(
@@ -15238,6 +15271,263 @@ def test_start_test_stores_admin_id(client: TestClient, db: SessionDep) -> None:
     candidate_test = db.get(CandidateTest, data["candidate_test_id"])
     assert candidate_test is not None
     assert candidate_test.admin_id == user.id
+
+
+def test_start_test_rejects_anonymous_for_external_login_org(
+    client: TestClient, db: SessionDep
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Browser"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "This test must be started from the external login flow."
+    )
+
+
+def test_external_provision_requires_avanti_token(
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing provisioning token"
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid provisioning token"
+
+
+def test_external_provision_requires_backend_configuration(
+    client: TestClient, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", None)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": "test-link"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Avanti provisioning is not configured"
+
+
+def test_external_provision_requires_enabled_avanti_provider(
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "External login is not enabled for this organization"
+    )
+
+    payload = default_organization_settings()
+    payload.external_login.value.enabled = True
+    payload.external_login.value.provider = "other-provider"
+    payload.test_timings.value.start_time = time(0, 1)
+    payload.test_timings.value.end_time = time(23, 59)
+    db.add(
+        OrganizationSettings(
+            organization_id=org.id,
+            settings=payload.model_dump(mode="json"),
+        )
+    )
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "External login provider is not allowed for this organization"
+    )
+
+
+def test_external_provision_and_start_resume_same_attempt(
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    provision_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert provision_response.status_code == 200
+    provision_data = provision_response.json()
+
+    candidate_test = db.get(CandidateTest, provision_data["candidate_test_id"])
+    assert candidate_test is not None
+    assert candidate_test.test_id == test.id
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/start_test",
+        json={
+            "test_link_uuid": test_link.uuid,
+            "candidate_uuid": provision_data["candidate_uuid"],
+            "candidate_test_id": provision_data["candidate_test_id"],
+            "device_info": "Mobile",
+        },
+    )
+
+    assert start_response.status_code == 200
+    assert start_response.json() == provision_data
+
+
+def test_external_start_rejects_candidate_test_for_other_test(
+    client: TestClient, db: SessionDep, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "AVANTI_SASHAKT_PROVISION_TOKEN", "secret-token")
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test_a = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    test_b = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test_a)
+    db.add(test_b)
+    db.commit()
+    db.refresh(test_a)
+    db.refresh(test_b)
+    test_a_link = get_test_link(db, test_id=test_a.id, admin_id=user.id)
+    test_b_link = get_test_link(db, test_id=test_b.id, admin_id=user.id)
+
+    provision_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_a_link.uuid, "device_info": "Portal"},
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert provision_response.status_code == 200
+    provision_data = provision_response.json()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/start_test",
+        json={
+            "test_link_uuid": test_b_link.uuid,
+            "candidate_uuid": provision_data["candidate_uuid"],
+            "candidate_test_id": provision_data["candidate_test_id"],
+            "device_info": "Mobile",
+        },
+    )
+
+    assert start_response.status_code == 404
+    assert start_response.json()["detail"] == (
+        "Candidate test not found for this test link"
+    )
 
 
 # ---------------------------------------------------------------------------
