@@ -16,6 +16,7 @@ from app.models.organization_settings import (
     ORGANIZATION_SETTINGS_SCHEMA_VERSION,
     AnswerReviewSetting,
     AnswerReviewValue,
+    CompletionMessageSetting,
     MarkForReviewSetting,
     MarkForReviewValue,
     MarkingSchemeSetting,
@@ -27,6 +28,7 @@ from app.models.organization_settings import (
     PauseTestValue,
     PlatformNomenclatureSetting,
     PlatformNomenclatureValue,
+    PreTestInstructionsSetting,
     QuestionPaletteSetting,
     QuestionPaletteValue,
     QuestionsPerPageSetting,
@@ -110,7 +112,7 @@ def test_create_organization_initializes_settings_row(
     name = random_lower_string()
     response = client.post(
         f"{settings.API_V1_STR}/organization/",
-        json={"name": name, "description": random_lower_string()},
+        data={"name": name, "description": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1602,6 +1604,151 @@ def test_put_settings_rejects_analytics_link_without_scheme(
     own_org_id = _get_org_id(client, get_user_systemadmin_token)
     payload = default_organization_settings().model_dump(mode="json")
     payload["analytics_link"]["value"]["url"] = "lookerstudio.in"
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+# ---------- pre_test_instructions + completion_message ----------
+
+
+def test_default_settings_include_pre_test_instructions_and_completion_message() -> (
+    None
+):
+    payload = OrganizationSettingsPayload.model_validate(DEFAULT_ORGANIZATION_SETTINGS)
+    assert payload.pre_test_instructions.value.text is None
+    assert payload.completion_message.value.text is None
+
+
+def test_put_settings_pre_test_instructions_round_trip(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings()
+    payload.pre_test_instructions = PreTestInstructionsSetting()
+    payload.pre_test_instructions.value.text = "Read the instructions carefully."
+
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+    assert put_resp.status_code == 200
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+    )
+    assert get_resp.status_code == 200
+    assert (
+        get_resp.json()["settings"]["pre_test_instructions"]["value"]["text"]
+        == "Read the instructions carefully."
+    )
+
+
+def test_put_settings_completion_message_round_trip(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings()
+    payload.completion_message = CompletionMessageSetting()
+    payload.completion_message.value.text = "Thanks for completing the test."
+
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+    assert put_resp.status_code == 200
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+    )
+    assert get_resp.status_code == 200
+    assert (
+        get_resp.json()["settings"]["completion_message"]["value"]["text"]
+        == "Thanks for completing the test."
+    )
+
+
+def test_put_settings_clears_pre_test_instructions_to_null(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    payload = default_organization_settings()
+    payload.pre_test_instructions.value.text = "Initial text."
+    client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+
+    payload.pre_test_instructions.value.text = None
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+    assert put_resp.status_code == 200
+    assert put_resp.json()["settings"]["pre_test_instructions"]["value"]["text"] is None
+
+
+def test_put_settings_clears_completion_message_to_null(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    payload = default_organization_settings()
+    payload.completion_message.value.text = "Initial message."
+    client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+
+    payload.completion_message.value.text = None
+    put_resp = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload.model_dump(mode="json")},
+    )
+    assert put_resp.status_code == 200
+    assert put_resp.json()["settings"]["completion_message"]["value"]["text"] is None
+
+
+def test_put_settings_pre_test_instructions_unknown_key_returns_422(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["pre_test_instructions"] = {"value": {"content": "wrong key"}}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": payload},
+    )
+    assert response.status_code == 422
+
+
+def test_put_settings_completion_message_unknown_key_returns_422(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    payload = default_organization_settings().model_dump(mode="json")
+    payload["completion_message"] = {"value": {"content": "wrong key"}}
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{own_org_id}/settings",

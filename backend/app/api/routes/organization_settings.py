@@ -92,6 +92,7 @@ def get_organization_settings(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> OrganizationSettingsPublic:
+    """Retrieve the settings for an organization."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_read_scope(current_user=current_user, organization_id=organization_id)
     row = crud_settings.get_or_create(session=session, organization_id=organization_id)
@@ -109,6 +110,7 @@ def update_organization_settings(
     current_user: CurrentUser,
     permissions: list[str] = Depends(get_user_permissions),
 ) -> OrganizationSettingsPublic:
+    """Update organization settings."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_update_permission_and_scope(
         current_user=current_user,
@@ -151,6 +153,7 @@ async def upload_platform_guide(
         ..., description="Platform guide PDF (max 10 MB, application/pdf)"
     ),
 ) -> OrganizationSettingsPublic:
+    """Upload the platform guide."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_update_permission_and_scope(
         current_user=current_user,
@@ -193,6 +196,7 @@ def delete_platform_guide(
     current_user: CurrentUser,
     permissions: list[str] = Depends(get_user_permissions),
 ) -> OrganizationSettingsPublic:
+    """Delete the platform guide."""
     _get_active_organization(session=session, organization_id=organization_id)
     _ensure_update_permission_and_scope(
         current_user=current_user,

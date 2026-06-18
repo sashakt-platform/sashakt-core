@@ -167,3 +167,8 @@ class UsersPublic(SQLModel):
 
 class UserPublicMe(UserPublic):
     permissions: list[str] = []
+
+
+class DeleteUser(SQLModel):
+    delete_success_count: int
+    delete_failure_list: list[UserPublic] | None = None

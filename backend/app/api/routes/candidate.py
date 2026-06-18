@@ -1097,7 +1097,8 @@ def submit_answer_for_qr_candidate(
         # Update existing answer
         existing_answer.response = answer_request.response
         existing_answer.visited = answer_request.visited
-        existing_answer.time_spent = answer_request.time_spent
+        if "time_spent" in answer_request.model_fields_set:
+            existing_answer.time_spent = answer_request.time_spent
         existing_answer.bookmarked = answer_request.bookmarked
         session.add(existing_answer)
         session.commit()
@@ -1221,7 +1222,8 @@ def submit_batch_answers_for_qr_candidate(
             # Update existing answer
             existing_answer.response = answer.response
             existing_answer.visited = answer.visited
-            existing_answer.time_spent = answer.time_spent
+            if "time_spent" in answer.model_fields_set:
+                existing_answer.time_spent = answer.time_spent
             existing_answer.bookmarked = answer.bookmarked
             session.add(existing_answer)
             results.append(existing_answer)
@@ -1528,6 +1530,7 @@ def get_test_questions(
 def create_candidate(
     candidate_create: CandidateCreate, session: SessionDep, current_user: CurrentUser
 ) -> Candidate:
+    """Create a new candidate."""
     candidate_dump = candidate_create.model_dump()
     candidate_dump["organization_id"] = current_user.organization_id
     candidate = Candidate.model_validate(candidate_dump)
@@ -1544,6 +1547,7 @@ def create_candidate(
     dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_candidate(session: SessionDep) -> Sequence[Candidate]:
+    """List all candidates."""
     candidate = session.exec(select(Candidate).where(not_(Candidate.is_deleted))).all()
     return candidate
 
@@ -1675,6 +1679,7 @@ def get_test_summary(
     dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_candidate_by_id(candidate_id: int, session: SessionDep) -> Candidate:
+    """Retrieve a candidate by ID."""
     candidate = session.get(Candidate, candidate_id)
     if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1692,6 +1697,7 @@ def update_candidate(
     updated_data: CandidateUpdate,
     session: SessionDep,
 ) -> Candidate:
+    """Update a candidate's details."""
     candidate = session.get(Candidate, candidate_id)
     if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1714,6 +1720,7 @@ def visibility_candidate(
     session: SessionDep,
     is_active: bool = Query(False, description="Set visibility of candidate"),
 ) -> Candidate:
+    """Set candidate visibility."""
     candidate = session.get(Candidate, candidate_id)
     if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1730,6 +1737,7 @@ def visibility_candidate(
     dependencies=[Depends(permission_dependency("delete_candidate"))],
 )
 def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
+    """Delete a candidate."""
     candidate = session.get(Candidate, candidate_id)
     if not candidate or candidate.is_deleted is True:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -1752,6 +1760,7 @@ def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
 def create_candidate_test(
     candidate_test_create: CandidateTestCreate, session: SessionDep
 ) -> CandidateTest:
+    """Create a candidate-test link."""
     candidate_test = CandidateTest.model_validate(candidate_test_create)
     session.add(candidate_test)
     session.commit()
@@ -1766,6 +1775,7 @@ def create_candidate_test(
     dependencies=[Depends(permission_dependency("read_candidate_test"))],
 )
 def get_candidate_test(session: SessionDep) -> Sequence[CandidateTest]:
+    """List all candidate-test links."""
     candidate_test = session.exec(select(CandidateTest)).all()
     return candidate_test
 
@@ -1779,6 +1789,7 @@ def get_candidate_test(session: SessionDep) -> Sequence[CandidateTest]:
 def get_candidate_test_by_id(
     candidate_test_id: int, session: SessionDep
 ) -> CandidateTest:
+    """Retrieve a candidate-test link by ID."""
     candidate_test = session.get(CandidateTest, candidate_test_id)
     if not candidate_test:
         raise HTTPException(
@@ -1798,6 +1809,7 @@ def update_candidate_test(
     updated_data: CandidateTestUpdate,
     session: SessionDep,
 ) -> CandidateTest:
+    """Update a candidate-test link record."""
     candidate_test = session.get(CandidateTest, candidate_test_id)
     if not candidate_test:
         raise HTTPException(
@@ -1824,6 +1836,7 @@ def update_candidate_test(
 def create_candidate_test_answer(
     candidate_test_answer_create: CandidateTestAnswerCreate, session: SessionDep
 ) -> CandidateTestAnswer:
+    """Submit an answer for a test question."""
     candidate_test_answer = CandidateTestAnswer.model_validate(
         candidate_test_answer_create
     )
@@ -1840,6 +1853,7 @@ def create_candidate_test_answer(
     dependencies=[Depends(permission_dependency("read_candidate_test_answer"))],
 )
 def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnswer]:
+    """List all candidate test answers."""
     candidate_test_answer = session.exec(select(CandidateTestAnswer)).all()
     return candidate_test_answer
 
@@ -1853,6 +1867,7 @@ def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnsw
 def get_candidate_test_answer_by_id(
     candidate_test_answer_id: int, session: SessionDep
 ) -> CandidateTestAnswer:
+    """Retrieve a candidate test answer by ID."""
     candidate_test_answer = session.get(CandidateTestAnswer, candidate_test_answer_id)
     if not candidate_test_answer:
         raise HTTPException(
@@ -1873,6 +1888,7 @@ def update_candidate_answer_test(
     updated_data: CandidateTestAnswerUpdate,
     session: SessionDep,
 ) -> CandidateTestAnswer:
+    """Update a candidate test answer."""
     candidate_test_answer = session.get(CandidateTestAnswer, candidate_test_answer_id)
     if not candidate_test_answer:
         raise HTTPException(status_code=404, detail="No Answer found")
@@ -1917,6 +1933,7 @@ def get_test_result(
         ..., description="Candidate UUID for verification"
     ),
 ) -> Result:
+    """Get the scored result for a candidate test."""
     candidate_test = session.get(CandidateTest, candidate_test_id)
 
     if not candidate_test:
@@ -2235,6 +2252,7 @@ def get_time_left(
         ..., description="Candidate UUID for verification"
     ),
 ) -> TimeLeft:
+    """Get remaining time for a candidate's test."""
     verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
     candidate_test = session.exec(
         select(CandidateTest).where(CandidateTest.id == candidate_test_id)
@@ -2262,6 +2280,7 @@ def sync_timer(
         ..., description="Candidate UUID for verification"
     ),
 ) -> TimeLeft:
+    """Sync the candidate test timer."""
     candidate_test = verify_candidate_uuid_access(
         session, candidate_test_id, candidate_uuid
     )
@@ -2325,6 +2344,7 @@ def get_review_feedback(
         None, description="Optional list of question revision IDs for feedback"
     ),
 ) -> list[CandidateReviewResponse]:
+    """Return correct answers and feedback for a candidate's completed test attempt."""
     candidate_test = verify_candidate_uuid_access(
         session, candidate_test_id, candidate_uuid
     )

@@ -2357,7 +2357,10 @@ def test_get_test_random_tag_count(
 def test_get_test_by_id(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
 
     country = Country(name=random_lower_string())
     db.add(country)
@@ -2533,6 +2536,57 @@ def test_get_test_by_id(
     assert data["tags"] == []
     assert data["states"] == []
     assert data["question_revisions"] == []
+
+
+def test_get_test_by_id_organization_restriction(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A user must not be able to fetch a test that belongs to a different organization,
+    even if they know the test ID.
+    """
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    own_org_id = user_data["organization_id"]
+
+    # Test belonging to the requesting user's organization — should be accessible
+    own_org_test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        question_pagination=1,
+        created_by_id=user_data["id"],
+        organization_id=own_org_id,
+    )
+    db.add(own_org_test)
+
+    # Test belonging to a completely different organization — should be blocked
+    other_org = create_random_organization(db)
+    other_user = create_random_user(db, organization_id=other_org.id)
+    other_org_test = Test(
+        name=random_lower_string(),
+        link=random_lower_string(),
+        no_of_random_questions=1,
+        question_pagination=1,
+        created_by_id=other_user.id,
+        organization_id=other_org.id,
+    )
+    db.add(other_org_test)
+    db.commit()
+
+    # Can fetch a test from own organization
+    own_response = client.get(
+        f"{settings.API_V1_STR}/test/{own_org_test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert own_response.status_code == 200
+    assert own_response.json()["id"] == own_org_test.id
+
+    # Cannot fetch a test from a different organization
+    other_response = client.get(
+        f"{settings.API_V1_STR}/test/{other_org_test.id}",
+        headers=get_user_superadmin_token,
+    )
+    assert other_response.status_code == 403
 
 
 def test_update_test(
@@ -3001,7 +3055,10 @@ def test_visibility_test(
 def test_visibility_test_with_random_tag_count(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
     tag1 = create_random_tag(db)
     tag2 = create_random_tag(db)
 
@@ -3018,6 +3075,7 @@ def test_visibility_test_with_random_tag_count(
         question_pagination=1,
         is_template=False,
         created_by_id=user.id,
+        organization_id=organization_id,
         random_tag_count=[
             {"tag_id": tag1.id, "count": 3},
             {"tag_id": tag2.id, "count": 2},
@@ -7271,7 +7329,7 @@ def test_state_admin_cannot_see_state_and_district_test(
     assert state_and_district_test.id not in item_ids
 
 
-def test_state_admin_cannot_delete_general_test(
+def test_state_admin_can_delete_test_created_by_them(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -7336,8 +7394,7 @@ def test_state_admin_cannot_delete_general_test(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
-    assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.status_code == 200
 
 
 def test_state_admin_can_delete_test_in_their_state(
@@ -7461,19 +7518,12 @@ def test_state_admin_cannot_delete_test_outside_their_state(
     )
     test_id = response.json()["id"]
 
-    state_admin_user = get_current_user_data(client, token_headers)
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
 
 
 def test_state_admin_cannot_delete_multi_state_test_without_full_access(
@@ -7529,21 +7579,12 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
         headers=get_user_superadmin_token,
     )
     test_id = response.json()["id"]
-
-    state_admin_user = get_current_user_data(client, token_headers)
-
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
 
 
 def test_state_admin_can_delete_test_connected_via_district(
@@ -7621,7 +7662,7 @@ def test_state_admin_can_delete_test_connected_via_district(
     assert "deleted successfully" in delete_resp.json()["message"].lower()
 
 
-def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_matches(
+def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -7690,20 +7731,13 @@ def test_state_admin_cannot_delete_multi_district_test_when_only_one_state_match
     )
     test_id = response.json()["id"]
 
-    state_admin_user = get_current_user_data(client, token_headers)
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     delete_resp = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
     )
 
     assert delete_resp.status_code == 403
-    assert "cannot modify/delete" in delete_resp.json()["detail"].lower()
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
 
 
 def test_localization_list(
@@ -8118,15 +8152,6 @@ def test_district_user_cannot_modify_out_of_scope_test(
     assert data["districts"] is not None
     test_id = data["id"]
 
-    # Reassign ownership to state_admin so ownership check passes;
-    # the location check then fires because district_2 is outside their scope.
-    state_admin_user = get_current_user_data(client, token_headers)
-    test_obj = db.get(Test, test_id)
-    assert test_obj is not None
-    test_obj.created_by_id = state_admin_user["id"]
-    db.add(test_obj)
-    db.commit()
-
     response = client.put(
         f"{settings.API_V1_STR}/test/{test_id}",
         headers=token_headers,
@@ -8135,7 +8160,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
 
     assert response.status_code == 403
     data = response.json()
-    assert "cannot modify/delete" in data["detail"]
+    assert data["detail"] == "You can only update tests created by you."
 
     response = client.delete(
         f"{settings.API_V1_STR}/test/{test_id}",
@@ -8144,7 +8169,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
 
     assert response.status_code == 403
     data = response.json()
-    assert "cannot modify/delete" in data["detail"]
+    assert data["detail"] == "You can only delete tests created by you."
 
 
 def test_get_tests_by_district_user(
@@ -9821,3 +9846,208 @@ def test_get_tests_my_tests_filter_no_location_user(
     assert my_test_2.id not in returned_ids
     assert other_test_1.id in returned_ids
     assert other_test_2.id in returned_ids
+
+
+def test_state_admin_can_see_tests_they_created_outside_their_location(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A state_admin scoped to state_A should see tests they personally created
+    even if those tests are mapped to state_B (outside their location scope).
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state_a = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    state_b = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add_all([state_a, state_b])
+    db.commit()
+    db.refresh(state_a)
+    db.refresh(state_b)
+
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert state_admin_role is not None
+    state_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": state_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": state_admin_role.id,
+            "organization_id": new_organization.id,
+            "state_ids": [state_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    state_admin_token = authentication_token_from_email(
+        client=client, email=state_admin_email, db=db
+    )
+
+    # state_admin creates a test mapped to state_B (outside their own state_A scope)
+    outside_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "state_ids": [state_b.id],
+        },
+        headers=state_admin_token,
+    )
+    assert outside_test_resp.status_code == 200
+    outside_test_id = outside_test_resp.json()["id"]
+
+    # state_admin creates a test mapped to their own state_A (within scope)
+    in_scope_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "state_ids": [state_a.id],
+        },
+        headers=state_admin_token,
+    )
+    assert in_scope_test_resp.status_code == 200
+    in_scope_test_id = in_scope_test_resp.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=state_admin_token)
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+
+    # Both tests must be visible: in-scope by location, out-of-scope because created by them
+    assert in_scope_test_id in returned_ids
+    assert outside_test_id in returned_ids
+
+    # my_tests=true: both tests are visible because the state_admin created them
+    my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true", headers=state_admin_token
+    )
+    assert my_tests_response.status_code == 200
+    my_tests_ids = {item["id"] for item in my_tests_response.json()["items"]}
+    assert in_scope_test_id in my_tests_ids
+    assert outside_test_id in my_tests_ids
+
+    # my_tests=false: neither test is visible because both were created by the state_admin
+    not_my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false", headers=state_admin_token
+    )
+    assert not_my_tests_response.status_code == 200
+    not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
+    assert in_scope_test_id not in not_my_tests_ids
+    assert outside_test_id not in not_my_tests_ids
+
+
+def test_test_admin_can_see_tests_they_created_outside_their_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """
+    A test_admin scoped to district_A should see tests they personally created
+    even if those tests are mapped to district_B (outside their location scope).
+    """
+    new_organization = create_random_organization(db)
+    db.add(new_organization)
+    db.commit()
+
+    country = Country(name=random_lower_string(), is_active=True)
+    db.add(country)
+    db.commit()
+    db.refresh(country)
+
+    state = State(name=random_lower_string(), is_active=True, country_id=country.id)
+    db.add(state)
+    db.commit()
+    db.refresh(state)
+
+    district_a = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    district_b = District(name=random_lower_string(), is_active=True, state_id=state.id)
+    db.add_all([district_a, district_b])
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role is not None
+    test_admin_email = random_email()
+    client.post(
+        f"{settings.API_V1_STR}/users/",
+        json={
+            "email": test_admin_email,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "full_name": random_lower_string(),
+            "role_id": test_admin_role.id,
+            "organization_id": new_organization.id,
+            "district_ids": [district_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    test_admin_token = authentication_token_from_email(
+        client=client, email=test_admin_email, db=db
+    )
+
+    # test_admin creates a test mapped to district_B (outside their district_A scope)
+    outside_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "district_ids": [district_b.id],
+        },
+        headers=test_admin_token,
+    )
+    assert outside_test_resp.status_code == 200
+    outside_test_id = outside_test_resp.json()["id"]
+
+    # test_admin creates a test mapped to their own district_A (within scope)
+    in_scope_test_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 30,
+            "marks": 10,
+            "link": random_lower_string(),
+            "district_ids": [district_a.id],
+        },
+        headers=test_admin_token,
+    )
+    assert in_scope_test_resp.status_code == 200
+    in_scope_test_id = in_scope_test_resp.json()["id"]
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+
+    # Both tests must be visible: in-scope by location, out-of-scope because created by them
+    assert in_scope_test_id in returned_ids
+    assert outside_test_id in returned_ids
+
+    # my_tests=true: both tests are visible because the test_admin created them
+    my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=true", headers=test_admin_token
+    )
+    assert my_tests_response.status_code == 200
+    my_tests_ids = {item["id"] for item in my_tests_response.json()["items"]}
+    assert in_scope_test_id in my_tests_ids
+    assert outside_test_id in my_tests_ids
+
+    # my_tests=false: neither test is visible because both were created by the test_admin
+    not_my_tests_response = client.get(
+        f"{settings.API_V1_STR}/test/?my_tests=false", headers=test_admin_token
+    )
+    assert not_my_tests_response.status_code == 200
+    not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
+    assert in_scope_test_id not in not_my_tests_ids
+    assert outside_test_id not in not_my_tests_ids
