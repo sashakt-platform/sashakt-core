@@ -1,12 +1,11 @@
 import json
 import random
-import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlmodel import and_, col, not_, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
@@ -17,7 +16,7 @@ from app.api.routes.question import (
 )
 from app.api.routes.utils import get_current_time
 from app.core.certificate_token import generate_certificate_token
-from app.core.config import TOLERANCE, settings
+from app.core.config import TOLERANCE
 from app.core.question_sets import (
     build_assigned_question_membership,
     build_question_set_id_map,
@@ -900,26 +899,6 @@ def _require_external_login_enabled(session: SessionDep, test: Test) -> None:
         )
 
 
-def _require_avanti_provision_token(authorization: str | None) -> None:
-    expected = settings.AVANTI_SASHAKT_PROVISION_TOKEN
-    if not expected:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Avanti provisioning is not configured",
-        )
-    scheme, _, token = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing provisioning token",
-        )
-    if not secrets.compare_digest(token, expected):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid provisioning token",
-        )
-
-
 @router.post("/start_test", response_model=StartTestResponse)
 def start_test_for_candidate(
     session: SessionDep,
@@ -935,7 +914,7 @@ def start_test_for_candidate(
     if _should_block_anonymous_start(session, test):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This test must be started from the external login flow.",
+            detail="Please open this test from your student portal.",
         )
     _validate_test_start_window(session, test)
     candidate = _create_anonymous_candidate(session, test)
@@ -956,14 +935,18 @@ def start_test_for_candidate(
 @router.post("/external/provision", response_model=StartTestResponse)
 def provision_external_candidate_test(
     session: SessionDep,
+    current_user: CurrentUser,
     provision_request: ExternalProvisionRequest = Body(...),
-    authorization: str | None = Header(default=None),
 ) -> StartTestResponse:
     """Create the Sashakt candidate and attempt Avanti will map to its user."""
-    _require_avanti_provision_token(authorization)
     test, admin_id = _resolve_active_test_link(
         session, provision_request.test_link_uuid
     )
+    if test.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Test link not found for this organization",
+        )
     _require_external_login_enabled(session, test)
     _validate_test_start_window(session, test)
 
@@ -975,7 +958,6 @@ def provision_external_candidate_test(
         admin_id=admin_id,
         start_test_request=provision_request,
     )
-
     return StartTestResponse(
         candidate_uuid=candidate.identity,
         candidate_test_id=candidate_test.id,
@@ -1046,6 +1028,9 @@ def submit_answer_for_qr_candidate(
     candidate_test = verify_candidate_uuid_access(
         session, candidate_test_id, candidate_uuid
     )
+    if candidate_test.is_submitted:
+        raise HTTPException(status_code=400, detail="Test already submitted")
+
     question_revision = session.get(
         QuestionRevision, answer_request.question_revision_id
     )

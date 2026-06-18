@@ -105,9 +105,6 @@ class Settings(BaseSettings):
     # Media upload settings
     MAX_QUESTION_IMAGE_SIZE_MB: int = 5
 
-    # Avanti external-login provisioning
-    AVANTI_SASHAKT_PROVISION_TOKEN: str | None = None
-
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
