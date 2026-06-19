@@ -15475,6 +15475,61 @@ def test_external_provision_and_start_resume_same_attempt(
     assert start_response.json() == provision_data
 
 
+def test_external_start_reports_submitted_attempt(
+    client: TestClient, db: SessionDep
+) -> None:
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    token_headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+
+    provision_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Portal"},
+        headers=token_headers,
+    )
+    assert provision_response.status_code == 200
+    provision_data = provision_response.json()
+    assert provision_data["is_submitted"] is False
+
+    candidate_test = db.get(CandidateTest, provision_data["candidate_test_id"])
+    assert candidate_test is not None
+    candidate_test.is_submitted = True
+    db.add(candidate_test)
+    db.commit()
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/start_test",
+        json={
+            "test_link_uuid": test_link.uuid,
+            "candidate_uuid": provision_data["candidate_uuid"],
+            "candidate_test_id": provision_data["candidate_test_id"],
+            "device_info": "Mobile",
+        },
+    )
+
+    assert start_response.status_code == 200
+    assert start_response.json()["is_submitted"] is True
+
+
 def test_external_provision_creates_distinct_candidates_for_new_tests(
     client: TestClient, db: SessionDep
 ) -> None:

@@ -986,6 +986,7 @@ def start_external_candidate_test(
     return StartTestResponse(
         candidate_uuid=start_request.candidate_uuid,
         candidate_test_id=start_request.candidate_test_id,
+        is_submitted=candidate_test.is_submitted,
     )
 
 
