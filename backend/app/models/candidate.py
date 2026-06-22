@@ -338,6 +338,16 @@ class StartTestRequest(SQLModel):
 class StartTestResponse(SQLModel):
     candidate_uuid: uuid.UUID
     candidate_test_id: int
+    is_submitted: bool = False
+
+
+class ExternalProvisionRequest(StartTestRequest):
+    pass
+
+
+class ExternalStartRequest(StartTestRequest):
+    candidate_uuid: uuid.UUID
+    candidate_test_id: int
 
 
 class OverallTestAnalyticsResponse(SQLModel):
