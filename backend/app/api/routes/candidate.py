@@ -839,8 +839,7 @@ def _create_candidate_test(
         last_heartbeat_at=start_time if test.pause_timer_when_inactive else None,
     )
     session.add(candidate_test)
-    session.commit()
-    session.refresh(candidate_test)
+    session.flush()  # assigns candidate_test.id without committing
 
     if start_test_request.form_responses and test.form_id:
         form_response = FormResponse(
@@ -849,7 +848,8 @@ def _create_candidate_test(
             responses=start_test_request.form_responses,
         )
         session.add(form_response)
-        session.commit()
+
+    session.commit()  # single commit for candidate, candidate_test, and form_response
 
     return candidate_test
 
@@ -860,8 +860,7 @@ def _create_anonymous_candidate(session: SessionDep, test: Test) -> Candidate:
         organization_id=test.organization_id,
     )
     session.add(candidate)
-    session.commit()
-    session.refresh(candidate)
+    session.flush()  # assigns candidate.id without committing; committed with the test
     return candidate
 
 

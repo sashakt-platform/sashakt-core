@@ -13,7 +13,7 @@ jobs:
     environment: staging
     steps:
       - name: Checkout (for logs)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Pull latest changes and deploy
         uses: appleboy/ssh-action@master
