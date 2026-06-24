@@ -84,6 +84,14 @@ EntitySortConfig: Any = {
 }
 
 
+CandidateReportSortConfig: Any = {
+    "obtained_marks": "obtained_marks",
+    "start_time": "start_time",
+    "end_time": "end_time",
+    "time_taken_seconds": "time_taken_seconds",
+}
+
+
 # Export all configurations for easy import
 ALL_SORT_CONFIGS = {
     "User": UserSortConfig,
@@ -92,6 +100,7 @@ ALL_SORT_CONFIGS = {
     "Tag": TagSortConfig,
     "TagType": TagTypeSortConfig,
     "Entity": EntitySortConfig,
+    "CandidateReport": CandidateReportSortConfig,
 }
 
 

@@ -344,3 +344,22 @@ class OverallTestAnalyticsResponse(SQLModel):
     total_candidates: int
     overall_score_percent: float
     overall_avg_time_minutes: float
+
+
+class CandidateReportStatus(str, enum.Enum):
+    submitted = "submitted"
+    in_progress = "in_progress"
+
+
+class CandidateReport(SQLModel):
+    candidate_uuid: uuid.UUID
+    status: CandidateReportStatus
+    obtained_marks: float | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    time_taken_seconds: int | None = None
+
+
+class CandidateReportResponse(SQLModel):
+    total_marks: float
+    candidates: list[CandidateReport]

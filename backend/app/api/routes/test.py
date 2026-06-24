@@ -16,10 +16,12 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
+from app.api.routes.candidate import get_score_and_time
 from app.api.routes.utils import get_current_time
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
+    CandidateReportSortConfig,
     SortingParams,
     SortOrder,
     TestSortConfig,
@@ -40,7 +42,14 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
-from app.models.candidate import CandidateTest, CandidateTestAnswer
+from app.models.candidate import (
+    Candidate,
+    CandidateReport,
+    CandidateReportResponse,
+    CandidateReportStatus,
+    CandidateTest,
+    CandidateTestAnswer,
+)
 from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
 from app.models.role import Role
@@ -72,6 +81,9 @@ router = APIRouter(prefix="/test", tags=["Test"])
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
+
+CandidateReportSorting = create_sorting_dependency(CandidateReportSortConfig)
+CandidateReportSortingDep = Annotated[SortingParams, Depends(CandidateReportSorting)]
 
 
 def check_test_ownership(
@@ -1055,6 +1067,79 @@ def get_test_by_id(
         )
 
     return build_test_public_response(session, test)
+
+
+@router.get(
+    "/{test_id}/candidate-report",
+    response_model=CandidateReportResponse,
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
+def get_candidate_report(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+    sorting: CandidateReportSortingDep,
+) -> CandidateReportResponse:
+    """Get per-candidate scores, status and time-taken for a test."""
+
+    test = session.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if test.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this test"
+        )
+
+    candidate_tests = session.exec(
+        select(CandidateTest).where(CandidateTest.test_id == test_id).join(Candidate)
+    ).all()
+
+    total_marks = 0.0
+    report_entries: list[CandidateReport] = []
+
+    for candidate_test in candidate_tests:
+        candidate = session.get(Candidate, candidate_test.candidate_id)
+        if not candidate or not candidate.identity:
+            continue
+
+        score_obtained, max_score, _ = get_score_and_time(session, candidate_test)
+        if total_marks == 0.0 and max_score > 0:
+            total_marks = max_score
+
+        if candidate_test.is_submitted:
+            status = CandidateReportStatus.submitted
+        else:
+            status = CandidateReportStatus.in_progress
+
+        time_taken_seconds: int | None = None
+        if candidate_test.start_time and candidate_test.end_time:
+            time_taken_seconds = int(
+                (candidate_test.end_time - candidate_test.start_time).total_seconds()
+            )
+
+        report_entries.append(
+            CandidateReport(
+                candidate_uuid=candidate.identity,
+                status=status,
+                obtained_marks=score_obtained if candidate_test.is_submitted else None,
+                start_time=candidate_test.start_time,
+                end_time=candidate_test.end_time,
+                time_taken_seconds=time_taken_seconds,
+            )
+        )
+
+    sorting_with_default = sorting.apply_default_if_none(
+        "obtained_marks", SortOrder.DESC
+    )
+    sort_field = sorting_with_default.sort_by
+    if sort_field:
+        reverse = sorting_with_default.sort_order == SortOrder.DESC
+        with_value = [e for e in report_entries if getattr(e, sort_field) is not None]
+        without_value = [e for e in report_entries if getattr(e, sort_field) is None]
+        with_value.sort(key=lambda e: getattr(e, sort_field), reverse=reverse)
+        report_entries = with_value + without_value
+
+    return CandidateReportResponse(total_marks=total_marks, candidates=report_entries)
 
 
 @router.put(
