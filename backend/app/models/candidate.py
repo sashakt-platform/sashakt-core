@@ -231,7 +231,6 @@ class Candidate(CandidateBase, table=True):
         sa_column_kwargs={"onupdate": get_timezone_aware_now},
     )
     organization_id: int | None = Field(foreign_key="organization.id")
-    is_deleted: bool = Field(default=False, nullable=False)
     user: "User" = Relationship(back_populates="candidates")
     tests: list["Test"] | None = Relationship(
         back_populates="candidates", link_model=CandidateTest
@@ -245,7 +244,6 @@ class CandidatePublic(CandidateBase):
     created_date: datetime
     modified_date: datetime
     organization_id: int | None
-    is_deleted: bool
 
 
 class CandidateUpdate(CandidateBase):

@@ -186,7 +186,7 @@ def test_read_candidate_by_id(
         candidate_aa.modified_date.isoformat() if candidate_aa.modified_date else None
     )
     assert data["is_active"] is True
-    assert data["is_deleted"] is False
+    assert "is_deleted" not in data
 
     response = client.get(
         f"{settings.API_V1_STR}/candidate/{candidate_b.id}",
@@ -204,7 +204,7 @@ def test_read_candidate_by_id(
         candidate_b.modified_date.isoformat() if candidate_b.modified_date else None
     )
     assert data["is_active"] is True
-    assert data["is_deleted"] is False
+    assert "is_deleted" not in data
 
     response = client.get(
         f"{settings.API_V1_STR}/candidate/{candidate_c.id}",
@@ -222,7 +222,7 @@ def test_read_candidate_by_id(
         candidate_c.modified_date.isoformat() if candidate_c.modified_date else None
     )
     assert data["is_active"] is True
-    assert data["is_deleted"] is False
+    assert "is_deleted" not in data
 
 
 def test_update_candidate(

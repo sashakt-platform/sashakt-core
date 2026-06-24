@@ -1391,7 +1391,7 @@ def create_candidate(
 )
 def get_candidate(session: SessionDep) -> Sequence[Candidate]:
     """List all candidates."""
-    candidate = session.exec(select(Candidate).where(not_(Candidate.is_deleted))).all()
+    candidate = session.exec(select(Candidate)).all()
     return candidate
 
 
@@ -1524,7 +1524,7 @@ def get_test_summary(
 def get_candidate_by_id(candidate_id: int, session: SessionDep) -> Candidate:
     """Retrieve a candidate by ID."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     return candidate
 
@@ -1542,7 +1542,7 @@ def update_candidate(
 ) -> Candidate:
     """Update a candidate's details."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate_data = updated_data.model_dump(exclude_unset=True)
     candidate.sqlmodel_update(candidate_data)
@@ -1565,7 +1565,7 @@ def visibility_candidate(
 ) -> Candidate:
     """Set candidate visibility."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate.is_active = is_active
     session.add(candidate)
