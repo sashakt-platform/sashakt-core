@@ -57,6 +57,7 @@ from app.models.candidate import (
     CandidateReviewResponse,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
+    DeleteCandidate,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -1581,13 +1582,54 @@ def visibility_candidate(
 def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
     """Delete a candidate."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    candidate.is_deleted = True
-    session.add(candidate)
+    session.delete(candidate)
     session.commit()
-    session.refresh(candidate)
     return Message(message="Candidate deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteCandidate,
+    dependencies=[Depends(permission_dependency("delete_candidate"))],
+)
+def bulk_delete_candidate(
+    session: SessionDep,
+    current_user: CurrentUser,
+    candidate_ids: list[int] = Body(...),
+) -> DeleteCandidate:
+    """Delete multiple candidates."""
+    candidates = session.exec(
+        select(Candidate).where(
+            col(Candidate.id).in_(candidate_ids),
+            Candidate.organization_id == current_user.organization_id,
+        )
+    ).all()
+
+    found_ids = {candidate.id for candidate in candidates}
+    missing_ids = set(candidate_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Candidates selected for deletion"
+        )
+
+    success_count = 0
+    failure_ids: list[int] = []
+
+    for candidate in candidates:
+        try:
+            session.delete(candidate)
+            success_count += 1
+        except Exception:
+            if candidate.id is not None:
+                failure_ids.append(candidate.id)
+
+    session.commit()
+    return DeleteCandidate(
+        delete_success_count=success_count,
+        delete_failure_ids=failure_ids or None,
+    )
 
 
 # Create Link between Candidate and Test

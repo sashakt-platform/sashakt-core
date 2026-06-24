@@ -252,6 +252,11 @@ class CandidateUpdate(CandidateBase):
     pass
 
 
+class DeleteCandidate(SQLModel):
+    delete_success_count: int
+    delete_failure_ids: list[int] | None = None
+
+
 class QuestionSetCandidatePublic(SQLModel):
     id: int | None = None
     title: str

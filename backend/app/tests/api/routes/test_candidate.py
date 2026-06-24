@@ -34,6 +34,11 @@ from app.models.test import (
     TestState,
     TestTag,
 )
+from app.tests.utils.candidate import (
+    create_test_candidate,
+    create_test_candidate_test,
+    create_test_record,
+)
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.test import get_test_link
@@ -342,6 +347,431 @@ def test_delete_candidate(
 
     assert response.status_code == 404
     assert "id" not in data
+
+
+def test_system_admin_can_delete_candidate(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+    candidate = create_test_candidate(db, user_id=user.id)
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/candidate/{candidate.id}",
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Candidate deleted successfully"
+
+    deleted_candidate = db.get(Candidate, candidate.id)
+    assert deleted_candidate is None
+
+
+def test_delete_candidate_cascades_to_candidate_test(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    revision = create_random_question_revision(
+        db, user_id=user.id, org_id=user.organization_id
+    )
+    db.refresh(revision)
+
+    test = create_test_record(db, user_id=user.id, organization_id=user.organization_id)
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(
+        db, user_id=user.id, organization_id=user.organization_id
+    )
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+    )
+
+    candidate_test_id = candidate_test.id
+    assert candidate_test_id is not None
+    assert db.get(CandidateTest, candidate_test_id) is not None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/candidate/{candidate.id}",
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Candidate deleted successfully"
+
+    assert db.get(Candidate, candidate.id) is None
+    assert db.get(CandidateTest, candidate_test_id) is None
+
+
+def test_delete_candidate_cascades_to_candidate_test_answer(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    revision = create_random_question_revision(
+        db, user_id=user.id, org_id=user.organization_id
+    )
+    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(
+        db, user_id=user.id, organization_id=user.organization_id
+    )
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:30:00",
+    )
+
+    answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test.id,
+        question_revision_id=revision.id,
+        response="[1]",
+        visited=True,
+    )
+    db.add(answer)
+    db.commit()
+    db.refresh(answer)
+
+    answer_id = answer.id
+    candidate_test_id = candidate_test.id
+    assert answer_id is not None
+    assert db.get(CandidateTestAnswer, answer_id) is not None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/candidate/{candidate.id}",
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Candidate deleted successfully"
+
+    assert db.get(Candidate, candidate.id) is None
+    assert db.get(CandidateTest, candidate_test_id) is None
+    assert db.get(CandidateTestAnswer, answer_id) is None
+
+
+def test_delete_candidate_cascades_to_form_response(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    user = create_random_user(db)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        form_id=form.id,
+    )
+
+    candidate = create_test_candidate(
+        db, user_id=user.id, organization_id=user.organization_id
+    )
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+    )
+
+    form_response = FormResponse(
+        candidate_test_id=candidate_test.id,
+        form_id=form.id,
+        responses={"full_name": "Test User"},
+    )
+    db.add(form_response)
+    db.commit()
+    db.refresh(form_response)
+
+    form_response_id = form_response.id
+    candidate_test_id = candidate_test.id
+    assert form_response_id is not None
+    assert db.get(FormResponse, form_response_id) is not None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/candidate/{candidate.id}",
+        headers=get_user_systemadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Candidate deleted successfully"
+
+    assert db.get(Candidate, candidate.id) is None
+    assert db.get(CandidateTest, candidate_test_id) is None
+    assert db.get(FormResponse, form_response_id) is None
+
+
+def test_bulk_delete_candidates(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+
+    candidate_one = create_test_candidate(db, organization_id=organization_id)
+    candidate_two = create_test_candidate(db, organization_id=organization_id)
+    candidate_three = create_test_candidate(db, organization_id=organization_id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_systemadmin_token,
+        json=[candidate_one.id, candidate_two.id, candidate_three.id],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["delete_success_count"] == 3
+    assert data["delete_failure_ids"] is None
+
+    assert db.get(Candidate, candidate_one.id) is None
+    assert db.get(Candidate, candidate_two.id) is None
+    assert db.get(Candidate, candidate_three.id) is None
+
+
+def test_bulk_delete_candidates_invalid_ids(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    _ = db
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_systemadmin_token,
+        json=[-999, -888],
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Candidates selected for deletion"
+
+
+def test_bulk_delete_candidates_different_organization(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    other_user = create_random_user(db)
+    candidate = create_test_candidate(db, organization_id=other_user.organization_id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_systemadmin_token,
+        json=[candidate.id],
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Invalid Candidates selected for deletion"
+
+    assert db.get(Candidate, candidate.id) is not None
+
+
+def test_bulk_delete_candidates_cascades_related_records(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
+
+    revision = create_random_question_revision(
+        db, user_id=user.id, org_id=user.organization_id
+    )
+    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate_one = create_test_candidate(db, organization_id=organization_id)
+    candidate_two = create_test_candidate(db, organization_id=organization_id)
+
+    candidate_test_one = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate_one.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:30:00",
+    )
+    candidate_test_two = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate_two.id,
+        question_revision_ids=[revision.id],
+    )
+
+    answer = CandidateTestAnswer(
+        candidate_test_id=candidate_test_one.id,
+        question_revision_id=revision.id,
+        response="[1]",
+        visited=True,
+    )
+    db.add(answer)
+    db.commit()
+    db.refresh(answer)
+
+    answer_id = answer.id
+    candidate_test_one_id = candidate_test_one.id
+    candidate_test_two_id = candidate_test_two.id
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_systemadmin_token,
+        json=[candidate_one.id, candidate_two.id],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_ids"] is None
+
+    assert db.get(Candidate, candidate_one.id) is None
+    assert db.get(Candidate, candidate_two.id) is None
+    assert db.get(CandidateTest, candidate_test_one_id) is None
+    assert db.get(CandidateTest, candidate_test_two_id) is None
+    assert db.get(CandidateTestAnswer, answer_id) is None
+
+
+def test_bulk_delete_candidates_superadmin(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+
+    candidate_one = create_test_candidate(db, organization_id=organization_id)
+    candidate_two = create_test_candidate(db, organization_id=organization_id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        json=[candidate_one.id, candidate_two.id],
+        headers=get_user_superadmin_token,
+    )
+
+    data = response.json()
+    assert response.status_code == 200
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_ids"] is None
+
+    assert db.get(Candidate, candidate_one.id) is None
+    assert db.get(Candidate, candidate_two.id) is None
+
+
+def test_bulk_delete_candidates_mixed_valid_and_invalid_ids(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+
+    candidate = create_test_candidate(db, organization_id=organization_id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_systemadmin_token,
+        json=[candidate.id, -999999],
+    )
+
+    assert response.status_code == 404
+    assert "invalid" in response.json()["detail"].lower()
+
+    assert db.get(Candidate, candidate.id) is not None
+
+
+def test_bulk_delete_candidates_state_admin_not_permitted(
+    client: TestClient, db: SessionDep, get_user_stateadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_stateadmin_token)[
+        "organization_id"
+    ]
+
+    candidate = create_test_candidate(db, organization_id=organization_id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_stateadmin_token,
+        json=[candidate.id],
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "User Not Permitted"
+
+    assert db.get(Candidate, candidate.id) is not None
+
+
+def test_bulk_delete_candidates_test_admin_not_permitted(
+    client: TestClient, db: SessionDep, get_user_testadmin_token: dict[str, str]
+) -> None:
+    organization_id = get_current_user_data(client, get_user_testadmin_token)[
+        "organization_id"
+    ]
+
+    candidate = create_test_candidate(db, organization_id=organization_id)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        headers=get_user_testadmin_token,
+        json=[candidate.id],
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "User Not Permitted"
+
+    assert db.get(Candidate, candidate.id) is not None
+
+
+def test_bulk_delete_candidates_unauthenticated(
+    client: TestClient, db: SessionDep
+) -> None:
+    _ = db
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/candidate/",
+        json=[1, 2, 3],
+    )
+
+    assert response.status_code == 401
 
 
 # Test cases for Candidate and Tests
