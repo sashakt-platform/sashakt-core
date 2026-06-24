@@ -1091,42 +1091,56 @@ def get_candidate_report(
         )
 
     candidate_tests = session.exec(
-        select(CandidateTest).where(CandidateTest.test_id == test_id).join(Candidate)
+        select(CandidateTest).where(CandidateTest.test_id == test_id)
     ).all()
+
+    if not candidate_tests:
+        return CandidateReportResponse(total_marks=0.0, candidates=[])
+
+    candidate_ids = [candidate_test.candidate_id for candidate_test in candidate_tests]
+    candidates_by_id = {
+        candidate.id: candidate
+        for candidate in session.exec(
+            select(Candidate).where(col(Candidate.id).in_(candidate_ids))
+        ).all()
+        if candidate.id is not None
+    }
 
     total_marks = 0.0
     report_entries: list[CandidateReport] = []
 
     for candidate_test in candidate_tests:
-        candidate = session.get(Candidate, candidate_test.candidate_id)
-        if not candidate or not candidate.identity:
-            continue
+        candidate = candidates_by_id.get(candidate_test.candidate_id)
+        if candidate and candidate.identity:
+            score_obtained, max_score, _ = get_score_and_time(session, candidate_test)
+            if total_marks == 0.0 and max_score > 0:
+                total_marks = max_score
 
-        score_obtained, max_score, _ = get_score_and_time(session, candidate_test)
-        if total_marks == 0.0 and max_score > 0:
-            total_marks = max_score
+            if candidate_test.is_submitted:
+                status = CandidateReportStatus.submitted
+            else:
+                status = CandidateReportStatus.in_progress
 
-        if candidate_test.is_submitted:
-            status = CandidateReportStatus.submitted
-        else:
-            status = CandidateReportStatus.in_progress
+            time_taken_seconds: int | None = None
+            if candidate_test.start_time and candidate_test.end_time:
+                time_taken_seconds = int(
+                    (
+                        candidate_test.end_time - candidate_test.start_time
+                    ).total_seconds()
+                )
 
-        time_taken_seconds: int | None = None
-        if candidate_test.start_time and candidate_test.end_time:
-            time_taken_seconds = int(
-                (candidate_test.end_time - candidate_test.start_time).total_seconds()
+            report_entries.append(
+                CandidateReport(
+                    candidate_uuid=candidate.identity,
+                    status=status,
+                    obtained_marks=score_obtained
+                    if candidate_test.is_submitted
+                    else None,
+                    start_time=candidate_test.start_time,
+                    end_time=candidate_test.end_time,
+                    time_taken_seconds=time_taken_seconds,
+                )
             )
-
-        report_entries.append(
-            CandidateReport(
-                candidate_uuid=candidate.identity,
-                status=status,
-                obtained_marks=score_obtained if candidate_test.is_submitted else None,
-                start_time=candidate_test.start_time,
-                end_time=candidate_test.end_time,
-                time_taken_seconds=time_taken_seconds,
-            )
-        )
 
     sorting_with_default = sorting.apply_default_if_none(
         "obtained_marks", SortOrder.DESC

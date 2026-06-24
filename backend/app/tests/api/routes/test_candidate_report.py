@@ -572,6 +572,73 @@ def test_candidate_report_empty(
     assert data["candidates"] == []
 
 
+def test_candidate_report_skips_candidate_without_identity(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """A candidate without identity (registered user, not QR-code) should not appear."""
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
+
+    revision = create_random_question_revision(
+        db, user_id=user.id, org_id=user.organization_id
+    )
+    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
+    db.add(revision)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=user.organization_id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate_without_identity = Candidate(
+        identity=None,
+        organization_id=user.organization_id,
+    )
+    db.add(candidate_without_identity)
+    db.commit()
+    db.refresh(candidate_without_identity)
+
+    candidate_test = CandidateTest(
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate_without_identity.id,
+        device=random_lower_string(),
+        consent=True,
+        start_time="2026-06-10T10:00:00",
+        end_time="2026-06-10T10:20:00",
+        is_submitted=True,
+        question_revision_ids=[revision.id],
+        question_set_ids=[None],
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_marks"] == 0.0
+    assert data["candidates"] == []
+
+
 def _create_three_candidates_for_sorting(
     db: SessionDep,
     user: Any,
@@ -758,7 +825,6 @@ def test_candidate_report_sort_by_start_time_asc(
     )
 
     assert response.status_code == 200
-    print("here is hello", response.json())
     candidates = response.json()["candidates"]
     uuids = [c["candidate_uuid"] for c in candidates]
 
