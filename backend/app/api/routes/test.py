@@ -26,6 +26,7 @@ from app.core.sorting import (
     SortOrder,
     TestSortConfig,
     create_sorting_dependency,
+    validate_sort_field,
 )
 from app.crud import organization_settings as crud_settings
 from app.models import (
@@ -1147,6 +1148,7 @@ def get_candidate_report(
     )
     sort_field = sorting_with_default.sort_by
     if sort_field:
+        validate_sort_field(sort_field, list(CandidateReportSortConfig.keys()))
         reverse = sorting_with_default.sort_order == SortOrder.DESC
         with_value = [e for e in report_entries if getattr(e, sort_field) is not None]
         without_value = [e for e in report_entries if getattr(e, sort_field) is None]

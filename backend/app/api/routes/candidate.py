@@ -1579,10 +1579,12 @@ def visibility_candidate(
     "/{candidate_id}",
     dependencies=[Depends(permission_dependency("delete_candidate"))],
 )
-def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
+def delete_candidate(
+    candidate_id: int, session: SessionDep, current_user: CurrentUser
+) -> Message:
     """Delete a candidate."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate:
+    if not candidate or candidate.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Candidate not found")
     session.delete(candidate)
     session.commit()

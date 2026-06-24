@@ -320,12 +320,15 @@ def test_visibility_candidate(
 def test_delete_candidate(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    user_a = create_random_user(db)
-    user_b = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+        "organization_id"
+    ]
+    user_a = create_random_user(db, organization_id=organization_id)
+    user_b = create_random_user(db, organization_id=organization_id)
 
-    candidate_aa = Candidate(user_id=user_a.id)
-    candidate_b = Candidate(user_id=user_b.id)
-    candidate_c = Candidate()
+    candidate_aa = Candidate(user_id=user_a.id, organization_id=organization_id)
+    candidate_b = Candidate(user_id=user_b.id, organization_id=organization_id)
+    candidate_c = Candidate(organization_id=organization_id)
 
     db.add_all([candidate_aa, candidate_b, candidate_c])
     db.commit()
@@ -352,8 +355,13 @@ def test_delete_candidate(
 def test_system_admin_can_delete_candidate(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
-    candidate = create_test_candidate(db, user_id=user.id)
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
+    candidate = create_test_candidate(
+        db, user_id=user.id, organization_id=organization_id
+    )
 
     response = client.delete(
         f"{settings.API_V1_STR}/candidate/{candidate.id}",
@@ -370,7 +378,10 @@ def test_system_admin_can_delete_candidate(
 def test_delete_candidate_cascades_to_candidate_test(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
 
     revision = create_random_question_revision(
         db, user_id=user.id, org_id=user.organization_id
@@ -411,7 +422,10 @@ def test_delete_candidate_cascades_to_candidate_test(
 def test_delete_candidate_cascades_to_candidate_test_answer(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
 
     revision = create_random_question_revision(
         db, user_id=user.id, org_id=user.organization_id
@@ -474,7 +488,10 @@ def test_delete_candidate_cascades_to_candidate_test_answer(
 def test_delete_candidate_cascades_to_form_response(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user = create_random_user(db)
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+    user = create_random_user(db, organization_id=organization_id)
 
     form = Form(
         name=random_lower_string(),
