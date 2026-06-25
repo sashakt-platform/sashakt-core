@@ -1811,51 +1811,21 @@ def convert_to_list(value: object) -> list[str]:
     return [str(value)]
 
 
-@router.get("/result/{candidate_test_id}", response_model=Result)
-def get_test_result(
-    candidate_test_id: int,
+def compute_result(
     session: SessionDep,
-    candidate_uuid: uuid.UUID = Query(
-        ..., description="Candidate UUID for verification"
-    ),
+    candidate_test: CandidateTest,
+    test: Test,
+    question_sets_by_id: dict[int, QuestionSet],
+    sectioned: bool,
 ) -> Result:
-    """Get the scored result for a candidate test."""
-    candidate_test = session.get(CandidateTest, candidate_test_id)
-
-    if not candidate_test:
-        raise HTTPException(status_code=404, detail="Candidate test not found")
-    test = session.get(Test, candidate_test.test_id)
-    if test is None:
-        raise HTTPException(status_code=404, detail="Test not found")
-    if not test.show_result:
-        raise HTTPException(
-            status_code=403, detail="Results are not visible for this test"
-        )
-    test_id = get_persisted_test_id(test)
-
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-    test_questions = get_test_question_links(session, test_id)
-    question_sets = get_test_question_sets(session, test_id)
-    question_sets_by_id = {
-        question_set.id: question_set
-        for question_set in question_sets
-        if question_set.id is not None
-    }
-    try:
-        sectioned = is_sectioned_test(
-            test_questions,
-            question_sets_by_id,
-            test_id=test_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    """Compute the scored result for a candidate test (no certificate or auth checks)."""
 
     question_revisions_map = get_question_revisions_map(
         session, candidate_test.question_revision_ids
     )
     answers = session.exec(
         select(CandidateTestAnswer).where(
-            CandidateTestAnswer.candidate_test_id == candidate_test_id
+            CandidateTestAnswer.candidate_test_id == candidate_test.id
         )
     ).all()
     answers_by_question_id = {answer.question_revision_id: answer for answer in answers}
@@ -2058,7 +2028,60 @@ def get_test_result(
 
     total_questions = len(candidate_test.question_revision_ids)
 
-    # Generate certificate download URL if test has a certificate assigned
+    return Result(
+        correct_answer=correct,
+        incorrect_answer=incorrect,
+        mandatory_not_attempted=mandatory_not_attempted,
+        optional_not_attempted=optional_not_attempted,
+        total_questions=total_questions,
+        marks_obtained=marks_obtained if has_marking_scheme else None,
+        marks_maximum=marks_maximum if has_marking_scheme else None,
+    )
+
+
+@router.get("/result/{candidate_test_id}", response_model=Result)
+def get_test_result(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> Result:
+    """Get the scored result for a candidate test."""
+    candidate_test = session.get(CandidateTest, candidate_test_id)
+
+    if not candidate_test:
+        raise HTTPException(status_code=404, detail="Candidate test not found")
+    test = session.get(Test, candidate_test.test_id)
+    if test is None:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if not test.show_result:
+        raise HTTPException(
+            status_code=403, detail="Results are not visible for this test"
+        )
+    test_id = get_persisted_test_id(test)
+
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
+    question_sets_by_id = {
+        question_set.id: question_set
+        for question_set in question_sets
+        if question_set.id is not None
+    }
+    try:
+        sectioned = is_sectioned_test(
+            test_questions,
+            question_sets_by_id,
+            test_id=test_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    result = compute_result(
+        session, candidate_test, test, question_sets_by_id, sectioned
+    )
+
     certificate_download_url = None
     if test.certificate_id:
         # Check if certificate_data already exists (reuse token)
@@ -2070,10 +2093,11 @@ def get_test_result(
             # Generate new token and save certificate data snapshot
             token = generate_certificate_token()
 
-            # Format score string from already-calculated values
-            if marks_maximum > 0:
-                score_percentage = marks_obtained / marks_maximum * 100
-                score_str = f"{marks_obtained:.1f}/{marks_maximum:.1f} ({score_percentage:.1f}%)"
+            raw_marks_obtained = result.marks_obtained or 0.0
+            raw_marks_maximum = result.marks_maximum or 0.0
+            if raw_marks_maximum > 0:
+                score_percentage = raw_marks_obtained / raw_marks_maximum * 100
+                score_str = f"{raw_marks_obtained:.1f}/{raw_marks_maximum:.1f} ({score_percentage:.1f}%)"
             else:
                 score_str = "N/A"
 
@@ -2118,16 +2142,8 @@ def get_test_result(
 
         certificate_download_url = f"/api/v1/certificate/download/{token}"
 
-    return Result(
-        correct_answer=correct,
-        incorrect_answer=incorrect,
-        mandatory_not_attempted=mandatory_not_attempted,
-        optional_not_attempted=optional_not_attempted,
-        total_questions=total_questions,
-        marks_obtained=marks_obtained if has_marking_scheme else None,
-        marks_maximum=marks_maximum if has_marking_scheme else None,
-        certificate_download_url=certificate_download_url,
-    )
+    result.certificate_download_url = certificate_download_url
+    return result
 
 
 @router.get("/time_left/{candidate_test_id}", response_model=TimeLeft)

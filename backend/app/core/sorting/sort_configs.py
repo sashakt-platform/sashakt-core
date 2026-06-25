@@ -85,7 +85,6 @@ EntitySortConfig: Any = {
 
 
 CandidateReportSortConfig: Any = {
-    "obtained_marks": "obtained_marks",
     "start_time": "start_time",
     "end_time": "end_time",
     "time_taken_seconds": "time_taken_seconds",

@@ -85,13 +85,12 @@ def test_candidate_report_submitted(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total_marks"] == 10.0
     assert len(data["candidates"]) == 1
 
     entry = data["candidates"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
     assert entry["status"] == "submitted"
-    assert entry["obtained_marks"] == 10.0
+    assert entry["result"]["marks_obtained"] == 10.0
     assert entry["start_time"] == "2026-06-10T10:00:00"
     assert entry["end_time"] == "2026-06-10T10:32:00"
     assert entry["time_taken_seconds"] == 1920
@@ -187,12 +186,11 @@ def test_candidate_report_total_marks_test_level(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total_marks"] == 20.0
     assert len(data["candidates"]) == 1
 
     entry = data["candidates"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
-    assert entry["obtained_marks"] == 10.0
+    assert entry["result"]["marks_obtained"] == 10.0
     assert entry["start_time"] == "2026-06-10T10:00:00"
     assert entry["end_time"] == "2026-06-10T10:30:00"
     assert entry["time_taken_seconds"] == 1800
@@ -303,12 +301,11 @@ def test_candidate_report_total_marks_question_level(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total_marks"] == 17.0
     assert len(data["candidates"]) == 1
 
     entry = data["candidates"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
-    assert entry["obtained_marks"] == 15.0
+    assert entry["result"]["marks_obtained"] == 15.0
     assert entry["start_time"] == "2026-06-10T10:00:00"
     assert entry["end_time"] == "2026-06-10T10:25:00"
     assert entry["time_taken_seconds"] == 1500
@@ -410,21 +407,20 @@ def test_candidate_report_submitted_and_in_progress(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total_marks"] == 10.0
     assert len(data["candidates"]) == 2
 
     entries_by_uuid = {e["candidate_uuid"]: e for e in data["candidates"]}
 
     submitted_entry = entries_by_uuid[str(submitted_candidate.identity)]
     assert submitted_entry["status"] == "submitted"
-    assert submitted_entry["obtained_marks"] == 10.0
+    assert submitted_entry["result"]["marks_obtained"] == 10.0
     assert submitted_entry["start_time"] == "2026-06-10T10:00:00"
     assert submitted_entry["end_time"] == "2026-06-10T10:20:00"
     assert submitted_entry["time_taken_seconds"] == 1200
 
     in_progress_entry = entries_by_uuid[str(in_progress_candidate.identity)]
     assert in_progress_entry["status"] == "in_progress"
-    assert in_progress_entry["obtained_marks"] is None
+    assert in_progress_entry["result"] is None
     assert in_progress_entry["start_time"] == "2026-06-10T10:05:00"
     assert in_progress_entry["end_time"] is None
     assert in_progress_entry["time_taken_seconds"] is None
@@ -568,7 +564,6 @@ def test_candidate_report_empty(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total_marks"] == 0.0
     assert data["candidates"] == []
 
 
@@ -635,7 +630,6 @@ def test_candidate_report_skips_candidate_without_identity(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total_marks"] == 0.0
     assert data["candidates"] == []
 
 
@@ -764,49 +758,6 @@ def _setup_sorting_test(
     )
     assert test.id is not None
     return test.id, uuid_a, uuid_b, uuid_c
-
-
-def test_candidate_report_sort_by_obtained_marks_desc(
-    client: TestClient,
-    db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
-) -> None:
-    test_id, uuid_a, uuid_b, uuid_c = _setup_sorting_test(
-        client, db, get_user_superadmin_token
-    )
-
-    response = client.get(
-        f"{settings.API_V1_STR}/test/{test_id}/candidate-report",
-        headers=get_user_superadmin_token,
-        params={"sort_by": "obtained_marks", "sort_order": "desc"},
-    )
-
-    assert response.status_code == 200
-    candidates = response.json()["candidates"]
-    uuids = [c["candidate_uuid"] for c in candidates]
-
-    assert uuids == [uuid_a, uuid_b, uuid_c]
-
-
-def test_candidate_report_sort_by_obtained_marks_asc(
-    client: TestClient,
-    db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
-) -> None:
-    test_id, uuid_a, uuid_b, uuid_c = _setup_sorting_test(
-        client, db, get_user_superadmin_token
-    )
-
-    response = client.get(
-        f"{settings.API_V1_STR}/test/{test_id}/candidate-report",
-        headers=get_user_superadmin_token,
-        params={"sort_by": "obtained_marks", "sort_order": "asc"},
-    )
-
-    assert response.status_code == 200
-    candidates = response.json()["candidates"]
-    uuids = [c["candidate_uuid"] for c in candidates]
-    assert uuids == [uuid_b, uuid_a, uuid_c]
 
 
 def test_candidate_report_sort_by_start_time_asc(

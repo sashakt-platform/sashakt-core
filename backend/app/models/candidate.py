@@ -357,12 +357,11 @@ class CandidateReportStatus(str, enum.Enum):
 class CandidateReport(SQLModel):
     candidate_uuid: uuid.UUID
     status: CandidateReportStatus
-    obtained_marks: float | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
     time_taken_seconds: int | None = None
+    result: Result | None = None
 
 
 class CandidateReportResponse(SQLModel):
-    total_marks: float
     candidates: list[CandidateReport]

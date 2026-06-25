@@ -16,7 +16,7 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
-from app.api.routes.candidate import get_score_and_time
+from app.api.routes.candidate import compute_result
 from app.api.routes.utils import get_current_time
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
@@ -50,6 +50,7 @@ from app.models.candidate import (
     CandidateReportStatus,
     CandidateTest,
     CandidateTestAnswer,
+    Result,
 )
 from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
@@ -1096,7 +1097,7 @@ def get_candidate_report(
     ).all()
 
     if not candidate_tests:
-        return CandidateReportResponse(total_marks=0.0, candidates=[])
+        return CandidateReportResponse(candidates=[])
 
     candidate_ids = [candidate_test.candidate_id for candidate_test in candidate_tests]
     candidates_by_id = {
@@ -1107,20 +1108,35 @@ def get_candidate_report(
         if candidate.id is not None
     }
 
-    total_marks = 0.0
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
+    question_sets_by_id = {qs.id: qs for qs in question_sets if qs.id is not None}
+    try:
+        sectioned = is_sectioned_test(
+            test_questions, question_sets_by_id, test_id=test_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     report_entries: list[CandidateReport] = []
 
     for candidate_test in candidate_tests:
         candidate = candidates_by_id.get(candidate_test.candidate_id)
         if candidate and candidate.identity:
-            score_obtained, max_score, _ = get_score_and_time(session, candidate_test)
-            if total_marks == 0.0 and max_score > 0:
-                total_marks = max_score
-
-            if candidate_test.is_submitted:
+            if candidate_test.end_time:
                 status = CandidateReportStatus.submitted
             else:
                 status = CandidateReportStatus.in_progress
+
+            result: Result | None = None
+            if candidate_test.end_time:
+                result = compute_result(
+                    session,
+                    candidate_test,
+                    test,
+                    question_sets_by_id,
+                    sectioned,
+                )
 
             time_taken_seconds: int | None = None
             if candidate_test.start_time and candidate_test.end_time:
@@ -1134,18 +1150,14 @@ def get_candidate_report(
                 CandidateReport(
                     candidate_uuid=candidate.identity,
                     status=status,
-                    obtained_marks=score_obtained
-                    if candidate_test.is_submitted
-                    else None,
                     start_time=candidate_test.start_time,
                     end_time=candidate_test.end_time,
                     time_taken_seconds=time_taken_seconds,
+                    result=result,
                 )
             )
 
-    sorting_with_default = sorting.apply_default_if_none(
-        "obtained_marks", SortOrder.DESC
-    )
+    sorting_with_default = sorting.apply_default_if_none("end_time", SortOrder.DESC)
     sort_field = sorting_with_default.sort_by
     if sort_field:
         validate_sort_field(sort_field, list(CandidateReportSortConfig.keys()))
@@ -1155,7 +1167,7 @@ def get_candidate_report(
         with_value.sort(key=lambda e: getattr(e, sort_field), reverse=reverse)
         report_entries = with_value + without_value
 
-    return CandidateReportResponse(total_marks=total_marks, candidates=report_entries)
+    return CandidateReportResponse(candidates=report_entries)
 
 
 @router.put(
