@@ -21,12 +21,10 @@ from app.api.routes.utils import get_current_time
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
-    CandidateReportSortConfig,
     SortingParams,
     SortOrder,
     TestSortConfig,
     create_sorting_dependency,
-    validate_sort_field,
 )
 from app.crud import organization_settings as crud_settings
 from app.models import (
@@ -83,9 +81,6 @@ router = APIRouter(prefix="/test", tags=["Test"])
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
-
-CandidateReportSorting = create_sorting_dependency(CandidateReportSortConfig)
-CandidateReportSortingDep = Annotated[SortingParams, Depends(CandidateReportSorting)]
 
 
 def check_test_ownership(
@@ -1080,7 +1075,6 @@ def get_candidate_report(
     test_id: int,
     session: SessionDep,
     current_user: CurrentUser,
-    sorting: CandidateReportSortingDep,
 ) -> CandidateReportResponse:
     """Get per-candidate scores, status and time-taken for a test."""
 
@@ -1156,16 +1150,6 @@ def get_candidate_report(
                     result=result,
                 )
             )
-
-    sorting_with_default = sorting.apply_default_if_none("end_time", SortOrder.DESC)
-    sort_field = sorting_with_default.sort_by
-    if sort_field:
-        validate_sort_field(sort_field, list(CandidateReportSortConfig.keys()))
-        reverse = sorting_with_default.sort_order == SortOrder.DESC
-        with_value = [e for e in report_entries if getattr(e, sort_field) is not None]
-        without_value = [e for e in report_entries if getattr(e, sort_field) is None]
-        with_value.sort(key=lambda e: getattr(e, sort_field), reverse=reverse)
-        report_entries = with_value + without_value
 
     return CandidateReportResponse(candidates=report_entries)
 
