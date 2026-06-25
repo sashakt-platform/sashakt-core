@@ -355,6 +355,7 @@ class CandidateReportStatus(str, enum.Enum):
 
 
 class CandidateReport(SQLModel):
+    candidate_id: int
     candidate_uuid: uuid.UUID
     status: CandidateReportStatus
     start_time: datetime | None = None
