@@ -6,18 +6,12 @@ from .sort_configs import (
     TestSortConfig,
     UserSortConfig,
 )
-from .sorting import (
-    SortingParams,
-    SortOrder,
-    create_sorting_dependency,
-    validate_sort_field,
-)
+from .sorting import SortingParams, SortOrder, create_sorting_dependency
 
 __all__ = [
     "SortingParams",
     "SortOrder",
     "create_sorting_dependency",
-    "validate_sort_field",
     "UserSortConfig",
     "QuestionSortConfig",
     "TestSortConfig",
