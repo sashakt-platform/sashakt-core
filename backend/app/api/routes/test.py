@@ -18,6 +18,7 @@ from app.api.deps import (
 )
 from app.api.routes.candidate import compute_result
 from app.api.routes.utils import get_current_time
+from app.core.candidate import get_time_taken_seconds
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
@@ -1132,13 +1133,7 @@ def get_candidate_report(
                     sectioned,
                 )
 
-            time_taken_seconds: int | None = None
-            if candidate_test.start_time and candidate_test.end_time:
-                time_taken_seconds = int(
-                    (
-                        candidate_test.end_time - candidate_test.start_time
-                    ).total_seconds()
-                )
+            time_taken_seconds = get_time_taken_seconds(candidate_test)
 
             report_entries.append(
                 CandidateReport(

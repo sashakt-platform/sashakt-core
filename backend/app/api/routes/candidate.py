@@ -15,6 +15,7 @@ from app.api.routes.question import (
     get_gcs_service_for_org,
 )
 from app.api.routes.utils import get_current_time
+from app.core.candidate import get_time_taken_seconds
 from app.core.certificate_token import generate_certificate_token
 from app.core.config import TOLERANCE
 from app.core.question_sets import (
@@ -577,11 +578,8 @@ def get_score_and_time(
             else:
                 total_score_obtained += marking_scheme.get("wrong", 0.0)
 
-    if candidate_test.start_time and candidate_test.end_time:
-        time_diff = candidate_test.end_time - candidate_test.start_time
-        total_time_minutes = time_diff.total_seconds() / 60.0
-    else:
-        total_time_minutes = 0.0
+    time_seconds = get_time_taken_seconds(candidate_test)
+    total_time_minutes = time_seconds / 60.0 if time_seconds is not None else 0.0
 
     return total_score_obtained, total_max_score, total_time_minutes
 
@@ -1622,12 +1620,13 @@ def bulk_delete_candidate(
     for candidate in candidates:
         try:
             session.delete(candidate)
+            session.commit()
             success_count += 1
         except Exception:
+            session.rollback()
             if candidate.id is not None:
                 failure_ids.append(candidate.id)
 
-    session.commit()
     return DeleteCandidate(
         delete_success_count=success_count,
         delete_failure_ids=failure_ids or None,
