@@ -4,11 +4,15 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models import Test, TestQuestion
-from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
+from app.models import TestQuestion
+from app.models.candidate import CandidateTestAnswer
+from app.tests.utils.candidate import (
+    create_test_candidate,
+    create_test_candidate_test,
+    create_test_record,
+)
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import create_random_user, get_current_user_data
-from app.tests.utils.utils import random_lower_string
 
 
 def test_candidate_report_submitted(
@@ -29,52 +33,40 @@ def test_candidate_report_submitted(
     db.commit()
     db.refresh(revision)
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
         marks_level="question",
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
-    candidate = Candidate(
-        identity=uuid.uuid4(),
-        organization_id=user.organization_id,
-    )
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
 
-    candidate_test = CandidateTest(
+    candidate_test = create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:00:00",
-        end_time="2026-06-10T10:32:00",
-        is_submitted=True,
         question_revision_ids=[revision.id],
-        question_set_ids=[None],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
     )
-    db.add(candidate_test)
-    db.commit()
-    db.refresh(candidate_test)
 
-    answer = CandidateTestAnswer(
-        candidate_test_id=candidate_test.id,
-        question_revision_id=revision.id,
-        response="[1]",
-        visited=True,
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
     )
-    db.add(answer)
     db.commit()
 
     response = client.get(
@@ -119,15 +111,13 @@ def test_candidate_report_total_marks_test_level(
     db.add(revision_two)
     db.commit()
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
         marks_level="test",
-        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
     )
+    test.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
     db.add(test)
     db.commit()
     db.refresh(test)
@@ -136,29 +126,21 @@ def test_candidate_report_total_marks_test_level(
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision_two.id))
     db.commit()
 
-    candidate = Candidate(
-        identity=uuid.uuid4(),
-        organization_id=user.organization_id,
-    )
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
 
-    candidate_test = CandidateTest(
+    candidate_test = create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:00:00",
-        end_time="2026-06-10T10:30:00",
-        is_submitted=True,
         question_revision_ids=[revision_one.id, revision_two.id],
-        question_set_ids=[None, None],
+        is_submitted=True,
+        end_time="2026-06-10T10:30:00",
     )
-    db.add(candidate_test)
-    db.commit()
-    db.refresh(candidate_test)
 
     db.add(
         CandidateTestAnswer(
@@ -226,46 +208,33 @@ def test_candidate_report_total_marks_question_level(
     db.add(revision_three)
     db.commit()
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
         marks_level="question",
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision_one.id))
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision_two.id))
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision_three.id))
     db.commit()
 
-    candidate = Candidate(
-        identity=uuid.uuid4(),
-        organization_id=user.organization_id,
-    )
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
 
-    candidate_test = CandidateTest(
+    candidate_test = create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:00:00",
-        end_time="2026-06-10T10:25:00",
-        is_submitted=True,
         question_revision_ids=[revision_one.id, revision_two.id, revision_three.id],
-        question_set_ids=[None, None, None],
+        is_submitted=True,
+        end_time="2026-06-10T10:25:00",
     )
-    db.add(candidate_test)
-    db.commit()
-    db.refresh(candidate_test)
 
     db.add(
         CandidateTestAnswer(
@@ -327,44 +296,33 @@ def test_candidate_report_submitted_and_in_progress(
     db.add(revision)
     db.commit()
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
         marks_level="question",
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
-    submitted_candidate = Candidate(
-        identity=uuid.uuid4(),
-        organization_id=user.organization_id,
+    submitted_candidate = create_test_candidate(
+        db, organization_id=user.organization_id
     )
+    submitted_candidate.identity = uuid.uuid4()
     db.add(submitted_candidate)
     db.commit()
     db.refresh(submitted_candidate)
 
-    submitted_ct = CandidateTest(
+    submitted_ct = create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=submitted_candidate.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:00:00",
-        end_time="2026-06-10T10:20:00",
-        is_submitted=True,
         question_revision_ids=[revision.id],
-        question_set_ids=[None],
+        is_submitted=True,
+        end_time="2026-06-10T10:20:00",
     )
-    db.add(submitted_ct)
-    db.commit()
-    db.refresh(submitted_ct)
 
     db.add(
         CandidateTestAnswer(
@@ -376,28 +334,23 @@ def test_candidate_report_submitted_and_in_progress(
     )
     db.commit()
 
-    in_progress_candidate = Candidate(
-        identity=uuid.uuid4(),
-        organization_id=user.organization_id,
+    in_progress_candidate = create_test_candidate(
+        db, organization_id=user.organization_id
     )
+    in_progress_candidate.identity = uuid.uuid4()
     db.add(in_progress_candidate)
     db.commit()
     db.refresh(in_progress_candidate)
 
-    in_progress_ct = CandidateTest(
+    create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=in_progress_candidate.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:05:00",
-        end_time=None,
-        is_submitted=False,
         question_revision_ids=[revision.id],
-        question_set_ids=[None],
+        is_submitted=False,
+        end_time=None,
     )
-    db.add(in_progress_ct)
-    db.commit()
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
@@ -420,7 +373,7 @@ def test_candidate_report_submitted_and_in_progress(
     in_progress_entry = entries_by_uuid[str(in_progress_candidate.identity)]
     assert in_progress_entry["status"] == "not_submitted"
     assert in_progress_entry["result"] is None
-    assert in_progress_entry["start_time"] == "2026-06-10T10:05:00"
+    assert in_progress_entry["start_time"] == "2026-06-10T10:00:00"
     assert in_progress_entry["end_time"] is None
     assert in_progress_entry["time_taken_seconds"] is None
 
@@ -442,43 +395,31 @@ def test_candidate_report_null_end_time(
     db.add(revision)
     db.commit()
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
         marks_level="question",
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
-    candidate = Candidate(
-        identity=uuid.uuid4(),
-        organization_id=user.organization_id,
-    )
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
 
-    candidate_test = CandidateTest(
+    create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:00:00",
-        end_time=None,
-        is_submitted=False,
         question_revision_ids=[revision.id],
-        question_set_ids=[None],
+        is_submitted=False,
+        end_time=None,
     )
-    db.add(candidate_test)
-    db.commit()
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
@@ -502,16 +443,11 @@ def test_candidate_report_different_organization(
 ) -> None:
     other_user = create_random_user(db)
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=other_user.id,
+    test = create_test_record(
+        db,
+        user_id=other_user.id,
         organization_id=other_user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
@@ -545,16 +481,11 @@ def test_candidate_report_empty(
     ]
     user = create_random_user(db, organization_id=organization_id)
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
@@ -584,43 +515,29 @@ def test_candidate_report_skips_candidate_without_identity(
     db.add(revision)
     db.commit()
 
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
+    test = create_test_record(
+        db,
+        user_id=user.id,
         organization_id=user.organization_id,
-        is_active=True,
-        link=random_lower_string(),
         marks_level="question",
     )
-    db.add(test)
-    db.commit()
-    db.refresh(test)
 
     db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
     db.commit()
 
-    candidate_without_identity = Candidate(
-        identity=None,
-        organization_id=user.organization_id,
+    candidate_without_identity = create_test_candidate(
+        db, organization_id=user.organization_id
     )
-    db.add(candidate_without_identity)
-    db.commit()
-    db.refresh(candidate_without_identity)
 
-    candidate_test = CandidateTest(
+    create_test_candidate_test(
+        db,
         admin_id=user.id,
         test_id=test.id,
         candidate_id=candidate_without_identity.id,
-        device=random_lower_string(),
-        consent=True,
-        start_time="2026-06-10T10:00:00",
-        end_time="2026-06-10T10:20:00",
-        is_submitted=True,
         question_revision_ids=[revision.id],
-        question_set_ids=[None],
+        is_submitted=True,
+        end_time="2026-06-10T10:20:00",
     )
-    db.add(candidate_test)
-    db.commit()
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}/candidate-report",

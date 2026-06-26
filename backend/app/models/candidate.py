@@ -358,7 +358,7 @@ class CandidateReport(SQLModel):
     candidate_id: int
     candidate_uuid: uuid.UUID
     status: CandidateReportStatus
-    start_time: datetime | None = None
+    start_time: datetime
     end_time: datetime | None = None
     time_taken_seconds: int | None = None
     result: Result | None = None

@@ -1150,6 +1150,7 @@ def get_candidate_report(
         .where(
             CandidateTest.test_id == test_id,
             col(Candidate.identity).is_not(None),
+            Candidate.organization_id == current_user.organization_id,
         )
     )
 
