@@ -351,7 +351,7 @@ class OverallTestAnalyticsResponse(SQLModel):
 
 class CandidateReportStatus(str, enum.Enum):
     submitted = "submitted"
-    in_progress = "in_progress"
+    not_submitted = "not_submitted"
 
 
 class CandidateReport(SQLModel):

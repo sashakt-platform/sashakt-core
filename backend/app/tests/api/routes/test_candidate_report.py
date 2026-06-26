@@ -84,9 +84,9 @@ def test_candidate_report_submitted(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["candidates"]) == 1
+    assert len(data["items"]) == 1
 
-    entry = data["candidates"][0]
+    entry = data["items"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
     assert entry["status"] == "submitted"
     assert entry["result"]["marks_obtained"] == 10.0
@@ -185,9 +185,9 @@ def test_candidate_report_total_marks_test_level(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["candidates"]) == 1
+    assert len(data["items"]) == 1
 
-    entry = data["candidates"][0]
+    entry = data["items"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
     assert entry["result"]["marks_obtained"] == 10.0
     assert entry["start_time"] == "2026-06-10T10:00:00"
@@ -300,9 +300,9 @@ def test_candidate_report_total_marks_question_level(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["candidates"]) == 1
+    assert len(data["items"]) == 1
 
-    entry = data["candidates"][0]
+    entry = data["items"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
     assert entry["result"]["marks_obtained"] == 15.0
     assert entry["start_time"] == "2026-06-10T10:00:00"
@@ -406,9 +406,9 @@ def test_candidate_report_submitted_and_in_progress(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["candidates"]) == 2
+    assert len(data["items"]) == 2
 
-    entries_by_uuid = {e["candidate_uuid"]: e for e in data["candidates"]}
+    entries_by_uuid = {e["candidate_uuid"]: e for e in data["items"]}
 
     submitted_entry = entries_by_uuid[str(submitted_candidate.identity)]
     assert submitted_entry["status"] == "submitted"
@@ -418,7 +418,7 @@ def test_candidate_report_submitted_and_in_progress(
     assert submitted_entry["time_taken_seconds"] == 1200
 
     in_progress_entry = entries_by_uuid[str(in_progress_candidate.identity)]
-    assert in_progress_entry["status"] == "in_progress"
+    assert in_progress_entry["status"] == "not_submitted"
     assert in_progress_entry["result"] is None
     assert in_progress_entry["start_time"] == "2026-06-10T10:05:00"
     assert in_progress_entry["end_time"] is None
@@ -487,9 +487,9 @@ def test_candidate_report_null_end_time(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["candidates"]) == 1
+    assert len(data["items"]) == 1
 
-    entry = data["candidates"][0]
+    entry = data["items"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
     assert entry["end_time"] is None
     assert entry["time_taken_seconds"] is None
@@ -563,7 +563,7 @@ def test_candidate_report_empty(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["candidates"] == []
+    assert data["items"] == []
 
 
 def test_candidate_report_skips_candidate_without_identity(
@@ -629,4 +629,4 @@ def test_candidate_report_skips_candidate_without_identity(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["candidates"] == []
+    assert data["items"] == []
