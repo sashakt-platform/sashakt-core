@@ -117,6 +117,11 @@ def authentication_token_from_email(
     return user_authentication_headers(client=client, email=email, password=password)
 
 
+def get_org_user(client: TestClient, db: Session, token: dict[str, str]) -> User:
+    organization_id = get_current_user_data(client, token)["organization_id"]
+    return create_random_user(db, organization_id=organization_id)
+
+
 def get_current_user_data(
     client: TestClient, auth_header: dict[str, Any]
 ) -> dict[str, Any]:

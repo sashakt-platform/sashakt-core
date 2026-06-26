@@ -1152,6 +1152,7 @@ def get_candidate_report(
             col(Candidate.identity).is_not(None),
             Candidate.organization_id == current_user.organization_id,
         )
+        .order_by(col(CandidateTest.id))
     )
 
     test_questions = get_test_question_links(session, test_id)

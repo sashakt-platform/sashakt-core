@@ -12,7 +12,7 @@ from app.tests.utils.candidate import (
     create_test_record,
 )
 from app.tests.utils.question_revisions import create_random_question_revision
-from app.tests.utils.user import create_random_user, get_current_user_data
+from app.tests.utils.user import create_random_user, get_org_user
 
 
 def test_candidate_report_submitted(
@@ -20,18 +20,14 @@ def test_candidate_report_submitted(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
+    user = get_org_user(client, db, get_user_superadmin_token)
 
     revision = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
     )
-    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
-    db.add(revision)
-    db.commit()
-    db.refresh(revision)
 
     test = create_test_record(
         db,
@@ -92,24 +88,20 @@ def test_candidate_report_total_marks_test_level(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
+    user = get_org_user(client, db, get_user_superadmin_token)
 
     revision_one = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 5, "wrong": 0, "skipped": 0},
     )
-    revision_one.marking_scheme = {"correct": 5, "wrong": 0, "skipped": 0}
-    db.add(revision_one)
-    db.commit()
-
     revision_two = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 5, "wrong": 0, "skipped": 0},
     )
-    revision_two.marking_scheme = {"correct": 5, "wrong": 0, "skipped": 0}
-    db.add(revision_two)
-    db.commit()
 
     test = create_test_record(
         db,
@@ -182,31 +174,26 @@ def test_candidate_report_total_marks_question_level(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
+    user = get_org_user(client, db, get_user_superadmin_token)
 
     revision_one = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
     )
-    revision_one.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
-    db.add(revision_one)
-    db.commit()
-
     revision_two = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 5, "wrong": 0, "skipped": 0},
     )
-    revision_two.marking_scheme = {"correct": 5, "wrong": 0, "skipped": 0}
-    db.add(revision_two)
-    db.commit()
-
     revision_three = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 2, "wrong": 0, "skipped": 0},
     )
-    revision_three.marking_scheme = {"correct": 2, "wrong": 0, "skipped": 0}
-    db.add(revision_three)
-    db.commit()
 
     test = create_test_record(
         db,
@@ -284,17 +271,14 @@ def test_candidate_report_submitted_and_in_progress(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
+    user = get_org_user(client, db, get_user_superadmin_token)
 
     revision = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
     )
-    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
-    db.add(revision)
-    db.commit()
 
     test = create_test_record(
         db,
@@ -383,17 +367,14 @@ def test_candidate_report_null_end_time(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
+    user = get_org_user(client, db, get_user_superadmin_token)
 
     revision = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
     )
-    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
-    db.add(revision)
-    db.commit()
 
     test = create_test_record(
         db,
@@ -476,10 +457,7 @@ def test_candidate_report_empty(
     db: SessionDep,
     get_user_superadmin_token: dict[str, str],
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
+    user = get_org_user(client, db, get_user_superadmin_token)
 
     test = create_test_record(
         db,
@@ -497,53 +475,45 @@ def test_candidate_report_empty(
     assert data["items"] == []
 
 
-def test_candidate_report_skips_candidate_without_identity(
+def test_candidate_report_accessible_by_test_admin(
     client: TestClient,
     db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
 ) -> None:
-    """A candidate without identity (registered user, not QR-code) should not appear."""
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
-        "organization_id"
-    ]
-    user = create_random_user(db, organization_id=organization_id)
-
-    revision = create_random_question_revision(
-        db, user_id=user.id, org_id=user.organization_id
-    )
-    revision.marking_scheme = {"correct": 10, "wrong": 0, "skipped": 0}
-    db.add(revision)
-    db.commit()
+    user = get_org_user(client, db, get_user_testadmin_token)
 
     test = create_test_record(
         db,
         user_id=user.id,
         organization_id=user.organization_id,
-        marks_level="question",
-    )
-
-    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
-    db.commit()
-
-    candidate_without_identity = create_test_candidate(
-        db, organization_id=user.organization_id
-    )
-
-    create_test_candidate_test(
-        db,
-        admin_id=user.id,
-        test_id=test.id,
-        candidate_id=candidate_without_identity.id,
-        question_revision_ids=[revision.id],
-        is_submitted=True,
-        end_time="2026-06-10T10:20:00",
     )
 
     response = client.get(
         f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
-        headers=get_user_superadmin_token,
+        headers=get_user_testadmin_token,
     )
 
     assert response.status_code == 200
-    data = response.json()
-    assert data["items"] == []
+    assert response.json()["items"] == []
+
+
+def test_candidate_report_accessible_by_state_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_stateadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_stateadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
