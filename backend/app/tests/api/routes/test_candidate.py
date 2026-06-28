@@ -2031,6 +2031,42 @@ def test_update_current_position_rejects_invalid_requests(
     assert response.json()["detail"] == "Test already submitted"
 
 
+def test_test_questions_returns_saved_answers_for_resume(
+    client: TestClient, db: SessionDep
+) -> None:
+    """test_questions returns the candidate's own saved answers (no correct answer)."""
+    candidate_uuid, candidate_test_id, revision_one_id, _ = (
+        _start_test_with_two_questions(client, db)
+    )
+
+    submit = client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json={
+            "question_revision_id": revision_one_id,
+            "response": "[1]",
+            "visited": True,
+            "bookmarked": True,
+        },
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert submit.status_code == 200
+
+    resume = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert resume.status_code == 200
+    saved = resume.json()["saved_answers"]
+
+    match = [a for a in saved if a["question_revision_id"] == revision_one_id]
+    assert len(match) == 1
+    assert match[0]["response"] == "[1]"
+    assert match[0]["visited"] is True
+    assert match[0]["bookmarked"] is True
+    # Resuming must never leak the correct answer.
+    assert all("correct_answer" not in a for a in saved)
+
+
 def test_submit_answer_enforces_question_set_attempt_limit(
     client: TestClient, db: SessionDep
 ) -> None:

@@ -56,6 +56,7 @@ from app.models import (
 from app.models.candidate import (
     CandidatePositionUpdateRequest,
     CandidateReviewResponse,
+    CandidateSavedAnswer,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
     OverallTestAnalyticsResponse,
@@ -1351,6 +1352,22 @@ def get_test_questions(
         )
     ).first()
 
+    # The candidate's own saved answers, so the attempt resumes with answers
+    # intact on another device. Excludes correct answers.
+    saved_answers = [
+        CandidateSavedAnswer(
+            question_revision_id=answer.question_revision_id,
+            response=answer.response,
+            visited=answer.visited,
+            bookmarked=answer.bookmarked,
+        )
+        for answer in session.exec(
+            select(CandidateTestAnswer).where(
+                CandidateTestAnswer.candidate_test_id == candidate_test_id
+            )
+        ).all()
+    ]
+
     return TestCandidatePublic(
         **test_data,
         question_revisions=candidate_questions,
@@ -1359,6 +1376,7 @@ def get_test_questions(
         states=states,
         total_questions=len(candidate_questions),
         candidate_test=candidate_test,
+        saved_answers=saved_answers,
         nomenclature=nomenclature,
         link=test_link.uuid if test_link else None,
     )

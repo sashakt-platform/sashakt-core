@@ -75,6 +75,19 @@ class CandidateTestAnswerFeedback(SQLModel):
     correct_answer: CorrectAnswerType = None
 
 
+class CandidateSavedAnswer(SQLModel):
+    """A candidate's own saved answer, for resuming an attempt on another device.
+
+    Deliberately excludes the correct answer so resuming never leaks it.
+    """
+
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    visited: bool = False
+    bookmarked: bool = False
+
+
 class CandidateReviewResponse(SQLModel):
     __test__ = False
     question_revision_id: int
@@ -312,6 +325,10 @@ class TestCandidatePublic(SQLModel):
 
     # Candidate test info
     candidate_test: "CandidateTestPublic"
+
+    # The candidate's own saved answers, so an attempt resumes with answers
+    # intact on another device. Never includes correct answers.
+    saved_answers: list["CandidateSavedAnswer"] | None = None
 
     # Resolved platform nomenclature for the test's organization
     nomenclature: dict[str, str] = Field(default_factory=dict)
