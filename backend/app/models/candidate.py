@@ -125,6 +125,10 @@ class CandidateTimerSyncRequest(SQLModel):
     event: CandidateTimerEventType
 
 
+class CandidatePositionUpdateRequest(SQLModel):
+    current_question_revision_id: int
+
+
 # Linking Tables between Candidate and Test
 
 
@@ -156,6 +160,7 @@ class CandidateTest(CandidateTestBase, table=True):
     active_time_spent_seconds: int | None = Field(default=None, nullable=True)
     last_timer_started_at: datetime | None = Field(default=None, nullable=True)
     last_heartbeat_at: datetime | None = Field(default=None, nullable=True)
+    current_question_revision_id: int | None = Field(default=None, nullable=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
         default_factory=get_timezone_aware_now,
@@ -198,6 +203,7 @@ class CandidateTestPublic(CandidateTestBase):
     modified_date: datetime
     question_revision_ids: list[int] = Field(default_factory=list)
     question_set_ids: list[int | None] = Field(default_factory=list)
+    current_question_revision_id: int | None = None
     answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
