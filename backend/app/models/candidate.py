@@ -85,7 +85,12 @@ class CandidateSavedAnswer(SQLModel):
     question_revision_id: int
     response: str | None = None
     visited: bool = False
+    time_spent: int | None = None
     bookmarked: bool = False
+    is_reviewed: bool = False
+    # Only set for already-reviewed answers (the candidate has already seen it
+    # and can no longer change the answer), so resuming never leaks unseen ones.
+    correct_answer: CorrectAnswerType = None
 
 
 class CandidateReviewResponse(SQLModel):

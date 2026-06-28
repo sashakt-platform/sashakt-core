@@ -2034,37 +2034,59 @@ def test_update_current_position_rejects_invalid_requests(
 def test_test_questions_returns_saved_answers_for_resume(
     client: TestClient, db: SessionDep
 ) -> None:
-    """test_questions returns the candidate's own saved answers (no correct answer)."""
-    candidate_uuid, candidate_test_id, revision_one_id, _ = (
+    """test_questions returns saved answers; the correct answer only for reviewed ones."""
+    candidate_uuid, candidate_test_id, revision_one_id, revision_two_id = (
         _start_test_with_two_questions(client, db)
     )
 
-    submit = client.post(
-        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
-        json={
-            "question_revision_id": revision_one_id,
-            "response": "[1]",
-            "visited": True,
-            "bookmarked": True,
-        },
-        params={"candidate_uuid": candidate_uuid},
-    )
-    assert submit.status_code == 200
+    for revision_id, answer_response in (
+        (revision_one_id, "[1]"),
+        (revision_two_id, "[2]"),
+    ):
+        submit = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": revision_id,
+                "response": answer_response,
+                "visited": True,
+                "time_spent": 42,
+                "bookmarked": True,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert submit.status_code == 200
+
+    # The candidate has reviewed only the first question (already saw its answer).
+    reviewed = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == revision_one_id)
+    ).first()
+    assert reviewed is not None
+    reviewed.is_reviewed = True
+    db.add(reviewed)
+    db.commit()
 
     resume = client.get(
         f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
         params={"candidate_uuid": candidate_uuid},
     )
     assert resume.status_code == 200
-    saved = resume.json()["saved_answers"]
+    saved = {a["question_revision_id"]: a for a in resume.json()["saved_answers"]}
 
-    match = [a for a in saved if a["question_revision_id"] == revision_one_id]
-    assert len(match) == 1
-    assert match[0]["response"] == "[1]"
-    assert match[0]["visited"] is True
-    assert match[0]["bookmarked"] is True
-    # Resuming must never leak the correct answer.
-    assert all("correct_answer" not in a for a in saved)
+    first = saved[revision_one_id]
+    assert first["response"] == "[1]"
+    assert first["visited"] is True
+    assert first["time_spent"] == 42
+    assert first["bookmarked"] is True
+    # Reviewed → the already-seen correct answer is allowed.
+    assert first["is_reviewed"] is True
+    assert first["correct_answer"] == [1]
+
+    second = saved[revision_two_id]
+    # Not reviewed → the correct answer must never be exposed.
+    assert second["is_reviewed"] is False
+    assert second["correct_answer"] is None
 
 
 def test_submit_answer_enforces_question_set_attempt_limit(

@@ -1354,19 +1354,29 @@ def get_test_questions(
 
     # The candidate's own saved answers, so the attempt resumes with answers
     # intact on another device. Excludes correct answers.
-    saved_answers = [
-        CandidateSavedAnswer(
-            question_revision_id=answer.question_revision_id,
-            response=answer.response,
-            visited=answer.visited,
-            bookmarked=answer.bookmarked,
+    saved_answers = []
+    for answer in session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
         )
-        for answer in session.exec(
-            select(CandidateTestAnswer).where(
-                CandidateTestAnswer.candidate_test_id == candidate_test_id
+    ).all():
+        revision = question_revisions_map.get(answer.question_revision_id)
+        saved_answers.append(
+            CandidateSavedAnswer(
+                question_revision_id=answer.question_revision_id,
+                response=answer.response,
+                visited=answer.visited,
+                time_spent=answer.time_spent,
+                bookmarked=answer.bookmarked,
+                is_reviewed=answer.is_reviewed,
+                # Only reviewed answers carry the correct answer (already seen).
+                correct_answer=(
+                    revision.correct_answer
+                    if answer.is_reviewed and revision is not None
+                    else None
+                ),
             )
-        ).all()
-    ]
+        )
 
     return TestCandidatePublic(
         **test_data,
