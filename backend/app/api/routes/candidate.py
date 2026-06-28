@@ -54,6 +54,7 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidatePositionUpdateRequest,
     CandidateReviewResponse,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
@@ -2170,6 +2171,42 @@ def sync_timer(
         test,
         time_now=time_now,
     )
+
+
+@router.patch(
+    "/current_position/{candidate_test_id}",
+    response_model=CandidateTestPublic,
+)
+def update_candidate_current_position(
+    candidate_test_id: int,
+    position_request: CandidatePositionUpdateRequest,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> CandidateTest:
+    """Persist the candidate's current question so the attempt can resume elsewhere."""
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+    if candidate_test.is_submitted:
+        raise HTTPException(status_code=400, detail="Test already submitted")
+    if (
+        position_request.current_question_revision_id
+        not in candidate_test.question_revision_ids
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Question revision is not assigned to this candidate test.",
+        )
+
+    candidate_test.current_question_revision_id = (
+        position_request.current_question_revision_id
+    )
+    session.add(candidate_test)
+    session.commit()
+    session.refresh(candidate_test)
+    return candidate_test
 
 
 @router.get(
