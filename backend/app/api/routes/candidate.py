@@ -1361,6 +1361,17 @@ def get_test_questions(
         )
     ).all():
         revision = question_revisions_map.get(answer.question_revision_id)
+        # Only reviewed answers carry the correct answer (already seen). Stringify
+        # matrix-match answers like the feedback path does, since the client
+        # parser expects a JSON string for them.
+        correct_answer: CorrectAnswerType = None
+        if answer.is_reviewed and revision is not None:
+            if revision.question_type == QuestionType.matrix_match and isinstance(
+                revision.correct_answer, dict
+            ):
+                correct_answer = json.dumps(revision.correct_answer)
+            else:
+                correct_answer = revision.correct_answer
         saved_answers.append(
             CandidateSavedAnswer(
                 question_revision_id=answer.question_revision_id,
@@ -1369,12 +1380,7 @@ def get_test_questions(
                 time_spent=answer.time_spent,
                 bookmarked=answer.bookmarked,
                 is_reviewed=answer.is_reviewed,
-                # Only reviewed answers carry the correct answer (already seen).
-                correct_answer=(
-                    revision.correct_answer
-                    if answer.is_reviewed and revision is not None
-                    else None
-                ),
+                correct_answer=correct_answer,
             )
         )
 
