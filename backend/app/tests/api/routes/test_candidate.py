@@ -15341,3 +15341,163 @@ def test_submit_test_returns_admin_id(client: TestClient, db: SessionDep) -> Non
     )
     assert response.status_code == 200
     assert response.json()["admin_id"] == user.id
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by the partial-update test cases below
+# ---------------------------------------------------------------------------
+
+
+def _setup_candidate_test_with_single_choice_question(
+    client: TestClient, db: SessionDep
+) -> tuple[int, str, int]:
+    """
+    Creates a test with one single-choice question, starts the test, and
+    returns (candidate_test_id, candidate_uuid, question_revision_id).
+    """
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text="What is 2+2?",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "4"},
+            {"id": 2, "key": "B", "value": "5"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    from app.models.test import TestQuestion
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid},
+    )
+    assert start.status_code == 200
+    data = start.json()
+    return data["candidate_test_id"], data["candidate_uuid"], question_revision.id
+
+
+def test_submit_answer_time_only_preserves_response(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Sending only time_spent (no response key) must not overwrite the saved response."""
+    candidate_test_id, candidate_uuid, qr_id = (
+        _setup_candidate_test_with_single_choice_question(client, db)
+    )
+    url = f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}"
+    params = {"candidate_uuid": candidate_uuid}
+
+    r = client.post(
+        url,
+        json={"question_revision_id": qr_id, "response": "[1]", "time_spent": 10},
+        params=params,
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        url, json={"question_revision_id": qr_id, "time_spent": 99}, params=params
+    )
+    assert r.status_code == 200
+    assert r.json()["response"] == "[1]"
+    assert r.json()["time_spent"] == 99
+    assert r.json()["visited"] is True
+
+
+def test_submit_answer_bookmarked_only_preserves_response(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Sending only bookmarked (no response key) must not overwrite the saved response."""
+    candidate_test_id, candidate_uuid, qr_id = (
+        _setup_candidate_test_with_single_choice_question(client, db)
+    )
+    url = f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}"
+    params = {"candidate_uuid": candidate_uuid}
+
+    r = client.post(
+        url, json={"question_revision_id": qr_id, "response": "[1]"}, params=params
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        url, json={"question_revision_id": qr_id, "bookmarked": True}, params=params
+    )
+    assert r.status_code == 200
+    assert r.json()["response"] == "[1]"
+    assert r.json()["bookmarked"] is True
+    assert r.json()["visited"] is True
+
+
+def test_submit_answer_explicit_null_response_clears_it(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Sending response=null explicitly must clear the saved response."""
+    candidate_test_id, candidate_uuid, qr_id = (
+        _setup_candidate_test_with_single_choice_question(client, db)
+    )
+    url = f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}"
+    params = {"candidate_uuid": candidate_uuid}
+
+    r = client.post(
+        url, json={"question_revision_id": qr_id, "response": "[1]"}, params=params
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        url, json={"question_revision_id": qr_id, "response": None}, params=params
+    )
+    assert r.status_code == 200
+    assert r.json()["response"] is None
+    assert r.json()["visited"] is True
+
+
+def test_submit_answer_visited_defaults_to_true(
+    client: TestClient, db: SessionDep
+) -> None:
+    """visited defaults to True — omitting it on create and update still yields True."""
+    candidate_test_id, candidate_uuid, qr_id = (
+        _setup_candidate_test_with_single_choice_question(client, db)
+    )
+    url = f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}"
+    params = {"candidate_uuid": candidate_uuid}
+
+    # Create without visited
+    r = client.post(url, json={"question_revision_id": qr_id}, params=params)
+    assert r.status_code == 200
+    assert r.json()["visited"] is True
+
+    # Update without visited — preserved as True
+    r = client.post(
+        url, json={"question_revision_id": qr_id, "time_spent": 5}, params=params
+    )
+    assert r.status_code == 200
+    assert r.json()["visited"] is True
