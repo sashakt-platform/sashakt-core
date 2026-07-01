@@ -95,7 +95,7 @@ class CandidateAnswerSubmitRequest(SQLModel):
 
     question_revision_id: int
     response: str | None = None
-    visited: bool = False
+    visited: bool = True
     time_spent: int | None = None
     bookmarked: bool = False
 
