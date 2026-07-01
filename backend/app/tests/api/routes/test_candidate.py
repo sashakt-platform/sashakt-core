@@ -15830,8 +15830,6 @@ def _setup_candidate_test_with_single_choice_question(
     db.commit()
     db.refresh(question_revision)
 
-    from app.models.test import TestQuestion
-
     test = Test(
         name=random_lower_string(),
         created_by_id=user.id,
