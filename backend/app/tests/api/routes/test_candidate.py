@@ -15402,7 +15402,12 @@ def _setup_candidate_test_with_single_choice_question(
     )
     assert start.status_code == 200
     data = start.json()
-    return data["candidate_test_id"], data["candidate_uuid"], question_revision.id
+    assert question_revision.id is not None
+    return (
+        int(data["candidate_test_id"]),
+        str(data["candidate_uuid"]),
+        question_revision.id,
+    )
 
 
 def test_submit_answer_time_only_preserves_response(
