@@ -3,13 +3,17 @@ from sqlmodel import Session
 from app.models import Question, QuestionRevision
 from app.models.organization import Organization
 from app.models.user import User
+from app.models.utils import MarkingScheme
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.user import create_random_user
 from app.tests.utils.utils import random_lower_string
 
 
 def create_random_question_revision(
-    session: Session, user_id: int | None = None, org_id: int | None = None
+    session: Session,
+    user_id: int | None = None,
+    org_id: int | None = None,
+    marking_scheme: MarkingScheme | None = None,
 ) -> QuestionRevision:
     if user_id is None:
         user = create_random_user(session)
@@ -61,8 +65,11 @@ def create_random_question_revision(
 
     # set last_revision_id on the question as it is expected in API
     question.last_revision_id = question_revision.id
+    if marking_scheme is not None:
+        question_revision.marking_scheme = marking_scheme
     session.add(question)
+    session.add(question_revision)
     session.commit()
-    session.refresh(question)
+    session.refresh(question_revision)
 
     return question_revision

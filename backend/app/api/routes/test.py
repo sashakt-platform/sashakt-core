@@ -16,7 +16,9 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
+from app.api.routes.candidate import compute_result
 from app.api.routes.utils import get_current_time
+from app.core.candidate import get_time_taken_seconds
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
@@ -40,7 +42,14 @@ from app.models import (
     TestTag,
     TestUpdate,
 )
-from app.models.candidate import CandidateTest, CandidateTestAnswer
+from app.models.candidate import (
+    Candidate,
+    CandidateReport,
+    CandidateReportStatus,
+    CandidateTest,
+    CandidateTestAnswer,
+    Result,
+)
 from app.models.form import Form, FormFieldPublic, FormPublic
 from app.models.location import District
 from app.models.role import Role
@@ -68,6 +77,63 @@ from app.services.organization_settings_mapper import (
 )
 
 router = APIRouter(prefix="/test", tags=["Test"])
+
+
+def transform_to_report(
+    candidate_tests: list[CandidateTest] | Any,
+    session: SessionDep,
+    test: Test,
+    question_sets_by_id: dict[int, QuestionSet],
+    sectioned: bool,
+) -> list[CandidateReport]:
+    candidate_test_list: list[CandidateTest] = (
+        list(candidate_tests)
+        if not isinstance(candidate_tests, list)
+        else candidate_tests
+    )
+    candidate_ids = {
+        candidate_test.candidate_id for candidate_test in candidate_test_list
+    }
+    candidates_by_id = {
+        candidate.id: candidate
+        for candidate in session.exec(
+            select(Candidate).where(col(Candidate.id).in_(candidate_ids))
+        ).all()
+        if candidate.id is not None
+    }
+
+    report_entries: list[CandidateReport] = []
+    for candidate_test in candidate_test_list:
+        candidate = candidates_by_id.get(candidate_test.candidate_id)
+        if candidate and candidate.identity:
+            if candidate_test.start_time and candidate_test.end_time:
+                status = CandidateReportStatus.submitted
+            else:
+                status = CandidateReportStatus.not_submitted
+
+            result: Result | None = None
+            if candidate_test.start_time and candidate_test.end_time:
+                result = compute_result(
+                    session,
+                    candidate_test,
+                    test,
+                    question_sets_by_id,
+                    sectioned,
+                )
+
+            report_entries.append(
+                CandidateReport(
+                    candidate_id=candidate_test.candidate_id,
+                    candidate_uuid=candidate.identity,
+                    status=status,
+                    start_time=candidate_test.start_time,
+                    end_time=candidate_test.end_time,
+                    time_taken_seconds=get_time_taken_seconds(candidate_test),
+                    result=result,
+                )
+            )
+    return report_entries
+
 
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
@@ -1055,6 +1121,59 @@ def get_test_by_id(
         )
 
     return build_test_public_response(session, test)
+
+
+@router.get(
+    "/{test_id}/candidate-report",
+    response_model=Page[CandidateReport],
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
+def get_candidate_report(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+    params: Pagination = Depends(),
+) -> Page[CandidateReport]:
+    """Get per-candidate scores, status and time-taken for a test."""
+
+    test = session.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if test.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this test"
+        )
+
+    query = (
+        select(CandidateTest)
+        .join(Candidate, col(Candidate.id) == CandidateTest.candidate_id)
+        .where(
+            CandidateTest.test_id == test_id,
+            col(Candidate.identity).is_not(None),
+            Candidate.organization_id == current_user.organization_id,
+        )
+        .order_by(col(CandidateTest.id))
+    )
+
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
+    question_sets_by_id = {qs.id: qs for qs in question_sets if qs.id is not None}
+    try:
+        sectioned = is_sectioned_test(
+            test_questions, question_sets_by_id, test_id=test_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    result: Page[CandidateReport] = paginate(
+        session,
+        query,  # type: ignore[arg-type]
+        params,
+        transformer=lambda items: transform_to_report(
+            items, session, test, question_sets_by_id, sectioned
+        ),
+    )
+    return result
 
 
 @router.put(
