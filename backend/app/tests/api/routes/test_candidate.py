@@ -1797,7 +1797,6 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     db.commit()
 
     # Link question to test
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
@@ -2272,7 +2271,6 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     # Link question to test
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
@@ -2743,8 +2741,6 @@ def test_submit_answer_for_subjective_qr_candidate(
     db.add(test)
     db.commit()
 
-    from app.models.test import TestQuestion
-
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
     )
@@ -2866,8 +2862,6 @@ def test_update_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     )
     db.add(test)
     db.commit()
-
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
@@ -3422,8 +3416,6 @@ def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> N
     )
     db.add(test)
     db.commit()
-
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
@@ -9917,8 +9909,6 @@ def test_submit_answer_for_single_choice_with_multiple_options_should_fail(
     db.add(test)
     db.commit()
 
-    from app.models.test import TestQuestion
-
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
     )
@@ -10066,8 +10056,6 @@ def test_submit_answer_for_multi_choice_with_invalid_response_should_fail(
     )
     db.add(test)
     db.commit()
-
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
@@ -10282,7 +10270,6 @@ def test_question_level_marking_scheme_applied_on_questions(
     db.commit()
 
     # Link the question to the test
-    from app.models.test import TestQuestion
 
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
@@ -15730,8 +15717,6 @@ def test_get_test_questions_returns_link(client: TestClient, db: SessionDep) -> 
     )
     db.add(test)
     db.commit()
-
-    from app.models.test import TestQuestion
 
     db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
     db.commit()
