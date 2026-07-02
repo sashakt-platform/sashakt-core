@@ -908,10 +908,9 @@ def submit_answer_for_qr_candidate(
             response=answer_request.response,
         )
 
-    if question_revision:
-        answer_request.response = validate_question_response_format(
-            answer_request.response, question_revision.question_type
-        )
+    validated_response = validate_question_response_format(
+        answer_request.response, question_revision.question_type
+    )
     # Check if answer already exists for this question
     existing_answer = session.exec(
         select(CandidateTestAnswer)
@@ -926,7 +925,7 @@ def submit_answer_for_qr_candidate(
         session,
         candidate_test=candidate_test,
         question_revision_id=answer_request.question_revision_id,
-        response=answer_request.response,
+        response=validated_response,
         existing_answer=existing_answer,
     )
 
@@ -937,11 +936,14 @@ def submit_answer_for_qr_candidate(
                 detail="Cannot modify answer after it has been reviewed",
             )
         # Update existing answer
-        existing_answer.response = answer_request.response
-        existing_answer.visited = answer_request.visited
+        if "response" in answer_request.model_fields_set:
+            existing_answer.response = validated_response
+        if "visited" in answer_request.model_fields_set:
+            existing_answer.visited = answer_request.visited
         if "time_spent" in answer_request.model_fields_set:
             existing_answer.time_spent = answer_request.time_spent
-        existing_answer.bookmarked = answer_request.bookmarked
+        if "bookmarked" in answer_request.model_fields_set:
+            existing_answer.bookmarked = answer_request.bookmarked
         session.add(existing_answer)
         session.commit()
         session.refresh(existing_answer)
@@ -951,7 +953,7 @@ def submit_answer_for_qr_candidate(
         candidate_test_answer = CandidateTestAnswer(
             candidate_test_id=candidate_test_id,
             question_revision_id=answer_request.question_revision_id,
-            response=answer_request.response,
+            response=validated_response,
             visited=answer_request.visited,
             time_spent=answer_request.time_spent,
             bookmarked=answer_request.bookmarked,
