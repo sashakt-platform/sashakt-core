@@ -160,6 +160,7 @@ def read_users(
     sorting: UserSortingDep,
     param: Pagination = Depends(),
     search: str | None = None,
+    organization_id: int | None = None,
 ) -> Page[UserPublic]:
     """
     Retrieve users.
@@ -174,6 +175,9 @@ def read_users(
         statement = select(User).where(
             User.organization_id == current_user_organization_id
         )
+
+    if organization_id is not None:
+        statement = statement.where(User.organization_id == organization_id)
 
     # apply role-based filtering
     if (

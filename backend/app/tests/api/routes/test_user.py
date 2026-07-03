@@ -450,6 +450,93 @@ def test_non_superadmin_only_sees_own_org_users(
         assert item["organization_id"] == caller_org_id
 
 
+def test_superadmin_can_filter_users_by_organization_id(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """super_admin can filter the user list down to a single organization."""
+    system_admin_role = db.exec(
+        select(Role).where(Role.name == system_admin.name)
+    ).first()
+    assert system_admin_role is not None
+
+    other_org = create_random_organization(db)
+    other_email = random_email()
+    user_in = UserCreate(
+        email=other_email,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=system_admin_role.id,
+        organization_id=other_org.id,
+    )
+    crud.create_user(session=db, user_create=user_in)
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/",
+        params={"organization_id": other_org.id},
+        headers=get_user_superadmin_token,
+    )
+    assert r.status_code == 200
+    data = r.json()
+
+    returned_emails = [item["email"] for item in data["items"]]
+    assert other_email in returned_emails
+    for item in data["items"]:
+        assert item["organization_id"] == other_org.id
+
+
+def test_superadmin_filter_by_organization_id_excludes_other_org_users(
+    client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Filtering by org1's id returns all of org1's (admin-role) users and none
+    of org2's, even when both orgs have multiple users."""
+    system_admin_role = db.exec(
+        select(Role).where(Role.name == system_admin.name)
+    ).first()
+    assert system_admin_role is not None
+
+    org1 = create_random_organization(db)
+    org2 = create_random_organization(db)
+
+    org1_emails = [random_email() for _ in range(3)]
+    for email in org1_emails:
+        user_in = UserCreate(
+            email=email,
+            full_name=random_lower_string(),
+            phone=random_lower_string(),
+            password=random_lower_string(),
+            role_id=system_admin_role.id,
+            organization_id=org1.id,
+        )
+        crud.create_user(session=db, user_create=user_in)
+
+    org2_email = random_email()
+    org2_user_in = UserCreate(
+        email=org2_email,
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        password=random_lower_string(),
+        role_id=system_admin_role.id,
+        organization_id=org2.id,
+    )
+    crud.create_user(session=db, user_create=org2_user_in)
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/",
+        params={"organization_id": org1.id},
+        headers=get_user_superadmin_token,
+    )
+    assert r.status_code == 200
+    data = r.json()
+
+    returned_emails = [item["email"] for item in data["items"]]
+    for email in org1_emails:
+        assert email in returned_emails
+    assert org2_email not in returned_emails
+    for item in data["items"]:
+        assert item["organization_id"] == org1.id
+
+
 def test_superadmin_can_read_system_admin_from_other_org(
     client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
 ) -> None:
