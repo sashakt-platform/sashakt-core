@@ -15,6 +15,7 @@ from app.api.routes.question import (
     get_gcs_service_for_org,
 )
 from app.api.routes.utils import get_current_time
+from app.core.candidate import get_time_taken_seconds
 from app.core.certificate_token import generate_certificate_token
 from app.core.config import TOLERANCE
 from app.core.question_sets import (
@@ -57,6 +58,7 @@ from app.models.candidate import (
     CandidateReviewResponse,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
+    DeleteCandidate,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -576,11 +578,8 @@ def get_score_and_time(
             else:
                 total_score_obtained += marking_scheme.get("wrong", 0.0)
 
-    if candidate_test.start_time and candidate_test.end_time:
-        time_diff = candidate_test.end_time - candidate_test.start_time
-        total_time_minutes = time_diff.total_seconds() / 60.0
-    else:
-        total_time_minutes = 0.0
+    time_seconds = get_time_taken_seconds(candidate_test)
+    total_time_minutes = time_seconds / 60.0 if time_seconds is not None else 0.0
 
     return total_score_obtained, total_max_score, total_time_minutes
 
@@ -1390,7 +1389,7 @@ def create_candidate(
 )
 def get_candidate(session: SessionDep) -> Sequence[Candidate]:
     """List all candidates."""
-    candidate = session.exec(select(Candidate).where(not_(Candidate.is_deleted))).all()
+    candidate = session.exec(select(Candidate)).all()
     return candidate
 
 
@@ -1523,7 +1522,7 @@ def get_test_summary(
 def get_candidate_by_id(candidate_id: int, session: SessionDep) -> Candidate:
     """Retrieve a candidate by ID."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     return candidate
 
@@ -1541,7 +1540,7 @@ def update_candidate(
 ) -> Candidate:
     """Update a candidate's details."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate_data = updated_data.model_dump(exclude_unset=True)
     candidate.sqlmodel_update(candidate_data)
@@ -1564,7 +1563,7 @@ def visibility_candidate(
 ) -> Candidate:
     """Set candidate visibility."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     candidate.is_active = is_active
     session.add(candidate)
@@ -1578,16 +1577,60 @@ def visibility_candidate(
     "/{candidate_id}",
     dependencies=[Depends(permission_dependency("delete_candidate"))],
 )
-def delete_candidate(candidate_id: int, session: SessionDep) -> Message:
+def delete_candidate(
+    candidate_id: int, session: SessionDep, current_user: CurrentUser
+) -> Message:
     """Delete a candidate."""
     candidate = session.get(Candidate, candidate_id)
-    if not candidate or candidate.is_deleted is True:
+    if not candidate or candidate.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    candidate.is_deleted = True
-    session.add(candidate)
+    session.delete(candidate)
     session.commit()
-    session.refresh(candidate)
     return Message(message="Candidate deleted successfully")
+
+
+@router.delete(
+    "/",
+    response_model=DeleteCandidate,
+    dependencies=[Depends(permission_dependency("delete_candidate"))],
+)
+def bulk_delete_candidate(
+    session: SessionDep,
+    current_user: CurrentUser,
+    candidate_ids: list[int] = Body(...),
+) -> DeleteCandidate:
+    """Delete multiple candidates."""
+    candidates = session.exec(
+        select(Candidate).where(
+            col(Candidate.id).in_(candidate_ids),
+            Candidate.organization_id == current_user.organization_id,
+        )
+    ).all()
+
+    found_ids = {candidate.id for candidate in candidates}
+    missing_ids = set(candidate_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(
+            status_code=404, detail="Invalid Candidates selected for deletion"
+        )
+
+    success_count = 0
+    failure_ids: list[int] = []
+
+    for candidate in candidates:
+        try:
+            session.delete(candidate)
+            session.commit()
+            success_count += 1
+        except Exception:
+            session.rollback()
+            if candidate.id is not None:
+                failure_ids.append(candidate.id)
+
+    return DeleteCandidate(
+        delete_success_count=success_count,
+        delete_failure_ids=failure_ids or None,
+    )
 
 
 # Create Link between Candidate and Test
@@ -1767,51 +1810,21 @@ def convert_to_list(value: object) -> list[str]:
     return [str(value)]
 
 
-@router.get("/result/{candidate_test_id}", response_model=Result)
-def get_test_result(
-    candidate_test_id: int,
+def compute_result(
     session: SessionDep,
-    candidate_uuid: uuid.UUID = Query(
-        ..., description="Candidate UUID for verification"
-    ),
+    candidate_test: CandidateTest,
+    test: Test,
+    question_sets_by_id: dict[int, QuestionSet],
+    sectioned: bool,
 ) -> Result:
-    """Get the scored result for a candidate test."""
-    candidate_test = session.get(CandidateTest, candidate_test_id)
-
-    if not candidate_test:
-        raise HTTPException(status_code=404, detail="Candidate test not found")
-    test = session.get(Test, candidate_test.test_id)
-    if test is None:
-        raise HTTPException(status_code=404, detail="Test not found")
-    if not test.show_result:
-        raise HTTPException(
-            status_code=403, detail="Results are not visible for this test"
-        )
-    test_id = get_persisted_test_id(test)
-
-    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
-    test_questions = get_test_question_links(session, test_id)
-    question_sets = get_test_question_sets(session, test_id)
-    question_sets_by_id = {
-        question_set.id: question_set
-        for question_set in question_sets
-        if question_set.id is not None
-    }
-    try:
-        sectioned = is_sectioned_test(
-            test_questions,
-            question_sets_by_id,
-            test_id=test_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    """Compute the scored result for a candidate test (no certificate or auth checks)."""
 
     question_revisions_map = get_question_revisions_map(
         session, candidate_test.question_revision_ids
     )
     answers = session.exec(
         select(CandidateTestAnswer).where(
-            CandidateTestAnswer.candidate_test_id == candidate_test_id
+            CandidateTestAnswer.candidate_test_id == candidate_test.id
         )
     ).all()
     answers_by_question_id = {answer.question_revision_id: answer for answer in answers}
@@ -2014,7 +2027,60 @@ def get_test_result(
 
     total_questions = len(candidate_test.question_revision_ids)
 
-    # Generate certificate download URL if test has a certificate assigned
+    return Result(
+        correct_answer=correct,
+        incorrect_answer=incorrect,
+        mandatory_not_attempted=mandatory_not_attempted,
+        optional_not_attempted=optional_not_attempted,
+        total_questions=total_questions,
+        marks_obtained=marks_obtained if has_marking_scheme else None,
+        marks_maximum=marks_maximum if has_marking_scheme else None,
+    )
+
+
+@router.get("/result/{candidate_test_id}", response_model=Result)
+def get_test_result(
+    candidate_test_id: int,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> Result:
+    """Get the scored result for a candidate test."""
+    candidate_test = session.get(CandidateTest, candidate_test_id)
+
+    if not candidate_test:
+        raise HTTPException(status_code=404, detail="Candidate test not found")
+    test = session.get(Test, candidate_test.test_id)
+    if test is None:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if not test.show_result:
+        raise HTTPException(
+            status_code=403, detail="Results are not visible for this test"
+        )
+    test_id = get_persisted_test_id(test)
+
+    verify_candidate_uuid_access(session, candidate_test_id, candidate_uuid)
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
+    question_sets_by_id = {
+        question_set.id: question_set
+        for question_set in question_sets
+        if question_set.id is not None
+    }
+    try:
+        sectioned = is_sectioned_test(
+            test_questions,
+            question_sets_by_id,
+            test_id=test_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    result = compute_result(
+        session, candidate_test, test, question_sets_by_id, sectioned
+    )
+
     certificate_download_url = None
     if test.certificate_id:
         # Check if certificate_data already exists (reuse token)
@@ -2026,10 +2092,11 @@ def get_test_result(
             # Generate new token and save certificate data snapshot
             token = generate_certificate_token()
 
-            # Format score string from already-calculated values
-            if marks_maximum > 0:
-                score_percentage = marks_obtained / marks_maximum * 100
-                score_str = f"{marks_obtained:.1f}/{marks_maximum:.1f} ({score_percentage:.1f}%)"
+            raw_marks_obtained = result.marks_obtained or 0.0
+            raw_marks_maximum = result.marks_maximum or 0.0
+            if raw_marks_maximum > 0:
+                score_percentage = raw_marks_obtained / raw_marks_maximum * 100
+                score_str = f"{raw_marks_obtained:.1f}/{raw_marks_maximum:.1f} ({score_percentage:.1f}%)"
             else:
                 score_str = "N/A"
 
@@ -2074,16 +2141,8 @@ def get_test_result(
 
         certificate_download_url = f"/api/v1/certificate/download/{token}"
 
-    return Result(
-        correct_answer=correct,
-        incorrect_answer=incorrect,
-        mandatory_not_attempted=mandatory_not_attempted,
-        optional_not_attempted=optional_not_attempted,
-        total_questions=total_questions,
-        marks_obtained=marks_obtained if has_marking_scheme else None,
-        marks_maximum=marks_maximum if has_marking_scheme else None,
-        certificate_download_url=certificate_download_url,
-    )
+    result.certificate_download_url = certificate_download_url
+    return result
 
 
 @router.get("/time_left/{candidate_test_id}", response_model=TimeLeft)

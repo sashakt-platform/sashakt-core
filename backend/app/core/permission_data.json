@@ -21,7 +21,7 @@
     "name": "delete_candidate",
     "description": "Delete Existing Candidate",
     "super_admin": true,
-    "system_admin": false,
+    "system_admin": true,
     "state_admin": false,
     "test_admin": false,
     "candidate": false
