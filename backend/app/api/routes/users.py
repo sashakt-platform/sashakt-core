@@ -160,11 +160,22 @@ def read_users(
     sorting: UserSortingDep,
     param: Pagination = Depends(),
     search: str | None = None,
+    organization_id: int | None = None,
 ) -> Page[UserPublic]:
     """
     Retrieve users.
     """
     current_user_organization_id = current_user.organization_id
+
+    if (
+        organization_id is not None
+        and current_user.role.name != super_admin.name
+        and organization_id != current_user_organization_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to filter users by another organization.",
+        )
 
     if current_user.role.name == super_admin.name:
         statement = select(User).where(
@@ -174,6 +185,9 @@ def read_users(
         statement = select(User).where(
             User.organization_id == current_user_organization_id
         )
+
+    if organization_id is not None:
+        statement = statement.where(User.organization_id == organization_id)
 
     # apply role-based filtering
     if (
