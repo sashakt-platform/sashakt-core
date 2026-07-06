@@ -10,14 +10,9 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.crud import organization_settings as crud_settings
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
-from app.models.organization_settings import (
-    PlatformNomenclatureSetting,
-    PlatformNomenclatureValue,
-)
 from app.models.question import (
     Question,
     QuestionLocation,
@@ -2569,11 +2564,11 @@ def test_bulk_upload_questions(
 
     # Create a CSV file with test data - add an empty row to test skipping
     # Also includes duplicate tags to test tag cache
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
-What is 2+2?,4,3,5,6,A,Test Tag Type:Math,Punjab
-What is the capital of France?,Paris,London,Berlin,Madrid,A,Test Tag Type:Geography,Punjab
-What is H2O?,Water,Gold,Silver,Oxygen,A,Test Tag Type:Chemistry,Punjab
-What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Test Tag Type:Math,Punjab
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Test Tag Type,State
+What is 2+2?,4,3,5,6,A,Math,Punjab
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Geography,Punjab
+What is H2O?,Water,Gold,Silver,Oxygen,A,Chemistry,Punjab
+What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,Odd numbers,Negative numbers,A,Math,Punjab
 ,,,,,,,
 """
 
@@ -2613,9 +2608,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
         assert response.status_code in [400, 500]
 
         # Test with headers-only CSV (line 1045)
-        headers_only_csv = (
-            "Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State\n"
-        )
+        headers_only_csv = "Questions,Option A,Option B,Option C,Option D,Correct Option,Test Tag Type,State\n"
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(headers_only_csv.encode("utf-8"))
             headers_only_csv_path = temp_file.name
@@ -2704,8 +2697,8 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
                 assert any(loc["state_name"] == "Punjab" for loc in locations)
 
         # Test with non-existent tag type
-        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
-What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,NonExistentType:Math,Punjab
+        csv_content_bad_tag = """Questions,Option A,Option B,Option C,Option D,Correct Option,NonExistentType,State
+What is a prime number?,A number only divisible by 1 and itself,An even number,An odd number,A fractional number,A,Math,Punjab
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(csv_content_bad_tag.encode("utf-8"))
@@ -2717,13 +2710,14 @@ What is a prime number?,A number only divisible by 1 and itself,An even number,A
                 files={"file": ("bad_tag.csv", file, "text/csv")},
                 headers=get_user_superadmin_token,
             )
-        assert response.status_code == 200
+        assert response.status_code == 400
         data = response.json()
-        assert "Failed to create" in data["message"]
+        assert "Unknown column" in data["detail"]
+        assert "NonExistentType" in data["detail"]
 
         # Test upload with non-existent state
-        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
-What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Test Tag Type:Geography,NonExistentState
+        csv_content_bad_state = """Questions,Option A,Option B,Option C,Option D,Correct Option,Test Tag Type,State
+What is the highest mountain?,Everest,K2,Denali,Kilimanjaro,A,Geography,NonExistentState
 """
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
             temp_file.write(csv_content_bad_state.encode("utf-8"))
@@ -3961,12 +3955,12 @@ def test_bulk_upload_questions_response_format(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
-What is 4+4?,4,3,5,8,A,Response Model Type:Math,Punjab
-What is the capital of France?,Paris,London,Berlin,Madrid,A,Response Model Type:Geography,Punjab
-Water,Gold,Silver,Carbon,A,Response Model Type:Chemistry,Punjab
-Invalid state?,A,B,C,D,A,Response Model Type:Math,NonExistentState
-Invalid tagtype?,A,B,C,D,A,NonExistentType:Math,Punjab
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Response Model Type,State
+What is 4+4?,4,3,5,8,A,Math,Punjab
+What is the capital of France?,Paris,London,Berlin,Madrid,A,Geography,Punjab
+Water,Gold,Silver,Carbon,A,Chemistry,Punjab
+Invalid state?,A,B,C,D,A,Math,NonExistentState
+Invalid correct option?,A,B,C,D,X,Math,Punjab
 """
     import tempfile
 
@@ -4073,7 +4067,7 @@ def test_get_questions_by_is_active_filter(
     assert active_question.id not in ids
 
 
-def test_bulk_upload_questions_without_tagtype(
+def test_bulk_upload_questions_with_multiple_tags_same_type(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
@@ -4095,11 +4089,9 @@ def test_bulk_upload_questions_without_tagtype(
     db.add(tag_type)
     db.commit()
     db.refresh(tag_type)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Subject,State
 What is 10+10?,20,10,30,40,A,Math,Punjab
-What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
-What is 5x5?,25,10,15,20,A,Subject:Multiplication,Punjab
-What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Subject:Geography,Punjab
+What subject combines numbers and shapes?,Math,Science,History,Art,A,"Math, Geometry",Punjab
 """
     import tempfile
 
@@ -4111,84 +4103,28 @@ What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,Subject:Geography,P
         with open(temp_file_path, "rb") as file:
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
-                files={"file": ("test_questions_no_tagtype.csv", file, "text/csv")},
+                files={"file": ("test_questions_multi_tags.csv", file, "text/csv")},
                 headers=get_user_superadmin_token,
             )
         assert response.status_code == 200, response.text
         data = response.json()
         assert "Created" in data["message"]
-        assert data["uploaded_questions"] == 4
-        assert data["success_questions"] == 4
+        assert data["uploaded_questions"] == 2
+        assert data["success_questions"] == 2
         response = client.get(
             f"{settings.API_V1_STR}/questions/",
             headers=get_user_superadmin_token,
         )
         data = response.json()
         questions = data["items"]
-        question_texts = [q["question_text"] for q in questions]
-        assert "What is 10+10?" in question_texts
-        assert "What is the color of the sky?" in question_texts
         for question in questions:
             if question["question_text"] == "What is 10+10?":
                 assert any(tag["name"] == "Math" for tag in question["tags"])
-            if question["question_text"] == "What is the color of the sky?":
-                assert any(tag["name"] == "Science" for tag in question["tags"])
-                assert any(tag["tag_type"] is None for tag in question["tags"])
-            if question["question_text"] == "What is 5x5?":
-                assert any(tag["name"] == "Multiplication" for tag in question["tags"])
-                assert any(
-                    tag["tag_type"]["name"] == "Subject" for tag in question["tags"]
-                )
-            if question["question_text"] == "What is the capital of India?":
-                assert any(tag["name"] == "Geography" for tag in question["tags"])
-                assert any(
-                    tag["tag_type"]["name"] == "Subject" for tag in question["tags"]
-                )
-    finally:
-        import os
-
-        if os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
-
-
-def test_bulk_upload_questions_with_invalid_tagtype(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
-) -> None:
-    india = Country(name="India")
-    db.add(india)
-    db.commit()
-    db.refresh(india)
-    punjab = State(name="Punjab", country_id=india.id)
-    db.add(punjab)
-    db.commit()
-    db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
-    What is 10+10?,20,10,30,40,A,Math,Punjab
-    What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
-    What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
-    What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
-"""
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
-        temp_file.write(csv_content.encode("utf-8"))
-        temp_file_path = temp_file.name
-
-    try:
-        with open(temp_file_path, "rb") as file:
-            response = client.post(
-                f"{settings.API_V1_STR}/questions/bulk-upload",
-                files={
-                    "file": ("test_questions_invalid_tagtype.csv", file, "text/csv")
-                },
-                headers=get_user_superadmin_token,
-            )
-        assert response.status_code == 200, response.text
-        data = response.json()
-        assert "Failed to create 2 questions." in data["message"]
-        assert data["uploaded_questions"] == 4
-        assert data["success_questions"] == 2
-        assert data["failed_questions"] == 2
+            if question["question_text"] == "What subject combines numbers and shapes?":
+                tag_names = {tag["name"] for tag in question["tags"]}
+                assert {"Math", "Geometry"} <= tag_names
+                for tag in question["tags"]:
+                    assert tag["tag_type"]["name"] == "Subject"
     finally:
         import os
 
@@ -4551,12 +4487,12 @@ def test_bulk_upload_questions_with_duplicate(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Bulk TagType,State
     What is 10+10?,20,10,30,40,A,Math,Punjab
      What is 10+10?,20,10,30,40,A,Math,Punjab
-    What is PYTHON?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag,Punjab
-    What is Python?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag |BulkTag 2,Punjab
-    What is Python?,Programming Language,Snake,Car,Food,A,Bulk TagType:BulkTag 2,Punjab
+    What is PYTHON?,Programming Language,Snake,Car,Food,A,BulkTag,Punjab
+    What is Python?,Programming Language,Snake,Car,Food,A,"BulkTag, BulkTag 2",Punjab
+    What is Python?,Programming Language,Snake,Car,Food,A,BulkTag 2,Punjab
 
     What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab"""
 
@@ -4570,9 +4506,7 @@ def test_bulk_upload_questions_with_duplicate(
         with open(temp_file_path, "rb") as file:
             response = client.post(
                 f"{settings.API_V1_STR}/questions/bulk-upload",
-                files={
-                    "file": ("test_questions_invalid_tagtype.csv", file, "text/csv")
-                },
+                files={"file": ("test_questions_duplicate.csv", file, "text/csv")},
                 headers=get_user_superadmin_token,
             )
         assert response.status_code == 200, response.text
@@ -4991,6 +4925,8 @@ def test_create_same_text_one_with_tags_one_without(
 def test_bulk_upload_questions_with_multiple_errors_report(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -5000,11 +4936,20 @@ def test_bulk_upload_questions_with_multiple_errors_report(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
+
+    tag_type = TagType(
+        name="Subject",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Subject,State
 What is 10+10?,20,10,30,40,A,Math,Punjab
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science,Punjab
-What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication,Punjab
-What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography,Punjab
 Which option is missing?,,10,20,30,A,Math,Punjab
 What is 2 + 2?,4,5,6,7,Z,Math,Punjab
 ,1,2,3,4,A,Math,Punjab
@@ -5025,19 +4970,17 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
             )
         assert response.status_code == 200
         data = response.json()
-        assert data["uploaded_questions"] == 10
+        assert data["uploaded_questions"] == 8
         assert data["success_questions"] == 2
-        assert data["failed_questions"] == 8
-        assert "Failed to create 8 questions." in data["message"]
+        assert data["failed_questions"] == 6
+        assert "Failed to create 6 questions." in data["message"]
         expected_errors = {
-            3: "Invalid tag type",
-            4: "Invalid tag type",
-            5: "one or more options (a-d) are missing",
-            6: "Invalid correct option",
-            7: "Question text is missing",
-            8: "Invalid states: NonExistentState",
-            9: "Correct option is missing",
-            10: "Questions Already Exist",
+            3: "one or more options (a-d) are missing",
+            4: "Invalid correct option",
+            5: "Question text is missing",
+            6: "Invalid states: NonExistentState",
+            7: "Correct option is missing",
+            8: "Questions Already Exist",
         }
         assert "data:text/csv;base64," in data["error_log"]
         base64_csv = data["error_log"].split("base64,")[-1]
@@ -5045,7 +4988,7 @@ What is 10+10?,20,10,30,40,A,Math,Punjab"""
         csv_text = csv_bytes.decode("utf-8")
         csv_reader = csv.DictReader(io.StringIO(csv_text))
         rows = list(csv_reader)
-        assert len(rows) == 8
+        assert len(rows) == 6
         for row in rows:
             assert "row_number" in row
             assert "question_text" in row
@@ -5212,6 +5155,8 @@ Which planet is known as the Red Planet?,Earth,Mars,Jupiter,Venus,,Punjab"""
 def test_bulk_upload_questions_without_state_column(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
 ) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
     india = Country(name="India")
     db.add(india)
     db.commit()
@@ -5221,10 +5166,19 @@ def test_bulk_upload_questions_without_state_column(
     db.add(punjab)
     db.commit()
     db.refresh(punjab)
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,
+
+    tag_type = TagType(
+        name="Subject",
+        description=random_lower_string(),
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Subject,
 What is the color of the sky?,Blue,Green,Red,Yellow,A,Science
-What is 5x5?,25,10,15,20,A,InvalidTagType:Multiplication
-What is the capital of India?,Delhi,Mumbai,Kolkata,Chennai,A,InvalidTagType:Geography
 Which option is missing?,25,10,20,30,A,Math
 What is 2 + 2?,4,5,6,7,Z,Math
 What is 9+1?,10,20,30,40,A,Math
@@ -5245,9 +5199,9 @@ What is 10+10?,20,10,30,40,A,Math"""
 
         data = response.json()
         assert response.status_code == 200
-        assert data["uploaded_questions"] == 8
+        assert data["uploaded_questions"] == 6
         assert data["success_questions"] == 4
-        assert data["failed_questions"] == 4
+        assert data["failed_questions"] == 2
     finally:
         import os
 
@@ -5276,14 +5230,13 @@ def test_get_bulk_upload_template(
         "Option C",
         "Option D",
         "Correct Option",
-        "Tags",
     ]
     assert reader.fieldnames == expected_headers
     rows = list(reader)
     assert len(rows) == 1
 
 
-def test_get_bulk_upload_template_custom_nomenclature(
+def test_get_bulk_upload_template_with_tag_types(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
     db: SessionDep,
@@ -5291,15 +5244,22 @@ def test_get_bulk_upload_template_custom_nomenclature(
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
 
-    row = crud_settings.get_or_create(session=db, organization_id=org_id)
-    payload = crud_settings.get_payload(session=db, organization_id=org_id)
-    assert payload is not None
-    payload.platform_nomenclature = PlatformNomenclatureSetting(
-        mode="custom", value=PlatformNomenclatureValue(tags="Labels")
+    difficulty = TagType(
+        name="Difficulty",
+        description="Difficulty tag type",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
     )
-    row.settings = payload.model_dump(mode="json")
-    db.add(row)
+    subject = TagType(
+        name="Subject",
+        description="Subject tag type",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+    )
+    db.add_all([difficulty, subject])
     db.commit()
+    db.refresh(difficulty)
+    db.refresh(subject)
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/bulk-upload/template",
@@ -5308,71 +5268,17 @@ def test_get_bulk_upload_template_custom_nomenclature(
     assert response.status_code == 200
     reader = csv.DictReader(io.StringIO(response.text))
     assert reader.fieldnames is not None
-    assert reader.fieldnames[-1] == "Labels"
-
-
-def test_bulk_upload_questions_with_custom_nomenclature_column(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
-) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
-    org_id = user_data["organization_id"]
-
-    india = Country(name="India")
-    db.add(india)
-    db.commit()
-    db.refresh(india)
-    state = State(name="Rajasthan", country_id=india.id)
-    db.add(state)
-    db.commit()
-    db.refresh(state)
-    tag_type = TagType(
-        name="Subject",
-        description="Subject tag type",
-        organization_id=org_id,
-        created_by_id=user_data["id"],
-    )
-    db.add(tag_type)
-    db.commit()
-    db.refresh(tag_type)
-
-    row = crud_settings.get_or_create(session=db, organization_id=org_id)
-    payload = crud_settings.get_payload(session=db, organization_id=org_id)
-    assert payload is not None
-    payload.platform_nomenclature = PlatformNomenclatureSetting(
-        mode="custom", value=PlatformNomenclatureValue(tags="Labels")
-    )
-    row.settings = payload.model_dump(mode="json")
-    db.add(row)
-    db.commit()
-
-    csv_content = "Questions,Option A,Option B,Option C,Option D,Correct Option,Labels,State\nWhat is 2+2?,4,3,5,8,A,Subject:Math,Rajasthan\n"
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
-        temp_file.write(csv_content.encode("utf-8"))
-        temp_file_path = temp_file.name
-
-    try:
-        with open(temp_file_path, "rb") as file:
-            response = client.post(
-                f"{settings.API_V1_STR}/questions/bulk-upload",
-                files={"file": ("test_questions.csv", file, "text/csv")},
-                headers=get_user_superadmin_token,
-            )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success_questions"] == 1
-        assert data["failed_questions"] == 0
-    finally:
-        import os
-
-        os.unlink(temp_file_path)
+    assert reader.fieldnames[-2:] == ["Difficulty", "Subject"]
+    rows = list(reader)
+    assert len(rows) == 1
+    assert rows[0]["Difficulty"] == "Sample Difficulty"
+    assert rows[0]["Subject"] == "Sample Subject"
 
 
 def test_bulk_upload_questions_with_extra_column(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    csv_content = "Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,Tags,State\nWhat is 10+10?,20,10,30,40,A,ABCD,Math,Punjab\n"
+    csv_content = "Questions,Option A,Option B,Option C,Option D,Correct Option,ABCD,State\nWhat is 10+10?,20,10,30,40,A,ABCD,Punjab\n"
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
@@ -7185,11 +7091,11 @@ def test_bulk_upload_questions_case_insensitive_tags(
     )
     assert response.status_code == 200
 
-    # Upload CSV using DIFFERENT casing for tag type and tag name
-    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Tags,State
-What is 1+1?,2,3,4,5,A,difficulty:easy,Punjab
-What is 2+2?,4,3,5,6,A,DIFFICULTY:EASY,Punjab
-What is 3+3?,6,5,7,8,A, Difficulty : Easy ,Punjab
+    # Upload CSV using DIFFERENT casing for the tag-type column header and tag names
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,DIFFICULTY,State
+What is 1+1?,2,3,4,5,A,easy,Punjab
+What is 2+2?,4,3,5,6,A,EASY,Punjab
+What is 3+3?,6,5,7,8,A, Easy ,Punjab
 """
 
     import tempfile
