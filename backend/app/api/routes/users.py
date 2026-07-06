@@ -167,6 +167,16 @@ def read_users(
     """
     current_user_organization_id = current_user.organization_id
 
+    if (
+        organization_id is not None
+        and current_user.role.name != super_admin.name
+        and organization_id != current_user_organization_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to filter users by another organization.",
+        )
+
     if current_user.role.name == super_admin.name:
         statement = select(User).where(
             col(User.role_id).in_(_admin_role_ids_subquery())

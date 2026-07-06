@@ -537,6 +537,20 @@ def test_superadmin_filter_by_organization_id_excludes_other_org_users(
         assert item["organization_id"] == org1.id
 
 
+def test_non_superadmin_cannot_filter_users_by_other_organization_id(
+    client: TestClient, db: Session, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    """A non-super_admin caller passing another org's id must get 403."""
+    other_org = create_random_organization(db)
+
+    r = client.get(
+        f"{settings.API_V1_STR}/users/",
+        params={"organization_id": other_org.id},
+        headers=get_user_systemadmin_token,
+    )
+    assert r.status_code == 403
+
+
 def test_superadmin_can_read_system_admin_from_other_org(
     client: TestClient, db: Session, get_user_superadmin_token: dict[str, str]
 ) -> None:
