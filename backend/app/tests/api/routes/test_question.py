@@ -1,6 +1,7 @@
 import base64
 import csv
 import io
+import tempfile
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
@@ -4125,6 +4126,74 @@ What subject combines numbers and shapes?,Math,Science,History,Art,A,"Math, Geom
                 assert {"Math", "Geometry"} <= tag_names
                 for tag in question["tags"]:
                     assert tag["tag_type"]["name"] == "Subject"
+    finally:
+        import os
+
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+
+
+def test_bulk_upload_questions_repeated_tag_names_create_single_association(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+) -> None:
+    """Repeated tag names in a single cell (e.g. "Math, math") must not create
+    duplicate QuestionTag rows for the same question/tag pair."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    org_id = user_data["organization_id"]
+    india = Country(name="India")
+    db.add(india)
+    db.commit()
+    db.refresh(india)
+    punjab = State(name="Punjab", country_id=india.id)
+    db.add(punjab)
+    db.commit()
+    db.refresh(punjab)
+    tag_type = TagType(
+        name="Subject",
+        description="Subject tags",
+        organization_id=org_id,
+        created_by_id=user_data["id"],
+    )
+    db.add(tag_type)
+    db.commit()
+    db.refresh(tag_type)
+    csv_content = """Questions,Option A,Option B,Option C,Option D,Correct Option,Subject,State
+What is 10+10?,20,10,30,40,A,"Math, math, MATH",Punjab
+"""
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp_file:
+        temp_file.write(csv_content.encode("utf-8"))
+        temp_file_path = temp_file.name
+
+    try:
+        with open(temp_file_path, "rb") as file:
+            response = client.post(
+                f"{settings.API_V1_STR}/questions/bulk-upload",
+                files={"file": ("test_questions_repeated_tag.csv", file, "text/csv")},
+                headers=get_user_superadmin_token,
+            )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "Created" in data["message"]
+        assert data["uploaded_questions"] == 1
+        assert data["success_questions"] == 1
+
+        response = client.get(
+            f"{settings.API_V1_STR}/questions/",
+            headers=get_user_superadmin_token,
+        )
+        data = response.json()
+        questions = [q for q in data["items"] if q["question_text"] == "What is 10+10?"]
+        assert len(questions) == 1
+        question_id = questions[0]["id"]
+
+        assert len(questions[0]["tags"]) == 1
+        assert questions[0]["tags"][0]["name"] == "Math"
+
+        question_tags = db.exec(
+            select(QuestionTag).where(QuestionTag.question_id == question_id)
+        ).all()
+        assert len(question_tags) == 1
     finally:
         import os
 

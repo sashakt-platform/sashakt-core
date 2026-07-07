@@ -1514,6 +1514,8 @@ async def upload_questions_csv(
                                     tag_ids.append(tag.id)
                                     tag_cache[cache_key] = tag.id
 
+                tag_ids = list(set(tag_ids))
+
                 # Process state information if present
                 row_state_ids = []
                 state_error = False
