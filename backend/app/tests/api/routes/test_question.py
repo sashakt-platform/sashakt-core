@@ -1,6 +1,7 @@
 import base64
 import csv
 import io
+import os
 import tempfile
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -4195,8 +4196,6 @@ What is 10+10?,20,10,30,40,A,"Math, math, MATH",Punjab
         ).all()
         assert len(question_tags) == 1
     finally:
-        import os
-
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
 
