@@ -31,10 +31,12 @@ FK_INDEXES: list[tuple[str, str]] = [
     ("test", "template_id"),
     ("test", "certificate_id"),
     ("test", "form_id"),
-    ("test_question", "question_set_id"),
     ("question", "organization_id"),
     ("question_revision", "question_id"),
     ("question_revision", "created_by_id"),
+    ("question_location", "state_id"),
+    ("question_location", "district_id"),
+    ("question_location", "block_id"),
     ("user", "organization_id"),
     ("user", "created_by_id"),
     ("tag", "tag_type_id"),
@@ -49,6 +51,34 @@ FK_INDEXES: list[tuple[str, str]] = [
     ("form", "created_by_id"),
     ("certificate", "organization_id"),
     ("certificate", "created_by_id"),
+    # Second column of composite unique constraints (Postgres can't use the
+    # composite index when the leading column isn't in the query).
+    ("test_question", "question_revision_id"),
+    ("test_state", "state_id"),
+    ("test_district", "district_id"),
+    ("test_tag", "tag_id"),
+    ("question_tag", "tag_id"),
+    ("user_state", "state_id"),
+    ("user_district", "district_id"),
+    ("test_link", "created_by_id"),
+    # Form area — heavily joined.
+    ("form_field", "form_id"),
+    ("form_field", "entity_type_id"),
+    ("form_response", "form_id"),
+    # Small metadata tables — cheap to index, keeps FK coverage consistent
+    # and speeds up cascade-delete pre-checks on parent rows.
+    ("tag_type", "organization_id"),
+    ("tag_type", "created_by_id"),
+    ("entity_type", "organization_id"),
+    ("entity_type", "created_by_id"),
+    ("user", "role_id"),
+    ("role_permission", "role_id"),
+    ("organization_provider", "organization_id"),
+    ("organization_provider", "provider_id"),
+    # Geography reference chain — used in nearly every location join.
+    ("state", "country_id"),
+    ("district", "state_id"),
+    ("block", "district_id"),
 ]
 
 
