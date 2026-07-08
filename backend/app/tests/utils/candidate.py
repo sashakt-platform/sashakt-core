@@ -48,6 +48,7 @@ def create_test_candidate_test(
     candidate_id: int | None,
     question_revision_ids: list[int | None] | None = None,
     is_submitted: bool = False,
+    start_time: str = "2026-06-10T10:00:00",
     end_time: str | None = None,
 ) -> CandidateTest:
     candidate_test = CandidateTest(
@@ -56,7 +57,7 @@ def create_test_candidate_test(
         candidate_id=candidate_id,
         device=random_lower_string(),
         consent=True,
-        start_time="2026-06-10T10:00:00",
+        start_time=start_time,
         end_time=end_time,
         is_submitted=is_submitted,
         question_revision_ids=question_revision_ids or [],

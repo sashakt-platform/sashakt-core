@@ -517,3 +517,152 @@ def test_candidate_report_accessible_by_state_admin(
 
     assert response.status_code == 200
     assert response.json()["items"] == []
+
+
+def test_candidate_report_sort_by_start_time(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    for start_time in (
+        "2026-06-10T11:00:00",
+        "2026-06-10T09:00:00",
+        "2026-06-10T10:00:00",
+    ):
+        candidate = create_test_candidate(db, organization_id=user.organization_id)
+        candidate.identity = uuid.uuid4()
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
+
+        create_test_candidate_test(
+            db,
+            admin_id=user.id,
+            test_id=test.id,
+            candidate_id=candidate.id,
+            start_time=start_time,
+        )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "start_time", "sort_order": "asc"},
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["start_time"] for item in items] == [
+        "2026-06-10T09:00:00",
+        "2026-06-10T10:00:00",
+        "2026-06-10T11:00:00",
+    ]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "start_time", "sort_order": "desc"},
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["start_time"] for item in items] == [
+        "2026-06-10T11:00:00",
+        "2026-06-10T10:00:00",
+        "2026-06-10T09:00:00",
+    ]
+
+
+def test_candidate_report_sort_by_status(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    submitted_candidate = create_test_candidate(
+        db, organization_id=user.organization_id
+    )
+    submitted_candidate.identity = uuid.uuid4()
+    db.add(submitted_candidate)
+    db.commit()
+    db.refresh(submitted_candidate)
+    create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=submitted_candidate.id,
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+
+    not_submitted_candidate = create_test_candidate(
+        db, organization_id=user.organization_id
+    )
+    not_submitted_candidate.identity = uuid.uuid4()
+    db.add(not_submitted_candidate)
+    db.commit()
+    db.refresh(not_submitted_candidate)
+    create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=not_submitted_candidate.id,
+        is_submitted=False,
+        end_time=None,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "status", "sort_order": "asc"},
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["status"] for item in items] == ["not_submitted", "submitted"]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "status", "sort_order": "desc"},
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["status"] for item in items] == ["submitted", "not_submitted"]
+
+
+def test_candidate_report_sort_by_invalid_field(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "not_a_field"},
+    )
+
+    assert response.status_code == 400
