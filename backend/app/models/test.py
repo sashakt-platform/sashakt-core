@@ -453,13 +453,14 @@ class TestPublic(TestBase):
 
 
 class TestUpdate(TestBase):
+    name: str | None = Field(default=None)  # type: ignore
     tag_ids: list[int] = []
     question_revision_ids: list[int] = []
     question_sets: list["QuestionSetUpdate"] | None = None
     state_ids: list[int] = []
     district_ids: list[int] = []
     random_tag_count: list[TagRandomCreate] | None = None
-    locale: LocaleEnum
+    locale: LocaleEnum | None = Field(default=None)  # type: ignore
 
     @model_validator(mode="after")
     def check_question_membership_shape(self) -> Self:

@@ -1285,30 +1285,33 @@ def update_test(
     )
 
     # Updating Tags
-    tags_remove = [
-        tag.id for tag in (test.tags or []) if tag.id not in (test_update.tag_ids or [])
-    ]
-    tags_add = [
-        tag
-        for tag in (test_update.tag_ids or [])
-        if tag not in [t.id for t in (test.tags or [])]
-    ]
+    if "tag_ids" in test_update.model_fields_set:
+        tags_remove = [
+            tag.id
+            for tag in (test.tags or [])
+            if tag.id not in (test_update.tag_ids or [])
+        ]
+        tags_add = [
+            tag
+            for tag in (test_update.tag_ids or [])
+            if tag not in [t.id for t in (test.tags or [])]
+        ]
 
-    if tags_remove:
-        for tag in tags_remove:
-            session.delete(
-                session.exec(
-                    select(TestTag).where(
-                        TestTag.test_id == test.id, TestTag.tag_id == tag
-                    )
-                ).one()
-            )
-            session.commit()
+        if tags_remove:
+            for tag in tags_remove:
+                session.delete(
+                    session.exec(
+                        select(TestTag).where(
+                            TestTag.test_id == test.id, TestTag.tag_id == tag
+                        )
+                    ).one()
+                )
+                session.commit()
 
-    if tags_add:
-        for tag in tags_add:
-            session.add(TestTag(test_id=test.id, tag_id=tag))
-            session.commit()
+        if tags_add:
+            for tag in tags_add:
+                session.add(TestTag(test_id=test.id, tag_id=tag))
+                session.commit()
 
     if membership_update_requested:
         replace_test_question_membership(
@@ -1319,60 +1322,62 @@ def update_test(
         )
 
     # Updating States
-    states_remove = [
-        state.id
-        for state in (test.states or [])
-        if state.id not in (test_update.state_ids or [])
-    ]
-    states_add = [
-        state
-        for state in (test_update.state_ids or [])
-        if state not in [s.id for s in (test.states or [])]
-    ]
+    if "state_ids" in test_update.model_fields_set:
+        states_remove = [
+            state.id
+            for state in (test.states or [])
+            if state.id not in (test_update.state_ids or [])
+        ]
+        states_add = [
+            state
+            for state in (test_update.state_ids or [])
+            if state not in [s.id for s in (test.states or [])]
+        ]
 
-    if states_remove:
-        for state in states_remove:
-            session.delete(
-                session.exec(
-                    select(TestState).where(
-                        TestState.test_id == test.id,
-                        TestState.state_id == state,
-                    )
-                ).one()
-            )
+        if states_remove:
+            for state in states_remove:
+                session.delete(
+                    session.exec(
+                        select(TestState).where(
+                            TestState.test_id == test.id,
+                            TestState.state_id == state,
+                        )
+                    ).one()
+                )
+                session.commit()
+
+        if states_add:
+            for state in states_add:
+                session.add(TestState(test_id=test.id, state_id=state))
+                session.commit()
+
+    if "district_ids" in test_update.model_fields_set:
+        districts_remove = [
+            district.id
+            for district in (test.districts or [])
+            if district.id not in (test_update.district_ids or [])
+        ]
+        districts_add = [
+            district
+            for district in (test_update.district_ids or [])
+            if district not in [d.id for d in (test.districts or [])]
+        ]
+        if districts_remove:
+            for district in districts_remove:
+                session.delete(
+                    session.exec(
+                        select(TestDistrict).where(
+                            TestDistrict.test_id == test.id,
+                            TestDistrict.district_id == district,
+                        )
+                    ).one()
+                )
             session.commit()
 
-    if states_add:
-        for state in states_add:
-            session.add(TestState(test_id=test.id, state_id=state))
-            session.commit()
-
-    districts_remove = [
-        district.id
-        for district in (test.districts or [])
-        if district.id not in (test_update.district_ids or [])
-    ]
-    districts_add = [
-        district
-        for district in (test_update.district_ids or [])
-        if district not in [d.id for d in (test.districts or [])]
-    ]
-    if districts_remove:
-        for district in districts_remove:
-            session.delete(
-                session.exec(
-                    select(TestDistrict).where(
-                        TestDistrict.test_id == test.id,
-                        TestDistrict.district_id == district,
-                    )
-                ).one()
-            )
-        session.commit()
-
-    if districts_add:
-        for district in districts_add:
-            session.add(TestDistrict(test_id=test.id, district_id=district))
-            session.commit()
+        if districts_add:
+            for district in districts_add:
+                session.add(TestDistrict(test_id=test.id, district_id=district))
+                session.commit()
     test_data = test_update.model_dump(
         exclude_unset=True,
         exclude={
@@ -1398,7 +1403,7 @@ def update_test(
 
 
 @router.patch(
-    "/{test_id}",
+    "/{test_id}/visibility",
     response_model=TestPublic,
     dependencies=[Depends(permission_dependency("update_test"))],
 )
