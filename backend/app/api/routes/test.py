@@ -1185,6 +1185,42 @@ def get_candidate_report(
     return result
 
 
+def sync_test_link_ids(
+    session: SessionDep,
+    *,
+    test_id: int,
+    link_model: type[TestTag] | type[TestState] | type[TestDistrict],
+    related_id_field: str,
+    current_ids: set[int],
+    requested_ids: list[int] | None,
+) -> None:
+    """Reconcile a test's linked rows (tags/states/districts) with the requested ids."""
+    requested_ids_set = set(requested_ids or [])
+    remove_ids = current_ids - requested_ids_set
+    add_ids = requested_ids_set - current_ids
+
+    if not remove_ids and not add_ids:
+        return
+
+    if remove_ids:
+        link_rows_to_remove = session.exec(
+            select(link_model).where(
+                link_model.test_id == test_id,
+                col(getattr(link_model, related_id_field)).in_(remove_ids),
+            )
+        ).all()
+        for link_row in link_rows_to_remove:
+            session.delete(link_row)
+
+    if add_ids:
+        session.add_all(
+            link_model(test_id=test_id, **{related_id_field: related_id})
+            for related_id in add_ids
+        )
+
+    session.commit()
+
+
 @router.put(
     "/{test_id}",
     response_model=TestPublic,
@@ -1286,32 +1322,14 @@ def update_test(
 
     # Updating Tags
     if "tag_ids" in test_update.model_fields_set:
-        tags_remove = [
-            tag.id
-            for tag in (test.tags or [])
-            if tag.id not in (test_update.tag_ids or [])
-        ]
-        tags_add = [
-            tag
-            for tag in (test_update.tag_ids or [])
-            if tag not in [t.id for t in (test.tags or [])]
-        ]
-
-        if tags_remove:
-            for tag in tags_remove:
-                session.delete(
-                    session.exec(
-                        select(TestTag).where(
-                            TestTag.test_id == test.id, TestTag.tag_id == tag
-                        )
-                    ).one()
-                )
-                session.commit()
-
-        if tags_add:
-            for tag in tags_add:
-                session.add(TestTag(test_id=test.id, tag_id=tag))
-                session.commit()
+        sync_test_link_ids(
+            session,
+            test_id=test_id,
+            link_model=TestTag,
+            related_id_field="tag_id",
+            current_ids={tag.id for tag in (test.tags or []) if tag.id is not None},
+            requested_ids=test_update.tag_ids,
+        )
 
     if membership_update_requested:
         replace_test_question_membership(
@@ -1323,61 +1341,31 @@ def update_test(
 
     # Updating States
     if "state_ids" in test_update.model_fields_set:
-        states_remove = [
-            state.id
-            for state in (test.states or [])
-            if state.id not in (test_update.state_ids or [])
-        ]
-        states_add = [
-            state
-            for state in (test_update.state_ids or [])
-            if state not in [s.id for s in (test.states or [])]
-        ]
+        sync_test_link_ids(
+            session,
+            test_id=test_id,
+            link_model=TestState,
+            related_id_field="state_id",
+            current_ids={
+                state.id for state in (test.states or []) if state.id is not None
+            },
+            requested_ids=test_update.state_ids,
+        )
 
-        if states_remove:
-            for state in states_remove:
-                session.delete(
-                    session.exec(
-                        select(TestState).where(
-                            TestState.test_id == test.id,
-                            TestState.state_id == state,
-                        )
-                    ).one()
-                )
-                session.commit()
-
-        if states_add:
-            for state in states_add:
-                session.add(TestState(test_id=test.id, state_id=state))
-                session.commit()
-
+    # Updating Districts
     if "district_ids" in test_update.model_fields_set:
-        districts_remove = [
-            district.id
-            for district in (test.districts or [])
-            if district.id not in (test_update.district_ids or [])
-        ]
-        districts_add = [
-            district
-            for district in (test_update.district_ids or [])
-            if district not in [d.id for d in (test.districts or [])]
-        ]
-        if districts_remove:
-            for district in districts_remove:
-                session.delete(
-                    session.exec(
-                        select(TestDistrict).where(
-                            TestDistrict.test_id == test.id,
-                            TestDistrict.district_id == district,
-                        )
-                    ).one()
-                )
-            session.commit()
-
-        if districts_add:
-            for district in districts_add:
-                session.add(TestDistrict(test_id=test.id, district_id=district))
-                session.commit()
+        sync_test_link_ids(
+            session,
+            test_id=test_id,
+            link_model=TestDistrict,
+            related_id_field="district_id",
+            current_ids={
+                district.id
+                for district in (test.districts or [])
+                if district.id is not None
+            },
+            requested_ids=test_update.district_ids,
+        )
     test_data = test_update.model_dump(
         exclude_unset=True,
         exclude={
