@@ -2975,6 +2975,103 @@ def test_update_test_adds_two_questions(
     }
 
 
+def test_update_test_partial_put_keeps_state_tag_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """A PUT that omits state_ids/tag_ids/district_ids must not clear them."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    state = create_random_state(db)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+    tag = create_random_tag(db)
+
+    question_revision_one = create_random_question_revision(db, user_id=user.id)
+    question_revision_two = create_random_question_revision(db, user_id=user.id)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "state_ids": [state.id],
+            "tag_ids": [tag.id],
+            "district_ids": [district.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {s["id"] for s in data["states"]} == {state.id}
+    assert {t["id"] for t in data["tags"]} == {tag.id}
+    assert {d["id"] for d in data["districts"]} == {district.id}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "question_revision_ids": [
+                question_revision_one.id,
+                question_revision_two.id,
+            ]
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {s["id"] for s in data["states"]} == {state.id}
+    assert {t["id"] for t in data["tags"]} == {tag.id}
+    assert {d["id"] for d in data["districts"]} == {district.id}
+    assert {qr["id"] for qr in data["question_revisions"]} == {
+        question_revision_one.id,
+        question_revision_two.id,
+    }
+
+    assert (
+        len(db.exec(select(TestState).where(TestState.test_id == test.id)).all()) == 1
+    )
+    assert len(db.exec(select(TestTag).where(TestTag.test_id == test.id)).all()) == 1
+    assert (
+        len(db.exec(select(TestDistrict).where(TestDistrict.test_id == test.id)).all())
+        == 1
+    )
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"name": random_lower_string(), "time_limit": 45},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["time_limit"] == 45
+    assert {s["id"] for s in data["states"]} == {state.id}
+    assert {t["id"] for t in data["tags"]} == {tag.id}
+    assert {d["id"] for d in data["districts"]} == {district.id}
+    assert {qr["id"] for qr in data["question_revisions"]} == {
+        question_revision_one.id,
+        question_revision_two.id,
+    }
+
+    assert (
+        len(db.exec(select(TestState).where(TestState.test_id == test.id)).all()) == 1
+    )
+    assert len(db.exec(select(TestTag).where(TestTag.test_id == test.id)).all()) == 1
+    assert (
+        len(db.exec(select(TestDistrict).where(TestDistrict.test_id == test.id)).all())
+        == 1
+    )
+    assert (
+        len(db.exec(select(TestQuestion).where(TestQuestion.test_id == test.id)).all())
+        == 2
+    )
+
+
 def test_update_test_adds_random_tag_count(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
