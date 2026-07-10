@@ -1391,7 +1391,7 @@ def update_test(
 
 
 @router.patch(
-    "/{test_id}/visibility",
+    "/{test_id}",
     response_model=TestPublic,
     dependencies=[Depends(permission_dependency("update_test"))],
 )

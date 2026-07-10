@@ -3496,7 +3496,7 @@ def test_visibility_test(
     db.commit()
 
     response = client.patch(
-        f"{settings.API_V1_STR}/test/{test.id}/visibility",
+        f"{settings.API_V1_STR}/test/{test.id}",
         params={"is_active": True},
         headers=get_user_superadmin_token,
     )
@@ -3505,7 +3505,7 @@ def test_visibility_test(
     assert data["is_active"] is True
 
     response = client.patch(
-        f"{settings.API_V1_STR}/test/{test.id}/visibility",
+        f"{settings.API_V1_STR}/test/{test.id}",
         params={"is_active": False},
         headers=get_user_superadmin_token,
     )
@@ -3548,7 +3548,7 @@ def test_visibility_test_with_random_tag_count(
     db.refresh(test)
 
     response = client.patch(
-        f"{settings.API_V1_STR}/test/{test.id}/visibility",
+        f"{settings.API_V1_STR}/test/{test.id}",
         params={"is_active": True},
         headers=get_user_superadmin_token,
     )
@@ -3583,7 +3583,7 @@ def test_visibility_test_not_available(
     non_existent_test_id = -9999
 
     response = client.patch(
-        f"{settings.API_V1_STR}/test/{non_existent_test_id}/visibility",
+        f"{settings.API_V1_STR}/test/{non_existent_test_id}",
         params={"is_active": True},
         headers=get_user_superadmin_token,
     )
