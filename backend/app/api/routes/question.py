@@ -33,7 +33,6 @@ from app.core.sorting import (
     SortOrder,
     create_sorting_dependency,
 )
-from app.crud import organization_settings as crud_settings
 from app.models import (
     CandidateTest,
     Organization,
@@ -55,7 +54,6 @@ from app.models import (
     Test,
     User,
 )
-from app.models.organization_settings import NOMENCLATURE_DEFAULTS
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
     BulkUploadQuestionsResponse,
@@ -71,7 +69,6 @@ from app.models.role import Role
 from app.models.test import TestQuestion
 from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
-from app.services.organization_nomenclature import resolve_label
 from app.services.storage.gcs import GCSStorageService
 
 logger = logging.getLogger(__name__)
@@ -1301,14 +1298,15 @@ async def get_bulk_upload_template(
     current_user: CurrentUser,
 ) -> Response:
     """Download CSV file template for creating questions in bulk."""
-    settings_payload = crud_settings.get_payload(
-        session=session, organization_id=current_user.organization_id
-    )
-    tags_label = (
-        resolve_label(settings_payload, "tags")
-        if settings_payload is not None
-        else NOMENCLATURE_DEFAULTS["tags"]
-    )
+    tag_types = session.exec(
+        select(TagType)
+        .where(
+            TagType.organization_id == current_user.organization_id,
+            TagType.is_active == True,  # noqa: E712
+        )
+        .order_by(TagType.name)
+    ).all()
+
     headers = [
         "S.No",
         "State",
@@ -1318,8 +1316,7 @@ async def get_bulk_upload_template(
         "Option C",
         "Option D",
         "Correct Option",
-        tags_label,
-    ]
+    ] + [tag_type.name for tag_type in tag_types]
     sample = [
         "1",
         "Haryana",
@@ -1329,8 +1326,8 @@ async def get_bulk_upload_template(
         "Chennai",
         "Kolkata",
         "B",
-        "difficulty:easy|subject:geography",
     ]
+    sample += [f"Sample {tag_type.name}" for tag_type in tag_types]
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(headers)
@@ -1361,7 +1358,8 @@ async def upload_questions_csv(
     - Questions: The question text
     - Option A, Option B, Option C, Option D: The options
     - Correct Option: Which option is correct (A, B, C, D)
-    - Tags: Comma-separated list of tags (optional) of the form tag_type:tag_name
+    - One column per organization tag type (optional), e.g. "Difficulty", "Subject".
+      Each cell may hold a comma-separated list of tag names for that type.
     - State: State name or comma-separated list of states (optional)
     """
     # Verify user exists
@@ -1411,18 +1409,26 @@ async def upload_questions_csv(
                     status_code=400, detail=f"Missing required column: {column}"
                 )
 
-        # Reset the reader and normalise any custom tags-column label → "Tags"
+        # Reset the reader
         csv_reader = csv.DictReader(StringIO(csv_text))
-        settings_payload = crud_settings.get_payload(
-            session=session, organization_id=current_user.organization_id
-        )
-        tags_label = (
-            resolve_label(settings_payload, "tags")
-            if settings_payload is not None
-            else NOMENCLATURE_DEFAULTS["tags"]
-        )
-        allowed_columns = set(required_columns) | {"S.No", "State", tags_label}
-        unknown = {k for k in first_row.keys() if k} - allowed_columns
+        tag_types = session.exec(
+            select(TagType).where(
+                TagType.organization_id == organization_id,
+                TagType.is_active == True,  # noqa: E712
+            )
+        ).all()
+        tag_type_by_column = {
+            tag_type.name.strip().lower(): tag_type for tag_type in tag_types
+        }
+
+        fixed_columns = set(required_columns) | {"S.No", "State"}
+        unknown = {
+            column_name
+            for column_name in first_row.keys()
+            if column_name
+            and column_name not in fixed_columns
+            and column_name.strip().lower() not in tag_type_by_column
+        }
         if unknown:
             raise HTTPException(
                 status_code=400,
@@ -1430,11 +1436,6 @@ async def upload_questions_csv(
             )
 
         rows: list[dict[str, Any]] = list(csv_reader)
-        if tags_label != "Tags":
-            rows = [
-                {("Tags" if k == tags_label else k): v for k, v in row.items()}
-                for row in rows
-            ]
 
         # Start processing rows
         questions_created = 0
@@ -1444,7 +1445,6 @@ async def upload_questions_csv(
         tag_cache: dict[str, int] = {}  # Cache for tag lookups
         state_cache: dict[str, int] = {}  # Cache for state lookups
         failed_states = set()
-        failed_tagtypes = set()
 
         for row_number, row in enumerate(rows, start=1):
             try:
@@ -1475,86 +1475,46 @@ async def upload_questions_csv(
                     {"id": letter_map[key], "key": key, "value": value}
                     for key, value in zip(letter_map.keys(), options, strict=True)
                 ]
-                # Process tags if present
+                # Process tags if present — one column per organization tag type
                 tag_ids = []
-                tagtype_error = False
-                if "Tags" in row and row["Tags"].strip():
-                    tag_entries = [
-                        t.strip() for t in row["Tags"].split("|") if t.strip()
-                    ]
+                for column_name, cell_value in row.items():
+                    if column_name and cell_value and cell_value.strip():
+                        tag_type = tag_type_by_column.get(column_name.strip().lower())
+                        if tag_type is not None and tag_type.id is not None:
+                            tag_names = [
+                                raw_name.strip()
+                                for raw_name in cell_value.split(",")
+                                if raw_name.strip()
+                            ]
+                            for tag_name in tag_names:
+                                cache_key = f"{tag_type.id}:{tag_name.lower()}"
+                                if cache_key in tag_cache:
+                                    tag_ids.append(tag_cache[cache_key])
+                                    continue
 
-                    for tag_entry in tag_entries:
-                        # Split by colon to get tag_type and tag_name
-                        parts = tag_entry.split(":", 1)
-                        if len(parts) == 2:
-                            tag_type_name = parts[0].strip()
-                            tag_name = parts[1].strip()
-                        else:
-                            # Default tag type if no colon present
-                            tag_type_name = None
-                            tag_name = tag_entry
+                                tag_query = select(Tag).where(
+                                    func.lower(func.trim(Tag.name)) == tag_name.lower(),
+                                    Tag.tag_type_id == tag_type.id,
+                                    Tag.organization_id == organization_id,
+                                )
+                                tag = session.exec(tag_query).first()
 
-                        cache_key = f"{tag_type_name.strip().lower() if tag_type_name else None}:{tag_name.strip().lower()}"
-                        if cache_key in tag_cache:
-                            tag_ids.append(tag_cache[cache_key])
-                            continue
-                        tag_type = None
-                        if tag_type_name:
-                            tag_type_query = select(TagType).where(
-                                func.lower(func.trim(TagType.name))
-                                == tag_type_name.strip().lower(),
-                                TagType.organization_id == organization_id,
-                            )
+                                if not tag:
+                                    tag = Tag(
+                                        name=tag_name,
+                                        description=f"Tag for {tag_name}",
+                                        tag_type_id=tag_type.id,
+                                        created_by_id=user_id,
+                                        organization_id=organization_id,
+                                    )
+                                    session.add(tag)
+                                    session.flush()
 
-                            tag_type = session.exec(tag_type_query).first()
+                                if tag and tag.id:
+                                    tag_ids.append(tag.id)
+                                    tag_cache[cache_key] = tag.id
 
-                        if tag_type_name and not tag_type:
-                            failed_tagtypes.add(tag_type_name)
-                            tagtype_error = True
-                            continue
-
-                        if tag_type and tag_type.id:
-                            # Get or create tag
-                            tag_query = select(Tag).where(
-                                func.lower(func.trim(Tag.name))
-                                == tag_name.strip().lower(),
-                                Tag.tag_type_id == tag_type.id,
-                                Tag.organization_id == organization_id,
-                            )
-                        else:
-                            tag_query = select(Tag).where(
-                                func.lower(func.trim(Tag.name))
-                                == tag_name.strip().lower(),
-                                Tag.tag_type_id == None,  # noqa: E711
-                                Tag.organization_id == organization_id,
-                            )
-                        tag = session.exec(tag_query).first()
-
-                        if not tag:
-                            tag = Tag(
-                                name=tag_name,
-                                description=f"Tag for {tag_name}",
-                                tag_type_id=tag_type.id if tag_type else None,
-                                created_by_id=user_id,
-                                organization_id=organization_id,
-                            )
-                            session.add(tag)
-                            session.flush()
-
-                        if tag and tag.id:
-                            tag_ids.append(tag.id)
-                            tag_cache[f"{tag_type_name}:{tag_name}"] = tag.id
-
-                if tagtype_error:
-                    questions_failed += 1
-                    failed_question_details.append(
-                        {
-                            "row_number": row_number,
-                            "question_text": question_text,
-                            "error": f"Invalid tag types: {', '.join(failed_tagtypes)}",
-                        }
-                    )
-                    continue
+                tag_ids = list(set(tag_ids))
 
                 # Process state information if present
                 row_state_ids = []
@@ -1688,10 +1648,6 @@ async def upload_questions_csv(
         message = f"Bulk upload complete. Created {questions_created} questions successfully. Failed to create {questions_failed} questions."
         if failed_states:
             message += f" The following states were not found in the system: {', '.join(failed_states)}"
-        if failed_tagtypes:
-            message += (
-                f" The following tag types were not found: {', '.join(failed_tagtypes)}"
-            )
         if questions_failed > 0:
             csv_buffer = StringIO()
             csv_writer = csv.DictWriter(
