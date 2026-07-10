@@ -1,4 +1,5 @@
 from .sort_configs import (
+    CandidateReportSortConfig,
     EntitySortConfig,
     QuestionSortConfig,
     TagSortConfig,
@@ -18,4 +19,5 @@ __all__ = [
     "TagSortConfig",
     "TagTypeSortConfig",
     "EntitySortConfig",
+    "CandidateReportSortConfig",
 ]

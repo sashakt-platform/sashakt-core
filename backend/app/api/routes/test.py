@@ -22,6 +22,7 @@ from app.core.candidate import get_time_taken_seconds
 from app.core.question_sets import is_sectioned_test
 from app.core.roles import state_admin, super_admin, system_admin, test_admin
 from app.core.sorting import (
+    CandidateReportSortConfig,
     SortingParams,
     SortOrder,
     TestSortConfig,
@@ -138,6 +139,9 @@ def transform_to_report(
 # create sorting dependency
 TestSorting = create_sorting_dependency(TestSortConfig)
 TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
+
+CandidateReportSorting = create_sorting_dependency(CandidateReportSortConfig)
+CandidateReportSortingDep = Annotated[SortingParams, Depends(CandidateReportSorting)]
 
 
 def check_test_ownership(
@@ -1132,6 +1136,7 @@ def get_candidate_report(
     test_id: int,
     session: SessionDep,
     current_user: CurrentUser,
+    sorting: CandidateReportSortingDep,
     params: Pagination = Depends(),
 ) -> Page[CandidateReport]:
     """Get per-candidate scores, status and time-taken for a test."""
@@ -1152,8 +1157,12 @@ def get_candidate_report(
             col(Candidate.identity).is_not(None),
             Candidate.organization_id == current_user.organization_id,
         )
-        .order_by(col(CandidateTest.id))
     )
+
+    if sorting.is_sorting_requested():
+        query = sorting.apply_to_query(query, CandidateReportSortConfig)
+    else:
+        query = query.order_by(col(CandidateTest.id))
 
     test_questions = get_test_question_links(session, test_id)
     question_sets = get_test_question_sets(session, test_id)

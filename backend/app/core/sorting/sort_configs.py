@@ -20,6 +20,7 @@ from app.models import (
     Test,
     User,
 )
+from app.models.candidate import CandidateTest
 from app.models.role import Role
 
 # User sorting configuration
@@ -49,6 +50,12 @@ TestSortConfig: Any = {
     "created_date": Test.created_date,
     "modified_date": Test.modified_date,
     "is_active": Test.is_active,
+}
+
+
+CandidateReportSortConfig: Any = {
+    "start_time": CandidateTest.start_time,
+    "status": CandidateTest.is_submitted,
 }
 
 
@@ -92,6 +99,7 @@ ALL_SORT_CONFIGS = {
     "Tag": TagSortConfig,
     "TagType": TagTypeSortConfig,
     "Entity": EntitySortConfig,
+    "CandidateReport": CandidateReportSortConfig,
 }
 
 
