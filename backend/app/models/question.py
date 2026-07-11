@@ -434,19 +434,29 @@ class QuestionRevision(QuestionBase, table=True):
     tests: list["Test"] = Relationship(
         back_populates="question_revisions",
         link_model=TestQuestion,
+        sa_relationship_kwargs={"overlaps": "question_revision,test_questions"},
     )
     # Candidate tests that include this question revision
     candidate_tests: list["CandidateTest"] = Relationship(
         back_populates="question_revisions",
         link_model=CandidateTestAnswer,
+        sa_relationship_kwargs={
+            "overlaps": "question_revision,candidate_test_answers,question_revisions"
+        },
     )
     # Direct relationship to candidate test answers
     candidate_test_answers: list["CandidateTestAnswer"] = Relationship(
-        back_populates="question_revision"
+        back_populates="question_revision",
+        sa_relationship_kwargs={
+            "overlaps": "question_revisions,candidate_tests,question_revision"
+        },
     )
     # Direct relationship to test questions
     test_questions: list["TestQuestion"] = Relationship(
-        back_populates="question_revision"
+        back_populates="question_revision",
+        sa_relationship_kwargs={
+            "overlaps": "question_revisions,tests,question_revision"
+        },
     )
 
 

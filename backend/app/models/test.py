@@ -111,7 +111,8 @@ class TestQuestion(SQLModel, table=True):
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
     question_revision: "QuestionRevision" = Relationship(
-        back_populates="test_questions"
+        back_populates="test_questions",
+        sa_relationship_kwargs={"overlaps": "question_revisions,tests"},
     )
     question_set: Optional["QuestionSet"] = Relationship(
         back_populates="test_questions"
@@ -362,7 +363,9 @@ class Test(TestBase, table=True):
     tests: list["Test"] | None = Relationship(back_populates="template")
     tags: list["Tag"] | None = Relationship(back_populates="tests", link_model=TestTag)
     question_revisions: list["QuestionRevision"] | None = Relationship(
-        back_populates="tests", link_model=TestQuestion
+        back_populates="tests",
+        link_model=TestQuestion,
+        sa_relationship_kwargs={"overlaps": "question_revision,test_questions"},
     )
     question_sets: list["QuestionSet"] | None = Relationship(
         back_populates="test", cascade_delete=True

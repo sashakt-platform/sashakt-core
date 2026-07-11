@@ -53,7 +53,8 @@ class CandidateTestAnswer(CandidateTestAnswerBase, table=True):
     )
     # Add relationship to QuestionRevision
     question_revision: "QuestionRevision" = Relationship(
-        back_populates="candidate_test_answers"
+        back_populates="candidate_test_answers",
+        sa_relationship_kwargs={"overlaps": "question_revisions,candidate_tests"},
     )
 
 
@@ -162,7 +163,9 @@ class CandidateTest(CandidateTestBase, table=True):
     )
     # Updated relationship to reference QuestionRevision instead of Question
     question_revisions: list["QuestionRevision"] = Relationship(
-        back_populates="candidate_tests", link_model=CandidateTestAnswer
+        back_populates="candidate_tests",
+        link_model=CandidateTestAnswer,
+        sa_relationship_kwargs={"overlaps": "question_revision,candidate_test_answers"},
     )
     question_revision_ids: list[int] = Field(
         default_factory=list, sa_column=Column(JSON)
