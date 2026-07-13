@@ -8,7 +8,7 @@ def add_arguments(parser, **kwargs):
         "--test-link-uuid",
         type=str,
         required=True,
-        help="UUID of the test link to use for load testing. "
+        help="UUID of the test link. "
         "Requirements: active test, start_time in the past, no org time-window, no mandatory form.",
     )
 
