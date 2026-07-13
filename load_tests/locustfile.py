@@ -1,4 +1,5 @@
-from locust import HttpUser, task, between, events
+from locust import HttpUser, events, task
+from locust.exception import StopUser
 
 
 @events.init_command_line_parser.add_listener
@@ -13,10 +14,7 @@ def add_arguments(parser, **kwargs):
 
 
 class StartTestUser(HttpUser):
-    wait_time = between(1, 3)
-
-    @task
-    def start_test(self):
+    def on_start(self):
         self.client.post(
             "/api/v1/candidate/start_test",
             json={
@@ -24,3 +22,7 @@ class StartTestUser(HttpUser):
                 "device_info": "locust-loadtest",
             },
         )
+
+    @task
+    def stop(self):
+        raise StopUser()
