@@ -1,8 +1,15 @@
-from locust import HttpUser, task, between
+from locust import HttpUser, task, between, events
 
-# Replace with a valid test_link_uuid from the DB
-# Requirements: active test, start_time in the past, no org time-window, no mandatory form
-TEST_LINK_UUID = "4f87e1f0-d800-456f-b07f-3ee4af97ff6b"
+
+@events.init_command_line_parser.add_listener
+def add_arguments(parser, **kwargs):
+    parser.add_argument(
+        "--test-link-uuid",
+        type=str,
+        required=True,
+        help="UUID of the test link to use for load testing. "
+        "Requirements: active test, start_time in the past, no org time-window, no mandatory form.",
+    )
 
 
 class StartTestUser(HttpUser):
@@ -13,7 +20,7 @@ class StartTestUser(HttpUser):
         self.client.post(
             "/api/v1/candidate/start_test",
             json={
-                "test_link_uuid": TEST_LINK_UUID,
+                "test_link_uuid": self.environment.parsed_options.test_link_uuid,
                 "device_info": "locust-loadtest",
             },
         )
