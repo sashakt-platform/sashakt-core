@@ -2022,6 +2022,73 @@ def convert_to_list(value: object) -> list[str]:
     return [str(value)]
 
 
+def get_or_create_certificate_download_url(
+    session: SessionDep,
+    candidate_test: CandidateTest,
+    test: Test,
+    result: Result,
+) -> str | None:
+    """Get the certificate download URL for a candidate test.
+
+    Reuses the token in `candidate_test.certificate_data` if one was already
+    generated; otherwise generates a new token and persists a certificate
+    data snapshot (candidate_test is added to the session but not committed
+    here - the caller is responsible for committing). Returns None if the
+    test has no certificate configured.
+    """
+    if not test.certificate_id:
+        return None
+
+    if candidate_test.certificate_data and candidate_test.certificate_data.get("token"):
+        token = candidate_test.certificate_data["token"]
+        return f"/api/v1/certificate/download/{token}"
+
+    token = generate_certificate_token()
+
+    raw_marks_obtained = result.marks_obtained or 0.0
+    raw_marks_maximum = result.marks_maximum or 0.0
+    if raw_marks_maximum > 0:
+        score_percentage = raw_marks_obtained / raw_marks_maximum * 100
+        score_str = f"{raw_marks_obtained:.1f}/{raw_marks_maximum:.1f} ({score_percentage:.1f}%)"
+    else:
+        score_str = "N/A"
+
+    completion_date = (
+        candidate_test.end_time.strftime("%B %d, %Y")
+        if candidate_test.end_time
+        else "N/A"
+    )
+
+    form_response_data: dict[str, Any] = {}
+    if test.form_id:
+        raw_responses: dict[str, Any] = {}
+        form_response = session.exec(
+            select(FormResponse).where(
+                FormResponse.candidate_test_id == candidate_test.id,
+                FormResponse.form_id == test.form_id,
+            )
+        ).first()
+        if form_response and form_response.responses:
+            raw_responses = form_response.responses
+
+        form_response_data = resolve_form_response_values(
+            form_id=test.form_id,
+            responses=raw_responses,
+            session=session,
+        )
+
+    candidate_test.certificate_data = {
+        "token": token,
+        "test_name": test.name,
+        "score": score_str,
+        "completion_date": completion_date,
+        **form_response_data,
+    }
+    session.add(candidate_test)
+
+    return f"/api/v1/certificate/download/{token}"
+
+
 def compute_result(
     session: SessionDep,
     candidate_test: CandidateTest,
@@ -2295,68 +2362,10 @@ def get_test_result(
     result = compute_result(
         session, candidate_test, test, question_sets_by_id, sectioned
     )
-
-    certificate_download_url = None
-    if test.certificate_id:
-        # Check if certificate_data already exists (reuse token)
-        if candidate_test.certificate_data and candidate_test.certificate_data.get(
-            "token"
-        ):
-            token = candidate_test.certificate_data["token"]
-        else:
-            # Generate new token and save certificate data snapshot
-            token = generate_certificate_token()
-
-            raw_marks_obtained = result.marks_obtained or 0.0
-            raw_marks_maximum = result.marks_maximum or 0.0
-            if raw_marks_maximum > 0:
-                score_percentage = raw_marks_obtained / raw_marks_maximum * 100
-                score_str = f"{raw_marks_obtained:.1f}/{raw_marks_maximum:.1f} ({score_percentage:.1f}%)"
-            else:
-                score_str = "N/A"
-
-            # Format completion date
-            completion_date = (
-                candidate_test.end_time.strftime("%B %d, %Y")
-                if candidate_test.end_time
-                else "N/A"
-            )
-
-            # Get form response values if available
-            form_response_data: dict[str, Any] = {}
-            if test.form_id:
-                raw_responses: dict[str, Any] = {}
-                form_response = session.exec(
-                    select(FormResponse).where(
-                        FormResponse.candidate_test_id == candidate_test.id,
-                        FormResponse.form_id == test.form_id,
-                    )
-                ).first()
-                if form_response and form_response.responses:
-                    raw_responses = form_response.responses
-                # Always resolve so unanswered fields default to "N/A"
-                form_response_data = resolve_form_response_values(
-                    form_id=test.form_id,
-                    responses=raw_responses,
-                    session=session,
-                )
-
-            # Save certificate data snapshot (fixed tokens + form field values)
-            candidate_test.certificate_data = {
-                "token": token,
-                # Fixed tokens
-                "test_name": test.name,
-                "score": score_str,
-                "completion_date": completion_date,
-                # Dynamic tokens from form response
-                **form_response_data,
-            }
-            session.add(candidate_test)
-            session.commit()
-
-        certificate_download_url = f"/api/v1/certificate/download/{token}"
-
-    result.certificate_download_url = certificate_download_url
+    result.certificate_download_url = get_or_create_certificate_download_url(
+        session, candidate_test, test, result
+    )
+    session.commit()
     return result
 
 

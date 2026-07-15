@@ -16,7 +16,10 @@ from app.api.deps import (
     SessionDep,
     permission_dependency,
 )
-from app.api.routes.candidate import compute_result
+from app.api.routes.candidate import (
+    compute_result,
+    get_or_create_certificate_download_url,
+)
 from app.api.routes.utils import get_current_time
 from app.core.candidate import get_time_taken_seconds
 from app.core.question_sets import is_sectioned_test
@@ -51,7 +54,7 @@ from app.models.candidate import (
     CandidateTestAnswer,
     Result,
 )
-from app.models.form import Form, FormFieldPublic, FormPublic
+from app.models.form import Form, FormFieldPublic, FormPublic, FormResponse
 from app.models.location import District
 from app.models.role import Role
 from app.models.tag import Tag, TagPublic
@@ -71,6 +74,7 @@ from app.models.test import (
 )
 from app.models.user import User
 from app.models.utils import TimeLeft
+from app.services.certificate_tokens import resolve_form_response_values
 from app.services.organization_nomenclature import resolve_nomenclature_for_test
 from app.services.organization_settings_mapper import (
     fixed_overrides_for_test,
@@ -103,7 +107,27 @@ def transform_to_report(
         if candidate.id is not None
     }
 
+    candidate_test_ids = [
+        candidate_test.id
+        for candidate_test in candidate_test_list
+        if candidate_test.id is not None
+    ]
+    raw_form_responses_by_candidate_test: dict[int, dict[str, Any]] = {}
+    if test.form_id and candidate_test_ids:
+        form_response_rows = session.exec(
+            select(FormResponse).where(
+                col(FormResponse.candidate_test_id).in_(candidate_test_ids),
+                FormResponse.form_id == test.form_id,
+            )
+        ).all()
+        raw_form_responses_by_candidate_test = {
+            form_response.candidate_test_id: form_response.responses
+            for form_response in form_response_rows
+            if form_response.responses
+        }
+
     report_entries: list[CandidateReport] = []
+    certificate_data_changed = False
     for candidate_test in candidate_test_list:
         candidate = candidates_by_id.get(candidate_test.candidate_id)
         if candidate and candidate.identity:
@@ -121,6 +145,30 @@ def transform_to_report(
                     question_sets_by_id,
                     sectioned,
                 )
+                had_token = bool(
+                    candidate_test.certificate_data
+                    and candidate_test.certificate_data.get("token")
+                )
+                result.certificate_download_url = (
+                    get_or_create_certificate_download_url(
+                        session, candidate_test, test, result
+                    )
+                )
+                if not had_token and result.certificate_download_url:
+                    certificate_data_changed = True
+
+            form_response: dict[str, Any] | None = None
+            raw_responses = (
+                raw_form_responses_by_candidate_test.get(candidate_test.id)
+                if candidate_test.id is not None
+                else None
+            )
+            if test.form_id and raw_responses:
+                form_response = resolve_form_response_values(
+                    form_id=test.form_id,
+                    responses=raw_responses,
+                    session=session,
+                )
 
             report_entries.append(
                 CandidateReport(
@@ -131,8 +179,12 @@ def transform_to_report(
                     end_time=candidate_test.end_time,
                     time_taken_seconds=get_time_taken_seconds(candidate_test),
                     result=result,
+                    form_response=form_response,
                 )
             )
+
+    if certificate_data_changed:
+        session.commit()
     return report_entries
 
 
