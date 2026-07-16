@@ -2027,6 +2027,7 @@ def get_or_create_certificate_download_url(
     candidate_test: CandidateTest,
     test: Test,
     result: Result,
+    resolved_form_response: dict[str, Any] | None = None,
 ) -> str | None:
     """Get the certificate download URL for a candidate test.
 
@@ -2060,7 +2061,9 @@ def get_or_create_certificate_download_url(
     )
 
     form_response_data: dict[str, Any] = {}
-    if test.form_id:
+    if resolved_form_response is not None:
+        form_response_data = resolved_form_response
+    elif test.form_id:
         raw_responses: dict[str, Any] = {}
         form_response = session.exec(
             select(FormResponse).where(

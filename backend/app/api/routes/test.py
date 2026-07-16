@@ -136,6 +136,19 @@ def transform_to_report(
             else:
                 status = CandidateReportStatus.not_submitted
 
+            form_response: dict[str, Any] | None = None
+            raw_responses = (
+                raw_form_responses_by_candidate_test.get(candidate_test.id)
+                if candidate_test.id is not None
+                else None
+            )
+            if test.form_id and raw_responses:
+                form_response = resolve_form_response_values(
+                    form_id=test.form_id,
+                    responses=raw_responses,
+                    session=session,
+                )
+
             result: Result | None = None
             if candidate_test.start_time and candidate_test.end_time:
                 result = compute_result(
@@ -151,24 +164,15 @@ def transform_to_report(
                 )
                 result.certificate_download_url = (
                     get_or_create_certificate_download_url(
-                        session, candidate_test, test, result
+                        session,
+                        candidate_test,
+                        test,
+                        result,
+                        resolved_form_response=form_response,
                     )
                 )
                 if not had_token and result.certificate_download_url:
                     certificate_data_changed = True
-
-            form_response: dict[str, Any] | None = None
-            raw_responses = (
-                raw_form_responses_by_candidate_test.get(candidate_test.id)
-                if candidate_test.id is not None
-                else None
-            )
-            if test.form_id and raw_responses:
-                form_response = resolve_form_response_values(
-                    form_id=test.form_id,
-                    responses=raw_responses,
-                    session=session,
-                )
 
             report_entries.append(
                 CandidateReport(
