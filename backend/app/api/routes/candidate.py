@@ -2081,11 +2081,11 @@ def get_or_create_certificate_download_url(
         )
 
     candidate_test.certificate_data = {
+        **form_response_data,
         "token": token,
         "test_name": test.name,
         "score": score_str,
         "completion_date": completion_date,
-        **form_response_data,
     }
     session.add(candidate_test)
 
