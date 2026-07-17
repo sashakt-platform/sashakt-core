@@ -1,11 +1,11 @@
 from datetime import datetime
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, NotRequired, Optional, TypeIs
 
 from pydantic import model_validator
 from sqlalchemy.orm import Mapped
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import NotRequired, TypedDict, TypeIs
+from typing_extensions import TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import CandidateTestAnswer
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class QuestionType(str, Enum):
+class QuestionType(StrEnum):
     """Types of questions available in the system"""
 
     single_choice = "single-choice"
