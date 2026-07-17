@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from google.api_core.exceptions import NotFound
@@ -1038,17 +1038,15 @@ class BigQueryService:
             # Normalize timezones for comparison - convert both to naive UTC
             if last_sync.tzinfo is not None:
                 # Convert timezone-aware last_sync to naive UTC
-                last_sync_normalized = last_sync.astimezone(timezone.utc).replace(
-                    tzinfo=None
-                )
+                last_sync_normalized = last_sync.astimezone(UTC).replace(tzinfo=None)
             else:
                 last_sync_normalized = last_sync
 
             if record_timestamp.tzinfo is not None:
                 # Convert timezone-aware record_timestamp to naive UTC
-                record_timestamp_normalized = record_timestamp.astimezone(
-                    timezone.utc
-                ).replace(tzinfo=None)
+                record_timestamp_normalized = record_timestamp.astimezone(UTC).replace(
+                    tzinfo=None
+                )
             else:
                 record_timestamp_normalized = record_timestamp
 

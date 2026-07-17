@@ -109,7 +109,7 @@ alembic upgrade head
 - SQLModel IDs are typed `int | None`. After `db.commit()` + `db.refresh()`, the ID is non-None at runtime but mypy sees `int | None`. Use `assert obj.id is not None` when passing to functions expecting `int`.
 - Always run `mypy app` after code changes (inside Docker: `docker compose exec backend bash -c "mypy app"`)
 - mypy is configured with `strict = true`
-- ruff targets Python 3.10, excludes alembic directory
+- ruff targets Python 3.13, excludes alembic directory
 - Sentry is integrated for error tracking (configured via `SENTRY_DSN` env var)
 - FastAPI Pagination is used for list endpoints
 

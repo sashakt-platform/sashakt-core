@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.models.test import Test
 
 
-class FormFieldType(str, enum.Enum):
+class FormFieldType(enum.StrEnum):
     """Types of form fields available in the system"""
 
     # Core user fields

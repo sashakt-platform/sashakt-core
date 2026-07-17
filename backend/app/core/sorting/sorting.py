@@ -3,7 +3,7 @@ Generic sorting utilities for API endpoints.
 This module provides a standardized way to handle sorting across all API endpoints
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from fastapi import HTTPException, Query
@@ -11,7 +11,7 @@ from sqlalchemy import Column
 from sqlalchemy.orm import InstrumentedAttribute
 
 
-class SortOrder(str, Enum):
+class SortOrder(StrEnum):
     ASC = "asc"
     DESC = "desc"
 

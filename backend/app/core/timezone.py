@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 
@@ -11,4 +11,4 @@ def get_timezone_aware_now() -> datetime:
         return datetime.now(tz).replace(tzinfo=None)
     except Exception:
         # Fallback to UTC if timezone is invalid
-        return datetime.now(timezone.utc).replace(tzinfo=None)
+        return datetime.now(UTC).replace(tzinfo=None)
