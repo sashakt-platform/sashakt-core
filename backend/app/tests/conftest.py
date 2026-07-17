@@ -13,7 +13,7 @@ from app.tests.utils.utils import get_superuser_token_headers
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_database() -> Generator[None, None, None]:
+def setup_database() -> Generator[None]:
     """Initialize database with seed data once per test session."""
     with Session(engine) as session:
         init_db(session)
@@ -21,7 +21,7 @@ def setup_database() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope="function")
-def db() -> Generator[Session, None, None]:
+def db() -> Generator[Session]:
     """
     Create a transactional test session with automatic rollback.
 
@@ -49,10 +49,10 @@ def db() -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
-def client(db: Session) -> Generator[TestClient, None, None]:
+def client(db: Session) -> Generator[TestClient]:
     """Test client that uses the transactional session."""
 
-    def override_get_db() -> Generator[Session, None, None]:
+    def override_get_db() -> Generator[Session]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
