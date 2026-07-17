@@ -4,7 +4,7 @@ import io
 import os
 import tempfile
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -2438,7 +2438,7 @@ def test_get_question_candidate_tests(client: TestClient, db: SessionDep) -> Non
     db.flush()
 
     # Create candidate test with end_time
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
     end_time = start_time + timedelta(hours=1)
     candidate_test = CandidateTest(
         candidate_id=candidate.id,

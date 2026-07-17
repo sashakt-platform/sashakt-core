@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from pytest import MonkeyPatch
@@ -9,7 +9,7 @@ from app.core.timezone import get_timezone_aware_now
 def test_get_timezone_aware_now_invalid_timezone(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("TIMEZONE", "Invalid/Timezone")
     result = get_timezone_aware_now()
-    expected = datetime.now(timezone.utc).replace(tzinfo=None)
+    expected = datetime.now(UTC).replace(tzinfo=None)
     assert abs((result - expected).total_seconds()) < 5
     assert result.tzinfo is None
 

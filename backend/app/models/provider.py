@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from app.models import Organization
 
 
-class ProviderType(str, Enum):
+class ProviderType(StrEnum):
     BIGQUERY = "BIGQUERY"
     GOOGLE_SLIDES = "GOOGLE_SLIDES"
     GCS = "GCS"

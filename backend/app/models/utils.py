@@ -1,7 +1,8 @@
 import enum
+from typing import NotRequired
 
 from sqlmodel import SQLModel
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 
 # Generic message
@@ -42,7 +43,7 @@ class MarkingScheme(TypedDict):
     partial: NotRequired[PartialMarkRule]
 
 
-class LocaleEnum(str, enum.Enum):
+class LocaleEnum(enum.StrEnum):
     English = "en-US"
     Hindi = "hi-IN"
 

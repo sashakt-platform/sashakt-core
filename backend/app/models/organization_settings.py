@@ -1,11 +1,10 @@
 from datetime import datetime, time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pydantic import Field as PydanticField
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
-from typing_extensions import Self
 
 from app.core.timezone import get_timezone_aware_now
 from app.models.utils import MarkingScheme

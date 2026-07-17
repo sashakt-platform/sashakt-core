@@ -116,7 +116,7 @@ class CandidateAnswerUpdateRequest(SQLModel):
     bookmarked: bool = False
 
 
-class CandidateTimerEventType(str, enum.Enum):
+class CandidateTimerEventType(enum.StrEnum):
     resume = "resume"
     heartbeat = "heartbeat"
 
@@ -352,7 +352,7 @@ class OverallTestAnalyticsResponse(SQLModel):
     overall_avg_time_minutes: float
 
 
-class CandidateReportStatus(str, enum.Enum):
+class CandidateReportStatus(enum.StrEnum):
     submitted = "submitted"
     not_submitted = "not_submitted"
 

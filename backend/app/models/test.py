@@ -1,10 +1,10 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, Self
 
 from pydantic import model_validator
 from sqlmodel import JSON, Field, Relationship, SQLModel, UniqueConstraint
-from typing_extensions import Self, TypedDict
+from typing_extensions import TypedDict
 
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
@@ -14,12 +14,12 @@ from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme
 TestStatus = Literal["In Progress", "Completed", "Scheduled", None]
 
 
-class MarksLevelEnum(str, enum.Enum):
+class MarksLevelEnum(enum.StrEnum):
     QUESTION = "question"
     TEST = "test"
 
 
-class OMRMode(str, enum.Enum):
+class OMRMode(enum.StrEnum):
     NEVER = "NEVER"
     ALWAYS = "ALWAYS"
     OPTIONAL = "OPTIONAL"

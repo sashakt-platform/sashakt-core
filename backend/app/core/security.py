@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -25,7 +25,7 @@ def create_token(
         token_type: Type of token ("access" or "refresh")
     """
     # JWT expires should remain in UTC for standards compliance
-    expire = datetime.now(timezone.utc) + expires_delta
+    expire = datetime.now(UTC) + expires_delta
     to_encode = {
         "exp": expire,
         "sub": str(user_id),
