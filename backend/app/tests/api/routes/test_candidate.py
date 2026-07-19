@@ -24,6 +24,7 @@ from app.models.form import Form, FormField, FormFieldType, FormResponse
 from app.models.location import Country, District, State
 from app.models.organization_settings import (
     OrganizationSettings,
+    OrganizationSettingsPayload,
     default_organization_settings,
 )
 from app.models.question import QuestionTag, QuestionType
@@ -16220,6 +16221,181 @@ def test_external_start_rejects_candidate_test_for_other_test(
     assert start_response.json()["detail"] == (
         "Candidate test not found or invalid UUID"
     )
+
+
+def test_start_test_resume_requires_external_login_enabled(
+    client: TestClient, db: SessionDep
+) -> None:
+    """candidate_uuid resume is rejected when the org has external login disabled."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    candidate = Candidate(identity=uuid.uuid4(), organization_id=org.id)
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    create_test_candidate_test(
+        db, admin_id=user.id, test_id=test.id, candidate_id=candidate.id
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        params={"candidate_uuid": str(candidate.identity)},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Mobile"},
+    )
+
+    assert response.status_code == 403
+    assert (
+        response.json()["detail"]
+        == "External login is not enabled for this organization"
+    )
+
+
+def test_start_test_resume_unknown_candidate_uuid(
+    client: TestClient, db: SessionDep
+) -> None:
+    """A candidate_uuid that was never provisioned resumes to a 404."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        params={"candidate_uuid": str(uuid.uuid4())},
+        json={"test_link_uuid": test_link.uuid, "device_info": "Mobile"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Candidate test not found or invalid UUID"
+
+
+def test_start_test_anonymous_allowed_when_anonymous_starts_not_blocked(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Anonymous starts (no candidate_uuid) still work when external login is
+    enabled but block_anonymous_starts is off."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    settings_row = db.exec(
+        select(OrganizationSettings).where(
+            OrganizationSettings.organization_id == org.id
+        )
+    ).first()
+    assert settings_row is not None
+    payload = OrganizationSettingsPayload.model_validate(settings_row.settings)
+    payload.external_login.value.block_anonymous_starts = False
+    settings_row.settings = payload.model_dump(mode="json")
+    db.add(settings_row)
+    db.commit()
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Browser"},
+    )
+
+    assert response.status_code == 200
+    candidate_test = db.get(CandidateTest, response.json()["candidate_test_id"])
+    assert candidate_test is not None
+    candidate = db.get(Candidate, candidate_test.candidate_id)
+    assert candidate is not None
+    assert candidate.external_user_id is None
+
+
+def test_start_test_resume_respects_start_window(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Resuming via candidate_uuid still enforces the test's start_time window."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_avanti_external_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+        start_time=datetime(2025, 7, 6, 12, 30, 0),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    candidate = Candidate(
+        identity=uuid.uuid4(), organization_id=org.id, external_user_id="375220"
+    )
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    create_test_candidate_test(
+        db, admin_id=user.id, test_id=test.id, candidate_id=candidate.id
+    )
+
+    fake_now = datetime(2025, 7, 5, 12, 0, 0)
+    with patch("app.api.routes.candidate.get_current_time", return_value=fake_now):
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/start_test",
+            params={"candidate_uuid": str(candidate.identity)},
+            json={"test_link_uuid": test_link.uuid, "device_info": "Mobile"},
+        )
+
+    assert response.status_code == 400
+    assert "Test has not started yet" in response.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
