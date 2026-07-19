@@ -15929,11 +15929,10 @@ def test_external_provision_and_start_resume_same_attempt(
     assert candidate_test.test_id == test.id
 
     start_response = client.post(
-        f"{settings.API_V1_STR}/candidate/external/start_test",
+        f"{settings.API_V1_STR}/candidate/start_test",
+        params={"candidate_uuid": provision_data["candidate_uuid"]},
         json={
             "test_link_uuid": test_link.uuid,
-            "candidate_uuid": provision_data["candidate_uuid"],
-            "candidate_test_id": provision_data["candidate_test_id"],
             "device_info": "Mobile",
         },
     )
@@ -15988,11 +15987,10 @@ def test_external_start_reports_submitted_attempt(
     db.commit()
 
     start_response = client.post(
-        f"{settings.API_V1_STR}/candidate/external/start_test",
+        f"{settings.API_V1_STR}/candidate/start_test",
+        params={"candidate_uuid": provision_data["candidate_uuid"]},
         json={
             "test_link_uuid": test_link.uuid,
-            "candidate_uuid": provision_data["candidate_uuid"],
-            "candidate_test_id": provision_data["candidate_test_id"],
             "device_info": "Mobile",
         },
     )
@@ -16210,18 +16208,17 @@ def test_external_start_rejects_candidate_test_for_other_test(
     provision_data = provision_response.json()
 
     start_response = client.post(
-        f"{settings.API_V1_STR}/candidate/external/start_test",
+        f"{settings.API_V1_STR}/candidate/start_test",
+        params={"candidate_uuid": provision_data["candidate_uuid"]},
         json={
             "test_link_uuid": test_b_link.uuid,
-            "candidate_uuid": provision_data["candidate_uuid"],
-            "candidate_test_id": provision_data["candidate_test_id"],
             "device_info": "Mobile",
         },
     )
 
     assert start_response.status_code == 404
     assert start_response.json()["detail"] == (
-        "Candidate test not found for this test link"
+        "Candidate test not found or invalid UUID"
     )
 
 
