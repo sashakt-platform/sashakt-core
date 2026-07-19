@@ -98,7 +98,7 @@ def create_single_choice_question_revision(
     return revision
 
 
-def enable_avanti_external_login(
+def enable_external_org_login(
     db: SessionDep, *, organization_id: int
 ) -> OrganizationSettings:
     payload = default_organization_settings()
@@ -15742,7 +15742,7 @@ def test_start_test_rejects_anonymous_for_external_login_org(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -15805,7 +15805,7 @@ def test_external_provision_requires_sashakt_auth(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -15895,7 +15895,7 @@ def test_external_provision_and_start_resume_same_attempt(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -15950,7 +15950,7 @@ def test_external_start_reports_submitted_attempt(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -16009,7 +16009,7 @@ def test_external_provision_reuses_same_candidate_across_tests(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -16082,7 +16082,7 @@ def test_external_provision_is_idempotent_for_same_user_and_test(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -16129,7 +16129,7 @@ def test_external_provision_distinct_users_get_distinct_candidates(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -16169,7 +16169,7 @@ def test_external_start_rejects_candidate_test_for_other_test(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -16276,7 +16276,7 @@ def test_start_test_resume_unknown_candidate_uuid(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None
@@ -16311,7 +16311,7 @@ def test_start_test_anonymous_allowed_when_anonymous_starts_not_blocked(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     settings_row = db.exec(
         select(OrganizationSettings).where(
@@ -16360,7 +16360,7 @@ def test_start_test_resume_respects_start_window(
     db.commit()
     db.refresh(org)
     assert org.id is not None
-    enable_avanti_external_login(db, organization_id=org.id)
+    enable_external_org_login(db, organization_id=org.id)
 
     user = create_random_user(db, organization_id=org.id)
     assert user.id is not None

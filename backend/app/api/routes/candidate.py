@@ -1028,7 +1028,7 @@ def provision_external_candidate_test(
     current_user: CurrentUser,
     provision_request: ExternalProvisionRequest = Body(...),
 ) -> StartTestResponse:
-    """Create the Sashakt candidate and attempt Avanti will map to its user."""
+    """Create the Sashakt candidate and attempt Organization will map to its user."""
     test, admin_id = _resolve_active_test_link(
         session, provision_request.test_link_uuid
     )
