@@ -3328,8 +3328,129 @@ def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
     assert response.status_code == 409
     assert (
         response.json()["detail"]
-        == "Cannot update pause timer setting after candidate tests have been created."
+        == "This test cannot be updated because candidates have already attempted it."
     )
+
+
+def test_update_test_blocks_disallowed_field_after_candidate_test_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Any field outside name/description/state/district/tag is blocked once a candidate has attempted the test."""
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks=5,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    assert candidate.id is not None
+
+    candidate_test = CandidateTest(
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": test.name,
+            "marks": 10,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "This test cannot be updated because candidates have already attempted it."
+    )
+    db.refresh(test)
+    assert test.marks == 5
+
+
+def test_update_test_allows_only_permitted_fields_after_candidate_test_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """name/description/state_ids/district_ids/tag_ids can still be updated once a candidate has attempted the test."""
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    assert candidate.id is not None
+
+    candidate_test = CandidateTest(
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    new_name = random_lower_string()
+    new_description = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": new_name,
+            "description": new_description,
+            "state_ids": [stata_a.id],
+            "district_ids": [],
+            "tag_ids": [tag_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == new_name
+    assert data["description"] == new_description
+    assert [state["id"] for state in data["states"]] == [stata_a.id]
+    assert [tag["id"] for tag in data["tags"]] == [tag_a.id]
 
 
 def test_update_test_can_replace_flat_membership_with_question_sets(
@@ -9913,6 +10034,90 @@ def test_get_or_create_test_link_template_rejected(
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Templates do not have shareable links."
+
+
+def test_get_test_has_candidate_tests_false(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/has-candidate-tests returns False when no candidate has taken the test."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/has-candidate-tests",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json() is False
+
+
+def test_get_test_has_candidate_tests_true(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/has-candidate-tests returns True once a candidate test exists."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        admin_id=user_id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+        question_revision_ids=[],
+        question_set_ids=[None],
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/has-candidate-tests",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json() is True
+
+
+def test_get_test_has_candidate_tests_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/has-candidate-tests returns 404 when the test does not exist."""
+    response = client.get(
+        f"{settings.API_V1_STR}/test/-999999/has-candidate-tests",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test is not available"
 
 
 # ---------------------------------------------------------------------------
