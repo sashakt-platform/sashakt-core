@@ -60,7 +60,6 @@ from app.models.candidate import (
     CandidateTimerSyncRequest,
     DeleteCandidate,
     ExternalProvisionRequest,
-    ExternalStartRequest,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -949,18 +948,59 @@ def _require_external_login_enabled(session: SessionDep, test: Test) -> None:
         )
 
 
+def _get_candidate_test_by_uuid(
+    session: SessionDep, test: Test, candidate_uuid: uuid.UUID
+) -> CandidateTest:
+    """Resume a previously provisioned attempt for this test.
+
+    Scoping by test_id plus the unguessable candidate identity is sufficient
+    authorization here, so unlike verify_candidate_uuid_access this does not
+    also need the candidate_test_id as a second factor.
+    """
+    candidate_test = session.exec(
+        select(CandidateTest)
+        .join(Candidate)
+        .where(CandidateTest.test_id == test.id)
+        .where(Candidate.identity == candidate_uuid)
+    ).first()
+    if not candidate_test:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidate test not found or invalid UUID",
+        )
+    return candidate_test
+
+
 @router.post("/start_test", response_model=StartTestResponse)
 def start_test_for_candidate(
     session: SessionDep,
     start_test_request: StartTestRequest = Body(...),
+    candidate_uuid: uuid.UUID | None = Query(
+        default=None,
+        description="Resume a previously provisioned externally-mapped attempt",
+    ),
 ) -> StartTestResponse:
     """
     Creates a candidate when they start a test, links them to the test.
     Returns the candidate UUID for verification.
+
+    If candidate_uuid is provided, resumes an existing externally-provisioned
+    attempt (see /external/provision) instead of creating a new anonymous one.
     """
     test, admin_id = _resolve_active_test_link(
         session, start_test_request.test_link_uuid
     )
+
+    if candidate_uuid is not None:
+        _require_external_login_enabled(session, test)
+        _validate_test_start_window(session, test)
+        candidate_test = _get_candidate_test_by_uuid(session, test, candidate_uuid)
+        return StartTestResponse(
+            candidate_uuid=candidate_uuid,
+            candidate_test_id=candidate_test.id,
+            is_submitted=candidate_test.is_submitted,
+        )
+
     if _should_block_anonymous_start(session, test):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -988,7 +1028,7 @@ def provision_external_candidate_test(
     current_user: CurrentUser,
     provision_request: ExternalProvisionRequest = Body(...),
 ) -> StartTestResponse:
-    """Create the Sashakt candidate and attempt Avanti will map to its user."""
+    """Create the Sashakt candidate and attempt Organization will map to its user."""
     test, admin_id = _resolve_active_test_link(
         session, provision_request.test_link_uuid
     )
@@ -1013,32 +1053,6 @@ def provision_external_candidate_test(
     return StartTestResponse(
         candidate_uuid=candidate.identity,
         candidate_test_id=candidate_test.id,
-        is_submitted=candidate_test.is_submitted,
-    )
-
-
-@router.post("/external/start_test", response_model=StartTestResponse)
-def start_external_candidate_test(
-    session: SessionDep,
-    start_request: ExternalStartRequest = Body(...),
-) -> StartTestResponse:
-    """Resume an externally provisioned attempt using Sashakt-owned IDs."""
-    test, _admin_id = _resolve_active_test_link(session, start_request.test_link_uuid)
-    _require_external_login_enabled(session, test)
-    _validate_test_start_window(session, test)
-
-    candidate_test = verify_candidate_uuid_access(
-        session, start_request.candidate_test_id, start_request.candidate_uuid
-    )
-    if candidate_test.test_id != test.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Candidate test not found for this test link",
-        )
-
-    return StartTestResponse(
-        candidate_uuid=start_request.candidate_uuid,
-        candidate_test_id=start_request.candidate_test_id,
         is_submitted=candidate_test.is_submitted,
     )
 

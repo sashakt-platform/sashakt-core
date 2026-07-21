@@ -358,11 +358,6 @@ class ExternalProvisionRequest(StartTestRequest):
     external_user_id: str
 
 
-class ExternalStartRequest(StartTestRequest):
-    candidate_uuid: uuid.UUID
-    candidate_test_id: int
-
-
 class OverallTestAnalyticsResponse(SQLModel):
     total_candidates: int
     overall_score_percent: float
