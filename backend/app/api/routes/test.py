@@ -186,6 +186,16 @@ def test_has_candidate_tests(session: SessionDep, test_id: int) -> bool:
     return bool(result)
 
 
+TEST_FIELDS_UPDATABLE_AFTER_CANDIDATE_ATTEMPT = {
+    "name",
+    "description",
+    "state_ids",
+    "district_ids",
+    "tag_ids",
+    "is_active",
+}
+
+
 def get_persisted_test_id(test: Test) -> int:
     if test.id is None:
         raise HTTPException(status_code=500, detail="Test is missing a database id.")
@@ -1128,6 +1138,24 @@ def get_test_by_id(
 
 
 @router.get(
+    "/{test_id}/has-candidate-tests",
+    response_model=bool,
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
+def get_test_has_candidate_tests(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> bool:
+    """Check whether any candidate has taken (or started) this test."""
+    test = session.get(Test, test_id)
+    if not test or test.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Test is not available")
+
+    return test_has_candidate_tests(session, test_id)
+
+
+@router.get(
     "/{test_id}/candidate-report",
     response_model=Page[CandidateReport],
     dependencies=[Depends(permission_dependency("read_test"))],
@@ -1238,6 +1266,16 @@ def update_test(
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
     check_test_ownership(session, current_user, test)
+
+    disallowed_fields_requested = test_update.model_fields_set - (
+        TEST_FIELDS_UPDATABLE_AFTER_CANDIDATE_ATTEMPT
+    )
+    if disallowed_fields_requested and test_has_candidate_tests(session, test_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This test cannot be updated because candidates have already attempted it.",
+        )
+
     membership_fields = {"question_revision_ids", "question_sets"}
     membership_update_requested = bool(
         membership_fields.intersection(test_update.model_fields_set)
@@ -1252,17 +1290,6 @@ def update_test(
     else:
         question_revision_ids = []
         question_sets = []
-    if (
-        "pause_timer_when_inactive" in test_update.model_fields_set
-        and test_update.pause_timer_when_inactive != test.pause_timer_when_inactive
-        and test_has_candidate_tests(session, test_id)
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Cannot update pause timer setting after candidate tests have been created."
-            ),
-        )
 
     if (
         test_update.start_time is not None
