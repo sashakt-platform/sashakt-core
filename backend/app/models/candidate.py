@@ -228,6 +228,10 @@ class Candidate(CandidateBase, table=True):
     identity: uuid.UUID | None = Field(
         default=None, unique=True, index=True, nullable=True
     )  # Only for anonymous QR code users
+    external_user_id: str | None = Field(
+        default=None
+    )  # External (e.g. Avanti) user id; reused across tests per (organization, external_user_id).
+    # Uniqueness + lookup covered by the partial unique index in the migration.
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
         default_factory=get_timezone_aware_now,
@@ -326,6 +330,9 @@ class Result(SQLModel):
     marks_obtained: float | None
     marks_maximum: float | None
     certificate_download_url: str | None = None
+    # External (e.g. Avanti) user id, when the candidate came via external login;
+    # None for anonymous QR candidates.
+    external_user_id: str | None = None
 
 
 class TestStatusSummary(SQLModel):
@@ -344,6 +351,11 @@ class StartTestRequest(SQLModel):
 class StartTestResponse(SQLModel):
     candidate_uuid: uuid.UUID
     candidate_test_id: int
+    is_submitted: bool = False
+
+
+class ExternalProvisionRequest(StartTestRequest):
+    external_user_id: str
 
 
 class OverallTestAnalyticsResponse(SQLModel):
