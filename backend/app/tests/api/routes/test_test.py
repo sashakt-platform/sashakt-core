@@ -12,6 +12,7 @@ from app.api.routes.utils import get_current_time
 from app.core.config import settings
 from app.models import (
     Country,
+    Form,
     Organization,
     Question,
     QuestionRevision,
@@ -29,7 +30,7 @@ from app.models.certificate import Certificate
 from app.models.location import District
 from app.models.question import QuestionType
 from app.models.role import Role
-from app.models.test import QuestionSet, TestDistrict
+from app.models.test import OMRMode, QuestionSet, TestDistrict
 from app.models.user import UserState
 from app.tests.utils.location import create_random_state
 from app.tests.utils.organization import (
@@ -2750,6 +2751,467 @@ def test_update_test(
     assert updated_test_questions[0].question_revision_id == question_revision_one.id
 
 
+def test_update_test_without_name_keeps_existing_name(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    original_name = random_lower_string()
+    test = Test(
+        name=original_name,
+        description=random_lower_string(),
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"description": random_lower_string()},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["name"] == original_name
+
+    db.refresh(test)
+    assert test.name == original_name
+
+
+def test_update_test_removes_description_when_explicitly_null(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"description": None},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["description"] is None
+
+    db.refresh(test)
+    assert test.description is None
+
+
+def test_update_test_add_then_remove_tags(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    tag_a = create_random_tag(db)
+    tag_b = create_random_tag(db)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"tag_ids": [tag_a.id, tag_b.id]},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {tag["id"] for tag in data["tags"]} == {tag_a.id, tag_b.id}
+    assert len(db.exec(select(TestTag).where(TestTag.test_id == test.id)).all()) == 2
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"tag_ids": []},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["tags"] == []
+    assert db.exec(select(TestTag).where(TestTag.test_id == test.id)).all() == []
+
+
+def test_update_test_add_then_remove_states(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    state_a = create_random_state(db)
+    state_b = create_random_state(db)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"state_ids": [state_a.id, state_b.id]},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {state["id"] for state in data["states"]} == {state_a.id, state_b.id}
+    assert (
+        len(db.exec(select(TestState).where(TestState.test_id == test.id)).all()) == 2
+    )
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"state_ids": []},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["states"] == []
+    assert db.exec(select(TestState).where(TestState.test_id == test.id)).all() == []
+
+
+def test_update_test_add_then_remove_districts(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    state = create_random_state(db)
+    district_a = District(name=random_lower_string(), state_id=state.id)
+    district_b = District(name=random_lower_string(), state_id=state.id)
+    db.add(district_a)
+    db.add(district_b)
+    db.commit()
+    db.refresh(district_a)
+    db.refresh(district_b)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"district_ids": [district_a.id, district_b.id]},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {district["id"] for district in data["districts"]} == {
+        district_a.id,
+        district_b.id,
+    }
+    assert (
+        len(db.exec(select(TestDistrict).where(TestDistrict.test_id == test.id)).all())
+        == 2
+    )
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"district_ids": []},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["districts"] == []
+    assert (
+        db.exec(select(TestDistrict).where(TestDistrict.test_id == test.id)).all() == []
+    )
+
+
+def test_update_test_adds_two_questions(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    question_revision_one = create_random_question_revision(db, user_id=user.id)
+    question_revision_two = create_random_question_revision(db, user_id=user.id)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "question_revision_ids": [
+                question_revision_one.id,
+                question_revision_two.id,
+            ]
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {qr["id"] for qr in data["question_revisions"]} == {
+        question_revision_one.id,
+        question_revision_two.id,
+    }
+
+    test_questions = db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == test.id)
+    ).all()
+    assert {tq.question_revision_id for tq in test_questions} == {
+        question_revision_one.id,
+        question_revision_two.id,
+    }
+
+
+def test_update_test_partial_put_keeps_state_tag_district(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """A PUT that omits state_ids/tag_ids/district_ids must not clear them."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    state = create_random_state(db)
+    district = District(name=random_lower_string(), state_id=state.id)
+    db.add(district)
+    db.commit()
+    db.refresh(district)
+    tag = create_random_tag(db)
+
+    question_revision_one = create_random_question_revision(db, user_id=user.id)
+    question_revision_two = create_random_question_revision(db, user_id=user.id)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "state_ids": [state.id],
+            "tag_ids": [tag.id],
+            "district_ids": [district.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {s["id"] for s in data["states"]} == {state.id}
+    assert {t["id"] for t in data["tags"]} == {tag.id}
+    assert {d["id"] for d in data["districts"]} == {district.id}
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "question_revision_ids": [
+                question_revision_one.id,
+                question_revision_two.id,
+            ]
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert {s["id"] for s in data["states"]} == {state.id}
+    assert {t["id"] for t in data["tags"]} == {tag.id}
+    assert {d["id"] for d in data["districts"]} == {district.id}
+    assert {qr["id"] for qr in data["question_revisions"]} == {
+        question_revision_one.id,
+        question_revision_two.id,
+    }
+
+    assert (
+        len(db.exec(select(TestState).where(TestState.test_id == test.id)).all()) == 1
+    )
+    assert len(db.exec(select(TestTag).where(TestTag.test_id == test.id)).all()) == 1
+    assert (
+        len(db.exec(select(TestDistrict).where(TestDistrict.test_id == test.id)).all())
+        == 1
+    )
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={"name": random_lower_string(), "time_limit": 45},
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert data["time_limit"] == 45
+    assert {s["id"] for s in data["states"]} == {state.id}
+    assert {t["id"] for t in data["tags"]} == {tag.id}
+    assert {d["id"] for d in data["districts"]} == {district.id}
+    assert {qr["id"] for qr in data["question_revisions"]} == {
+        question_revision_one.id,
+        question_revision_two.id,
+    }
+
+    assert (
+        len(db.exec(select(TestState).where(TestState.test_id == test.id)).all()) == 1
+    )
+    assert len(db.exec(select(TestTag).where(TestTag.test_id == test.id)).all()) == 1
+    assert (
+        len(db.exec(select(TestDistrict).where(TestDistrict.test_id == test.id)).all())
+        == 1
+    )
+    assert (
+        len(db.exec(select(TestQuestion).where(TestQuestion.test_id == test.id)).all())
+        == 2
+    )
+
+
+def test_update_test_adds_random_tag_count(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+
+    tag_one = create_random_tag(db)
+    tag_two = create_random_tag(db)
+
+    test = Test(name=random_lower_string(), created_by_id=user.id)
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "random_tag_count": [
+                {"tag_id": tag_one.id, "count": 3},
+                {"tag_id": tag_two.id, "count": 2},
+            ]
+        },
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+    assert len(data["random_tag_counts"]) == 2
+    assert data["random_tag_counts"][0]["tag"]["id"] == tag_one.id
+    assert data["random_tag_counts"][0]["tag"]["name"] == tag_one.name
+    assert data["random_tag_counts"][0]["count"] == 3
+    assert data["random_tag_counts"][1]["tag"]["id"] == tag_two.id
+    assert data["random_tag_counts"][1]["tag"]["name"] == tag_two.name
+    assert data["random_tag_counts"][1]["count"] == 2
+
+    db.refresh(test)
+    assert test.random_tag_count == [
+        {"tag_id": tag_one.id, "count": 3},
+        {"tag_id": tag_two.id, "count": 2},
+    ]
+
+
+def test_update_test_full_settings_payload(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user = db.get(User, user_data["id"])
+    assert user is not None
+    assert user.organization_id is not None
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        pause_timer_when_inactive=False,
+        show_marks=True,
+        show_result=True,
+        show_question_palette=False,
+        bookmark=False,
+        show_feedback_on_completion=False,
+        show_feedback_immediately=False,
+        omr=OMRMode.NEVER,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    payload = {
+        "start_time": None,
+        "end_time": None,
+        "pause_timer_when_inactive": True,
+        "time_limit": 12000000,
+        "marks_level": "question",
+        "marks": None,
+        "marking_scheme": {"correct": 2, "wrong": 0, "skipped": 0},
+        "completion_message": "<p>hello 2</p>",
+        "start_instructions": "<p>heello </p>",
+        "no_of_attempts": 1,
+        "shuffle": True,
+        "random_questions": False,
+        "no_of_random_questions": None,
+        "question_pagination": 1,
+        "is_template": False,
+        "template_id": None,
+        "show_marks": False,
+        "show_result": True,
+        "show_question_palette": True,
+        "bookmark": True,
+        "locale": "en-US",
+        "certificate_id": certificate.id,
+        "show_feedback_on_completion": True,
+        "show_feedback_immediately": True,
+        "form_id": form.id,
+        "omr": "OPTIONAL",
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json=payload,
+        headers=get_user_superadmin_token,
+    )
+    data = response.json()
+    assert response.status_code == 200
+
+    for field, expected in payload.items():
+        assert data[field] == expected, (
+            f"{field}: expected {expected}, got {data[field]}"
+        )
+
+    db.refresh(test)
+    assert test.pause_timer_when_inactive is True
+    assert test.show_marks is False
+    assert test.show_question_palette is True
+    assert test.bookmark is True
+    assert test.show_feedback_on_completion is True
+    assert test.show_feedback_immediately is True
+    assert test.omr == OMRMode.OPTIONAL
+    assert test.form_id == form.id
+    assert test.certificate_id == certificate.id
+
+
 def test_update_test_blocks_membership_changes_after_candidate_test_exists(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -2866,8 +3328,129 @@ def test_update_test_blocks_pause_timer_changes_after_candidate_test_exists(
     assert response.status_code == 409
     assert (
         response.json()["detail"]
-        == "Cannot update pause timer setting after candidate tests have been created."
+        == "This test cannot be updated because candidates have already attempted it."
     )
+
+
+def test_update_test_blocks_disallowed_field_after_candidate_test_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Any field outside name/description/state/district/tag is blocked once a candidate has attempted the test."""
+    user = create_random_user(db)
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks=5,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    assert candidate.id is not None
+
+    candidate_test = CandidateTest(
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": test.name,
+            "marks": 10,
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "This test cannot be updated because candidates have already attempted it."
+    )
+    db.refresh(test)
+    assert test.marks == 5
+
+
+def test_update_test_allows_only_permitted_fields_after_candidate_test_exists(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """name/description/state_ids/district_ids/tag_ids can still be updated once a candidate has attempted the test."""
+    (
+        user,
+        india,
+        stata_a,
+        state_b,
+        organization,
+        tag_type,
+        tag_a,
+        tag_b,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    assert candidate.id is not None
+
+    candidate_test = CandidateTest(
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    new_name = random_lower_string()
+    new_description = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{test.id}",
+        json={
+            "name": new_name,
+            "description": new_description,
+            "state_ids": [stata_a.id],
+            "district_ids": [],
+            "tag_ids": [tag_a.id],
+        },
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == new_name
+    assert data["description"] == new_description
+    assert [state["id"] for state in data["states"]] == [stata_a.id]
+    assert [tag["id"] for tag in data["tags"]] == [tag_a.id]
 
 
 def test_update_test_can_replace_flat_membership_with_question_sets(
@@ -9451,6 +10034,90 @@ def test_get_or_create_test_link_template_rejected(
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Templates do not have shareable links."
+
+
+def test_get_test_has_candidate_tests_false(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/has-candidate-tests returns False when no candidate has taken the test."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/has-candidate-tests",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json() is False
+
+
+def test_get_test_has_candidate_tests_true(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/has-candidate-tests returns True once a candidate test exists."""
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    organization_id = user_data["organization_id"]
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=organization_id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    assert test.id is not None
+
+    candidate = Candidate()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = CandidateTest(
+        admin_id=user_id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        device="test-device",
+        consent=True,
+        start_time=get_current_time(),
+        question_revision_ids=[],
+        question_set_ids=[None],
+    )
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/has-candidate-tests",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json() is True
+
+
+def test_get_test_has_candidate_tests_not_found(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """GET /{test_id}/has-candidate-tests returns 404 when the test does not exist."""
+    response = client.get(
+        f"{settings.API_V1_STR}/test/-999999/has-candidate-tests",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Test is not available"
 
 
 # ---------------------------------------------------------------------------

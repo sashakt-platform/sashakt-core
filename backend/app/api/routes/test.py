@@ -186,6 +186,16 @@ def test_has_candidate_tests(session: SessionDep, test_id: int) -> bool:
     return bool(result)
 
 
+TEST_FIELDS_UPDATABLE_AFTER_CANDIDATE_ATTEMPT = {
+    "name",
+    "description",
+    "state_ids",
+    "district_ids",
+    "tag_ids",
+    "is_active",
+}
+
+
 def get_persisted_test_id(test: Test) -> int:
     if test.id is None:
         raise HTTPException(status_code=500, detail="Test is missing a database id.")
@@ -1128,6 +1138,24 @@ def get_test_by_id(
 
 
 @router.get(
+    "/{test_id}/has-candidate-tests",
+    response_model=bool,
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
+def get_test_has_candidate_tests(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> bool:
+    """Check whether any candidate has taken (or started) this test."""
+    test = session.get(Test, test_id)
+    if not test or test.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Test is not available")
+
+    return test_has_candidate_tests(session, test_id)
+
+
+@router.get(
     "/{test_id}/candidate-report",
     response_model=Page[CandidateReport],
     dependencies=[Depends(permission_dependency("read_test"))],
@@ -1185,6 +1213,42 @@ def get_candidate_report(
     return result
 
 
+def sync_test_link_ids(
+    session: SessionDep,
+    *,
+    test_id: int,
+    link_model: type[TestTag] | type[TestState] | type[TestDistrict],
+    related_id_field: str,
+    current_ids: set[int],
+    requested_ids: list[int] | None,
+) -> None:
+    """Reconcile a test's linked rows (tags/states/districts) with the requested ids."""
+    requested_ids_set = set(requested_ids or [])
+    remove_ids = current_ids - requested_ids_set
+    add_ids = requested_ids_set - current_ids
+
+    if not remove_ids and not add_ids:
+        return
+
+    if remove_ids:
+        link_rows_to_remove = session.exec(
+            select(link_model).where(
+                link_model.test_id == test_id,
+                col(getattr(link_model, related_id_field)).in_(remove_ids),
+            )
+        ).all()
+        for link_row in link_rows_to_remove:
+            session.delete(link_row)
+
+    if add_ids:
+        session.add_all(
+            link_model(test_id=test_id, **{related_id_field: related_id})
+            for related_id in add_ids
+        )
+
+    session.commit()
+
+
 @router.put(
     "/{test_id}",
     response_model=TestPublic,
@@ -1202,6 +1266,16 @@ def update_test(
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
     check_test_ownership(session, current_user, test)
+
+    disallowed_fields_requested = test_update.model_fields_set - (
+        TEST_FIELDS_UPDATABLE_AFTER_CANDIDATE_ATTEMPT
+    )
+    if disallowed_fields_requested and test_has_candidate_tests(session, test_id):
+        raise HTTPException(
+            status_code=409,
+            detail="This test cannot be updated because candidates have already attempted it.",
+        )
+
     membership_fields = {"question_revision_ids", "question_sets"}
     membership_update_requested = bool(
         membership_fields.intersection(test_update.model_fields_set)
@@ -1216,17 +1290,6 @@ def update_test(
     else:
         question_revision_ids = []
         question_sets = []
-    if (
-        "pause_timer_when_inactive" in test_update.model_fields_set
-        and test_update.pause_timer_when_inactive != test.pause_timer_when_inactive
-        and test_has_candidate_tests(session, test_id)
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Cannot update pause timer setting after candidate tests have been created."
-            ),
-        )
 
     if (
         test_update.start_time is not None
@@ -1285,30 +1348,15 @@ def update_test(
     )
 
     # Updating Tags
-    tags_remove = [
-        tag.id for tag in (test.tags or []) if tag.id not in (test_update.tag_ids or [])
-    ]
-    tags_add = [
-        tag
-        for tag in (test_update.tag_ids or [])
-        if tag not in [t.id for t in (test.tags or [])]
-    ]
-
-    if tags_remove:
-        for tag in tags_remove:
-            session.delete(
-                session.exec(
-                    select(TestTag).where(
-                        TestTag.test_id == test.id, TestTag.tag_id == tag
-                    )
-                ).one()
-            )
-            session.commit()
-
-    if tags_add:
-        for tag in tags_add:
-            session.add(TestTag(test_id=test.id, tag_id=tag))
-            session.commit()
+    if "tag_ids" in test_update.model_fields_set:
+        sync_test_link_ids(
+            session,
+            test_id=test_id,
+            link_model=TestTag,
+            related_id_field="tag_id",
+            current_ids={tag.id for tag in (test.tags or []) if tag.id is not None},
+            requested_ids=test_update.tag_ids,
+        )
 
     if membership_update_requested:
         replace_test_question_membership(
@@ -1319,60 +1367,32 @@ def update_test(
         )
 
     # Updating States
-    states_remove = [
-        state.id
-        for state in (test.states or [])
-        if state.id not in (test_update.state_ids or [])
-    ]
-    states_add = [
-        state
-        for state in (test_update.state_ids or [])
-        if state not in [s.id for s in (test.states or [])]
-    ]
+    if "state_ids" in test_update.model_fields_set:
+        sync_test_link_ids(
+            session,
+            test_id=test_id,
+            link_model=TestState,
+            related_id_field="state_id",
+            current_ids={
+                state.id for state in (test.states or []) if state.id is not None
+            },
+            requested_ids=test_update.state_ids,
+        )
 
-    if states_remove:
-        for state in states_remove:
-            session.delete(
-                session.exec(
-                    select(TestState).where(
-                        TestState.test_id == test.id,
-                        TestState.state_id == state,
-                    )
-                ).one()
-            )
-            session.commit()
-
-    if states_add:
-        for state in states_add:
-            session.add(TestState(test_id=test.id, state_id=state))
-            session.commit()
-
-    districts_remove = [
-        district.id
-        for district in (test.districts or [])
-        if district.id not in (test_update.district_ids or [])
-    ]
-    districts_add = [
-        district
-        for district in (test_update.district_ids or [])
-        if district not in [d.id for d in (test.districts or [])]
-    ]
-    if districts_remove:
-        for district in districts_remove:
-            session.delete(
-                session.exec(
-                    select(TestDistrict).where(
-                        TestDistrict.test_id == test.id,
-                        TestDistrict.district_id == district,
-                    )
-                ).one()
-            )
-        session.commit()
-
-    if districts_add:
-        for district in districts_add:
-            session.add(TestDistrict(test_id=test.id, district_id=district))
-            session.commit()
+    # Updating Districts
+    if "district_ids" in test_update.model_fields_set:
+        sync_test_link_ids(
+            session,
+            test_id=test_id,
+            link_model=TestDistrict,
+            related_id_field="district_id",
+            current_ids={
+                district.id
+                for district in (test.districts or [])
+                if district.id is not None
+            },
+            requested_ids=test_update.district_ids,
+        )
     test_data = test_update.model_dump(
         exclude_unset=True,
         exclude={
