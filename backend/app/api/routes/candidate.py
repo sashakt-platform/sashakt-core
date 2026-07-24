@@ -55,7 +55,9 @@ from app.models import (
     TestQuestion,
 )
 from app.models.candidate import (
+    CandidatePositionUpdateRequest,
     CandidateReviewResponse,
+    CandidateSavedAnswer,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
     DeleteCandidate,
@@ -1561,6 +1563,38 @@ def get_test_questions(
         )
     ).first()
 
+    # The candidate's own saved answers, so the attempt resumes with answers
+    # intact on another device. Excludes correct answers.
+    saved_answers = []
+    for answer in session.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all():
+        revision = question_revisions_map.get(answer.question_revision_id)
+        # Only reviewed answers carry the correct answer (already seen). Stringify
+        # matrix-match answers like the feedback path does, since the client
+        # parser expects a JSON string for them.
+        correct_answer: CorrectAnswerType = None
+        if answer.is_reviewed and revision is not None:
+            if revision.question_type == QuestionType.matrix_match and isinstance(
+                revision.correct_answer, dict
+            ):
+                correct_answer = json.dumps(revision.correct_answer)
+            else:
+                correct_answer = revision.correct_answer
+        saved_answers.append(
+            CandidateSavedAnswer(
+                question_revision_id=answer.question_revision_id,
+                response=answer.response,
+                visited=answer.visited,
+                time_spent=answer.time_spent,
+                bookmarked=answer.bookmarked,
+                is_reviewed=answer.is_reviewed,
+                correct_answer=correct_answer,
+            )
+        )
+
     return TestCandidatePublic(
         **test_data,
         question_revisions=candidate_questions,
@@ -1569,6 +1603,7 @@ def get_test_questions(
         states=states,
         total_questions=len(candidate_questions),
         candidate_test=candidate_test,
+        saved_answers=saved_answers,
         nomenclature=nomenclature,
         link=test_link.uuid if test_link else None,
     )
@@ -2444,6 +2479,42 @@ def sync_timer(
         test,
         time_now=time_now,
     )
+
+
+@router.patch(
+    "/current_position/{candidate_test_id}",
+    response_model=CandidateTestPublic,
+)
+def update_candidate_current_position(
+    candidate_test_id: int,
+    position_request: CandidatePositionUpdateRequest,
+    session: SessionDep,
+    candidate_uuid: uuid.UUID = Query(
+        ..., description="Candidate UUID for verification"
+    ),
+) -> CandidateTest:
+    """Persist the candidate's current question so the attempt can resume elsewhere."""
+    candidate_test = verify_candidate_uuid_access(
+        session, candidate_test_id, candidate_uuid
+    )
+    if candidate_test.is_submitted:
+        raise HTTPException(status_code=400, detail="Test already submitted")
+    if (
+        position_request.current_question_revision_id
+        not in candidate_test.question_revision_ids
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Question revision is not assigned to this candidate test.",
+        )
+
+    candidate_test.current_question_revision_id = (
+        position_request.current_question_revision_id
+    )
+    session.add(candidate_test)
+    session.commit()
+    session.refresh(candidate_test)
+    return candidate_test
 
 
 @router.get(
