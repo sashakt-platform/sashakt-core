@@ -1,3 +1,5 @@
+import csv
+import io
 import uuid
 
 from fastapi.testclient import TestClient
@@ -1265,3 +1267,344 @@ def test_candidate_report_form_response_none_when_test_has_no_form(
     assert response.status_code == 200
     entry = response.json()["items"][0]
     assert entry["form_response"] is None
+
+
+def test_candidate_report_export_submitted(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "attachment" in response.headers["content-disposition"]
+    assert (
+        f'filename="{test.name}-responses.csv"'
+        in response.headers["content-disposition"]
+    )
+
+    reader = csv.DictReader(io.StringIO(response.text))
+    assert reader.fieldnames == [
+        "Candidate UUID",
+        "Status",
+        "Marks Obtained",
+        "Marks Maximum",
+        "Correct Answers",
+        "Incorrect Answers",
+        "Mandatory Not Attempted",
+        "Optional Not Attempted",
+        "Total Questions",
+        "Start Time",
+        "End Time",
+        "Time Taken (seconds)",
+        "Form Response",
+    ]
+    rows = list(reader)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["Candidate UUID"] == str(candidate.identity)
+    assert row["Status"] == "submitted"
+    assert row["Marks Obtained"] == "10.0"
+    assert row["Start Time"] == "2026-06-10T10:00:00"
+    assert row["End Time"] == "2026-06-10T10:32:00"
+    assert row["Time Taken (seconds)"] == "1920"
+    assert row["Form Response"] == ""
+
+
+def test_candidate_report_export_different_organization(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    other_user = create_random_user(db)
+
+    test = create_test_record(
+        db,
+        user_id=other_user.id,
+        organization_id=other_user.organization_id,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not authorized to access this test"
+
+
+def test_candidate_report_export_not_found(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    _ = db
+    response = client.get(
+        f"{settings.API_V1_STR}/test/-999999/candidate-report/export",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 404
+
+
+def test_candidate_report_export_empty(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    reader = csv.DictReader(io.StringIO(response.text))
+    assert reader.fieldnames == [
+        "Candidate UUID",
+        "Status",
+        "Marks Obtained",
+        "Marks Maximum",
+        "Correct Answers",
+        "Incorrect Answers",
+        "Mandatory Not Attempted",
+        "Optional Not Attempted",
+        "Total Questions",
+        "Start Time",
+        "End Time",
+        "Time Taken (seconds)",
+        "Form Response",
+    ]
+    assert list(reader) == []
+
+
+def test_candidate_report_export_sort_by_start_time(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    for start_time in (
+        "2026-06-10T11:00:00",
+        "2026-06-10T09:00:00",
+        "2026-06-10T10:00:00",
+    ):
+        candidate = create_test_candidate(db, organization_id=user.organization_id)
+        candidate.identity = uuid.uuid4()
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
+
+        create_test_candidate_test(
+            db,
+            admin_id=user.id,
+            test_id=test.id,
+            candidate_id=candidate.id,
+            start_time=start_time,
+        )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "start_time", "sort_order": "asc"},
+    )
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert [row["Start Time"] for row in rows] == [
+        "2026-06-10T09:00:00",
+        "2026-06-10T10:00:00",
+        "2026-06-10T11:00:00",
+    ]
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "start_time", "sort_order": "desc"},
+    )
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert [row["Start Time"] for row in rows] == [
+        "2026-06-10T11:00:00",
+        "2026-06-10T10:00:00",
+        "2026-06-10T09:00:00",
+    ]
+
+
+def test_candidate_report_export_sort_by_invalid_field(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+        params={"sort_by": "not_a_field"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_candidate_report_export_filters_null_and_na_form_response(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """CSV form_response column excludes keys whose value is null or "N/A",
+    matching the frontend's "Show Responses" popup filter."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    for name, order in (("full_name", 0), ("nickname", 1), ("age", 2)):
+        db.add(
+            FormField(
+                form_id=form.id,
+                field_type=FormFieldType.TEXT,
+                label=name,
+                name=name,
+                order=order,
+            )
+        )
+    db.commit()
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        form_id=form.id,
+    )
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        is_submitted=False,
+        end_time=None,
+    )
+
+    db.add(
+        FormResponse(
+            candidate_test_id=candidate_test.id,
+            form_id=form.id,
+            responses={"full_name": "Jane Doe", "nickname": None},
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert len(rows) == 1
+    assert rows[0]["Form Response"] == '{"full_name": "Jane Doe"}'
+
+
+def test_candidate_report_export_accessible_by_test_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    user = get_org_user(client, db, get_user_testadmin_token)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report/export",
+        headers=get_user_testadmin_token,
+    )
+
+    assert response.status_code == 200
+    assert list(csv.DictReader(io.StringIO(response.text))) == []

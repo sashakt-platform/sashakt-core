@@ -1,10 +1,15 @@
+import csv
+import json
+import re
 import uuid
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from datetime import datetime
+from io import StringIO
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
@@ -190,6 +195,83 @@ def transform_to_report(
     if certificate_data_changed:
         session.commit()
     return report_entries
+
+
+CANDIDATE_REPORT_CSV_HEADERS = [
+    "Candidate UUID",
+    "Status",
+    "Marks Obtained",
+    "Marks Maximum",
+    "Correct Answers",
+    "Incorrect Answers",
+    "Mandatory Not Attempted",
+    "Optional Not Attempted",
+    "Total Questions",
+    "Start Time",
+    "End Time",
+    "Time Taken (seconds)",
+    "Form Response",
+]
+
+
+def format_form_response_for_csv(form_response: dict[str, Any] | None) -> str:
+    if not form_response:
+        return ""
+    filtered = {
+        key: value for key, value in form_response.items() if value not in (None, "N/A")
+    }
+    return json.dumps(filtered) if filtered else ""
+
+
+RESULT_CSV_FIELDS = (
+    "marks_obtained",
+    "marks_maximum",
+    "correct_answer",
+    "incorrect_answer",
+    "mandatory_not_attempted",
+    "optional_not_attempted",
+    "total_questions",
+)
+
+
+def candidate_report_to_csv_row(entry: CandidateReport) -> list[Any]:
+    result = entry.result
+    result_fields = (
+        [getattr(result, field) for field in RESULT_CSV_FIELDS]
+        if result
+        else [""] * len(RESULT_CSV_FIELDS)
+    )
+    return [
+        str(entry.candidate_uuid),
+        entry.status.value,
+        *result_fields,
+        entry.start_time.isoformat() if entry.start_time else "",
+        entry.end_time.isoformat() if entry.end_time else "",
+        entry.time_taken_seconds if entry.time_taken_seconds is not None else "",
+        format_form_response_for_csv(entry.form_response),
+    ]
+
+
+def generate_candidate_report_csv_rows(
+    session: SessionDep,
+    query: Any,
+    test: Test,
+    question_sets_by_id: dict[int, QuestionSet],
+    sectioned: bool,
+) -> Generator[str]:
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(CANDIDATE_REPORT_CSV_HEADERS)
+    yield buf.getvalue()
+
+    candidate_tests = session.exec(query).all()
+    for entry in transform_to_report(
+        candidate_tests, session, test, question_sets_by_id, sectioned
+    ):
+        buf.seek(0)
+        buf.truncate(0)
+        writer.writerow(candidate_report_to_csv_row(entry))
+        yield buf.getvalue()
 
 
 # create sorting dependency
@@ -1239,6 +1321,63 @@ def get_candidate_report(
         ),
     )
     return result
+
+
+@router.get(
+    "/{test_id}/candidate-report/export",
+    dependencies=[Depends(permission_dependency("read_test"))],
+)
+def export_candidate_report(
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+    sorting: CandidateReportSortingDep,
+) -> StreamingResponse:
+    """Export all candidate responses for a test as a downloadable CSV."""
+
+    test = session.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if test.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this test"
+        )
+
+    query = (
+        select(CandidateTest)
+        .join(Candidate, col(Candidate.id) == CandidateTest.candidate_id)
+        .where(
+            CandidateTest.test_id == test_id,
+            col(Candidate.identity).is_not(None),
+            Candidate.organization_id == current_user.organization_id,
+        )
+    )
+
+    if sorting.is_sorting_requested():
+        query = sorting.apply_to_query(query, CandidateReportSortConfig)
+    else:
+        query = query.order_by(col(CandidateTest.id))
+
+    test_questions = get_test_question_links(session, test_id)
+    question_sets = get_test_question_sets(session, test_id)
+    question_sets_by_id = {qs.id: qs for qs in question_sets if qs.id is not None}
+    try:
+        sectioned = is_sectioned_test(
+            test_questions, question_sets_by_id, test_id=test_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    safe_test_name = re.sub(r'[\\/:"\r\n]+', "_", test.name).strip() or str(test_id)
+    filename = f"{safe_test_name}-responses.csv"
+
+    return StreamingResponse(
+        generate_candidate_report_csv_rows(
+            session, query, test, question_sets_by_id, sectioned
+        ),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.put(
