@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, exists, func, or_, select
+from sqlmodel import col, exists, func, or_, select, true
 
 from app.api.deps import (
     CurrentUser,
@@ -51,7 +51,7 @@ from app.models.candidate import (
     CandidateTestAnswer,
     Result,
 )
-from app.models.form import Form, FormFieldPublic, FormPublic
+from app.models.form import Form, FormFieldPublic, FormPublic, FormResponse
 from app.models.location import District
 from app.models.role import Role
 from app.models.tag import Tag, TagPublic
@@ -1138,6 +1138,7 @@ def get_candidate_report(
     current_user: CurrentUser,
     sorting: CandidateReportSortingDep,
     params: Pagination = Depends(),
+    search: str | None = None,
 ) -> Page[CandidateReport]:
     """Get per-candidate scores, status and time-taken for a test."""
 
@@ -1158,6 +1159,26 @@ def get_candidate_report(
             Candidate.organization_id == current_user.organization_id,
         )
     )
+
+    if search:
+        search_term = search.strip()
+        response_kv = (
+            func.json_each_text(FormResponse.responses)
+            .table_valued("key", "value")
+            .lateral()
+        )
+        response_value_matches = (
+            select(1)
+            .select_from(FormResponse)
+            .join(response_kv, true())
+            .where(
+                FormResponse.candidate_test_id == CandidateTest.id,
+                FormResponse.form_id == test.form_id,
+                response_kv.c.value.icontains(search_term, autoescape=True),
+            )
+            .exists()
+        )
+        query = query.where(response_value_matches)
 
     if sorting.is_sorting_requested():
         query = sorting.apply_to_query(query, CandidateReportSortConfig)
