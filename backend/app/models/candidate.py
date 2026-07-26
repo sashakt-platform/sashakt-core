@@ -377,6 +377,7 @@ class CandidateReport(SQLModel):
     end_time: datetime | None = None
     time_taken_seconds: int | None = None
     result: Result | None = None
+    form_response: dict[str, Any] | None = None
 
 
 class CandidateReportResponse(SQLModel):

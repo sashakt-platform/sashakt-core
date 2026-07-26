@@ -6,6 +6,8 @@ from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models import TestQuestion
 from app.models.candidate import CandidateTestAnswer
+from app.models.certificate import Certificate
+from app.models.form import Form, FormField, FormFieldType, FormResponse
 from app.tests.utils.candidate import (
     create_test_candidate,
     create_test_candidate_test,
@@ -13,6 +15,7 @@ from app.tests.utils.candidate import (
 )
 from app.tests.utils.question_revisions import create_random_question_revision
 from app.tests.utils.user import create_random_user, get_org_user
+from app.tests.utils.utils import random_lower_string
 
 
 def test_candidate_report_submitted(
@@ -666,3 +669,599 @@ def test_candidate_report_sort_by_invalid_field(
     )
 
     assert response.status_code == 400
+
+
+def test_candidate_report_certificate_download_url_present(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Report includes a certificate_download_url for a submitted candidate when the
+    test has a certificate assigned, and persists the certificate data snapshot."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    test.certificate_id = certificate.id
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+
+    entry = data["items"][0]
+    assert entry["result"]["certificate_download_url"] is not None
+    assert entry["result"]["certificate_download_url"].startswith(
+        "/api/v1/certificate/download/"
+    )
+
+    db.refresh(candidate_test)
+    assert candidate_test.certificate_data is not None
+    assert candidate_test.certificate_data.get("token") is not None
+
+
+def test_candidate_report_certificate_download_url_none_without_certificate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Report has certificate_download_url=None when the test has no certificate."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    entry = response.json()["items"][0]
+    assert entry["result"]["certificate_download_url"] is None
+
+    db.refresh(candidate_test)
+    assert candidate_test.certificate_data is None
+
+
+def test_candidate_report_certificate_token_reused_across_calls(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Calling the report endpoint twice returns the same certificate token/url
+    instead of regenerating it each time."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    test.certificate_id = certificate.id
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    first_response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+    second_response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    first_url = first_response.json()["items"][0]["result"]["certificate_download_url"]
+    second_url = second_response.json()["items"][0]["result"][
+        "certificate_download_url"
+    ]
+
+    assert first_url is not None
+    assert first_url == second_url
+
+
+def test_candidate_report_certificate_generated_independently_per_candidate(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Each candidate in the same report page gets its own distinct certificate
+    token, and both are persisted."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    test.certificate_id = certificate.id
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate_tests = []
+    for _ in range(2):
+        candidate = create_test_candidate(db, organization_id=user.organization_id)
+        candidate.identity = uuid.uuid4()
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
+
+        candidate_test = create_test_candidate_test(
+            db,
+            admin_id=user.id,
+            test_id=test.id,
+            candidate_id=candidate.id,
+            question_revision_ids=[revision.id],
+            is_submitted=True,
+            end_time="2026-06-10T10:32:00",
+        )
+        db.add(
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test.id,
+                question_revision_id=revision.id,
+                response="[1]",
+                visited=True,
+            )
+        )
+        db.commit()
+        candidate_tests.append(candidate_test)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 2
+
+    urls = {item["result"]["certificate_download_url"] for item in items}
+    assert len(urls) == 2
+    assert all(url is not None for url in urls)
+
+    for candidate_test in candidate_tests:
+        db.refresh(candidate_test)
+        assert candidate_test.certificate_data is not None
+        assert candidate_test.certificate_data.get("token") is not None
+
+
+def test_candidate_report_certificate_token_matches_single_result_endpoint(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """A certificate token generated via the single-candidate result endpoint is
+    reused (not regenerated) by the bulk candidate-report endpoint."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    certificate = Certificate(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+        url=random_lower_string(),
+    )
+    db.add(certificate)
+    db.commit()
+    db.refresh(certificate)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    test.certificate_id = certificate.id
+    test.show_result = True
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    result_response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test.id}",
+        params={"candidate_uuid": str(candidate.identity)},
+    )
+    assert result_response.status_code == 200
+    single_url = result_response.json()["certificate_download_url"]
+    assert single_url is not None
+
+    report_response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+    assert report_response.status_code == 200
+    report_url = report_response.json()["items"][0]["result"][
+        "certificate_download_url"
+    ]
+
+    assert report_url == single_url
+
+
+def test_candidate_report_includes_form_response(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Report includes resolved form_response values for a candidate that has
+    submitted a form response, even when the candidate has not finished the test."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    field = FormField(
+        form_id=form.id,
+        field_type=FormFieldType.TEXT,
+        label="Full Name",
+        name="full_name",
+        order=0,
+    )
+    db.add(field)
+    db.commit()
+    db.refresh(field)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        form_id=form.id,
+    )
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        is_submitted=False,
+        end_time=None,
+    )
+
+    db.add(
+        FormResponse(
+            candidate_test_id=candidate_test.id,
+            form_id=form.id,
+            responses={"full_name": "Jane Doe"},
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    entry = response.json()["items"][0]
+    assert entry["status"] == "not_submitted"
+    assert entry["result"] is None
+    assert entry["form_response"] == {"full_name": "Jane Doe"}
+
+
+def test_candidate_report_form_response_none_without_submission(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Report has form_response=None when the test has a form but the candidate
+    has not submitted any form response."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    form = Form(
+        name=random_lower_string(),
+        organization_id=user.organization_id,
+        created_by_id=user.id,
+    )
+    db.add(form)
+    db.commit()
+    db.refresh(form)
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        form_id=form.id,
+    )
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        is_submitted=False,
+        end_time=None,
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    entry = response.json()["items"][0]
+    assert entry["form_response"] is None
+
+
+def test_candidate_report_form_response_none_when_test_has_no_form(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """Report has form_response=None when the test has no form configured."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+
+    assert response.status_code == 200
+    entry = response.json()["items"][0]
+    assert entry["form_response"] is None
