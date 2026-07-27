@@ -65,14 +65,23 @@ def get_role_permissions(role: RoleCreate, session: Session) -> list[int]:
 
 
 def create_role(
-    session: Session, role_create: RoleCreate, permissions: list[int]
+    session: Session,
+    role_create: RoleCreate,
+    permissions: list[int],
+    organization_id: int,
 ) -> RolePublic:
     current_role = session.exec(
-        select(Role).where(Role.name == role_create.name)
+        select(Role).where(
+            Role.name == role_create.name,
+            Role.organization_id == organization_id,
+        )
     ).first()
 
     if not current_role:
-        current_role = Role(**role_create.model_dump())
+        current_role = Role(
+            **role_create.model_dump(exclude={"permissions"}),
+            organization_id=organization_id,
+        )
         session.add(current_role)
         session.commit()
         session.refresh(current_role)
@@ -99,26 +108,27 @@ def create_role(
     return RolePublic(**current_role.model_dump(), permissions=stored_permission_ids)
 
 
-def init_roles(session: Session) -> None:
+def init_super_admin_role(session: Session, organization_id: int) -> None:
     """
-    Function to initialize roles in the database.
-    It creates roles based on the data provided in permission_data.json file.
+    Create the single, global super_admin role, scoped to the T4D organization.
+
+    This must only ever be called once, for T4D — super_admin is never cloned
+    into any other organization.
     """
-    super_admin_permissions = get_role_permissions(super_admin, session)
-    system_admin_permissions = get_role_permissions(system_admin, session)
-    state_admin_permissions = get_role_permissions(state_admin, session)
-    test_admin_permissions = get_role_permissions(test_admin, session)
-    candidate_permissions = get_role_permissions(candidate, session)
+    permissions = get_role_permissions(super_admin, session)
+    create_role(session, super_admin, permissions, organization_id=organization_id)
 
-    create_role(session, super_admin, super_admin_permissions)
 
-    create_role(session, system_admin, system_admin_permissions)
+def init_org_roles(session: Session, organization_id: int) -> None:
+    """
+    Create the four customizable roles (system_admin, state_admin, test_admin,
+    candidate) with their default permissions for one organization.
 
-    create_role(session, state_admin, state_admin_permissions)
-
-    create_role(session, test_admin, test_admin_permissions)
-
-    create_role(session, candidate, candidate_permissions)
+    Safe to call for any organization, including T4D. Idempotent per organization.
+    """
+    for role in (system_admin, state_admin, test_admin, candidate):
+        permissions = get_role_permissions(role, session)
+        create_role(session, role, permissions, organization_id=organization_id)
 
 
 def get_role_hierarchy() -> dict[str, list[str]]:

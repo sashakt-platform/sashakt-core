@@ -20,7 +20,7 @@ from app.core.files import (
     save_logo_file,
     validate_logo_upload,
 )
-from app.core.roles import state_admin, test_admin
+from app.core.roles import init_org_roles, state_admin, test_admin
 from app.models import (
     DEFAULT_ORGANIZATION_SETTINGS,
     AggregatedData,
@@ -227,12 +227,15 @@ async def create_organization(
 
     try:
         session.commit()
-        session.refresh(organization)
     except Exception:
         session.rollback()
         if new_logo_path:
             delete_logo_file(new_logo_path)
         raise
+
+    init_org_roles(session, organization.id)
+
+    session.refresh(organization)
 
     return transform_organizations_to_public([organization])[0]
 

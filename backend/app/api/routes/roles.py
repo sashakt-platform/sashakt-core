@@ -100,12 +100,14 @@ def read_role(session: SessionDep, id: int) -> Any:
     response_model=RolePublic,
     dependencies=[Depends(permission_dependency("create_role"))],
 )
-def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
+def create_role(
+    *, session: SessionDep, role_in: RoleCreate, current_user: CurrentUser
+) -> Any:
     """
     Create new role.
     """
     role_data = role_in.model_dump(exclude={"permissions"})
-    role = Role.model_validate(role_data)
+    role = Role(**role_data, organization_id=current_user.organization_id)
     session.add(role)
     session.commit()
     if role_in.permissions:

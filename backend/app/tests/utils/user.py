@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
+from app.core.roles import init_org_roles
 from app.models import Organization, Role, User, UserCreate, UserUpdate
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.utils import random_email, random_lower_string
@@ -23,16 +24,20 @@ def user_authentication_headers(
 
 
 def create_random_user(db: Session, organization_id: int | None = None) -> User:
-    role = Role(name=random_lower_string(), label=random_lower_string())
     if organization_id is not None:
         organization = db.get(Organization, organization_id)
         if not organization:
             raise ValueError(f"Organization with ID {organization_id} not found")
     else:
         organization = create_random_organization(session=db)
-    db.add_all([organization, role])
+    assert organization.id is not None
+    role = Role(
+        name=random_lower_string(),
+        label=random_lower_string(),
+        organization_id=organization.id,
+    )
+    db.add(role)
     db.commit()
-    db.refresh(organization)
     db.refresh(role)
     email = random_email()
     password = random_lower_string()
@@ -51,17 +56,36 @@ def create_random_user(db: Session, organization_id: int | None = None) -> User:
 
 
 def get_user_token(*, db: Session, role: str) -> dict[str, str]:
-    current_role = db.exec(select(Role).where(Role.name == role)).first()
+    if role == "super_admin":
+        current_role = db.exec(select(Role).where(Role.name == role)).first()
+        if not current_role:
+            raise Exception(f"Role with name '{role}' not found")
+        organization = Organization(
+            name=random_lower_string(), description=random_lower_string()
+        )
+        db.add(organization)
+        db.commit()
+        db.refresh(organization)
+    else:
+        organization = Organization(
+            name=random_lower_string(), description=random_lower_string()
+        )
+        db.add(organization)
+        db.commit()
+        db.refresh(organization)
+        assert organization.id is not None
+        init_org_roles(db, organization.id)
 
-    if not current_role:
-        raise Exception(f"Role with name '{role}' not found")
-
-    organization = Organization(
-        name=random_lower_string(), description=random_lower_string()
-    )
-    db.add(organization)
-    db.commit()
-    db.refresh(organization)
+        current_role = db.exec(
+            select(Role).where(
+                Role.name == role, Role.organization_id == organization.id
+            )
+        ).first()
+        if not current_role:
+            current_role = Role(name=role, label=role, organization_id=organization.id)
+            db.add(current_role)
+            db.commit()
+            db.refresh(current_role)
 
     user_in = UserCreate(
         full_name=random_lower_string(),
@@ -110,8 +134,7 @@ def authentication_token_from_email(
             password=password,
             organization_id=user.organization_id,
         )
-        if not user.id:
-            raise Exception("User id not set")
+        assert user.id is not None
         user = crud.update_user(session=db, db_user=user, user_in=user_in_update)
 
     return user_authentication_headers(client=client, email=email, password=password)
