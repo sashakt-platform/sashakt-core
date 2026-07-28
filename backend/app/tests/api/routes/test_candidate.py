@@ -16156,6 +16156,123 @@ def test_external_provision_and_start_resume_same_attempt(
     assert start_response.json() == provision_data
 
 
+def test_external_provision_resumes_position_and_answers_cross_device(
+    client: TestClient, db: SessionDep
+) -> None:
+    """The genuine cross-device story: an external user starts a test on one
+    device (answers a question, navigates), then logs in from another device.
+    Re-provisioning the same external_user_id returns the *same* candidate and
+    in-progress attempt, and the resume payload carries the saved position and
+    answers — so external login + maintain-candidate-state compose end to end.
+    """
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_external_org_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Q1",
+        correct_answer=1,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Q2",
+        correct_answer=2,
+    )
+    assert revision_one.id is not None and revision_two.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    for revision in (revision_one, revision_two):
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    token_headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+    external_user_id = "375220"
+
+    # --- device A: portal launch provisions the attempt ---
+    device_a = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "external_user_id": external_user_id},
+        headers=token_headers,
+    )
+    assert device_a.status_code == 200
+    launch = device_a.json()
+    candidate_test_id = launch["candidate_test_id"]
+    candidate_uuid = launch["candidate_uuid"]
+
+    # device A: answer Q1 and navigate to Q2
+    assert (
+        client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": revision_one.id,
+                "response": "[1]",
+                "visited": True,
+                "time_spent": 30,
+                "bookmarked": True,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+            json={"current_question_revision_id": revision_two.id},
+            params={"candidate_uuid": candidate_uuid},
+        ).status_code
+        == 200
+    )
+
+    # --- device B: same external user logs in again -> same candidate + attempt ---
+    device_b = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "external_user_id": external_user_id},
+        headers=token_headers,
+    )
+    assert device_b.status_code == 200
+    assert device_b.json() == launch  # same candidate_uuid + candidate_test_id reused
+
+    # device B: resume payload carries the saved position and answers
+    resume = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert resume.status_code == 200
+    body = resume.json()
+    assert body["candidate_test"]["current_question_revision_id"] == revision_two.id
+
+    saved = {a["question_revision_id"]: a for a in body["saved_answers"]}
+    assert saved[revision_one.id]["response"] == "[1]"
+    assert saved[revision_one.id]["visited"] is True
+    assert saved[revision_one.id]["time_spent"] == 30
+    assert saved[revision_one.id]["bookmarked"] is True
+    # Not reviewed -> the correct answer is never leaked on resume.
+    assert saved[revision_one.id]["is_reviewed"] is False
+    assert saved[revision_one.id]["correct_answer"] is None
+
+
 def test_external_start_reports_submitted_attempt(
     client: TestClient, db: SessionDep
 ) -> None:
