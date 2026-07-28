@@ -19,7 +19,7 @@ router = APIRouter(prefix="/permissions", tags=["permissions"])
 @router.get(
     "/",
     response_model=PermissionsPublic,
-    dependencies=[Depends(permission_dependency("create_permission"))],
+    dependencies=[Depends(permission_dependency("read_permission"))],
 )
 def read_permissions(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     """

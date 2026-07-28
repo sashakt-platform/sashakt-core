@@ -228,7 +228,7 @@
     "name": "read_permission",
     "description": "Read Permission Details",
     "super_admin": true,
-    "system_admin": false,
+    "system_admin": true,
     "state_admin": false,
     "test_admin": false,
     "candidate": false
@@ -390,7 +390,7 @@
     "name": "update_role",
     "description": "Update Existing Role",
     "super_admin": true,
-    "system_admin": false,
+    "system_admin": true,
     "state_admin": false,
     "test_admin": false,
     "candidate": false
