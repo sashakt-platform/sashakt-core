@@ -76,6 +76,24 @@ class CandidateTestAnswerFeedback(SQLModel):
     correct_answer: CorrectAnswerType = None
 
 
+class CandidateSavedAnswer(SQLModel):
+    """A candidate's own saved answer, for resuming an attempt on another device.
+
+    Deliberately excludes the correct answer so resuming never leaks it.
+    """
+
+    __test__ = False
+    question_revision_id: int
+    response: str | None = None
+    visited: bool = False
+    time_spent: int | None = None
+    bookmarked: bool = False
+    is_reviewed: bool = False
+    # Only set for already-reviewed answers (the candidate has already seen it
+    # and can no longer change the answer), so resuming never leaks unseen ones.
+    correct_answer: CorrectAnswerType = None
+
+
 class CandidateReviewResponse(SQLModel):
     __test__ = False
     question_revision_id: int
@@ -125,6 +143,10 @@ class CandidateTimerSyncRequest(SQLModel):
     event: CandidateTimerEventType
 
 
+class CandidatePositionUpdateRequest(SQLModel):
+    current_question_revision_id: int
+
+
 # Linking Tables between Candidate and Test
 
 
@@ -156,6 +178,7 @@ class CandidateTest(CandidateTestBase, table=True):
     active_time_spent_seconds: int | None = Field(default=None, nullable=True)
     last_timer_started_at: datetime | None = Field(default=None, nullable=True)
     last_heartbeat_at: datetime | None = Field(default=None, nullable=True)
+    current_question_revision_id: int | None = Field(default=None, nullable=True)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
         default_factory=get_timezone_aware_now,
@@ -198,6 +221,7 @@ class CandidateTestPublic(CandidateTestBase):
     modified_date: datetime
     question_revision_ids: list[int] = Field(default_factory=list)
     question_set_ids: list[int | None] = Field(default_factory=list)
+    current_question_revision_id: int | None = None
     answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
@@ -316,6 +340,10 @@ class TestCandidatePublic(SQLModel):
 
     # Candidate test info
     candidate_test: "CandidateTestPublic"
+
+    # The candidate's own saved answers, so an attempt resumes with answers
+    # intact on another device. Never includes correct answers.
+    saved_answers: list["CandidateSavedAnswer"] | None = None
 
     # Resolved platform nomenclature for the test's organization
     nomenclature: dict[str, str] = Field(default_factory=dict)

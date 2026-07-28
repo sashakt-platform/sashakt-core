@@ -2369,6 +2369,220 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     assert response.json()["detail"] == "Test already submitted"
 
 
+def _start_test_with_two_questions(
+    client: TestClient, db: SessionDep
+) -> tuple[str, int, int, int]:
+    """Helper: set up a test with two questions and start it as a QR candidate.
+
+    Returns (candidate_uuid, candidate_test_id, revision_one_id, revision_two_id).
+    """
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    revisions = []
+    for text, answer in (("Q1", [1]), ("Q2", [2])):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.flush()
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user.id,
+            question_text=text,
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": "1"},
+                {"id": 2, "key": "B", "value": "2"},
+            ],
+            correct_answer=answer,
+        )
+        db.add(revision)
+        db.flush()
+        question.last_revision_id = revision.id
+        revisions.append(revision)
+    db.commit()
+    for revision in revisions:
+        db.refresh(revision)
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+
+    from app.models.test import TestQuestion
+
+    for revision in revisions:
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Web"},
+    )
+    start_data = start_response.json()
+    revision_one_id = revisions[0].id
+    revision_two_id = revisions[1].id
+    assert revision_one_id is not None
+    assert revision_two_id is not None
+    return (
+        start_data["candidate_uuid"],
+        start_data["candidate_test_id"],
+        revision_one_id,
+        revision_two_id,
+    )
+
+
+def test_update_current_position_for_qr_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Candidate's current question is persisted, overwritable, and surfaced on resume."""
+    candidate_uuid, candidate_test_id, revision_one_id, revision_two_id = (
+        _start_test_with_two_questions(client, db)
+    )
+
+    # Persist the current question
+    response = client.patch(
+        f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+        json={"current_question_revision_id": revision_one_id},
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    assert response.json()["current_question_revision_id"] == revision_one_id
+
+    # Overwrite with another assigned question (idempotent single-column update)
+    response = client.patch(
+        f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+        json={"current_question_revision_id": revision_two_id},
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    assert response.json()["current_question_revision_id"] == revision_two_id
+
+    # Persisted in the database
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assert candidate_test.current_question_revision_id == revision_two_id
+
+    # Surfaced on resume via test_questions (so another device lands on it)
+    resume = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert resume.status_code == 200
+    assert (
+        resume.json()["candidate_test"]["current_question_revision_id"]
+        == revision_two_id
+    )
+
+
+def test_update_current_position_rejects_invalid_requests(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Position updates reject unassigned questions, submitted tests, and bad UUIDs."""
+    candidate_uuid, candidate_test_id, revision_one_id, _ = (
+        _start_test_with_two_questions(client, db)
+    )
+
+    # A question not assigned to this candidate test → 403
+    response = client.patch(
+        f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+        json={"current_question_revision_id": 999999},
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 403
+    assert (
+        response.json()["detail"]
+        == "Question revision is not assigned to this candidate test."
+    )
+
+    # An invalid candidate UUID → 404
+    response = client.patch(
+        f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+        json={"current_question_revision_id": revision_one_id},
+        params={"candidate_uuid": str(uuid.uuid4())},
+    )
+    assert response.status_code == 404
+
+    # Already-submitted test → 400
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    candidate_test.is_submitted = True
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+        json={"current_question_revision_id": revision_one_id},
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Test already submitted"
+
+
+def test_test_questions_returns_saved_answers_for_resume(
+    client: TestClient, db: SessionDep
+) -> None:
+    """test_questions returns saved answers; the correct answer only for reviewed ones."""
+    candidate_uuid, candidate_test_id, revision_one_id, revision_two_id = (
+        _start_test_with_two_questions(client, db)
+    )
+
+    for revision_id, answer_response in (
+        (revision_one_id, "[1]"),
+        (revision_two_id, "[2]"),
+    ):
+        submit = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": revision_id,
+                "response": answer_response,
+                "visited": True,
+                "time_spent": 42,
+                "bookmarked": True,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert submit.status_code == 200
+
+    # The candidate has reviewed only the first question (already saw its answer).
+    reviewed = db.exec(
+        select(CandidateTestAnswer)
+        .where(CandidateTestAnswer.candidate_test_id == candidate_test_id)
+        .where(CandidateTestAnswer.question_revision_id == revision_one_id)
+    ).first()
+    assert reviewed is not None
+    reviewed.is_reviewed = True
+    db.add(reviewed)
+    db.commit()
+
+    resume = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert resume.status_code == 200
+    saved = {a["question_revision_id"]: a for a in resume.json()["saved_answers"]}
+
+    first = saved[revision_one_id]
+    assert first["response"] == "[1]"
+    assert first["visited"] is True
+    assert first["time_spent"] == 42
+    assert first["bookmarked"] is True
+    # Reviewed → the already-seen correct answer is allowed.
+    assert first["is_reviewed"] is True
+    assert first["correct_answer"] == [1]
+
+    second = saved[revision_two_id]
+    # Not reviewed → the correct answer must never be exposed.
+    assert second["is_reviewed"] is False
+    assert second["correct_answer"] is None
+
+
 def test_submit_answer_enforces_question_set_attempt_limit(
     client: TestClient, db: SessionDep
 ) -> None:
@@ -15940,6 +16154,123 @@ def test_external_provision_and_start_resume_same_attempt(
 
     assert start_response.status_code == 200
     assert start_response.json() == provision_data
+
+
+def test_external_provision_resumes_position_and_answers_cross_device(
+    client: TestClient, db: SessionDep
+) -> None:
+    """The genuine cross-device story: an external user starts a test on one
+    device (answers a question, navigates), then logs in from another device.
+    Re-provisioning the same external_user_id returns the *same* candidate and
+    in-progress attempt, and the resume payload carries the saved position and
+    answers — so external login + maintain-candidate-state compose end to end.
+    """
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_external_org_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+
+    revision_one = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Q1",
+        correct_answer=1,
+    )
+    revision_two = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Q2",
+        correct_answer=2,
+    )
+    assert revision_one.id is not None and revision_two.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    for revision in (revision_one, revision_two):
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    token_headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+    external_user_id = "375220"
+
+    # --- device A: portal launch provisions the attempt ---
+    device_a = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "external_user_id": external_user_id},
+        headers=token_headers,
+    )
+    assert device_a.status_code == 200
+    launch = device_a.json()
+    candidate_test_id = launch["candidate_test_id"]
+    candidate_uuid = launch["candidate_uuid"]
+
+    # device A: answer Q1 and navigate to Q2
+    assert (
+        client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": revision_one.id,
+                "response": "[1]",
+                "visited": True,
+                "time_spent": 30,
+                "bookmarked": True,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"{settings.API_V1_STR}/candidate/current_position/{candidate_test_id}",
+            json={"current_question_revision_id": revision_two.id},
+            params={"candidate_uuid": candidate_uuid},
+        ).status_code
+        == 200
+    )
+
+    # --- device B: same external user logs in again -> same candidate + attempt ---
+    device_b = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "external_user_id": external_user_id},
+        headers=token_headers,
+    )
+    assert device_b.status_code == 200
+    assert device_b.json() == launch  # same candidate_uuid + candidate_test_id reused
+
+    # device B: resume payload carries the saved position and answers
+    resume = client.get(
+        f"{settings.API_V1_STR}/candidate/test_questions/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert resume.status_code == 200
+    body = resume.json()
+    assert body["candidate_test"]["current_question_revision_id"] == revision_two.id
+
+    saved = {a["question_revision_id"]: a for a in body["saved_answers"]}
+    assert saved[revision_one.id]["response"] == "[1]"
+    assert saved[revision_one.id]["visited"] is True
+    assert saved[revision_one.id]["time_spent"] == 30
+    assert saved[revision_one.id]["bookmarked"] is True
+    # Not reviewed -> the correct answer is never leaked on resume.
+    assert saved[revision_one.id]["is_reviewed"] is False
+    assert saved[revision_one.id]["correct_answer"] is None
 
 
 def test_external_start_reports_submitted_attempt(
