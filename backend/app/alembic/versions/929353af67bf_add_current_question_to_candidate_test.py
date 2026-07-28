@@ -1,7 +1,7 @@
 """add current_question_revision_id to candidate_test
 
 Revision ID: 929353af67bf
-Revises: fe6a2f1b6886
+Revises: a1e4c7b2f9d0
 Create Date: 2026-06-24 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlmodel.sql.sqltypes
 
 # revision identifiers, used by Alembic.
 revision = "929353af67bf"
-down_revision = "fe6a2f1b6886"
+down_revision = "a1e4c7b2f9d0"
 branch_labels = None
 depends_on = None
 
