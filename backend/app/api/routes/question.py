@@ -734,7 +734,11 @@ def get_questions(
     return questions
 
 
-@router.get("/count-by-tags", response_model=list[TagQuestionCount])
+@router.get(
+    "/count-by-tags",
+    response_model=list[TagQuestionCount],
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
 def get_question_count_by_tags(
     session: SessionDep,
     current_user: CurrentUser,
