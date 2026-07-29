@@ -66,7 +66,9 @@ class Organization(OrganizationBase, table=True):
         back_populates="organization",
         sa_relationship_kwargs={"uselist": False},
     )
-    roles: list["Role"] = Relationship(back_populates="organization")
+    roles: list["Role"] = Relationship(
+        back_populates="organization", cascade_delete=True
+    )
 
 
 class OrganizationCreate(OrganizationBase):

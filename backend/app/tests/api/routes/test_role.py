@@ -586,7 +586,14 @@ def test_role_actions_scoped_to_callers_own_org(
 def test_super_admin_role_is_protected_from_modification(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    super_admin_role = db.exec(
+        select(Role).where(
+            Role.name == "super_admin", Role.organization_id == caller_org_id
+        )
+    ).first()
     assert super_admin_role is not None
 
     update_response = client.put(
