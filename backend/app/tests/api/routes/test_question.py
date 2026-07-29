@@ -641,6 +641,106 @@ def test_read_questions_filter_by_tags(
     assert data["total"] == 2
 
 
+def test_question_count_by_tags(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_id = user_data["id"]
+    org_id = user_data["organization_id"]
+
+    tag1 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    tag2 = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    tag_with_no_questions = Tag(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user_id,
+        organization_id=org_id,
+    )
+    db.add_all([tag1, tag2, tag_with_no_questions])
+    db.commit()
+    db.refresh(tag1)
+    db.refresh(tag2)
+    db.refresh(tag_with_no_questions)
+
+    def make_question(*, organization_id: int, is_active: bool = True) -> Question:
+        question = Question(organization_id=organization_id, is_active=is_active)
+        db.add(question)
+        db.flush()
+        revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user_id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            options=[
+                {"id": 1, "key": "A", "value": "Option 1"},
+                {"id": 2, "key": "B", "value": "Option 2"},
+            ],
+            correct_answer=[1],
+        )
+        db.add(revision)
+        db.flush()
+        question.last_revision_id = revision.id
+        db.add(question)
+        return question
+
+    # tag1 -> 2 active questions
+    q1 = make_question(organization_id=org_id)
+    q2 = make_question(organization_id=org_id)
+    db.add_all(
+        [
+            QuestionTag(question_id=q1.id, tag_id=tag1.id),
+            QuestionTag(question_id=q2.id, tag_id=tag1.id),
+        ]
+    )
+
+    # tag2 -> 1 active question + 1 inactive question (should not be counted)
+    q3 = make_question(organization_id=org_id)
+    q4_inactive = make_question(organization_id=org_id, is_active=False)
+    db.add_all(
+        [
+            QuestionTag(question_id=q3.id, tag_id=tag2.id),
+            QuestionTag(question_id=q4_inactive.id, tag_id=tag2.id),
+        ]
+    )
+
+    # question in a different organization tagged with tag1 -- must not be counted,
+    # since counting should scope by the caller's organization_id
+    other_org = create_random_organization(db)
+    assert other_org.id is not None
+    other_org_question = make_question(organization_id=other_org.id)
+    db.add(QuestionTag(question_id=other_org_question.id, tag_id=tag1.id))
+
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/count-by-tags"
+        f"?tag_ids={tag1.id}&tag_ids={tag2.id}"
+        f"&tag_ids={tag_with_no_questions.id}&tag_ids=999999",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    counts = {item["tag_id"]: item["question_count"] for item in data}
+
+    assert counts[tag1.id] == 2
+    assert counts[tag2.id] == 1
+    assert counts[tag_with_no_questions.id] == 0
+    assert counts[999999] == 0
+    assert len(data) == 4
+
+
 def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     # Create organization
     org = Organization(name=random_lower_string())

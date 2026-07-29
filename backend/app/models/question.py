@@ -553,6 +553,13 @@ class QuestionTagsUpdate(SQLModel):
     )
 
 
+class TagQuestionCount(SQLModel):
+    """Number of active questions available for a tag."""
+
+    tag_id: int = Field(description="ID of the tag")
+    question_count: int = Field(description="Number of active questions for this tag")
+
+
 class QuestionLocationUpdateItem(SQLModel):
     """Item for specifying a location to associate with a question."""
 
