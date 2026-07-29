@@ -252,11 +252,20 @@ def read_users(
 
 
 def validate_user_return_role(
-    session: SessionDep, user_in: UserCreate | UserUpdate, current_user: User
+    session: SessionDep,
+    user_in: UserCreate | UserUpdate,
+    current_user: User,
+    target_org: int,
 ) -> Role:
     role = session.get(Role, user_in.role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Invalid Role")
+
+    if role.organization_id != target_org:
+        raise HTTPException(
+            status_code=400,
+            detail="Role does not belong to the user's organization",
+        )
 
     # validate role hierarchy - check if current user can assign this role
     if not can_assign_role(current_user.role.name, role.name):
@@ -333,7 +342,10 @@ def create_user(
         user_in.organization_id = current_user.organization_id
 
     role = validate_user_return_role(
-        session=session, user_in=user_in, current_user=current_user
+        session=session,
+        user_in=user_in,
+        current_user=current_user,
+        target_org=user_in.organization_id,
     )
 
     user = crud.create_user(
@@ -567,7 +579,10 @@ def update_user(
             )
 
     role = validate_user_return_role(
-        session=session, user_in=user_in, current_user=current_user
+        session=session,
+        user_in=user_in,
+        current_user=current_user,
+        target_org=db_user.organization_id,
     )
 
     if role.name == state_admin.name:
