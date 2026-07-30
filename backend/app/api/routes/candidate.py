@@ -891,35 +891,20 @@ def _get_or_create_external_candidate(
     return candidate
 
 
-def _get_or_create_candidate_test(
-    session: SessionDep,
-    *,
-    test: Test,
-    candidate: Candidate,
-    admin_id: int,
-    start_test_request: StartTestRequest,
-) -> CandidateTest:
-    """Find the candidate's existing attempt for this test, or create one.
+def _find_candidate_test(
+    session: SessionDep, *, test: Test, candidate: Candidate
+) -> CandidateTest | None:
+    """The candidate's existing attempt for this test, if any.
 
     A reused candidate may already have a CandidateTest for this test (the
     UNIQUE(test_id, candidate_id) constraint enforces one attempt per pair), so
-    re-provisioning must be idempotent rather than raising a unique violation.
+    starting again must resolve that attempt rather than raise a unique violation.
     """
-    existing = session.exec(
+    return session.exec(
         select(CandidateTest)
         .where(CandidateTest.test_id == test.id)
         .where(CandidateTest.candidate_id == candidate.id)
     ).first()
-    if existing is not None:
-        return existing
-
-    return _create_candidate_test(
-        session,
-        test=test,
-        candidate=candidate,
-        admin_id=admin_id,
-        start_test_request=start_test_request,
-    )
 
 
 def _get_external_login_value(session: SessionDep, test: Test) -> Any | None:
@@ -994,17 +979,23 @@ def start_test_for_candidate(
         _require_external_login_enabled(session, test)
         _validate_test_start_window(session, test)
         candidate = _get_provisioned_candidate(session, test, candidate_uuid)
-        candidate_test = _get_or_create_candidate_test(
-            session,
-            test=test,
-            candidate=candidate,
-            admin_id=admin_id,
-            start_test_request=start_test_request,
-        )
+        # The attempt is created on the first start, so finding one here means the
+        # candidate already started this test — on this device or another.
+        candidate_test = _find_candidate_test(session, test=test, candidate=candidate)
+        is_resumed = candidate_test is not None
+        if candidate_test is None:
+            candidate_test = _create_candidate_test(
+                session,
+                test=test,
+                candidate=candidate,
+                admin_id=admin_id,
+                start_test_request=start_test_request,
+            )
         return StartTestResponse(
             candidate_uuid=candidate_uuid,
             candidate_test_id=candidate_test.id,
             is_submitted=candidate_test.is_submitted,
+            is_resumed=is_resumed,
         )
 
     if _should_block_anonymous_start(session, test):

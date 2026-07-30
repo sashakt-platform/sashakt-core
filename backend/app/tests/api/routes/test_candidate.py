@@ -16200,7 +16200,9 @@ def test_external_provision_and_start_resume_same_attempt(
     candidate_test = db.get(CandidateTest, first["candidate_test_id"])
     assert candidate_test is not None
     assert candidate_test.test_id == test.id
-    assert start() == first
+    assert first["is_resumed"] is False
+    # Launching again finds the existing attempt, which is exactly a resume.
+    assert start() == {**first, "is_resumed": True}
 
 
 def test_external_provision_resumes_position_and_answers_cross_device(
@@ -16307,7 +16309,8 @@ def test_external_provision_resumes_position_and_answers_cross_device(
     )
 
     # --- device B: same external user logs in again -> same candidate + attempt ---
-    assert portal_launch() == launch  # same candidate_uuid + candidate_test_id reused
+    # Same candidate + attempt reused, and reported as a resume this time.
+    assert portal_launch() == {**launch, "is_resumed": True}
 
     # device B: resume payload carries the saved position and answers
     resume = client.get(
