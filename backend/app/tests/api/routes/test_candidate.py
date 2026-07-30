@@ -15982,10 +15982,10 @@ def test_start_test_rejects_anonymous_for_external_login_org(
     )
 
 
-def test_anonymous_start_test_leaves_external_user_id_null(
+def test_anonymous_start_test_leaves_external_identifier_null(
     client: TestClient, db: SessionDep
 ) -> None:
-    """The QR/anonymous flow must be untouched: no external_user_id is stored."""
+    """The QR/anonymous flow must be untouched: no external_identifier is stored."""
     user = create_random_user(db)
     assert user.id is not None
     test = Test(
@@ -16008,7 +16008,7 @@ def test_anonymous_start_test_leaves_external_user_id_null(
     assert candidate_test is not None
     candidate = db.get(Candidate, candidate_test.candidate_id)
     assert candidate is not None
-    assert candidate.external_user_id is None
+    assert candidate.external_identifier is None
 
 
 def test_external_provision_requires_sashakt_auth(
@@ -16038,7 +16038,7 @@ def test_external_provision_requires_sashakt_auth(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_link.uuid,
-            "external_user_id": "375220",
+            "external_identifier": "375220",
             "device_info": "Portal",
         },
     )
@@ -16050,7 +16050,7 @@ def test_external_provision_requires_sashakt_auth(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_link.uuid,
-            "external_user_id": "375220",
+            "external_identifier": "375220",
             "device_info": "Portal",
         },
         headers={"Authorization": "Bearer wrong-token"},
@@ -16089,7 +16089,7 @@ def test_external_provision_requires_external_login_enabled(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_link.uuid,
-            "external_user_id": "375220",
+            "external_identifier": "375220",
             "device_info": "Portal",
         },
         headers=token_headers,
@@ -16131,7 +16131,7 @@ def test_external_provision_and_start_resume_same_attempt(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_link.uuid,
-            "external_user_id": "375220",
+            "external_identifier": "375220",
             "device_info": "Portal",
         },
         headers=token_headers,
@@ -16161,7 +16161,7 @@ def test_external_provision_resumes_position_and_answers_cross_device(
 ) -> None:
     """The genuine cross-device story: an external user starts a test on one
     device (answers a question, navigates), then logs in from another device.
-    Re-provisioning the same external_user_id returns the *same* candidate and
+    Re-provisioning the same external_identifier returns the *same* candidate and
     in-progress attempt, and the resume payload carries the saved position and
     answers — so external login + maintain-candidate-state compose end to end.
     """
@@ -16208,12 +16208,15 @@ def test_external_provision_resumes_position_and_answers_cross_device(
     token_headers = authentication_token_from_email(
         client=client, email=user.email, db=db
     )
-    external_user_id = "375220"
+    external_identifier = "375220"
 
     # --- device A: portal launch provisions the attempt ---
     device_a = client.post(
         f"{settings.API_V1_STR}/candidate/external/provision",
-        json={"test_link_uuid": test_link.uuid, "external_user_id": external_user_id},
+        json={
+            "test_link_uuid": test_link.uuid,
+            "external_identifier": external_identifier,
+        },
         headers=token_headers,
     )
     assert device_a.status_code == 200
@@ -16248,7 +16251,10 @@ def test_external_provision_resumes_position_and_answers_cross_device(
     # --- device B: same external user logs in again -> same candidate + attempt ---
     device_b = client.post(
         f"{settings.API_V1_STR}/candidate/external/provision",
-        json={"test_link_uuid": test_link.uuid, "external_user_id": external_user_id},
+        json={
+            "test_link_uuid": test_link.uuid,
+            "external_identifier": external_identifier,
+        },
         headers=token_headers,
     )
     assert device_b.status_code == 200
@@ -16303,7 +16309,7 @@ def test_external_start_reports_submitted_attempt(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_link.uuid,
-            "external_user_id": "375220",
+            "external_identifier": "375220",
             "device_info": "Portal",
         },
         headers=token_headers,
@@ -16367,12 +16373,12 @@ def test_external_provision_reuses_same_candidate_across_tests(
         client=client, email=user.email, db=db
     )
 
-    external_user_id = "375220"
+    external_identifier = "375220"
     first_response = client.post(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_a_link.uuid,
-            "external_user_id": external_user_id,
+            "external_identifier": external_identifier,
             "device_info": "Portal",
         },
         headers=token_headers,
@@ -16384,7 +16390,7 @@ def test_external_provision_reuses_same_candidate_across_tests(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_b_link.uuid,
-            "external_user_id": external_user_id,
+            "external_identifier": external_identifier,
             "device_info": "Portal",
         },
         headers=token_headers,
@@ -16433,7 +16439,7 @@ def test_external_provision_is_idempotent_for_same_user_and_test(
 
     body = {
         "test_link_uuid": test_link.uuid,
-        "external_user_id": "375220",
+        "external_identifier": "375220",
         "device_info": "Portal",
     }
     first_data = client.post(
@@ -16480,12 +16486,12 @@ def test_external_provision_distinct_users_get_distinct_candidates(
 
     first_data = client.post(
         f"{settings.API_V1_STR}/candidate/external/provision",
-        json={"test_link_uuid": test_link.uuid, "external_user_id": "111"},
+        json={"test_link_uuid": test_link.uuid, "external_identifier": "111"},
         headers=token_headers,
     ).json()
     second_data = client.post(
         f"{settings.API_V1_STR}/candidate/external/provision",
-        json={"test_link_uuid": test_link.uuid, "external_user_id": "222"},
+        json={"test_link_uuid": test_link.uuid, "external_identifier": "222"},
         headers=token_headers,
     ).json()
 
@@ -16531,7 +16537,7 @@ def test_external_start_rejects_candidate_test_for_other_test(
         f"{settings.API_V1_STR}/candidate/external/provision",
         json={
             "test_link_uuid": test_a_link.uuid,
-            "external_user_id": "375220",
+            "external_identifier": "375220",
             "device_info": "Portal",
         },
         headers=token_headers,
@@ -16679,7 +16685,7 @@ def test_start_test_anonymous_allowed_when_anonymous_starts_not_blocked(
     assert candidate_test is not None
     candidate = db.get(Candidate, candidate_test.candidate_id)
     assert candidate is not None
-    assert candidate.external_user_id is None
+    assert candidate.external_identifier is None
 
 
 def test_start_test_resume_respects_start_window(
@@ -16708,7 +16714,7 @@ def test_start_test_resume_respects_start_window(
     test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
 
     candidate = Candidate(
-        identity=uuid.uuid4(), organization_id=org.id, external_user_id="375220"
+        identity=uuid.uuid4(), organization_id=org.id, external_identifier="375220"
     )
     db.add(candidate)
     db.commit()

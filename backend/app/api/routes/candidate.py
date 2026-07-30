@@ -865,9 +865,9 @@ def _create_anonymous_candidate(session: SessionDep, test: Test) -> Candidate:
 
 
 def _get_or_create_external_candidate(
-    session: SessionDep, test: Test, external_user_id: str
+    session: SessionDep, test: Test, external_identifier: str
 ) -> Candidate:
-    """Reuse a single candidate per (organization, external_user_id).
+    """Reuse a single candidate per (organization, external_identifier).
 
     Unlike anonymous QR candidates (a fresh row per start), an external user is a
     recurring student: the same candidate is returned across all their tests.
@@ -875,7 +875,7 @@ def _get_or_create_external_candidate(
     candidate = session.exec(
         select(Candidate)
         .where(Candidate.organization_id == test.organization_id)
-        .where(Candidate.external_user_id == external_user_id)
+        .where(Candidate.external_identifier == external_identifier)
     ).first()
     if candidate is not None:
         return candidate
@@ -883,7 +883,7 @@ def _get_or_create_external_candidate(
     candidate = Candidate(
         identity=uuid.uuid4(),
         organization_id=test.organization_id,
-        external_user_id=external_user_id,
+        external_identifier=external_identifier,
     )
     session.add(candidate)
     session.flush()  # assigns candidate.id without committing; committed with the test
@@ -1043,7 +1043,7 @@ def provision_external_candidate_test(
     _validate_test_start_window(session, test)
 
     candidate = _get_or_create_external_candidate(
-        session, test, provision_request.external_user_id
+        session, test, provision_request.external_identifier
     )
     candidate_test = _get_or_create_candidate_test(
         session,
@@ -2354,7 +2354,7 @@ def compute_result(
         total_questions=total_questions,
         marks_obtained=marks_obtained if has_marking_scheme else None,
         marks_maximum=marks_maximum if has_marking_scheme else None,
-        external_user_id=candidate.external_user_id if candidate else None,
+        external_identifier=candidate.external_identifier if candidate else None,
     )
 
 
