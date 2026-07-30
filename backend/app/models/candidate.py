@@ -386,6 +386,16 @@ class ExternalProvisionRequest(StartTestRequest):
     external_identifier: str
 
 
+class ExternalProvisionResponse(SQLModel):
+    """The candidate an external identifier maps to.
+
+    Only the candidate is provisioned; the attempt is created when the candidate
+    actually starts the test, exactly as in the anonymous flow.
+    """
+
+    candidate_uuid: uuid.UUID
+
+
 class OverallTestAnalyticsResponse(SQLModel):
     total_candidates: int
     overall_score_percent: float
