@@ -27,11 +27,7 @@ def get_org_role(session: Session, organization_id: int | None, role_name: str) 
                 Role.name == role_name, Role.organization_id == organization_id
             )
         ).first()
-    if role is None:
-        role = Role(name=role_name, label=role_name, organization_id=organization_id)
-        session.add(role)
-        session.commit()
-        session.refresh(role)
+    assert role is not None
     return role
 
 

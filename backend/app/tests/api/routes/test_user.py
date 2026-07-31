@@ -174,6 +174,33 @@ def test_create_user_new_email_without_org_id(
         assert user.created_by_id == current_user_data["id"]
 
 
+def test_create_user_role_from_different_organization(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A role must belong to the same organization as the user being created."""
+    target_organization = create_random_organization(db)
+    other_organization = create_random_organization(db)
+    role_from_other_org = get_org_role(db, other_organization.id, "system_admin")
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role_from_other_org.id,
+        "full_name": random_lower_string(),
+        "organization_id": target_organization.id,
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
+
+
 def test_get_existing_user(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
@@ -961,6 +988,45 @@ def test_update_user(
     db.refresh(user_db)
     assert user_db
     assert user_db.full_name == "Updated_full_name"
+
+
+def test_update_user_role_from_different_organization(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """A role must belong to the user's own organization, even on update -
+    it's checked against the target user's organization, not the payload's."""
+    organization = create_random_organization(db)
+    other_organization = create_random_organization(db)
+
+    role = get_org_role(db, organization.id, "test_admin")
+    user_in = UserCreate(
+        email=random_email(),
+        password=random_lower_string(),
+        full_name=random_lower_string(),
+        phone=random_lower_string(),
+        role_id=role.id,
+        organization_id=organization.id,
+    )
+    user = crud.create_user(session=db, user_create=user_in)
+
+    role_from_other_org = get_org_role(db, other_organization.id, "test_admin")
+    data = {
+        "email": user_in.email,
+        "password": user_in.password,
+        "full_name": user_in.full_name,
+        "phone": user_in.phone,
+        "role_id": role_from_other_org.id,
+        "organization_id": organization.id,
+    }
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{user.id}",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
 
 
 def test_update_user_not_exists(
