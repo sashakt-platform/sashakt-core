@@ -1016,7 +1016,7 @@ def test_update_user_role_from_different_organization(
         "full_name": user_in.full_name,
         "phone": user_in.phone,
         "role_id": role_from_other_org.id,
-        "organization_id": organization.id,
+        "organization_id": other_organization.id,
     }
     response = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
