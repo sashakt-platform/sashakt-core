@@ -1,7 +1,7 @@
 """add organization_id to role and backfill existing data
 
 Revision ID: dff7619e3cfb
-Revises: a1e4c7b2f9d0
+Revises: 929353af67bf
 Create Date: 2026-07-27 12:36:10.022699
 
 """
