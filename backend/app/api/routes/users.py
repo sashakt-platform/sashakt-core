@@ -397,7 +397,6 @@ def create_user(
 @router.patch(
     "/me",
     response_model=UserPublicMe,
-    dependencies=[Depends(permission_dependency("update_user_me"))],
 )
 def update_user_me(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
