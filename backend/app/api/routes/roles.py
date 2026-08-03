@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.core.roles import get_valid_roles
+from app.core.roles import get_valid_roles, super_admin
 from app.models import (
     Message,
     Role,
@@ -21,6 +21,26 @@ router = APIRouter(
 )
 
 
+def _get_own_org_role(session: SessionDep, current_user: CurrentUser, id: int) -> Role:
+    """
+    Get role by ID, scoped to the caller's own organization.
+    """
+    role = session.get(Role, id)
+    if not role or role.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Role not found")
+    return role
+
+
+def _ensure_not_super_admin(role: Role) -> None:
+    """
+    Block modification of the super_admin role.
+    """
+    if role.name == super_admin.name:
+        raise HTTPException(
+            status_code=403, detail="The super_admin role cannot be modified"
+        )
+
+
 @router.get(
     "/",
     response_model=RolesPublic,
@@ -30,7 +50,8 @@ def read_roles(
     session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 150
 ) -> Any:
     """
-    Retrieve roles based on current user's role hierarchy.
+    Retrieve roles based on current user's role hierarchy, scoped to their
+    own organization.
     """
     # get available role names based on current user's role
     available_roles = get_valid_roles(current_user.role.name)
@@ -42,13 +63,19 @@ def read_roles(
     count_statement = (
         select(func.count())
         .select_from(Role)
-        .where(col(Role.name).in_(available_roles))
+        .where(
+            col(Role.name).in_(available_roles),
+            Role.organization_id == current_user.organization_id,
+        )
     )
     count = session.exec(count_statement).one()
 
     statement = (
         select(Role)
-        .where(col(Role.name).in_(available_roles))
+        .where(
+            col(Role.name).in_(available_roles),
+            Role.organization_id == current_user.organization_id,
+        )
         .offset(skip)
         .limit(limit)
     )
@@ -76,15 +103,11 @@ def read_roles(
     response_model=RolePublic,
     dependencies=[Depends(permission_dependency("read_role"))],
 )
-def read_role(session: SessionDep, id: int) -> Any:
+def read_role(session: SessionDep, current_user: CurrentUser, id: int) -> Any:
     """
-    Get role by ID.
+    Get role by ID. See `_get_own_org_role`.
     """
-    role = session.get(Role, id)
-    if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
-    # if not current_user.is_superuser and (role.owner_id != current_user.id):
-    #     raise HTTPException(status_code=400, detail="Not enough permissions")
+    role = _get_own_org_role(session, current_user, id)
     stored_permission_ids = session.exec(
         select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
     )
@@ -100,12 +123,14 @@ def read_role(session: SessionDep, id: int) -> Any:
     response_model=RolePublic,
     dependencies=[Depends(permission_dependency("create_role"))],
 )
-def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
+def create_role(
+    *, session: SessionDep, role_in: RoleCreate, current_user: CurrentUser
+) -> Any:
     """
     Create new role.
     """
     role_data = role_in.model_dump(exclude={"permissions"})
-    role = Role.model_validate(role_data)
+    role = Role(**role_data, organization_id=current_user.organization_id)
     session.add(role)
     session.commit()
     if role_in.permissions:
@@ -136,17 +161,15 @@ def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
 def update_role(
     *,
     session: SessionDep,
+    current_user: CurrentUser,
     id: int,
     role_update: RoleUpdate,
 ) -> Any:
     """
-    Update an role.
+    Update a role.
     """
-    role = session.get(Role, id)
-    if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
-    # if not current_user.is_superuser and (role.owner_id != current_user.id):
-    #     raise HTTPException(status_code=400, detail="Not enough permissions")
+    role = _get_own_org_role(session, current_user, id)
+    _ensure_not_super_admin(role)
 
     # Updating Permission
     permission_remove = [
@@ -199,15 +222,15 @@ def update_role(
 )
 def set_visibility_role(
     session: SessionDep,
+    current_user: CurrentUser,
     id: int,
     is_active: bool = Query(True, description="Set visibility of the Role"),
 ) -> RolePublic:
     """
-    Set visitibility of the Role
+    Set visibility of the Role. See `_get_own_org_role` and `_ensure_not_super_admin`.
     """
-    role = session.get(Role, id)
-    if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
+    role = _get_own_org_role(session, current_user, id)
+    _ensure_not_super_admin(role)
     role.is_active = is_active
     session.add(role)
     session.commit()
@@ -226,15 +249,12 @@ def set_visibility_role(
     "/{id}",
     dependencies=[Depends(permission_dependency("delete_role"))],
 )
-def delete_role(session: SessionDep, id: int) -> Message:
+def delete_role(session: SessionDep, current_user: CurrentUser, id: int) -> Message:
     """
-    Delete an role.
+    Delete a role. See `_get_own_org_role` and `_ensure_not_super_admin`.
     """
-    role = session.get(Role, id)
-    if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
-    # if not current_user.is_superuser and (role.owner_id != current_user.id):
-    #     raise HTTPException(status_code=400, detail="Not enough permissions")
+    role = _get_own_org_role(session, current_user, id)
+    _ensure_not_super_admin(role)
     session.delete(role)
     session.commit()
     return Message(message="Role deleted successfully")

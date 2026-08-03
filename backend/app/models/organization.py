@@ -7,7 +7,16 @@ from app.core.timezone import get_timezone_aware_now
 from app.models.candidate import Candidate
 
 if TYPE_CHECKING:
-    from app.models import Certificate, EntityType, Question, Tag, TagType, Test, User
+    from app.models import (
+        Certificate,
+        EntityType,
+        Question,
+        Role,
+        Tag,
+        TagType,
+        Test,
+        User,
+    )
     from app.models.form import Form
     from app.models.organization_settings import OrganizationSettings
     from app.models.provider import OrganizationProvider
@@ -56,6 +65,9 @@ class Organization(OrganizationBase, table=True):
     settings: Optional["OrganizationSettings"] = Relationship(
         back_populates="organization",
         sa_relationship_kwargs={"uselist": False},
+    )
+    roles: list["Role"] = Relationship(
+        back_populates="organization", cascade_delete=True
     )
 
 

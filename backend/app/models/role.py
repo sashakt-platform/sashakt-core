@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
-    from app.models import Permission, User
+    from app.models import Organization, Permission, User
 
 
 class RolePermission(SQLModel, table=True):
@@ -35,7 +35,11 @@ class RoleUpdate(RoleBase):
 # Database model, database table inferred from class name
 class Role(RoleBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    organization_id: int = Field(foreign_key="organization.id", ondelete="CASCADE")
+    __table_args__ = (UniqueConstraint("organization_id", "name"),)
+
     users: list["User"] = Relationship(back_populates="role")
+    organization: "Organization" = Relationship(back_populates="roles")
     permissions: list["Permission"] | None = Relationship(
         back_populates="roles", link_model=RolePermission
     )
@@ -44,6 +48,7 @@ class Role(RoleBase, table=True):
 # Properties to return via API, id is always required
 class RolePublic(RoleBase):
     id: int
+    organization_id: int
     permissions: list[int]
 
 

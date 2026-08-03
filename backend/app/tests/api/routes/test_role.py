@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from app.core.config import settings
 from app.models import Permission, Role, RolePermission
 from app.tests.utils.role import create_random_role
-from app.tests.utils.user import get_user_token
+from app.tests.utils.user import get_current_user_data, get_user_token
 from app.tests.utils.utils import random_lower_string
 
 
@@ -77,7 +77,10 @@ def test_read_role(
 
     db.commit()
 
-    role = create_random_role(db)
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    role = create_random_role(db, organization_id=caller_org_id)
 
     role_permission_a = RolePermission(role_id=role.id, permission_id=permission_a.id)
     role_permission_b = RolePermission(role_id=role.id, permission_id=permission_b.id)
@@ -176,7 +179,10 @@ def test_read_roles(
 def test_update_role(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    role = create_random_role(db)
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    role = create_random_role(db, organization_id=caller_org_id)
     permission_a = Permission(
         name=random_lower_string(), description=random_lower_string()
     )
@@ -278,7 +284,10 @@ def test_update_role_not_found(
 def test_visibility_role(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    role = create_random_role(db)
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    role = create_random_role(db, organization_id=caller_org_id)
     data = {"is_active": False}
     response = client.patch(
         f"{settings.API_V1_STR}/roles/{role.id}",
@@ -329,7 +338,10 @@ def test_visibility_role(
 def test_delete_role(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
-    role = create_random_role(db)
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    role = create_random_role(db, organization_id=caller_org_id)
     response = client.delete(
         f"{settings.API_V1_STR}/roles/{role.id}",
         headers=superuser_token_headers,
@@ -373,15 +385,13 @@ def test_delete_role_not_found(
 #     assert content["detail"] == "Not enough permissions"
 
 
-def test_read_roles_super_admin_sees_all_roles(client: TestClient, db: Session) -> None:
+def test_read_roles_super_admin_sees_all_roles(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
     """Test that Super Admin can see all system roles."""
-
-    # get auth headers for super admin user
-    headers = get_user_token(db=db, role="super_admin")
-
     response = client.get(
         f"{settings.API_V1_STR}/roles/",
-        headers=headers,
+        headers=superuser_token_headers,
     )
     assert response.status_code == 200
     content = response.json()
@@ -510,3 +520,156 @@ def test_read_roles_invalid_role_empty_result(client: TestClient, db: Session) -
         # Custom role not in hierarchy should see no roles
         assert content["count"] == 0
         assert len(content["data"]) == 0
+
+
+def test_create_role_stamps_callers_own_org(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    """POST /roles/ always attaches the caller's own organization, never
+    something the client could smuggle in."""
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    assert response.json()["organization_id"] == caller_org_id
+
+
+def test_role_actions_scoped_to_callers_own_org(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A caller (even one with role-management permission) cannot see, edit,
+    hide, or delete a role that belongs to a different organization."""
+    other_org_headers = get_user_token(db=db, role="test_admin")
+    other_org_role_id = get_current_user_data(client, other_org_headers)["role_id"]
+
+    read_response = client.get(
+        f"{settings.API_V1_STR}/roles/{other_org_role_id}",
+        headers=superuser_token_headers,
+    )
+    assert read_response.status_code == 404
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/roles/{other_org_role_id}",
+        headers=superuser_token_headers,
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "label": random_lower_string(),
+        },
+    )
+    assert update_response.status_code == 404
+
+    patch_response = client.patch(
+        f"{settings.API_V1_STR}/roles/{other_org_role_id}",
+        headers=superuser_token_headers,
+        params={"is_active": False},
+    )
+    assert patch_response.status_code == 404
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/roles/{other_org_role_id}",
+        headers=superuser_token_headers,
+    )
+    assert delete_response.status_code == 404
+
+
+def test_super_admin_role_is_protected_from_modification(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    super_admin_role = db.exec(
+        select(Role).where(
+            Role.name == "super_admin", Role.organization_id == caller_org_id
+        )
+    ).first()
+    assert super_admin_role is not None
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/roles/{super_admin_role.id}",
+        headers=superuser_token_headers,
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "label": random_lower_string(),
+        },
+    )
+    assert update_response.status_code == 403
+
+    patch_response = client.patch(
+        f"{settings.API_V1_STR}/roles/{super_admin_role.id}",
+        headers=superuser_token_headers,
+        params={"is_active": False},
+    )
+    assert patch_response.status_code == 403
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/roles/{super_admin_role.id}",
+        headers=superuser_token_headers,
+    )
+    assert delete_response.status_code == 403
+
+
+def test_toggle_permission_scoped_to_one_org(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """The worked example from the issue: removing read_test from one org's
+    test_admin must not affect another org's test_admin."""
+    read_test_permission = db.exec(
+        select(Permission).where(Permission.name == "read_test")
+    ).first()
+    assert read_test_permission is not None
+
+    caller_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    org_a_test_admin = db.exec(
+        select(Role).where(
+            Role.name == "test_admin", Role.organization_id == caller_org_id
+        )
+    ).first()
+    assert org_a_test_admin is not None
+
+    other_org_headers = get_user_token(db=db, role="test_admin")
+    other_org_user = get_current_user_data(client, other_org_headers)
+    org_b_test_admin_id = other_org_user["role_id"]
+
+    other_permission_ids = list(
+        db.exec(
+            select(RolePermission.permission_id).where(
+                RolePermission.role_id == org_a_test_admin.id,
+                RolePermission.permission_id != read_test_permission.id,
+            )
+        ).all()
+    )
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{org_a_test_admin.id}",
+        headers=superuser_token_headers,
+        json={
+            "name": org_a_test_admin.name,
+            "description": org_a_test_admin.description,
+            "label": org_a_test_admin.label,
+            "permissions": other_permission_ids,
+        },
+    )
+    assert response.status_code == 200
+    assert read_test_permission.id not in response.json()["permissions"]
+
+    org_b_permission_ids = db.exec(
+        select(RolePermission.permission_id).where(
+            RolePermission.role_id == org_b_test_admin_id
+        )
+    ).all()
+    assert read_test_permission.id in org_b_permission_ids

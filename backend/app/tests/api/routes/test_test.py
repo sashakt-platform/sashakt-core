@@ -29,7 +29,6 @@ from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.certificate import Certificate
 from app.models.location import District
 from app.models.question import QuestionType
-from app.models.role import Role
 from app.models.test import OMRMode, QuestionSet, TestDistrict
 from app.models.user import UserState
 from app.tests.utils.location import create_random_state
@@ -38,6 +37,7 @@ from app.tests.utils.organization import (
 )
 from app.tests.utils.organization_settings import make_current_user_org_flexible
 from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.role import get_org_role
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.test import get_test_link
 from app.tests.utils.user import (
@@ -4524,9 +4524,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
+    state_admin_role = get_org_role(db, org_id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -4611,8 +4609,7 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    state_admin_role = get_org_role(db, org_id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -4700,8 +4697,7 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
 ) -> None:
     user_data = get_current_user_data(client, get_user_superadmin_token)
     org_id = user_data["organization_id"]
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    state_admin_role = get_org_role(db, org_id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -5734,9 +5730,8 @@ def test_update_test_not_created_by_user(
     db: SessionDep,
     get_user_systemadmin_token: dict[str, str],
 ) -> None:
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role
     org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+    test_admin_role = get_org_role(db, org, "test_admin")
 
     email_a = random_email()
     client.post(
@@ -5791,10 +5786,8 @@ def test_update_test_same_role_different_user_forbidden(
     db: SessionDep,
     get_user_systemadmin_token: dict[str, str],
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+    state_admin_role = get_org_role(db, org, "state_admin")
 
     country = Country(name=random_lower_string())
     db.add(country)
@@ -7504,8 +7497,7 @@ def test_test_list_state_user(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -7624,8 +7616,7 @@ def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
     db.commit()
     db.refresh(state_x)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email_a = random_email()
     response_a = client.post(
@@ -7701,8 +7692,7 @@ def test_state_admin_cannot_see_general_test_no_location(
     db.commit()
     db.refresh(state_x)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     client.post(
@@ -7775,8 +7765,7 @@ def test_state_admin_cannot_see_district_only_test(
     db.commit()
     db.refresh(district_x)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -7855,8 +7844,7 @@ def test_state_admin_cannot_see_state_and_district_test(
     db.commit()
     db.refresh(district_x)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -7915,10 +7903,8 @@ def test_state_admin_cannot_see_state_and_district_test(
 def test_state_admin_can_delete_test_created_by_them(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = create_random_organization(db)
+    state_admin_role = get_org_role(db, org.id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -7983,10 +7969,8 @@ def test_state_admin_can_delete_test_created_by_them(
 def test_state_admin_can_delete_test_in_their_state(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = create_random_organization(db)
+    state_admin_role = get_org_role(db, org.id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -8051,10 +8035,8 @@ def test_state_admin_can_delete_test_in_their_state(
 def test_state_admin_cannot_delete_test_outside_their_state(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = create_random_organization(db)
+    state_admin_role = get_org_role(db, org.id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -8112,10 +8094,8 @@ def test_state_admin_cannot_delete_test_outside_their_state(
 def test_state_admin_cannot_delete_multi_state_test_without_full_access(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = create_random_organization(db)
+    state_admin_role = get_org_role(db, org.id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -8173,10 +8153,8 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
 def test_state_admin_can_delete_test_connected_via_district(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = create_random_organization(db)
+    state_admin_role = get_org_role(db, org.id, "state_admin")
     country = Country(name=random_lower_string())
     db.add(country)
     db.commit()
@@ -8248,10 +8226,8 @@ def test_state_admin_can_delete_test_connected_via_district(
 def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = create_random_organization(db)
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string())
     db.add(country)
@@ -8636,10 +8612,8 @@ def test_district_user_cannot_modify_out_of_scope_test(
     db: SessionDep,
     get_user_systemadmin_token: dict[str, str],
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-
     org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
+    state_admin_role = get_org_role(db, org, "state_admin")
 
     country = Country(name=random_lower_string())
     db.add(country)
@@ -8789,8 +8763,7 @@ def test_get_tests_by_district_user(
 
     email = random_email()
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    state_admin_role = get_org_role(db, org_id, "state_admin")
     state_admin_user_payload = {
         "email": email,
         "password": random_lower_string(),
@@ -8938,8 +8911,7 @@ def test_test_admin_with_district_can_see_state_level_test(
     db.refresh(rohtak)
 
     # Create state_admin scoped to Haryana
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
     state_admin_email = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
@@ -8959,8 +8931,7 @@ def test_test_admin_with_district_can_see_state_level_test(
     )
 
     # Create test_admin scoped to Ambala district
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
     test_admin_email = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
@@ -9047,8 +9018,7 @@ def test_state_admin_cannot_see_district_level_test(
     db.refresh(ambala)
 
     # Create state_admin scoped to Haryana
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
     state_admin_email = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
@@ -9068,8 +9038,7 @@ def test_state_admin_cannot_see_district_level_test(
     )
 
     # Create test_admin scoped to Ambala district
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
     test_admin_email = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
@@ -9157,8 +9126,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
     db.refresh(district_a)
     db.refresh(district_b)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     # First test_admin — scoped to district_a (creator)
     creator_email = random_email()
@@ -9286,8 +9254,7 @@ def test_district_user_cannot_see_general_test_no_location(
     db.commit()
     db.refresh(district)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     district_user_email = random_email()
     client.post(
@@ -9370,10 +9337,8 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
     db.commit()
     db.refresh(district_x)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     # state_admin scoped to state X
     state_admin_x_email = random_email()
@@ -9496,8 +9461,7 @@ def test_unscoped_test_admin_can_see_all_org_tests(
     db.commit()
     db.refresh(state)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     # test_admin with no district or state assigned
     unscoped_email = random_email()
@@ -10236,9 +10200,6 @@ def test_get_tests_my_tests_filter(
 ) -> None:
     """my_tests=True returns only tests created by the current user;
     my_tests=False excludes them — regardless of location assignment."""
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
-
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -10250,6 +10211,7 @@ def test_get_tests_my_tests_filter(
     db.add(org_district)
     db.commit()
     db.refresh(org_district)
+    test_admin_role = get_org_role(db, org_district.id, "test_admin")
 
     state_d = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add(state_d)
@@ -10356,6 +10318,7 @@ def test_get_tests_my_tests_filter(
     db.add(org_state)
     db.commit()
     db.refresh(org_state)
+    state_test_admin_role = get_org_role(db, org_state.id, "test_admin")
 
     state_s = State(name=random_lower_string(), is_active=True, country_id=country.id)
     db.add(state_s)
@@ -10370,7 +10333,7 @@ def test_get_tests_my_tests_filter(
             "password": random_lower_string(),
             "phone": random_lower_string(),
             "full_name": random_lower_string(),
-            "role_id": test_admin_role.id,
+            "role_id": state_test_admin_role.id,
             "organization_id": org_state.id,
             "state_ids": [state_s.id],
         },
@@ -10538,8 +10501,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
     db.refresh(state_a)
     db.refresh(state_b)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
     state_admin_email = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
@@ -10643,8 +10605,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
     db.refresh(district_a)
     db.refresh(district_b)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
     test_admin_email = random_email()
     client.post(
         f"{settings.API_V1_STR}/users/",
