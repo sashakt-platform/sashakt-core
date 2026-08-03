@@ -223,28 +223,25 @@ def format_form_response_for_csv(form_response: dict[str, Any] | None) -> str:
     return json.dumps(filtered) if filtered else ""
 
 
-RESULT_CSV_FIELDS = (
-    "marks_obtained",
-    "marks_maximum",
-    "correct_answer",
-    "incorrect_answer",
-    "mandatory_not_attempted",
-    "optional_not_attempted",
-    "total_questions",
-)
+def result_to_csv_fields(result: Result | None) -> list[Any]:
+    if result is None:
+        return [""] * 7
+    return [
+        result.marks_obtained,
+        result.marks_maximum,
+        result.correct_answer,
+        result.incorrect_answer,
+        result.mandatory_not_attempted,
+        result.optional_not_attempted,
+        result.total_questions,
+    ]
 
 
 def candidate_report_to_csv_row(entry: CandidateReport) -> list[Any]:
-    result = entry.result
-    result_fields = (
-        [getattr(result, field) for field in RESULT_CSV_FIELDS]
-        if result
-        else [""] * len(RESULT_CSV_FIELDS)
-    )
     return [
         str(entry.candidate_uuid),
         entry.status.value,
-        *result_fields,
+        *result_to_csv_fields(entry.result),
         entry.start_time.isoformat() if entry.start_time else "",
         entry.end_time.isoformat() if entry.end_time else "",
         entry.time_taken_seconds if entry.time_taken_seconds is not None else "",
