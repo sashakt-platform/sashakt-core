@@ -351,7 +351,7 @@ def test_put_settings_super_admin_uses_any_org_permission(
 
     Confirms the permission split: super can edit another org via the
     'any-org' permission; system_admin is blocked (scope check) since they
-    only hold 'update_my_organization_settings'.
+    only hold 'update_my_organization'.
     """
     target_org_id = _get_org_id(client, get_user_systemadmin_token)
 

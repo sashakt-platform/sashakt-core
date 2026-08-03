@@ -52,11 +52,11 @@ def _ensure_update_permission_and_scope(
     organization_id: int,
 ) -> None:
     """Allow super_admin (via update_organization_settings) on any org; otherwise
-    require update_my_organization_settings AND target to be the caller's org."""
+    require update_my_organization AND target to be the caller's org."""
     if "update_organization_settings" in permissions:
         return
     if (
-        "update_my_organization_settings" in permissions
+        "update_my_organization" in permissions
         and current_user.organization_id == organization_id
     ):
         return
