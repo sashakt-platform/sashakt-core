@@ -51,10 +51,8 @@ def _ensure_update_permission_and_scope(
     permissions: list[str],
     organization_id: int,
 ) -> None:
-    """Allow super_admin (via update_organization_settings) on any org; otherwise
-    require update_my_organization AND target to be the caller's org."""
-    if "update_organization_settings" in permissions:
-        return
+    """Settings updates are scoped to one's own organization only - require
+    update_my_organization AND target to be the caller's org, even for super_admin."""
     if (
         "update_my_organization" in permissions
         and current_user.organization_id == organization_id

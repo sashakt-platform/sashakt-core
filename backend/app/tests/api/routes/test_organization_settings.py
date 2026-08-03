@@ -223,11 +223,13 @@ def test_get_settings_nonexistent_org_404(
 # ---------- PUT /organization/{id}/settings ----------
 
 
-def test_put_settings_super_admin_any_org(
+def test_put_settings_super_admin_other_org_forbidden(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
     get_user_systemadmin_token: dict[str, str],
 ) -> None:
+    """Settings updates are scoped to one's own organization only - even
+    super_admin cannot update another organization's settings."""
     target_org_id = _get_org_id(client, get_user_systemadmin_token)
 
     new_payload = default_organization_settings()
@@ -239,8 +241,7 @@ def test_put_settings_super_admin_any_org(
         headers=get_user_superadmin_token,
         json=body,
     )
-    assert response.status_code == 200
-    assert response.json()["settings"]["test_timings"]["value"]["time_limit"] == 45
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_put_settings_persists_round_trip(
@@ -340,34 +341,6 @@ def test_put_settings_forbidden_for_low_privilege_roles(
             json=_valid_payload(),
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-def test_put_settings_super_admin_uses_any_org_permission(
-    client: TestClient,
-    get_user_superadmin_token: dict[str, str],
-    get_user_systemadmin_token: dict[str, str],
-) -> None:
-    """super_admin has update_organization_settings; system_admin does not.
-
-    Confirms the permission split: super can edit another org via the
-    'any-org' permission; system_admin is blocked (scope check) since they
-    only hold 'update_my_organization'.
-    """
-    target_org_id = _get_org_id(client, get_user_systemadmin_token)
-
-    sa = client.put(
-        f"{settings.API_V1_STR}/organization/{target_org_id}/settings",
-        headers=get_user_superadmin_token,
-        json=_valid_payload(),
-    )
-    assert sa.status_code == 200
-
-    sys_other = client.put(
-        f"{settings.API_V1_STR}/organization/{_get_org_id(client, get_user_superadmin_token)}/settings",
-        headers=get_user_systemadmin_token,
-        json=_valid_payload(),
-    )
-    assert sys_other.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_put_settings_invalid_mode_returns_422(
