@@ -19,6 +19,7 @@ from app.api.deps import (
     CurrentUser,
     Pagination,
     SessionDep,
+    get_user_permissions,
     permission_dependency,
 )
 from app.api.routes.candidate import (
@@ -277,6 +278,20 @@ TestSortingDep = Annotated[SortingParams, Depends(TestSorting)]
 
 CandidateReportSorting = create_sorting_dependency(CandidateReportSortConfig)
 CandidateReportSortingDep = Annotated[SortingParams, Depends(CandidateReportSorting)]
+
+
+def check_test_type_permission(
+    *, permissions: list[str], action: str, is_template: bool
+) -> None:
+    """Templates require '<action>_test_template'; regular tests require
+    '<action>_test'. Exactly one of the two is checked, never both."""
+    required = f"{action}_test_template" if is_template else f"{action}_test"
+    if required not in permissions:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Not permitted to {action} this "
+            f"{'test template' if is_template else 'test'}.",
+        )
 
 
 def check_test_ownership(
@@ -859,14 +874,17 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
 @router.post(
     "/",
     response_model=TestPublic,
-    dependencies=[Depends(permission_dependency("create_test"))],
 )
 def create_test(
     test_create: TestCreate,
     session: SessionDep,
     current_user: CurrentUser,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> TestPublic:
     """Create a new test."""
+    check_test_type_permission(
+        permissions=permissions, action="create", is_template=test_create.is_template
+    )
     question_revision_ids, question_sets = validate_test_membership_payload(
         session,
         question_revision_ids=test_create.question_revision_ids or [],
@@ -953,7 +971,6 @@ def create_test(
 @router.get(
     "/",
     response_model=Page[TestPublic],
-    dependencies=[Depends(permission_dependency("read_test"))],
 )
 def get_test(
     session: SessionDep,
@@ -988,8 +1005,12 @@ def get_test(
     district_ids: list[int] | None = Query(None),
     is_active: bool | None = None,
     my_tests: bool | None = None,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> Page[TestPublic]:
     """List tests."""
+    check_test_type_permission(
+        permissions=permissions, action="read", is_template=bool(is_template)
+    )
     query = (
         select(Test)
         .options(
@@ -1253,12 +1274,12 @@ def get_or_create_test_link(
 @router.get(
     "/{test_id}",
     response_model=TestPublic,
-    dependencies=[Depends(permission_dependency("read_test"))],
 )
 def get_test_by_id(
     test_id: int,
     session: SessionDep,
     current_user: CurrentUser,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> TestPublic:
     """Retrieve a test by ID."""
     test = session.get(Test, test_id)
@@ -1268,6 +1289,9 @@ def get_test_by_id(
         raise HTTPException(
             status_code=403, detail="Not authorized to access this test"
         )
+    check_test_type_permission(
+        permissions=permissions, action="read", is_template=test.is_template
+    )
 
     return build_test_public_response(session, test)
 
@@ -1465,19 +1489,22 @@ def export_candidate_report(
 @router.put(
     "/{test_id}",
     response_model=TestPublic,
-    dependencies=[Depends(permission_dependency("update_test"))],
 )
 def update_test(
     test_id: int,
     test_update: TestUpdate,
     session: SessionDep,
     current_user: CurrentUser,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> TestPublic:
     """Update a test."""
     test = session.get(Test, test_id)
 
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    check_test_type_permission(
+        permissions=permissions, action="update", is_template=test.is_template
+    )
     check_test_ownership(session, current_user, test)
 
     disallowed_fields_requested = test_update.model_fields_set - (
@@ -1633,18 +1660,21 @@ def update_test(
 @router.patch(
     "/{test_id}",
     response_model=TestPublic,
-    dependencies=[Depends(permission_dependency("update_test"))],
 )
 def visibility_test(
     test_id: int,
     session: SessionDep,
     current_user: CurrentUser,
     is_active: bool = Query(False, description="Set visibility of Test"),
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> TestPublic:
     """Set test visibility."""
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    check_test_type_permission(
+        permissions=permissions, action="update", is_template=test.is_template
+    )
     check_test_ownership(session, current_user, test)
 
     test.is_active = is_active
@@ -1657,15 +1687,20 @@ def visibility_test(
 
 @router.delete(
     "/{test_id}",
-    dependencies=[Depends(permission_dependency("delete_test"))],
 )
 def delete_test(
-    test_id: int, session: SessionDep, current_user: CurrentUser
+    test_id: int,
+    session: SessionDep,
+    current_user: CurrentUser,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> Message:
     """Delete a test."""
     test = session.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Test is not available")
+    check_test_type_permission(
+        permissions=permissions, action="delete", is_template=test.is_template
+    )
     check_test_ownership(session, current_user, test, action="delete")
 
     if check_linked_question(session, test_id):
@@ -1683,10 +1718,12 @@ def delete_test(
 @router.delete(
     "/",
     response_model=DeleteTest,
-    dependencies=[Depends(permission_dependency("delete_test"))],
 )
 def bulk_delete_question(
-    session: SessionDep, current_user: CurrentUser, test_ids: list[int] = Body(...)
+    session: SessionDep,
+    current_user: CurrentUser,
+    test_ids: list[int] = Body(...),
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> DeleteTest:
     """bulk delete test"""
     success_count = 0
@@ -1711,6 +1748,9 @@ def bulk_delete_question(
     role = session.get(Role, current_user.role_id)
     for test in db_test:
         try:
+            check_test_type_permission(
+                permissions=permissions, action="delete", is_template=test.is_template
+            )
             check_test_ownership(
                 session, current_user, test, action="delete", role=role
             )
@@ -1749,18 +1789,21 @@ def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> Ti
 @router.post(
     "/{test_id}/clone",
     response_model=TestPublic,
-    dependencies=[Depends(permission_dependency("create_test"))],
 )
 def clone_test(
     test_id: int,
     session: SessionDep,
     current_user: CurrentUser,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> TestPublic:
     """Duplicate an existing test, creating an independent copy owned by the current user."""
     # Fetch the original test
     original = session.get(Test, test_id)
     if not original:
         raise HTTPException(status_code=404, detail="Test not found")
+    check_test_type_permission(
+        permissions=permissions, action="create", is_template=original.is_template
+    )
     original_id = get_persisted_test_id(original)
 
     test_data = original.model_dump(exclude={"id", "created_date", "modified_date"})
