@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm import selectinload
-from sqlmodel import col, exists, func, or_, select, true
+from sqlmodel import col, exists, func, not_, or_, select, true
 
 from app.api.deps import (
     CurrentUser,
@@ -1180,6 +1180,8 @@ def get_test(
 
     if is_template is not None:
         query = query.where(Test.is_template == is_template)
+    elif "read_test_template" not in permissions:
+        query = query.where(not_(Test.is_template))
 
     if created_by is not None:
         query = query.where(col(Test.created_by_id).in_(created_by))

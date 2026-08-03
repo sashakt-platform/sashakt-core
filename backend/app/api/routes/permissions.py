@@ -122,7 +122,7 @@ def update_permission(
 @router.patch(
     "/{id}",
     response_model=PermissionPublic,
-    dependencies=[Depends(permission_dependency("create_organization"))],
+    dependencies=[Depends(permission_dependency("update_permission"))],
 )
 def set_visibility_permission(
     session: SessionDep,
@@ -144,7 +144,7 @@ def set_visibility_permission(
 
 @router.delete(
     "/{id}",
-    dependencies=[Depends(permission_dependency("create_organization"))],
+    dependencies=[Depends(permission_dependency("delete_permission"))],
 )
 def delete_permission(session: SessionDep, id: int) -> Message:
     """

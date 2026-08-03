@@ -14,8 +14,10 @@ from app.models import (
     Country,
     Form,
     Organization,
+    Permission,
     Question,
     QuestionRevision,
+    RolePermission,
     State,
     Tag,
     TagType,
@@ -38,6 +40,7 @@ from app.tests.utils.organization import (
 )
 from app.tests.utils.organization_settings import make_current_user_org_flexible
 from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.role import create_random_role
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.test import get_test_link
 from app.tests.utils.user import (
@@ -10778,6 +10781,7 @@ def test_get_test_by_id_template_allowed_for_state_and_test_admin(
         )
         db.add(template_test)
         db.commit()
+        assert template_test.id is not None
 
         response = client.get(
             f"{settings.API_V1_STR}/test/{template_test.id}",
@@ -10805,6 +10809,7 @@ def test_update_test_template_forbidden_for_state_and_test_admin(
         )
         db.add(template_test)
         db.commit()
+        assert template_test.id is not None
 
         response = client.put(
             f"{settings.API_V1_STR}/test/{template_test.id}",
@@ -10831,6 +10836,7 @@ def test_update_test_template_allowed_for_system_admin(
     )
     db.add(template_test)
     db.commit()
+    assert template_test.id is not None
 
     new_name = random_lower_string()
     response = client.put(
@@ -10859,6 +10865,7 @@ def test_delete_test_template_forbidden_for_state_and_test_admin(
         )
         db.add(template_test)
         db.commit()
+        assert template_test.id is not None
 
         response = client.delete(
             f"{settings.API_V1_STR}/test/{template_test.id}",
@@ -10884,6 +10891,7 @@ def test_delete_test_template_allowed_for_system_admin(
     )
     db.add(template_test)
     db.commit()
+    assert template_test.id is not None
 
     response = client.delete(
         f"{settings.API_V1_STR}/test/{template_test.id}",
@@ -10911,6 +10919,7 @@ def test_clone_test_template_forbidden_for_state_and_test_admin(
     )
     db.add(template_test)
     db.commit()
+    assert template_test.id is not None
 
     for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
         response = client.post(
@@ -10938,6 +10947,7 @@ def test_clone_test_template_allowed_for_system_admin(
     )
     db.add(template_test)
     db.commit()
+    assert template_test.id is not None
 
     response = client.post(
         f"{settings.API_V1_STR}/test/{template_test.id}/clone",
@@ -10967,6 +10977,8 @@ def test_bulk_delete_templates_fail_permission_while_regular_tests_succeed(
     )
     db.add_all([regular_test, template_test])
     db.commit()
+    assert regular_test.id is not None
+    assert template_test.id is not None
 
     response = client.request(
         "DELETE",
@@ -10980,3 +10992,52 @@ def test_bulk_delete_templates_fail_permission_while_regular_tests_succeed(
     failure_ids = {item["id"] for item in (data["delete_failure_list"] or [])}
     assert template_test.id in failure_ids
     assert regular_test.id not in failure_ids
+
+
+def test_list_tests_unfiltered_excludes_templates_for_regular_test_only_role(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
+    """A role holding only read_test (not read_test_template) must not have
+    templates leak into the unfiltered ("no is_template filter") test list."""
+    read_test_permission = db.exec(
+        select(Permission).where(Permission.name == "read_test")
+    ).first()
+    assert read_test_permission is not None
+    assert read_test_permission.id is not None
+
+    role = create_random_role(db)
+    assert role.id is not None
+    db.add(RolePermission(role_id=role.id, permission_id=read_test_permission.id))
+    db.commit()
+
+    organization = create_random_organization(db)
+    user = create_random_user(db, organization_id=organization.id)
+    user.role_id = role.id
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    headers = {"Authorization": f"Bearer {user.token}"}
+
+    regular_test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+        is_template=False,
+    )
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+        is_template=True,
+    )
+    db.add_all([regular_test, template_test])
+    db.commit()
+    assert regular_test.id is not None
+    assert template_test.id is not None
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=headers)
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert regular_test.id in returned_ids
+    assert template_test.id not in returned_ids
