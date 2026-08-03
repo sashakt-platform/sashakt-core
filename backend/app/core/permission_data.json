@@ -475,14 +475,5 @@
     "state_admin": true,
     "test_admin": true,
     "candidate": false
-  },
-  {
-    "name": "read_form_response",
-    "description": "Read Form Response Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
   }
 ]

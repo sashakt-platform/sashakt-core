@@ -540,7 +540,7 @@ def delete_form_field(
 @router.get(
     "/{form_id}/responses",
     response_model=Page[FormResponsePublic],
-    dependencies=[Depends(permission_dependency("read_form_response"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_form_responses(
     form_id: int,
@@ -575,7 +575,7 @@ def get_form_responses(
 @router.get(
     "/response/{candidate_test_id}",
     response_model=FormResponsePublic,
-    dependencies=[Depends(permission_dependency("read_form_response"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_form_response_by_candidate_test(
     candidate_test_id: int,
