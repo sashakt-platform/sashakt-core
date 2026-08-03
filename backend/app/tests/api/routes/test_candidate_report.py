@@ -1,13 +1,23 @@
 import csv
 import io
 import uuid
+from datetime import datetime
 
 from fastapi.testclient import TestClient
 
 from app.api.deps import SessionDep
+from app.api.routes.test import (
+    CANDIDATE_REPORT_CSV_HEADERS,
+    candidate_report_to_csv_row,
+)
 from app.core.config import settings
 from app.models import TestQuestion
-from app.models.candidate import CandidateTestAnswer
+from app.models.candidate import (
+    CandidateReport,
+    CandidateReportStatus,
+    CandidateTestAnswer,
+    Result,
+)
 from app.models.certificate import Certificate
 from app.models.form import Form, FormField, FormFieldType, FormResponse
 from app.tests.utils.candidate import (
@@ -1948,3 +1958,44 @@ def test_candidate_report_export_accessible_by_test_admin(
 
     assert response.status_code == 200
     assert list(csv.DictReader(io.StringIO(response.text))) == []
+
+
+def test_candidate_report_csv_row_matches_headers() -> None:
+    entry = CandidateReport(
+        candidate_id=1,
+        candidate_uuid=uuid.uuid4(),
+        status=CandidateReportStatus.submitted,
+        start_time=datetime(2026, 1, 1, 9, 0, 0),
+        end_time=datetime(2026, 1, 1, 9, 45, 0),
+        time_taken_seconds=2700,
+        result=Result(
+            correct_answer=1,
+            incorrect_answer=2,
+            mandatory_not_attempted=3,
+            optional_not_attempted=4,
+            total_questions=5,
+            marks_obtained=6.0,
+            marks_maximum=7.0,
+        ),
+        form_response={"key": "value"},
+    )
+
+    row = candidate_report_to_csv_row(entry)
+
+    assert len(row) == len(CANDIDATE_REPORT_CSV_HEADERS)
+    values_by_header = dict(zip(CANDIDATE_REPORT_CSV_HEADERS, row, strict=True))
+    assert values_by_header == {
+        "Candidate UUID": str(entry.candidate_uuid),
+        "Status": "submitted",
+        "Marks Obtained": 6.0,
+        "Marks Maximum": 7.0,
+        "Correct Answers": 1,
+        "Incorrect Answers": 2,
+        "Mandatory Not Attempted": 3,
+        "Optional Not Attempted": 4,
+        "Total Questions": 5,
+        "Start Time": "2026-01-01T09:00:00",
+        "End Time": "2026-01-01T09:45:00",
+        "Time Taken (seconds)": 2700,
+        "Form Response": '{"key": "value"}',
+    }
