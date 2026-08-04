@@ -1,8 +1,8 @@
-"""Consolidate question_revision, question_tag, and question_location permissions into question
+"""Consolidate and remove redundant permissions superseded by broader ones
 
-Revision ID: 9c05454d0bbf
-Revises: aa209acb066d
-Create Date: 2026-07-31 00:00:00.000000
+Revision ID: 803a08724747
+Revises: 929353af67bf
+Create Date: 2026-08-04 00:00:00.000000
 
 """
 from alembic import op
@@ -10,14 +10,58 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '9c05454d0bbf'
-down_revision = 'aa209acb066d'
+revision = '803a08724747'
+down_revision = '929353af67bf'
 branch_labels = None
 depends_on = None
 
 
 # permission_name -> (description, {role_name: has_permission})
 REMOVED_PERMISSIONS = {
+    # Consolidated into 'candidate'
+    "create_candidate_test": (
+        "Create New Candidate Test",
+        {"candidate": True},
+    ),
+    "update_candidate_test": (
+        "Update Existing Candidate Test",
+        {"candidate": True},
+    ),
+    "delete_candidate_test": (
+        "Delete Existing Candidate Test",
+        {"super_admin": True},
+    ),
+    "read_candidate_test": (
+        "Read Candidate Test Details",
+        {
+            "super_admin": True,
+            "system_admin": True,
+            "state_admin": True,
+            "test_admin": True,
+        },
+    ),
+    "create_candidate_test_answer": (
+        "Create New Candidate Test Answer",
+        {"candidate": True},
+    ),
+    "update_candidate_test_answer": (
+        "Update Existing Candidate Test Answer",
+        {"candidate": True},
+    ),
+    "delete_candidate_test_answer": (
+        "Delete Existing Candidate Test Answer",
+        {},
+    ),
+    "read_candidate_test_answer": (
+        "Read Candidate Test Answer Details",
+        {
+            "super_admin": True,
+            "system_admin": True,
+            "state_admin": True,
+            "test_admin": True,
+        },
+    ),
+    # Consolidated into 'question'
     "create_question_revision": (
         "Create New Question Revision",
         {"super_admin": True, "system_admin": True, "state_admin": True},
@@ -80,6 +124,54 @@ REMOVED_PERMISSIONS = {
             "state_admin": True,
             "test_admin": True,
         },
+    ),
+    # Superseded by 'update_my_organization'
+    "create_provider": (
+        "Create New Provider",
+        {"super_admin": True, "system_admin": True},
+    ),
+    "update_provider": (
+        "Update Existing Provider",
+        {"super_admin": True, "system_admin": True},
+    ),
+    "delete_provider": (
+        "Delete Existing Provider",
+        {"super_admin": True, "system_admin": True},
+    ),
+    "read_provider": (
+        "Read Provider Details",
+        {"super_admin": True, "system_admin": True},
+    ),
+    # PATCH /users/me no longer needs a permission check
+    "update_user_me": (
+        "Update Own User Details",
+        {
+            "super_admin": True,
+            "system_admin": True,
+            "state_admin": True,
+            "test_admin": True,
+            "candidate": True,
+        },
+    ),
+    # Superseded by 'update_my_organization'
+    "update_my_organization_settings": (
+        "Update Settings for Own Organization",
+        {"super_admin": True, "system_admin": True},
+    ),
+    # Superseded by 'read_candidate'
+    "read_form_response": (
+        "Read Form Response Details",
+        {
+            "super_admin": True,
+            "system_admin": True,
+            "state_admin": True,
+            "test_admin": True,
+        },
+    ),
+    # Superseded by 'update_organization'
+    "update_organization_settings": (
+        "Update Settings for Any Organization",
+        {"super_admin": True},
     ),
 }
 
