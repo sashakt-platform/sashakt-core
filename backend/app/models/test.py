@@ -485,3 +485,7 @@ class TestPublicLimited(TestBase):
     question_sets: list["QuestionSetSummaryPublic"] | None = None
     form: "FormPublic | None" = None
     nomenclature: dict[str, str] = Field(default_factory=dict)
+    # True when the org requires candidates to arrive from their student portal,
+    # so the landing page can say so up front instead of letting them fill in a
+    # form and only then be turned away.
+    blocks_anonymous_start: bool = False

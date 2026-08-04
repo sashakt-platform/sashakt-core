@@ -934,11 +934,8 @@ def _get_external_login_value(session: SessionDep, test: Test) -> Any | None:
 
 
 def _should_block_anonymous_start(session: SessionDep, test: Test) -> bool:
-    external_login = _get_external_login_value(session, test)
-    return bool(
-        external_login
-        and external_login.enabled
-        and external_login.block_anonymous_starts
+    return crud_settings.blocks_anonymous_starts(
+        session=session, organization_id=test.organization_id
     )
 
 

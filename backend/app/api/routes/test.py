@@ -909,6 +909,9 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
         form=form_public,
         nomenclature=nomenclature,
         link=test_uuid,
+        blocks_anonymous_start=crud_settings.blocks_anonymous_starts(
+            session=session, organization_id=test.organization_id
+        ),
     )
 
 

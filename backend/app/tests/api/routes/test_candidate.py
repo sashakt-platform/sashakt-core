@@ -15982,6 +15982,45 @@ def test_start_test_rejects_anonymous_for_external_login_org(
     )
 
 
+def test_public_test_info_flags_orgs_that_block_anonymous_starts(
+    client: TestClient, db: SessionDep
+) -> None:
+    """The landing payload says so up front, so the client need not offer a start.
+
+    Without this the candidate only learns they came the wrong way after
+    filling in the pre-test form.
+    """
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+
+    # Default settings: anonymous starts are allowed.
+    before = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
+    assert before.status_code == 200
+    assert before.json()["blocks_anonymous_start"] is False
+
+    enable_external_org_login(db, organization_id=org.id)
+
+    after = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
+    assert after.status_code == 200
+    assert after.json()["blocks_anonymous_start"] is True
+
+
 def test_anonymous_start_test_leaves_external_identifier_null(
     client: TestClient, db: SessionDep
 ) -> None:
