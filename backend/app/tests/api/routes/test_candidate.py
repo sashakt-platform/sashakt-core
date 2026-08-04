@@ -16039,7 +16039,6 @@ def test_external_provision_requires_sashakt_auth(
         json={
             "test_link_uuid": test_link.uuid,
             "external_identifier": "375220",
-            "device_info": "Portal",
         },
     )
 
@@ -16051,7 +16050,6 @@ def test_external_provision_requires_sashakt_auth(
         json={
             "test_link_uuid": test_link.uuid,
             "external_identifier": "375220",
-            "device_info": "Portal",
         },
         headers={"Authorization": "Bearer wrong-token"},
     )
@@ -16090,7 +16088,6 @@ def test_external_provision_requires_external_login_enabled(
         json={
             "test_link_uuid": test_link.uuid,
             "external_identifier": "375220",
-            "device_info": "Portal",
         },
         headers=token_headers,
     )
@@ -16132,7 +16129,6 @@ def test_external_provision_and_start_resume_same_attempt(
         json={
             "test_link_uuid": test_link.uuid,
             "external_identifier": "375220",
-            "device_info": "Portal",
         },
         headers=token_headers,
     )
@@ -16324,7 +16320,6 @@ def test_external_start_reports_submitted_attempt(
         json={
             "test_link_uuid": test_link.uuid,
             "external_identifier": "375220",
-            "device_info": "Portal",
         },
         headers=token_headers,
     )
@@ -16564,7 +16559,6 @@ def test_external_start_gives_a_separate_attempt_per_test(
         json={
             "test_link_uuid": test_a_link.uuid,
             "external_identifier": "375220",
-            "device_info": "Portal",
         },
         headers=token_headers,
     )

@@ -382,7 +382,15 @@ class StartTestResponse(SQLModel):
     is_submitted: bool = False
 
 
-class ExternalProvisionRequest(StartTestRequest):
+class ExternalProvisionRequest(SQLModel):
+    """Resolve a candidate for an external identifier.
+
+    Deliberately not a StartTestRequest: provisioning only resolves the
+    candidate, so device info and form responses have nowhere to go. They are
+    sent with the actual start_test call instead.
+    """
+
+    test_link_uuid: str
     external_identifier: str
 
 
