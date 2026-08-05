@@ -380,6 +380,7 @@ class StartTestResponse(SQLModel):
     candidate_uuid: uuid.UUID
     candidate_test_id: int
     is_submitted: bool = False
+    is_resumed: bool = False  # True when this launch returned an already-started attempt by an external user
 
 
 class ExternalProvisionRequest(SQLModel):
