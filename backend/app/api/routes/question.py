@@ -24,9 +24,14 @@ from sqlmodel import col, or_, select
 from typing_extensions import TypedDict
 
 from app import crud
-from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    Pagination,
+    SessionDep,
+    get_user_permissions,
+    permission_dependency,
+)
 from app.core.provider_config import provider_config_service
-from app.core.roles import state_admin, test_admin
 from app.core.sorting import (
     QuestionSortConfig,
     SortingParams,
@@ -65,7 +70,6 @@ from app.models.question import (
     QuestionRevisionInfo,
     is_matrix_input_options,
 )
-from app.models.role import Role
 from app.models.test import TestQuestion
 from app.models.user import UserState
 from app.models.utils import MarkingScheme, Message
@@ -661,10 +665,7 @@ def get_questions(
         .where(Question.organization_id == current_user.organization_id)
     )
 
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         current_user_state_ids = (
             [state.id for state in current_user.states] if current_user.states else []
         )
@@ -835,8 +836,7 @@ def delete_question(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_question_permission(session, current_user, question)
 
     if check_linked_test(session, question_id):
@@ -873,9 +873,7 @@ def bulk_delete_question(
         raise HTTPException(
             status_code=404, detail="Invalid Questions selected for deletion"
         )
-    role = session.get(Role, current_user.role_id)
-
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         if current_user.states:
             admin_state_ids = {
                 state.id for state in current_user.states if state.id is not None
@@ -958,8 +956,7 @@ def update_question(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_question_permission(session, current_user, question)
 
     # Update basic question attributes
@@ -1007,8 +1004,7 @@ def create_question_revision(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    role = current_user.role
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_question_permission(session, current_user, question)
 
     # Prepare data for JSON serialization
@@ -1180,8 +1176,7 @@ def update_question_locations(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    role = current_user.role
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_question_permission(session, current_user, question)
 
     # Get current locations
@@ -1293,8 +1288,7 @@ def update_question_tags(
     question = session.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    role = current_user.role
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_question_permission(session, current_user, question)
 
     # Get current tags

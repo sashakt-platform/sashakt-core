@@ -10,6 +10,7 @@ from app.api.deps import (
     CurrentUser,
     Pagination,
     SessionDep,
+    get_user_permissions,
     permission_dependency,
 )
 from app.api.routes.utils import get_current_user_location_ids
@@ -190,10 +191,7 @@ def read_users(
         statement = statement.where(User.organization_id == organization_id)
 
     # apply role-based filtering
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         current_user_district_ids = (
             [district.id for district in current_user.districts]
             if current_user.districts
@@ -352,7 +350,7 @@ def create_user(
     elif role and role.name == test_admin.name:
         creator_role = current_user.role
 
-        if creator_role and creator_role.name in (state_admin.name, test_admin.name):
+        if "scope_by_own_location" in get_user_permissions(current_user):
             creator_state_ids = (
                 [s.id for s in current_user.states if s.id is not None]
                 if current_user.states
@@ -529,8 +527,7 @@ def read_user_by_id(
     # check location based access for state/district admins
     # skip check if user is reading their own profile
     if user_id != current_user.id:
-        role = session.get(Role, current_user.role_id)
-        if role and role.name in (state_admin.name, test_admin.name):
+        if "scope_by_own_location" in get_user_permissions(current_user):
             check_user_permission(session, current_user, user)
 
     user_public = crud.get_user_public(db_user=user, session=session)
@@ -554,8 +551,7 @@ def update_user(
             status_code=404,
             detail="The user with this id does not exist in the system",
         )
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_user_permission(session, current_user, db_user)
 
     if user_in.email:
@@ -671,8 +667,7 @@ def is_user_deletion_blocked(
         return True
     if _is_user_referenced(session, target_user):
         return True
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         try:
             check_user_permission(session, current_user, target_user)
         except HTTPException:
@@ -742,8 +737,7 @@ def delete_user(
             status_code=400,
             detail="Cannot delete user: associated records exist. Reassign or remove them first.",
         )
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_user_permission(session, current_user, user)
     try:
         session.delete(user)

@@ -12,6 +12,7 @@ from app.api.deps import (
     Pagination,
     SessionDep,
     get_current_user,
+    get_user_permissions,
     permission_dependency,
 )
 from app.core.files import (
@@ -20,7 +21,6 @@ from app.core.files import (
     save_logo_file,
     validate_logo_upload,
 )
-from app.core.roles import state_admin, test_admin
 from app.models import (
     DEFAULT_ORGANIZATION_SETTINGS,
     AggregatedData,
@@ -312,10 +312,7 @@ def get_organization_aggregated_stats_for_current_user(
 
     current_user_state_ids: list[int] = []
     current_user_district_ids: list[int] = []
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         current_user_state_ids = (
             [state.id for state in current_user.states if state.id is not None]
             if current_user.states

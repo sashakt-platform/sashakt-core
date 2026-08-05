@@ -12,10 +12,10 @@ from app.api.deps import (
     OptionalCurrentUser,
     Pagination,
     SessionDep,
+    get_user_permissions,
     permission_dependency,
 )
 from app.api.routes.utils import clean_value, get_test_location_scope
-from app.core.roles import state_admin, test_admin
 from app.models import (
     Block,
     BlockCreate,
@@ -249,10 +249,7 @@ def get_state(
             query = query.where(col(State.id).in_(list(all_state_ids)))
 
     # Apply role-based filtering only if user is authenticated
-    if current_user and (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if current_user and "scope_by_own_location" in get_user_permissions(current_user):
         user_state_ids = list(
             session.exec(
                 select(UserState.state_id).where(UserState.user_id == current_user.id)
@@ -371,10 +368,7 @@ def get_district(
             query = query.where(col(District.state_id).in_(test_state_ids))
 
     # Apply role-based filtering only if user is authenticated
-    if current_user and (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if current_user and "scope_by_own_location" in get_user_permissions(current_user):
         user_state_ids = list(
             session.exec(
                 select(UserState.state_id).where(UserState.user_id == current_user.id)

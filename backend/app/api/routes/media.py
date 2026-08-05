@@ -5,7 +5,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    SessionDep,
+    get_user_permissions,
+    permission_dependency,
+)
 from app.api.routes.question import check_question_permission
 from app.core.media import (
     build_external_media_dict,
@@ -14,7 +19,6 @@ from app.core.media import (
     validate_image_upload,
 )
 from app.core.provider_config import provider_config_service
-from app.core.roles import state_admin, test_admin
 from app.models import Message
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
@@ -25,7 +29,6 @@ from app.models.question import (
     QuestionRevision,
     is_matrix_input_options,
 )
-from app.models.role import Role
 from app.services.storage.gcs import GCSStorageService
 
 router = APIRouter(prefix="/media", tags=["Media"])
@@ -90,8 +93,7 @@ def get_question_with_permission(
     if question.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if "scope_by_own_location" in get_user_permissions(current_user):
         check_question_permission(session, current_user, question)
 
     return question

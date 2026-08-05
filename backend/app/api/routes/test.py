@@ -29,7 +29,7 @@ from app.api.routes.candidate import (
 from app.api.routes.utils import get_current_time
 from app.core.candidate import get_time_taken_seconds
 from app.core.question_sets import is_sectioned_test
-from app.core.roles import state_admin, super_admin, system_admin, test_admin
+from app.core.roles import super_admin, system_admin
 from app.core.sorting import (
     CandidateReportSortConfig,
     SortingParams,
@@ -1059,10 +1059,7 @@ def get_test(
         .where(Test.organization_id == current_user.organization_id)
     )
 
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if "scope_by_own_location" in permissions:
         current_user_district_ids = (
             [district.id for district in current_user.districts]
             if current_user.districts
