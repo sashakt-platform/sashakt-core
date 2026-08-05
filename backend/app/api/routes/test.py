@@ -336,20 +336,6 @@ def require_list_test_permission(
     )
 
 
-def require_clone_test_permission(
-    test_id: int,
-    session: SessionDep,
-    permissions: Annotated[list[str], Depends(get_user_permissions)],
-) -> Test:
-    original = session.get(Test, test_id)
-    if not original:
-        raise HTTPException(status_code=404, detail="Test not found")
-    check_test_type_permission(
-        permissions=permissions, action="create", is_template=original.is_template
-    )
-    return original
-
-
 def check_test_ownership(
     session: SessionDep,
     current_user: CurrentUser,
@@ -1819,7 +1805,9 @@ def get_time_before_test_start_public(test_uuid: str, session: SessionDep) -> Ti
 def clone_test(
     session: SessionDep,
     current_user: CurrentUser,
-    original: Test = Depends(require_clone_test_permission),
+    original: Test = Depends(
+        require_test_type_permission("create", not_found_detail="Test not found")
+    ),
 ) -> TestPublic:
     """Duplicate an existing test, creating an independent copy owned by the current user."""
     original_id = get_persisted_test_id(original)
