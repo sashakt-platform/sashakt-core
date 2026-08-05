@@ -380,10 +380,7 @@ class StartTestResponse(SQLModel):
     candidate_uuid: uuid.UUID
     candidate_test_id: int
     is_submitted: bool = False
-    # True when this launch returned an already-started attempt (e.g. an external
-    # user opening the test on another device), so the client can show "Resume"
-    # and skip a pre-test form the candidate already completed.
-    is_resumed: bool = False
+    is_resumed: bool = False  # True when this launch returned an already-started attempt by an external user
 
 
 class ExternalProvisionRequest(SQLModel):
