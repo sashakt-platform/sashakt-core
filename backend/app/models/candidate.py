@@ -383,23 +383,14 @@ class StartTestResponse(SQLModel):
 
 
 class ExternalProvisionRequest(SQLModel):
-    """Resolve a candidate for an external identifier.
-
-    Deliberately not a StartTestRequest: provisioning only resolves the
-    candidate, so device info and form responses have nowhere to go. They are
-    sent with the actual start_test call instead.
-    """
+    """Resolve a candidate for an external identifier."""
 
     test_link_uuid: str
     external_identifier: str
 
 
 class ExternalProvisionResponse(SQLModel):
-    """The candidate an external identifier maps to.
-
-    Only the candidate is provisioned; the attempt is created when the candidate
-    actually starts the test, exactly as in the anonymous flow.
-    """
+    """The candidate an external identifier maps to. Here only the candidate is provisioned."""
 
     candidate_uuid: uuid.UUID
 
