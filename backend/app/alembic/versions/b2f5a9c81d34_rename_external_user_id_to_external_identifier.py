@@ -4,7 +4,7 @@ Renames the external-login column (and its partial unique index) from
 external_user_id to external_identifier, matching the API/model rename.
 
 Revision ID: b2f5a9c81d34
-Revises: 929353af67bf
+Revises: 803a08724747
 Create Date: 2026-07-31 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = 'b2f5a9c81d34'
-down_revision = '929353af67bf'
+down_revision = '803a08724747'
 branch_labels = None
 depends_on = None
 
