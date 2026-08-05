@@ -36,78 +36,6 @@
     "candidate": false
   },
   {
-    "name": "create_candidate_test",
-    "description": "Create New Candidate Test",
-    "super_admin": false,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": true
-  },
-  {
-    "name": "update_candidate_test",
-    "description": "Update Existing Candidate Test",
-    "super_admin": false,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": true
-  },
-  {
-    "name": "delete_candidate_test",
-    "description": "Delete Existing Candidate Test",
-    "super_admin": true,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "read_candidate_test",
-    "description": "Read Candidate Test Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
-  },
-  {
-    "name": "create_candidate_test_answer",
-    "description": "Create New Candidate Test Answer",
-    "super_admin": false,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": true
-  },
-  {
-    "name": "update_candidate_test_answer",
-    "description": "Update Existing Candidate Test Answer",
-    "super_admin": false,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": true
-  },
-  {
-    "name": "delete_candidate_test_answer",
-    "description": "Delete Existing Candidate Test Answer",
-    "super_admin": false,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": true
-  },
-  {
-    "name": "read_candidate_test_answer",
-    "description": "Read Candidate Test Answer Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
-  },
-  {
     "name": "create_location",
     "description": "Create New Location",
     "super_admin": true,
@@ -155,24 +83,6 @@
   {
     "name": "update_my_organization",
     "description": "Update Own Organization",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "update_organization_settings",
-    "description": "Update Settings for Any Organization",
-    "super_admin": true,
-    "system_admin": false,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "update_my_organization_settings",
-    "description": "Update Settings for Own Organization",
     "super_admin": true,
     "system_admin": true,
     "state_admin": false,
@@ -263,114 +173,6 @@
   {
     "name": "read_question",
     "description": "Read Question Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
-  },
-  {
-    "name": "create_question_revision",
-    "description": "Create New Question Revision",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "update_question_revision",
-    "description": "Update Existing Question Revision",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "delete_question_revision",
-    "description": "Delete Existing Question Revision",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "read_question_revision",
-    "description": "Read Question Revision Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
-  },
-  {
-    "name": "create_question_tag",
-    "description": "Create New Question Tag",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "update_question_tag",
-    "description": "Update Existing Question Tag",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "delete_question_tag",
-    "description": "Delete Existing Question Tag",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "read_question_tag",
-    "description": "Read Question Tag Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
-  },
-  {
-    "name": "create_question_location",
-    "description": "Create New Question Location",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "update_question_location",
-    "description": "Update Existing Question Location",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "delete_question_location",
-    "description": "Delete Existing Question Location",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "read_question_location",
-    "description": "Read Question Location Details",
     "super_admin": true,
     "system_admin": true,
     "state_admin": true,
@@ -540,15 +342,6 @@
     "candidate": false
   },
   {
-    "name": "update_user_me",
-    "description": "Update Own User Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": true
-  },
-  {
     "name": "delete_user",
     "description": "Delete Existing User",
     "super_admin": true,
@@ -564,42 +357,6 @@
     "system_admin": true,
     "state_admin": true,
     "test_admin": true,
-    "candidate": false
-  },
-  {
-    "name": "create_provider",
-    "description": "Create New Provider",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "update_provider",
-    "description": "Update Existing Provider",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "delete_provider",
-    "description": "Delete Existing Provider",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": false,
-    "test_admin": false,
-    "candidate": false
-  },
-  {
-    "name": "read_provider",
-    "description": "Read Provider Details",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": false,
-    "test_admin": false,
     "candidate": false
   },
   {
@@ -704,15 +461,6 @@
   {
     "name": "delete_form",
     "description": "Delete Existing Form",
-    "super_admin": true,
-    "system_admin": true,
-    "state_admin": true,
-    "test_admin": true,
-    "candidate": false
-  },
-  {
-    "name": "read_form_response",
-    "description": "Read Form Response Details",
     "super_admin": true,
     "system_admin": true,
     "state_admin": true,

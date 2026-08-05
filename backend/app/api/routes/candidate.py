@@ -590,7 +590,7 @@ def get_score_and_time(
 @router.get(
     "/overall-analytics",
     response_model=OverallTestAnalyticsResponse,
-    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_overall_tests_analytics(
     session: SessionDep,
@@ -1643,7 +1643,7 @@ def get_candidate(session: SessionDep) -> Sequence[Candidate]:
 @router.get(
     "/summary",
     response_model=TestStatusSummary,
-    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_test_summary(
     session: SessionDep,
@@ -1887,7 +1887,7 @@ def bulk_delete_candidate(
 @router_candidate_test.post(
     "/",
     response_model=CandidateTestPublic,
-    dependencies=[Depends(permission_dependency("create_candidate_test"))],
+    dependencies=[Depends(permission_dependency("create_candidate"))],
 )
 def create_candidate_test(
     candidate_test_create: CandidateTestCreate, session: SessionDep
@@ -1904,7 +1904,7 @@ def create_candidate_test(
 @router_candidate_test.get(
     "/",
     response_model=list[CandidateTestPublic],
-    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_candidate_test(session: SessionDep) -> Sequence[CandidateTest]:
     """List all candidate-test links."""
@@ -1916,7 +1916,7 @@ def get_candidate_test(session: SessionDep) -> Sequence[CandidateTest]:
 @router_candidate_test.get(
     "/{candidate_test_id}",
     response_model=CandidateTestPublic,
-    dependencies=[Depends(permission_dependency("read_candidate_test"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_candidate_test_by_id(
     candidate_test_id: int, session: SessionDep
@@ -1934,7 +1934,7 @@ def get_candidate_test_by_id(
 @router_candidate_test.put(
     "/{candidate_test_id}",
     response_model=CandidateTestPublic,
-    dependencies=[Depends(permission_dependency("update_candidate_test"))],
+    dependencies=[Depends(permission_dependency("update_candidate"))],
 )
 def update_candidate_test(
     candidate_test_id: int,
@@ -1963,7 +1963,7 @@ def update_candidate_test(
 @router_candidate_test_answer.post(
     "/",
     response_model=CandidateTestAnswerPublic,
-    dependencies=[Depends(permission_dependency("create_candidate_test_answer"))],
+    dependencies=[Depends(permission_dependency("create_candidate"))],
 )
 def create_candidate_test_answer(
     candidate_test_answer_create: CandidateTestAnswerCreate, session: SessionDep
@@ -1982,7 +1982,7 @@ def create_candidate_test_answer(
 @router_candidate_test_answer.get(
     "/",
     response_model=list[CandidateTestAnswerPublic],
-    dependencies=[Depends(permission_dependency("read_candidate_test_answer"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnswer]:
     """List all candidate test answers."""
@@ -1994,7 +1994,7 @@ def get_candidate_test_answer(session: SessionDep) -> Sequence[CandidateTestAnsw
 @router_candidate_test_answer.get(
     "/{candidate_test_answer_id}",
     response_model=CandidateTestAnswerPublic,
-    dependencies=[Depends(permission_dependency("read_candidate_test_answer"))],
+    dependencies=[Depends(permission_dependency("read_candidate"))],
 )
 def get_candidate_test_answer_by_id(
     candidate_test_answer_id: int, session: SessionDep
@@ -2013,7 +2013,7 @@ def get_candidate_test_answer_by_id(
 @router_candidate_test_answer.put(
     "/{candidate_test_answer_id}",
     response_model=CandidateTestAnswerPublic,
-    dependencies=[Depends(permission_dependency("update_candidate_test_answer"))],
+    dependencies=[Depends(permission_dependency("update_candidate"))],
 )
 def update_candidate_answer_test(
     candidate_test_answer_id: int,

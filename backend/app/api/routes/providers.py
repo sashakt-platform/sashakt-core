@@ -31,7 +31,7 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 @router.get(
     "/",
     response_model=Page[ProviderPublic],
-    dependencies=[Depends(permission_dependency("read_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def get_providers(
     session: SessionDep,
@@ -48,7 +48,7 @@ def get_providers(
 @router.post(
     "/",
     response_model=ProviderPublic,
-    dependencies=[Depends(permission_dependency("create_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def create_provider(
     *,
@@ -69,7 +69,7 @@ def create_provider(
 @router.put(
     "/{provider_id}",
     response_model=ProviderPublic,
-    dependencies=[Depends(permission_dependency("update_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def update_provider(
     provider_id: int,
@@ -96,7 +96,7 @@ def update_provider(
 @router.delete(
     "/{provider_id}",
     response_model=Message,
-    dependencies=[Depends(permission_dependency("delete_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def delete_provider(
     provider_id: int,
@@ -120,7 +120,7 @@ def delete_provider(
 @router.get(
     "/organizations/{organization_id}/providers",
     response_model=list[OrganizationProviderPublic],
-    dependencies=[Depends(permission_dependency("read_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def get_organization_providers(
     organization_id: int,
@@ -145,7 +145,7 @@ def get_organization_providers(
 @router.post(
     "/organizations/{organization_id}/providers",
     response_model=OrganizationProviderPublic,
-    dependencies=[Depends(permission_dependency("create_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def create_organization_provider(
     organization_id: int,
@@ -208,7 +208,7 @@ def create_organization_provider(
 @router.put(
     "/organizations/{organization_id}/providers/{provider_id}",
     response_model=OrganizationProviderPublic,
-    dependencies=[Depends(permission_dependency("update_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def update_organization_provider(
     organization_id: int,
@@ -265,7 +265,7 @@ def update_organization_provider(
 @router.delete(
     "/organizations/{organization_id}/providers/{provider_id}",
     response_model=Message,
-    dependencies=[Depends(permission_dependency("delete_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def delete_organization_provider(
     organization_id: int,
@@ -295,7 +295,7 @@ def delete_organization_provider(
 @router.post(
     "/organizations/{organization_id}/providers/{provider_id}/test-connection",
     response_model=dict[str, bool],
-    dependencies=[Depends(permission_dependency("read_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def test_provider_connection(
     organization_id: int,
@@ -312,7 +312,7 @@ def test_provider_connection(
 @router.post(
     "/organizations/{organization_id}/providers/{provider_id}/sync",
     response_model=dict[str, Any],
-    dependencies=[Depends(permission_dependency("update_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def trigger_provider_sync(
     organization_id: int,
@@ -332,7 +332,7 @@ def trigger_provider_sync(
 @router.get(
     "/organizations/{organization_id}/providers/status",
     response_model=list[ProviderSyncStatus],
-    dependencies=[Depends(permission_dependency("read_provider"))],
+    dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
 def get_provider_sync_status(
     organization_id: int,
