@@ -666,10 +666,13 @@ def test_update_user_me(
     assert user_db.email == email
     assert user_db.full_name == full_name
 
+    # A user whose role has no permissions at all can still update their own
+    # profile via /me - this endpoint intentionally has no permission check.
     user = create_random_user(db)
+    new_email = random_email()
 
     data = {
-        "email": user.email,
+        "email": new_email,
         "phone": random_lower_string(),
         "password": password,
         "role_id": user.role_id,
@@ -682,7 +685,8 @@ def test_update_user_me(
         json=data,
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert response.json()["email"] == new_email
 
 
 def test_update_user_me_update_phone_only(

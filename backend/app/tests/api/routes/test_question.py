@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.models.candidate import Candidate, CandidateTest, CandidateTestAnswer
 from app.models.location import Block, Country, District, State
 from app.models.organization import Organization
+from app.models.permission import Permission
 from app.models.question import (
     Question,
     QuestionLocation,
@@ -22,7 +23,7 @@ from app.models.question import (
     QuestionTag,
     QuestionType,
 )
-from app.models.role import Role
+from app.models.role import Role, RolePermission
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.models.user import UserState
@@ -741,7 +742,10 @@ def test_question_count_by_tags(
     assert len(data) == 4
 
 
-def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
+def test_read_question_by_id(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -806,7 +810,10 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     db.refresh(q1)
 
     # Get question by ID
-    response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -823,7 +830,10 @@ def test_read_question_by_id(client: TestClient, db: SessionDep) -> None:
     assert data["tags"][0]["name"] == "History"
 
     # Test non-existent question
-    response = client.get(f"{settings.API_V1_STR}/questions/99999")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/99999",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 404
 
 
@@ -1033,7 +1043,10 @@ def test_create_question_revision(
     assert new_rev.created_by_id == user_id
 
     # Check revisions list
-    response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}/revisions")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q1.id}/revisions",
+        headers=get_user_superadmin_token,
+    )
     revisions = response.json()
 
     assert response.status_code == 200
@@ -1080,7 +1093,10 @@ def test_get_question_revisions(
     db.commit()
     db.refresh(q1)
 
-    response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}/revisions")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q1.id}/revisions",
+        headers=get_user_superadmin_token,
+    )
     revisions = response.json()
 
     assert response.status_code == 200
@@ -1094,7 +1110,9 @@ def test_get_question_revisions(
     assert created_by.get("full_name") is not None
 
 
-def test_get_revision(client: TestClient, db: SessionDep) -> None:
+def test_get_revision(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -1130,7 +1148,10 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
     db.refresh(rev1)
 
     # Get revision
-    response = client.get(f"{settings.API_V1_STR}/questions/revisions/{rev1.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/revisions/{rev1.id}",
+        headers=get_user_superadmin_token,
+    )
     data = response.json()
 
     assert response.status_code == 200
@@ -1143,7 +1164,10 @@ def test_get_revision(client: TestClient, db: SessionDep) -> None:
     # So we don't assert it here
 
     # Non-existent revision
-    response = client.get(f"{settings.API_V1_STR}/questions/revisions/99999")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/revisions/99999",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 404
 
 
@@ -2318,6 +2342,7 @@ def test_delete_single_question(
 
     response = client.get(
         f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
     )
     assert response.status_code == 404
 
@@ -2424,9 +2449,15 @@ def test_delete_bulk_question(
     db.refresh(q2)
     assert q2.is_active is True
 
-    response = client.get(f"{settings.API_V1_STR}/questions/{q1.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q1.id}",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 404
-    response = client.get(f"{settings.API_V1_STR}/questions/{q2.id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{q2.id}",
+        headers=get_user_superadmin_token,
+    )
     assert response.status_code == 200
 
 
@@ -3206,7 +3237,10 @@ def test_bulk_tag_operations(
     assert tag_ids == {tags[0].id, tags[1].id, tags[2].id}
 
     # Verify question has all the tags
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     current_tags = response.json()
     assert len(current_tags) == 3
 
@@ -3226,7 +3260,10 @@ def test_bulk_tag_operations(
     assert tag_ids == {tags[0].id, tags[3].id}
 
     # Verify we now have 2 tags total
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     current_tags = response.json()
     assert len(current_tags) == 2
 
@@ -3311,7 +3348,10 @@ def test_add_and_delete_question_with_state_link(
     ).all()
     assert links_after == []
 
-    resp_after = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    resp_after = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
     assert resp_after.status_code == 404
 
 
@@ -3439,7 +3479,10 @@ def test_bulk_location_operations(
     assert has_block0
 
     # Get question to verify locations were added
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
     question = response.json()
     assert len(question["locations"]) == 4
 
@@ -3470,7 +3513,10 @@ def test_bulk_location_operations(
     assert len(location_results) == 2
 
     # Verify we now have only 2 locations total
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
     question = response.json()
     assert len(question["locations"]) == 2
 
@@ -3486,7 +3532,10 @@ def test_bulk_location_operations(
     assert len(location_results) == 0
 
     # Verify all locations were removed
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}",
+        headers=get_user_superadmin_token,
+    )
     question = response.json()
     assert len(question["locations"]) == 0
 
@@ -3570,7 +3619,10 @@ def test_mixed_single_and_bulk_operations(
     assert len(response.json()) == 2
 
     # Verify all tags are present
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     current_tags = response.json()
     assert len(current_tags) == 2
     tag_ids = {tag["id"] for tag in current_tags}
@@ -3593,7 +3645,10 @@ def test_mixed_single_and_bulk_operations(
     assert response.status_code == 200
 
     # Verify all tags are removed
-    response = client.get(f"{settings.API_V1_STR}/questions/{question_id}/tags")
+    response = client.get(
+        f"{settings.API_V1_STR}/questions/{question_id}/tags",
+        headers=get_user_superadmin_token,
+    )
     current_tags = response.json()
     assert len(current_tags) == 0
 
@@ -4458,13 +4513,32 @@ def test_create_same_question_different_organizations(
     client: TestClient,
     db: SessionDep,
 ) -> None:
+    create_question_permission = db.exec(
+        select(Permission).where(Permission.name == "create_question")
+    ).first()
+    assert create_question_permission is not None
+    assert create_question_permission.id is not None
+
     user1 = create_random_user(db=db)
+    assert user1.role_id is not None
+    db.add(
+        RolePermission(
+            role_id=user1.role_id, permission_id=create_question_permission.id
+        )
+    )
     org1_id = user1.organization_id
     headers_org1 = authentication_token_from_email(
         client=client, email=user1.email, db=db
     )
 
     user2 = create_random_user(db=db)
+    assert user2.role_id is not None
+    db.add(
+        RolePermission(
+            role_id=user2.role_id, permission_id=create_question_permission.id
+        )
+    )
+    db.commit()
     org2_id = user2.organization_id
     headers_org2 = authentication_token_from_email(
         client=client, email=user2.email, db=db

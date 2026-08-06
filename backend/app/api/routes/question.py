@@ -438,7 +438,11 @@ def is_duplicate_question(
     return False
 
 
-@router.post("/", response_model=QuestionPublic)
+@router.post(
+    "/",
+    response_model=QuestionPublic,
+    dependencies=[Depends(permission_dependency("create_question"))],
+)
 def create_question(
     question_create: QuestionCreate,
     session: SessionDep,
@@ -622,7 +626,11 @@ def transform_questions_to_public(
     return result
 
 
-@router.get("/", response_model=Page[QuestionPublic])
+@router.get(
+    "/",
+    response_model=Page[QuestionPublic],
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
 def get_questions(
     session: SessionDep,
     current_user: CurrentUser,
@@ -935,7 +943,11 @@ def bulk_delete_question(
     )
 
 
-@router.get("/{question_id}", response_model=QuestionPublic)
+@router.get(
+    "/{question_id}",
+    response_model=QuestionPublic,
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
 def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     """Get a question by its ID."""
     question = session.get(Question, question_id)
@@ -962,7 +974,11 @@ def get_question_by_id(question_id: int, session: SessionDep) -> QuestionPublic:
     )
 
 
-@router.put("/{question_id}", response_model=QuestionPublic)
+@router.put(
+    "/{question_id}",
+    response_model=QuestionPublic,
+    dependencies=[Depends(permission_dependency("update_question"))],
+)
 def update_question(
     question_id: int,
     session: SessionDep,
@@ -1007,7 +1023,11 @@ def update_question(
     )
 
 
-@router.post("/{question_id}/revisions", response_model=QuestionPublic)
+@router.post(
+    "/{question_id}/revisions",
+    response_model=QuestionPublic,
+    dependencies=[Depends(permission_dependency("create_question"))],
+)
 def create_question_revision(
     question_id: int,
     revision_data: QuestionRevisionCreate,
@@ -1067,7 +1087,11 @@ def create_question_revision(
     )
 
 
-@router.get("/{question_id}/revisions", response_model=list[QuestionRevisionInfo])
+@router.get(
+    "/{question_id}/revisions",
+    response_model=list[QuestionRevisionInfo],
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
 def get_question_revisions(
     question_id: int, session: SessionDep
 ) -> list[QuestionRevisionInfo]:
@@ -1106,7 +1130,11 @@ def get_question_revisions(
     return result
 
 
-@router.get("/revisions/{revision_id}", response_model=RevisionDetailDict)
+@router.get(
+    "/revisions/{revision_id}",
+    response_model=RevisionDetailDict,
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
 def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     """Get a specific question revision by its ID."""
     revision = session.get(QuestionRevision, revision_id)
@@ -1164,7 +1192,11 @@ def get_revision(revision_id: int, session: SessionDep) -> RevisionDetailDict:
     )
 
 
-@router.put("/{question_id}/locations", response_model=list[QuestionLocationPublic])
+@router.put(
+    "/{question_id}/locations",
+    response_model=list[QuestionLocationPublic],
+    dependencies=[Depends(permission_dependency("update_question"))],
+)
 def update_question_locations(
     question_id: int,
     location_data: QuestionLocationsUpdate,
@@ -1237,7 +1269,11 @@ def update_question_locations(
     ]
 
 
-@router.get("/{question_id}/tags", response_model=list[TagPublic])
+@router.get(
+    "/{question_id}/tags",
+    response_model=list[TagPublic],
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
 def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     """Get all tags associated with a question."""
     question = session.get(Question, question_id)
@@ -1270,7 +1306,11 @@ def get_question_tags(question_id: int, session: SessionDep) -> list[TagPublic]:
     return result
 
 
-@router.put("/{question_id}/tags", response_model=list[TagPublic])
+@router.put(
+    "/{question_id}/tags",
+    response_model=list[TagPublic],
+    dependencies=[Depends(permission_dependency("update_question"))],
+)
 def update_question_tags(
     question_id: int,
     tag_data: QuestionTagsUpdate,

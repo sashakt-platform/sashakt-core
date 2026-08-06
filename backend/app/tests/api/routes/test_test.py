@@ -14,8 +14,10 @@ from app.models import (
     Country,
     Form,
     Organization,
+    Permission,
     Question,
     QuestionRevision,
+    RolePermission,
     State,
     Tag,
     TagType,
@@ -38,6 +40,7 @@ from app.tests.utils.organization import (
 )
 from app.tests.utils.organization_settings import make_current_user_org_flexible
 from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.role import create_random_role
 from app.tests.utils.tag import create_random_tag
 from app.tests.utils.test import get_test_link
 from app.tests.utils.user import (
@@ -10718,3 +10721,323 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
     not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
     assert in_scope_test_id not in not_my_tests_ids
     assert outside_test_id not in not_my_tests_ids
+
+
+def test_create_test_template_forbidden_for_state_and_test_admin(
+    client: TestClient,
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        regular_response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={"name": random_lower_string(), "is_template": False},
+            headers=token_headers,
+        )
+        assert regular_response.status_code == 200
+        assert regular_response.json()["is_template"] is False
+        assert "id" in regular_response.json()
+
+        template_response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={"name": random_lower_string(), "is_template": True},
+            headers=token_headers,
+        )
+        assert template_response.status_code == 403
+        assert (
+            template_response.json()["detail"]
+            == "Not permitted to create this test template."
+        )
+
+
+def test_create_test_template_allowed_for_super_and_system_admin(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    for token_headers in (get_user_superadmin_token, get_user_systemadmin_token):
+        response = client.post(
+            f"{settings.API_V1_STR}/test/",
+            json={"name": random_lower_string(), "is_template": True},
+            headers=token_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["is_template"] is True
+
+
+def test_get_test_by_id_template_allowed_for_state_and_test_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        user_data = get_current_user_data(client, token_headers)
+        template_test = Test(
+            name=random_lower_string(),
+            created_by_id=user_data["id"],
+            organization_id=user_data["organization_id"],
+            is_template=True,
+        )
+        db.add(template_test)
+        db.commit()
+        assert template_test.id is not None
+
+        response = client.get(
+            f"{settings.API_V1_STR}/test/{template_test.id}",
+            headers=token_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["is_template"] is True
+
+
+def test_update_test_template_forbidden_for_state_and_test_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    """Type-permission is checked before ownership - even the template's own
+    creator is blocked without update_test_template."""
+    for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        user_data = get_current_user_data(client, token_headers)
+        template_test = Test(
+            name=random_lower_string(),
+            created_by_id=user_data["id"],
+            organization_id=user_data["organization_id"],
+            is_template=True,
+        )
+        db.add(template_test)
+        db.commit()
+        assert template_test.id is not None
+
+        response = client.put(
+            f"{settings.API_V1_STR}/test/{template_test.id}",
+            headers=token_headers,
+            json={"name": random_lower_string()},
+        )
+        assert response.status_code == 403
+        assert (
+            response.json()["detail"] == "Not permitted to update this test template."
+        )
+
+
+def test_update_test_template_allowed_for_system_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user_data["id"],
+        organization_id=user_data["organization_id"],
+        is_template=True,
+    )
+    db.add(template_test)
+    db.commit()
+    assert template_test.id is not None
+
+    new_name = random_lower_string()
+    response = client.put(
+        f"{settings.API_V1_STR}/test/{template_test.id}",
+        headers=get_user_systemadmin_token,
+        json={"name": new_name},
+    )
+    assert response.status_code == 200
+    assert response.json()["name"] == new_name
+    assert response.json()["is_template"] is True
+
+
+def test_delete_test_template_forbidden_for_state_and_test_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        user_data = get_current_user_data(client, token_headers)
+        template_test = Test(
+            name=random_lower_string(),
+            created_by_id=user_data["id"],
+            organization_id=user_data["organization_id"],
+            is_template=True,
+        )
+        db.add(template_test)
+        db.commit()
+        assert template_test.id is not None
+
+        response = client.delete(
+            f"{settings.API_V1_STR}/test/{template_test.id}",
+            headers=token_headers,
+        )
+        assert response.status_code == 403
+        assert (
+            response.json()["detail"] == "Not permitted to delete this test template."
+        )
+
+
+def test_delete_test_template_allowed_for_system_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user_data["id"],
+        organization_id=user_data["organization_id"],
+        is_template=True,
+    )
+    db.add(template_test)
+    db.commit()
+    assert template_test.id is not None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{template_test.id}",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json()["message"] == "Test deleted successfully"
+    db.expire_all()
+    assert db.get(Test, template_test.id) is None
+
+
+def test_clone_test_template_forbidden_for_state_and_test_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user_data["id"],
+        organization_id=user_data["organization_id"],
+        is_template=True,
+    )
+    db.add(template_test)
+    db.commit()
+    assert template_test.id is not None
+
+    for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        response = client.post(
+            f"{settings.API_V1_STR}/test/{template_test.id}/clone",
+            headers=token_headers,
+        )
+        assert response.status_code == 403
+        assert (
+            response.json()["detail"] == "Not permitted to create this test template."
+        )
+
+
+def test_clone_test_template_allowed_for_system_admin(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_superadmin_token)
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user_data["id"],
+        organization_id=user_data["organization_id"],
+        is_template=True,
+    )
+    db.add(template_test)
+    db.commit()
+    assert template_test.id is not None
+
+    response = client.post(
+        f"{settings.API_V1_STR}/test/{template_test.id}/clone",
+        headers=get_user_systemadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json()["is_template"] is True
+
+
+def test_bulk_delete_templates_fail_permission_while_regular_tests_succeed(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+) -> None:
+    user_data = get_current_user_data(client, get_user_stateadmin_token)
+    regular_test = Test(
+        name=random_lower_string(),
+        created_by_id=user_data["id"],
+        organization_id=user_data["organization_id"],
+        is_template=False,
+    )
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user_data["id"],
+        organization_id=user_data["organization_id"],
+        is_template=True,
+    )
+    db.add_all([regular_test, template_test])
+    db.commit()
+    assert regular_test.id is not None
+    assert template_test.id is not None
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[regular_test.id, template_test.id],
+        headers=get_user_stateadmin_token,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["delete_success_count"] == 1
+    failure_ids = {item["id"] for item in (data["delete_failure_list"] or [])}
+    assert template_test.id in failure_ids
+    assert regular_test.id not in failure_ids
+
+
+def test_list_tests_unfiltered_excludes_templates_for_regular_test_only_role(
+    client: TestClient,
+    db: SessionDep,
+) -> None:
+    """A role holding only read_test (not read_test_template) must not have
+    templates leak into the unfiltered ("no is_template filter") test list."""
+    read_test_permission = db.exec(
+        select(Permission).where(Permission.name == "read_test")
+    ).first()
+    assert read_test_permission is not None
+    assert read_test_permission.id is not None
+
+    role = create_random_role(db)
+    assert role.id is not None
+    db.add(RolePermission(role_id=role.id, permission_id=read_test_permission.id))
+    db.commit()
+
+    organization = create_random_organization(db)
+    user = create_random_user(db, organization_id=organization.id)
+    user.role_id = role.id
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    headers = {"Authorization": f"Bearer {user.token}"}
+
+    regular_test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+        is_template=False,
+    )
+    template_test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        organization_id=organization.id,
+        is_template=True,
+    )
+    db.add_all([regular_test, template_test])
+    db.commit()
+    assert regular_test.id is not None
+    assert template_test.id is not None
+
+    response = client.get(f"{settings.API_V1_STR}/test/", headers=headers)
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert regular_test.id in returned_ids
+    assert template_test.id not in returned_ids
