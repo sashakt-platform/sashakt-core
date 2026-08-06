@@ -485,3 +485,4 @@ class TestPublicLimited(TestBase):
     question_sets: list["QuestionSetSummaryPublic"] | None = None
     form: "FormPublic | None" = None
     nomenclature: dict[str, str] = Field(default_factory=dict)
+    blocks_anonymous_start: bool = False  # True when the org requires candidates to arrive from their student portal,

@@ -62,6 +62,7 @@ from app.models.candidate import (
     CandidateTimerSyncRequest,
     DeleteCandidate,
     ExternalProvisionRequest,
+    ExternalProvisionResponse,
     OverallTestAnalyticsResponse,
     Result,
     StartTestRequest,
@@ -865,9 +866,9 @@ def _create_anonymous_candidate(session: SessionDep, test: Test) -> Candidate:
 
 
 def _get_or_create_external_candidate(
-    session: SessionDep, test: Test, external_user_id: str
+    session: SessionDep, test: Test, external_identifier: str
 ) -> Candidate:
-    """Reuse a single candidate per (organization, external_user_id).
+    """Reuse a single candidate per (organization, external_identifier).
 
     Unlike anonymous QR candidates (a fresh row per start), an external user is a
     recurring student: the same candidate is returned across all their tests.
@@ -875,7 +876,7 @@ def _get_or_create_external_candidate(
     candidate = session.exec(
         select(Candidate)
         .where(Candidate.organization_id == test.organization_id)
-        .where(Candidate.external_user_id == external_user_id)
+        .where(Candidate.external_identifier == external_identifier)
     ).first()
     if candidate is not None:
         return candidate
@@ -883,42 +884,27 @@ def _get_or_create_external_candidate(
     candidate = Candidate(
         identity=uuid.uuid4(),
         organization_id=test.organization_id,
-        external_user_id=external_user_id,
+        external_identifier=external_identifier,
     )
     session.add(candidate)
-    session.flush()  # assigns candidate.id without committing; committed with the test
+    session.flush()  # assigns candidate.id; the caller commits
     return candidate
 
 
-def _get_or_create_candidate_test(
-    session: SessionDep,
-    *,
-    test: Test,
-    candidate: Candidate,
-    admin_id: int,
-    start_test_request: StartTestRequest,
-) -> CandidateTest:
-    """Find the candidate's existing attempt for this test, or create one.
+def _find_candidate_test(
+    session: SessionDep, *, test: Test, candidate: Candidate
+) -> CandidateTest | None:
+    """The candidate's existing attempt for this test, if any.
 
     A reused candidate may already have a CandidateTest for this test (the
     UNIQUE(test_id, candidate_id) constraint enforces one attempt per pair), so
-    re-provisioning must be idempotent rather than raising a unique violation.
+    starting again must resolve that attempt rather than raise a unique violation.
     """
-    existing = session.exec(
+    return session.exec(
         select(CandidateTest)
         .where(CandidateTest.test_id == test.id)
         .where(CandidateTest.candidate_id == candidate.id)
     ).first()
-    if existing is not None:
-        return existing
-
-    return _create_candidate_test(
-        session,
-        test=test,
-        candidate=candidate,
-        admin_id=admin_id,
-        start_test_request=start_test_request,
-    )
 
 
 def _get_external_login_value(session: SessionDep, test: Test) -> Any | None:
@@ -933,11 +919,8 @@ def _get_external_login_value(session: SessionDep, test: Test) -> Any | None:
 
 
 def _should_block_anonymous_start(session: SessionDep, test: Test) -> bool:
-    external_login = _get_external_login_value(session, test)
-    return bool(
-        external_login
-        and external_login.enabled
-        and external_login.block_anonymous_starts
+    return crud_settings.blocks_anonymous_starts(
+        session=session, organization_id=test.organization_id
     )
 
 
@@ -950,27 +933,25 @@ def _require_external_login_enabled(session: SessionDep, test: Test) -> None:
         )
 
 
-def _get_candidate_test_by_uuid(
+def _get_provisioned_candidate(
     session: SessionDep, test: Test, candidate_uuid: uuid.UUID
-) -> CandidateTest:
-    """Resume a previously provisioned attempt for this test.
+) -> Candidate:
+    """Look up the externally provisioned candidate behind this identity.
 
-    Scoping by test_id plus the unguessable candidate identity is sufficient
-    authorization here, so unlike verify_candidate_uuid_access this does not
-    also need the candidate_test_id as a second factor.
+    The unguessable identity, scoped to the test's organization, is sufficient
+    authorization here.
     """
-    candidate_test = session.exec(
-        select(CandidateTest)
-        .join(Candidate)
-        .where(CandidateTest.test_id == test.id)
+    candidate = session.exec(
+        select(Candidate)
         .where(Candidate.identity == candidate_uuid)
+        .where(Candidate.organization_id == test.organization_id)
     ).first()
-    if not candidate_test:
+    if not candidate:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Candidate test not found or invalid UUID",
+            detail="Candidate not found or invalid UUID",
         )
-    return candidate_test
+    return candidate
 
 
 @router.post("/start_test", response_model=StartTestResponse)
@@ -986,8 +967,9 @@ def start_test_for_candidate(
     Creates a candidate when they start a test, links them to the test.
     Returns the candidate UUID for verification.
 
-    If candidate_uuid is provided, resumes an existing externally-provisioned
-    attempt (see /external/provision) instead of creating a new anonymous one.
+    If candidate_uuid is provided, starts (or resumes) the test for that
+    externally provisioned candidate (see /external/provision) instead of
+    creating a new anonymous one.
     """
     test, admin_id = _resolve_active_test_link(
         session, start_test_request.test_link_uuid
@@ -996,11 +978,24 @@ def start_test_for_candidate(
     if candidate_uuid is not None:
         _require_external_login_enabled(session, test)
         _validate_test_start_window(session, test)
-        candidate_test = _get_candidate_test_by_uuid(session, test, candidate_uuid)
+        candidate = _get_provisioned_candidate(session, test, candidate_uuid)
+        # The attempt is created on the first start, so finding one here means the
+        # candidate already started this test — on this device or another.
+        candidate_test = _find_candidate_test(session, test=test, candidate=candidate)
+        is_resumed = candidate_test is not None
+        if candidate_test is None:
+            candidate_test = _create_candidate_test(
+                session,
+                test=test,
+                candidate=candidate,
+                admin_id=admin_id,
+                start_test_request=start_test_request,
+            )
         return StartTestResponse(
             candidate_uuid=candidate_uuid,
             candidate_test_id=candidate_test.id,
             is_submitted=candidate_test.is_submitted,
+            is_resumed=is_resumed,
         )
 
     if _should_block_anonymous_start(session, test):
@@ -1024,14 +1019,18 @@ def start_test_for_candidate(
     )
 
 
-@router.post("/external/provision", response_model=StartTestResponse)
+@router.post("/external/provision", response_model=ExternalProvisionResponse)
 def provision_external_candidate_test(
     session: SessionDep,
     current_user: CurrentUser,
     provision_request: ExternalProvisionRequest = Body(...),
-) -> StartTestResponse:
-    """Create the Sashakt candidate and attempt Organization will map to its user."""
-    test, admin_id = _resolve_active_test_link(
+) -> ExternalProvisionResponse:
+    """Resolve the Sashakt candidate an organization's external identifier maps to.
+
+    Only the candidate is provisioned. The attempt is created when the candidate
+    starts the test, so an existing attempt always means they have started it.
+    """
+    test, _admin_id = _resolve_active_test_link(
         session, provision_request.test_link_uuid
     )
     if test.organization_id != current_user.organization_id:
@@ -1043,20 +1042,10 @@ def provision_external_candidate_test(
     _validate_test_start_window(session, test)
 
     candidate = _get_or_create_external_candidate(
-        session, test, provision_request.external_user_id
+        session, test, provision_request.external_identifier
     )
-    candidate_test = _get_or_create_candidate_test(
-        session,
-        test=test,
-        candidate=candidate,
-        admin_id=admin_id,
-        start_test_request=provision_request,
-    )
-    return StartTestResponse(
-        candidate_uuid=candidate.identity,
-        candidate_test_id=candidate_test.id,
-        is_submitted=candidate_test.is_submitted,
-    )
+    session.commit()
+    return ExternalProvisionResponse(candidate_uuid=candidate.identity)
 
 
 def verify_candidate_uuid_access(
@@ -2354,7 +2343,7 @@ def compute_result(
         total_questions=total_questions,
         marks_obtained=marks_obtained if has_marking_scheme else None,
         marks_maximum=marks_maximum if has_marking_scheme else None,
-        external_user_id=candidate.external_user_id if candidate else None,
+        external_identifier=candidate.external_identifier if candidate else None,
     )
 
 

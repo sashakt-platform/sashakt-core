@@ -31,6 +31,25 @@ def get_payload(
     return OrganizationSettingsPayload.model_validate(row.settings)
 
 
+def blocks_anonymous_starts(*, session: Session, organization_id: int | None) -> bool:
+    """Whether this org requires candidates to arrive from their student portal.
+
+    Used both to reject an anonymous start and to tell the landing page not to
+    offer one in the first place.
+    """
+    if organization_id is None:
+        return False
+    payload = get_payload(session=session, organization_id=organization_id)
+    if payload is None:
+        return False
+    external_login = payload.external_login.value
+    return bool(
+        external_login
+        and external_login.enabled
+        and external_login.block_anonymous_starts
+    )
+
+
 def _insert_or_return_existing(
     *,
     session: Session,

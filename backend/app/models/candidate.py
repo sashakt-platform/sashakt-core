@@ -252,9 +252,9 @@ class Candidate(CandidateBase, table=True):
     identity: uuid.UUID | None = Field(
         default=None, unique=True, index=True, nullable=True
     )  # Only for anonymous QR code users
-    external_user_id: str | None = Field(
+    external_identifier: str | None = Field(
         default=None
-    )  # External (e.g. Avanti) user id; reused across tests per (organization, external_user_id).
+    )  # External (e.g. Avanti) user id; reused across tests per (organization, external_identifier).
     # Uniqueness + lookup covered by the partial unique index in the migration.
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
@@ -360,7 +360,7 @@ class Result(SQLModel):
     certificate_download_url: str | None = None
     # External (e.g. Avanti) user id, when the candidate came via external login;
     # None for anonymous QR candidates.
-    external_user_id: str | None = None
+    external_identifier: str | None = None
 
 
 class TestStatusSummary(SQLModel):
@@ -380,10 +380,20 @@ class StartTestResponse(SQLModel):
     candidate_uuid: uuid.UUID
     candidate_test_id: int
     is_submitted: bool = False
+    is_resumed: bool = False  # True when this launch returned an already-started attempt by an external user
 
 
-class ExternalProvisionRequest(StartTestRequest):
-    external_user_id: str
+class ExternalProvisionRequest(SQLModel):
+    """Resolve a candidate for an external identifier."""
+
+    test_link_uuid: str
+    external_identifier: str
+
+
+class ExternalProvisionResponse(SQLModel):
+    """The candidate an external identifier maps to. Here only the candidate is provisioned."""
+
+    candidate_uuid: uuid.UUID
 
 
 class OverallTestAnalyticsResponse(SQLModel):
