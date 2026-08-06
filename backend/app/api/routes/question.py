@@ -50,6 +50,7 @@ from app.models import (
     State,
     Tag,
     TagPublic,
+    TagQuestionCount,
     TagType,
     Test,
     User,
@@ -739,6 +740,36 @@ def get_questions(
     )
 
     return questions
+
+
+@router.get(
+    "/count-by-tags",
+    response_model=list[TagQuestionCount],
+    dependencies=[Depends(permission_dependency("read_question"))],
+)
+def get_question_count_by_tags(
+    session: SessionDep,
+    current_user: CurrentUser,
+    tag_ids: list[int] = Query(...),
+) -> list[TagQuestionCount]:
+    """Return the number of active questions available for each requested tag,
+    scoped to the caller's organization."""
+    results = session.exec(
+        select(QuestionTag.tag_id, func.count(func.distinct(Question.id)))
+        .join(Question, col(Question.id) == col(QuestionTag.question_id))
+        .where(
+            col(QuestionTag.tag_id).in_(tag_ids),
+            Question.organization_id == current_user.organization_id,
+            Question.is_active,
+        )
+        .group_by(col(QuestionTag.tag_id))
+    ).all()
+
+    counts = dict(results)
+    return [
+        TagQuestionCount(tag_id=tag_id, question_count=counts.get(tag_id, 0))
+        for tag_id in tag_ids
+    ]
 
 
 @router.get("/{question_id}/tests", response_model=list[TestInfoDict])

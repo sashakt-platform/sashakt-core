@@ -132,6 +132,7 @@ from .question import (
     QuestionTag,
     QuestionTagsUpdate,
     QuestionUpdate,
+    TagQuestionCount,
 )
 from .role import Role, RoleCreate, RolePermission, RolePublic, RolesPublic, RoleUpdate
 from .tag import (
@@ -250,6 +251,7 @@ __all__ = [
     "QuestionRevisionCreate",
     "QuestionTag",
     "QuestionUpdate",
+    "TagQuestionCount",
     "Tag",
     "TagPublic",
     "TagCreate",
