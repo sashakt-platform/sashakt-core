@@ -4,7 +4,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.core.roles import state_admin, test_admin
+from app.core.roles import is_location_scoped_role
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models import District, Permission, Role, RolePermission, State
 from app.models.user import (
@@ -59,12 +59,11 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
 
 def get_user_public(*, session: Session, db_user: User) -> UserPublic:
     role = session.exec(select(Role).where(Role.id == db_user.role_id)).first()
-    role_name = role.name if role else "N/A"
     role_label = role.label if role else "N/A"
 
     states = None
     districts = None
-    if role_name == state_admin.name or role_name == test_admin.name:
+    if role and is_location_scoped_role(role):
         state_query = (
             select(State)
             .join(UserState)
