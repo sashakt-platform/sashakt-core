@@ -24,6 +24,18 @@ def upgrade():
         sa.Column("location_scope", role_location_level, nullable=True),
     )
 
+    connection = op.get_bind()
+    connection.execute(
+        sa.text(
+            "UPDATE role SET location_scope = 'STATE' WHERE name = 'state_admin'"
+        )
+    )
+    connection.execute(
+        sa.text(
+            "UPDATE role SET location_scope = 'DISTRICT' WHERE name = 'test_admin'"
+        )
+    )
+
 
 def downgrade():
     op.drop_column("role", "location_scope")

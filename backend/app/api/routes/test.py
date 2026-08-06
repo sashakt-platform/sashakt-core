@@ -29,7 +29,7 @@ from app.api.routes.candidate import (
 from app.api.routes.utils import get_current_time
 from app.core.candidate import get_time_taken_seconds
 from app.core.question_sets import is_sectioned_test
-from app.core.roles import is_location_scoped_role, super_admin, system_admin
+from app.core.roles import is_location_scoped_role
 from app.core.sorting import (
     CandidateReportSortConfig,
     SortingParams,
@@ -345,7 +345,7 @@ def check_test_ownership(
 ) -> Role | None:
     if role is None:
         role = session.get(Role, current_user.role_id)
-    if role and role.name not in (super_admin.name, system_admin.name):
+    if "access_all_tests" not in get_user_permissions(current_user):
         if test.created_by_id != current_user.id:
             raise HTTPException(
                 status_code=403,
