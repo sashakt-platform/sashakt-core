@@ -1,4 +1,10 @@
-from app.core.roles import can_assign_role, get_role_hierarchy, get_valid_roles
+from app.core.roles import (
+    can_assign_role,
+    get_role_hierarchy,
+    get_valid_roles,
+    is_location_scoped_role,
+)
+from app.models import Role, RoleLocationLevel
 
 
 class TestRoleHierarchy:
@@ -138,3 +144,28 @@ class TestRoleHierarchy:
         assert can_assign_role("state_admin", "custom_role") is False
         assert can_assign_role("test_admin", "custom_role") is False
         assert can_assign_role("candidate", "custom_role") is False
+
+
+class TestIsLocationScopedRole:
+    """is_location_scoped_role must key off role.location_scope alone, never
+    the role name, so any role granted a scope behaves as scoped downstream."""
+
+    def test_custom_role_with_state_scope_is_scoped(self) -> None:
+        custom_role = Role(
+            name="custom_regional_lead",
+            label="Custom Regional Lead",
+            location_scope=RoleLocationLevel.STATE,
+        )
+        assert is_location_scoped_role(custom_role) is True
+
+    def test_custom_role_with_district_scope_is_scoped(self) -> None:
+        custom_role = Role(
+            name="custom_field_coordinator",
+            label="Custom Field Coordinator",
+            location_scope=RoleLocationLevel.DISTRICT,
+        )
+        assert is_location_scoped_role(custom_role) is True
+
+    def test_custom_role_without_scope_is_not_scoped(self) -> None:
+        custom_role = Role(name="custom_reporter", label="Custom Reporter")
+        assert is_location_scoped_role(custom_role) is False
