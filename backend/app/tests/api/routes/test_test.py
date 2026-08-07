@@ -4804,6 +4804,7 @@ def test_bulk_delete_bypasses_ownership_with_access_all_tests(
     ]
 
     other_user = create_random_user(db, organization_id=org_id)
+    assert other_user.id is not None
 
     test_one = Test(
         name=random_lower_string(),
@@ -4819,6 +4820,8 @@ def test_bulk_delete_bypasses_ownership_with_access_all_tests(
     )
     db.add_all([test_one, test_two])
     db.commit()
+    db.refresh(test_one)
+    db.refresh(test_two)
     assert test_one.id is not None
     assert test_two.id is not None
 
@@ -6028,7 +6031,11 @@ def test_custom_role_with_access_all_tests_bypasses_ownership(
 ) -> None:
     """A custom role (not state_admin/test_admin) granted access_all_tests
     must bypass ownership exactly like system_admin/super_admin do, since the
-    check only looks at the permission, never the role name."""
+    check only looks at the permission, never the role name. The custom user
+    stays in the test owner's organization so this isolates the ownership
+    bypass from any cross-organization access question."""
+    org_id = get_current_user_data(client, get_user_superadmin_token)["organization_id"]
+
     create_resp = client.post(
         f"{settings.API_V1_STR}/test/",
         json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
@@ -6047,7 +6054,7 @@ def test_custom_role_with_access_all_tests_bypasses_ownership(
         db.add(RolePermission(role_id=role.id, permission_id=permission.id))
     db.commit()
 
-    user = create_random_user(db)
+    user = create_random_user(db, organization_id=org_id)
     user.role_id = role.id
     db.add(user)
     db.commit()
