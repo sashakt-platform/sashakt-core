@@ -1829,7 +1829,6 @@ def test_get_test_questions(client: TestClient, db: SessionDep) -> None:
     db.commit()
 
     # Link question to test
-
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
     )
@@ -2303,7 +2302,6 @@ def test_submit_answer_for_qr_candidate(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     # Link question to test
-
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
     )
@@ -10445,7 +10443,6 @@ def test_test_level_marking_scheme_applied_on_questions(
     db.commit()
 
     # Link question to test
-
     test_question = TestQuestion(
         test_id=test.id, question_revision_id=question_revision.id
     )
