@@ -14,7 +14,7 @@ from app.core.media import (
     validate_image_upload,
 )
 from app.core.provider_config import provider_config_service
-from app.core.roles import state_admin, test_admin
+from app.core.roles import is_location_scoped_role
 from app.models import Message
 from app.models.provider import OrganizationProvider, Provider, ProviderType
 from app.models.question import (
@@ -91,7 +91,7 @@ def get_question_with_permission(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_question_permission(session, current_user, question)
 
     return question

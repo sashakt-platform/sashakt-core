@@ -288,6 +288,15 @@
     "candidate": true
   },
   {
+    "name": "access_all_tests",
+    "description": "Access, update and delete tests regardless of who created them",
+    "super_admin": true,
+    "system_admin": true,
+    "state_admin": false,
+    "test_admin": false,
+    "candidate": false
+  },
+  {
     "name": "create_test_template",
     "description": "Create New Test Template",
     "super_admin": true,

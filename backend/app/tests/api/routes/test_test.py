@@ -4793,6 +4793,50 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
     assert data["delete_failure_list"] is None
 
 
+def test_bulk_delete_bypasses_ownership_with_access_all_tests(
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
+) -> None:
+    """The bypass side of bulk delete: system_admin has access_all_tests, so
+    tests it did not create must still delete successfully instead of landing
+    in the failure list (the denial side is already covered above)."""
+    org_id = get_current_user_data(client, get_user_systemadmin_token)[
+        "organization_id"
+    ]
+
+    other_user = create_random_user(db, organization_id=org_id)
+    assert other_user.id is not None
+
+    test_one = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=org_id,
+        is_template=False,
+    )
+    test_two = Test(
+        name=random_lower_string(),
+        created_by_id=other_user.id,
+        organization_id=org_id,
+        is_template=False,
+    )
+    db.add_all([test_one, test_two])
+    db.commit()
+    db.refresh(test_one)
+    db.refresh(test_two)
+    assert test_one.id is not None
+    assert test_two.id is not None
+
+    delete_resp = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[test_one.id, test_two.id],
+        headers=get_user_systemadmin_token,
+    )
+    assert delete_resp.status_code == 200
+    data = delete_resp.json()
+    assert data["delete_success_count"] == 2
+    assert data["delete_failure_list"] is None
+
+
 def test_clone_test_with_random_tag(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
@@ -5869,6 +5913,166 @@ def test_update_test_same_role_different_user_forbidden(
 
     assert update_resp.status_code == 403
     assert update_resp.json()["detail"] == "You can only update tests created by you."
+
+
+def test_super_admin_bypasses_ownership_to_update_and_delete_test(
+    client: TestClient,
+    get_user_testadmin_token: dict[str, str],
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """super_admin has access_all_tests by default, so it must be able to
+    update/delete a test it did not create — the bypass this refactor added,
+    previously untested."""
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
+        headers=get_user_testadmin_token,
+    )
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json={"name": random_lower_string(), "locale": "en-US"},
+        headers=get_user_superadmin_token,
+    )
+    assert update_resp.status_code == 200, update_resp.text
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
+
+
+def test_system_admin_bypasses_ownership_to_update_and_delete_test(
+    client: TestClient,
+    get_user_testadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    """system_admin has access_all_tests by default, so it must be able to
+    update/delete a test it did not create — the bypass this refactor added,
+    previously untested."""
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
+        headers=get_user_testadmin_token,
+    )
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json={"name": random_lower_string(), "locale": "en-US"},
+        headers=get_user_systemadmin_token,
+    )
+    assert update_resp.status_code == 200, update_resp.text
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_systemadmin_token,
+    )
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
+
+
+def test_revoking_access_all_tests_enforces_ownership(
+    client: TestClient,
+    db: SessionDep,
+    get_user_testadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    """Once access_all_tests is revoked from a role, ownership enforcement
+    must kick back in for that role's users."""
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
+        headers=get_user_testadmin_token,
+    )
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role is not None
+    access_all_tests_permission = db.exec(
+        select(Permission).where(Permission.name == "access_all_tests")
+    ).first()
+    assert access_all_tests_permission is not None
+
+    role_permission = db.exec(
+        select(RolePermission).where(
+            RolePermission.role_id == system_admin_role.id,
+            RolePermission.permission_id == access_all_tests_permission.id,
+        )
+    ).first()
+    assert role_permission is not None
+    db.delete(role_permission)
+    db.commit()
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json={"name": random_lower_string(), "locale": "en-US"},
+        headers=get_user_systemadmin_token,
+    )
+    assert update_resp.status_code == 403
+    assert update_resp.json()["detail"] == "You can only update tests created by you."
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        headers=get_user_systemadmin_token,
+    )
+    assert delete_resp.status_code == 403
+    assert delete_resp.json()["detail"] == "You can only delete tests created by you."
+
+
+def test_custom_role_with_access_all_tests_bypasses_ownership(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """A custom role (not state_admin/test_admin) granted access_all_tests
+    must bypass ownership exactly like system_admin/super_admin do, since the
+    check only looks at the permission, never the role name. The custom user
+    stays in the test owner's organization so this isolates the ownership
+    bypass from any cross-organization access question."""
+    org_id = get_current_user_data(client, get_user_superadmin_token)["organization_id"]
+
+    create_resp = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
+        headers=get_user_superadmin_token,
+    )
+    assert create_resp.status_code == 200
+    test_id = create_resp.json()["id"]
+
+    role = create_random_role(db)
+    assert role.id is not None
+    for permission_name in ("access_all_tests", "update_test", "delete_test"):
+        permission = db.exec(
+            select(Permission).where(Permission.name == permission_name)
+        ).first()
+        assert permission is not None
+        db.add(RolePermission(role_id=role.id, permission_id=permission.id))
+    db.commit()
+
+    user = create_random_user(db, organization_id=org_id)
+    user.role_id = role.id
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    headers = {"Authorization": f"Bearer {user.token}"}
+
+    update_resp = client.put(
+        f"{settings.API_V1_STR}/test/{test_id}",
+        json={"name": random_lower_string(), "locale": "en-US"},
+        headers=headers,
+    )
+    assert update_resp.status_code == 200, update_resp.text
+
+    delete_resp = client.delete(
+        f"{settings.API_V1_STR}/test/{test_id}", headers=headers
+    )
+    assert delete_resp.status_code == 200
+    assert "deleted successfully" in delete_resp.json()["message"].lower()
 
 
 def test_get_test_by_id_not_available(

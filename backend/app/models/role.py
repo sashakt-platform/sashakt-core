@@ -1,9 +1,15 @@
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
     from app.models import Permission, User
+
+
+class RoleLocationLevel(StrEnum):
+    STATE = "state"
+    DISTRICT = "district"
 
 
 class RolePermission(SQLModel, table=True):
@@ -20,6 +26,7 @@ class RoleBase(SQLModel):
     description: str | None = Field(default=None, max_length=255, nullable=True)
     label: str = Field(nullable=False)
     is_active: bool = Field(default=True)
+    location_scope: RoleLocationLevel | None = Field(default=None, nullable=True)
 
 
 # Properties to receive on name creation

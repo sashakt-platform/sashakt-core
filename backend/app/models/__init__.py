@@ -134,7 +134,15 @@ from .question import (
     QuestionUpdate,
     TagQuestionCount,
 )
-from .role import Role, RoleCreate, RolePermission, RolePublic, RolesPublic, RoleUpdate
+from .role import (
+    Role,
+    RoleCreate,
+    RoleLocationLevel,
+    RolePermission,
+    RolePublic,
+    RolesPublic,
+    RoleUpdate,
+)
 from .tag import (
     Tag,
     TagCreate,
@@ -188,6 +196,7 @@ __all__ = [
     "TokenPayload",
     "Role",
     "RoleCreate",
+    "RoleLocationLevel",
     "RolePublic",
     "RolesPublic",
     "RoleUpdate",

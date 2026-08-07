@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Permission, Role, RolePermission
+from app.models import Permission, Role, RoleLocationLevel, RolePermission
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import get_user_token
 from app.tests.utils.utils import random_lower_string
@@ -61,6 +61,66 @@ def test_create_role(
     assert content["description"] == data["description"]
     assert "id" in content
     assert content["permissions"] == []
+
+
+def test_create_role_with_location_scope(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+        "location_scope": "state",
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] == "state"
+
+    db_role = db.exec(select(Role).where(Role.id == content["id"])).first()
+    assert db_role is not None
+    assert db_role.location_scope == "state"
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+        "location_scope": "district",
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] == "district"
+
+    db_role = db.exec(select(Role).where(Role.id == content["id"])).first()
+    assert db_role is not None
+    assert db_role.location_scope == "district"
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] is None
+
+    db_role = db.exec(select(Role).where(Role.id == content["id"])).first()
+    assert db_role is not None
+    assert db_role.location_scope is None
 
 
 def test_read_role(
@@ -255,6 +315,112 @@ def test_update_role(
         permission_b.id,
         permission_c.id,
     ]
+
+
+def test_update_role_location_scope(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    role = create_random_role(db)
+    assert role.location_scope is None
+
+    data = {
+        "name": role.name,
+        "description": role.description,
+        "label": role.label,
+        "location_scope": "state",
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] == "state"
+
+    db.refresh(role)
+    assert role.location_scope == "state"
+
+    data = {
+        "name": role.name,
+        "description": role.description,
+        "label": role.label,
+        "location_scope": "district",
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] == "district"
+
+    db.refresh(role)
+    assert role.location_scope == "district"
+
+
+def test_update_role_partial_put_omits_location_scope_unchanged(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Regression test: a PUT payload that omits location_scope must leave the
+    existing value untouched, since the route relies on exclude_unset=True."""
+    role = create_random_role(db)
+    role.location_scope = RoleLocationLevel.STATE
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    assert role.location_scope == "state"
+
+    data = {
+        "name": role.name,
+        "description": role.description,
+        "label": role.label,
+    }
+    assert "location_scope" not in data
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] == "state"
+
+    db.refresh(role)
+    assert role.location_scope == "state"
+
+
+def test_update_role_explicit_null_location_scope_clears_it(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """An explicit location_scope: null in the payload (unlike omitting the
+    key) is picked up by exclude_unset=True and clears the existing value."""
+    role = create_random_role(db)
+    role.location_scope = RoleLocationLevel.STATE
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    assert role.location_scope == "state"
+
+    data = {
+        "name": role.name,
+        "description": role.description,
+        "label": role.label,
+        "location_scope": None,
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["location_scope"] is None
+
+    db.refresh(role)
+    assert role.location_scope is None
 
 
 def test_update_role_not_found(
