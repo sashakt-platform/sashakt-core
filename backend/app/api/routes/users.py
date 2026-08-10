@@ -275,7 +275,7 @@ def validate_user_return_role(
         ):
             raise HTTPException(
                 status_code=400,
-                detail="A location must be selected to create a user with the State Admin role",
+                detail="A state must be selected to create a user with this role",
             )
 
         # Validate state exists

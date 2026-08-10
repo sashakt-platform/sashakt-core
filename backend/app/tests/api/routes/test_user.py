@@ -1235,8 +1235,7 @@ def test_create_state_admin_without_state_id_district_id(
         assert response.status_code == 400
         data = response.json()
         assert (
-            data["detail"]
-            == "A location must be selected to create a user with the State Admin role"
+            data["detail"] == "A state must be selected to create a user with this role"
         )
 
 
@@ -2046,10 +2045,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     )
     assert patch_response.status_code == 400
     error = patch_response.json()
-    assert (
-        error["detail"]
-        == "A location must be selected to create a user with the State Admin role"
-    )
+    assert error["detail"] == "A state must be selected to create a user with this role"
 
 
 def test_update_other_role_to_state_admin_without_district_ids_returns_400(
@@ -2111,10 +2107,7 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
     )
     assert patch_response.status_code == 400
     error = patch_response.json()
-    assert (
-        error["detail"]
-        == "A location must be selected to create a user with the State Admin role"
-    )
+    assert error["detail"] == "A state must be selected to create a user with this role"
 
 
 def test_update_state_admin_to_other_role_and_remove_states(
