@@ -1,11 +1,13 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app import crud
 from app.core.config import settings
-from app.models import Permission, Role, RoleLocationLevel, RolePermission
+from app.models import Permission, Role, RoleLocationLevel, RolePermission, UserCreate
+from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role
 from app.tests.utils.user import get_user_token
-from app.tests.utils.utils import random_lower_string
+from app.tests.utils.utils import random_email, random_lower_string
 
 
 def test_create_role(
@@ -523,6 +525,54 @@ def test_delete_role_not_found(
     assert response.status_code == 404
     content = response.json()
     assert content["detail"] == "Role not found"
+
+
+def test_delete_restricted_role_is_blocked(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Seeded roles have is_restricted=True and can never be deleted."""
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert role is not None
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "This role is restricted and cannot be deleted"
+    assert db.get(Role, role.id) is not None
+
+
+def test_delete_role_still_assigned_to_a_user_is_blocked(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A custom (non-restricted) role that still has a user assigned to it
+    cannot be deleted - the FK constraint should surface as a 400, not a 500."""
+    role = create_random_role(db)
+    org = create_random_organization(db)
+    assert role.id is not None
+    crud.create_user(
+        session=db,
+        user_create=UserCreate(
+            email=random_email(),
+            password=random_lower_string(),
+            full_name=random_lower_string(),
+            phone=random_lower_string(),
+            role_id=role.id,
+            organization_id=org.id,
+        ),
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "Cannot delete a role that is still assigned to users"
+    )
+    assert db.get(Role, role.id) is not None
 
 
 # TODO: Fix this once we have permisions in place

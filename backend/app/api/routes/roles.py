@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
@@ -233,8 +234,19 @@ def delete_role(session: SessionDep, id: int) -> Message:
     role = session.get(Role, id)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
-    # if not current_user.is_superuser and (role.owner_id != current_user.id):
-    #     raise HTTPException(status_code=400, detail="Not enough permissions")
+    if role.is_restricted:
+        raise HTTPException(
+            status_code=400,
+            detail="This role is restricted and cannot be deleted",
+        )
+
     session.delete(role)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a role that is still assigned to users",
+        )
     return Message(message="Role deleted successfully")
