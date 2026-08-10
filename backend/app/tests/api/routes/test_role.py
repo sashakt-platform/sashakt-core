@@ -185,7 +185,7 @@ def test_read_role_not_found(
 
 
 def test_read_roles(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     permission_a = Permission(
         name=random_lower_string(), description=random_lower_string()
@@ -222,7 +222,7 @@ def test_read_roles(
 
     response = client.get(
         f"{settings.API_V1_STR}/roles/",
-        headers=superuser_token_headers,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     content = response.json()
@@ -540,7 +540,7 @@ def test_delete_role_not_found(
 
 
 def test_read_roles_super_admin_sees_all_roles(client: TestClient, db: Session) -> None:
-    """Test that Super Admin can see all system roles."""
+    """Test that Super Admin only sees roles listed in its own allowed_roles."""
 
     # get auth headers for super admin user
     headers = get_user_token(db=db, role="super_admin")
@@ -552,16 +552,9 @@ def test_read_roles_super_admin_sees_all_roles(client: TestClient, db: Session) 
     assert response.status_code == 200
     content = response.json()
 
-    # super admin should see all roles except candidate
-    role_names = [role["name"] for role in content["data"]]
-    expected_roles = {
-        "super_admin",
-        "system_admin",
-        "state_admin",
-        "test_admin",
-    }
-    assert expected_roles.issubset(set(role_names))
-    assert "candidate" not in role_names
+    # super_admin.allowed_roles is seeded to just ["system_admin"]
+    role_names = {role["name"] for role in content["data"]}
+    assert role_names == {"system_admin"}
 
 
 def test_read_roles_system_admin_filtered(client: TestClient, db: Session) -> None:

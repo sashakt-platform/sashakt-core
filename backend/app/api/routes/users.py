@@ -248,14 +248,16 @@ def read_users(
 
 
 def validate_user_return_role(
-    session: SessionDep, user_in: UserCreate | UserUpdate, current_user: User
+    session: SessionDep,
+    user_in: UserCreate | UserUpdate,
+    current_user: User,
 ) -> Role:
     role = session.get(Role, user_in.role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Invalid Role")
 
     # validate role hierarchy - check if current user can assign this role
-    if not can_assign_role(current_user.role.name, role.name):
+    if not can_assign_role(current_user.role, role.name):
         raise HTTPException(
             status_code=403,
             detail=f"You do not have permission to assign the role '{role.label}'. "

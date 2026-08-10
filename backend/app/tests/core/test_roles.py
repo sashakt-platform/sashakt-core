@@ -1,152 +1,111 @@
 from sqlmodel import Session, select
 
-from app.core.roles import (
-    can_assign_role,
-    get_role_hierarchy,
-    get_valid_roles,
-    is_location_scoped_role,
-)
+from app.core.roles import can_assign_role, get_valid_roles, is_location_scoped_role
 from app.models import Role, RoleLocationLevel
 from app.tests.utils.role import create_random_role
 
 
-class TestRoleHierarchy:
-    """Test role hierarchy functions."""
+class TestGetValidRoles:
+    """get_valid_roles reads Role.allowed_roles directly, no hardcoded hierarchy."""
 
-    def test_get_role_hierarchy(self) -> None:
-        """Test that role hierarchy returns expected structure."""
-        hierarchy = get_role_hierarchy()
+    def test_super_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+        assert role is not None
+        assert set(get_valid_roles(role)) == {"system_admin"}
 
-        assert isinstance(hierarchy, dict)
-        assert "super_admin" in hierarchy
-        assert "system_admin" in hierarchy
-        assert "state_admin" in hierarchy
-
-        # Super admin should have access to all non-candidate roles
-        assert set(hierarchy["super_admin"]) == {
-            "super_admin",
+    def test_system_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
+        assert set(get_valid_roles(role)) == {
             "system_admin",
             "state_admin",
             "test_admin",
         }
 
-        # System admin should have access to system_admin and below
-        assert set(hierarchy["system_admin"]) == {
-            "system_admin",
-            "state_admin",
-            "test_admin",
-        }
+    def test_state_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+        assert role is not None
+        assert set(get_valid_roles(role)) == {"state_admin", "test_admin"}
 
-        # State admin should have access to state_admin and below
-        assert set(hierarchy["state_admin"]) == {
-            "state_admin",
-            "test_admin",
-        }
+    def test_test_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert role is not None
+        assert get_valid_roles(role) == ["test_admin"]
 
-    def test_get_valid_roles_super_admin(self) -> None:
-        """Test get_valid_roles for super_admin."""
-        valid_roles = get_valid_roles("super_admin")
+    def test_candidate(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "candidate")).first()
+        assert role is not None
+        assert get_valid_roles(role) == []
 
-        assert len(valid_roles) == 4
-        assert set(valid_roles) == {
-            "super_admin",
-            "system_admin",
-            "state_admin",
-            "test_admin",
-        }
+    def test_custom_role_with_no_allowed_roles(self, db: Session) -> None:
+        custom_role = create_random_role(db)
+        assert get_valid_roles(custom_role) == []
 
-    def test_get_valid_roles_system_admin(self) -> None:
-        """Test get_valid_roles for system_admin."""
-        valid_roles = get_valid_roles("system_admin")
+    def test_custom_role_with_custom_allowed_roles(self, db: Session) -> None:
+        custom_role = create_random_role(db)
+        custom_role.allowed_roles = ["test_admin"]
+        db.add(custom_role)
+        db.commit()
+        db.refresh(custom_role)
+        assert get_valid_roles(custom_role) == ["test_admin"]
 
-        assert len(valid_roles) == 3
-        assert set(valid_roles) == {
-            "system_admin",
-            "state_admin",
-            "test_admin",
-        }
 
-    def test_get_valid_roles_state_admin(self) -> None:
-        """Test get_valid_roles for state_admin."""
-        valid_roles = get_valid_roles("state_admin")
+class TestCanAssignRole:
+    """can_assign_role checks Role.allowed_roles directly, no hardcoded hierarchy."""
 
-        assert len(valid_roles) == 2
-        assert set(valid_roles) == {"state_admin", "test_admin"}
+    def test_super_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+        assert role is not None
+        assert can_assign_role(role, "super_admin") is False
+        assert can_assign_role(role, "system_admin") is True
+        assert can_assign_role(role, "state_admin") is False
+        assert can_assign_role(role, "test_admin") is False
+        assert can_assign_role(role, "candidate") is False
 
-    def test_get_valid_roles_test_admin(self) -> None:
-        """Test get_valid_roles for test_admin"""
-        valid_roles = get_valid_roles("test_admin")
-        assert len(valid_roles) == 1
-        assert valid_roles == ["test_admin"]
+    def test_system_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
+        assert can_assign_role(role, "super_admin") is False
+        assert can_assign_role(role, "system_admin") is True
+        assert can_assign_role(role, "state_admin") is True
+        assert can_assign_role(role, "test_admin") is True
+        assert can_assign_role(role, "candidate") is False
 
-    def test_get_valid_roles_candidate(self) -> None:
-        """Test get_valid_roles for candidate (should return empty)."""
-        valid_roles = get_valid_roles("candidate")
+    def test_state_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+        assert role is not None
+        assert can_assign_role(role, "super_admin") is False
+        assert can_assign_role(role, "system_admin") is False
+        assert can_assign_role(role, "state_admin") is True
+        assert can_assign_role(role, "test_admin") is True
+        assert can_assign_role(role, "candidate") is False
 
-        assert valid_roles == []
+    def test_test_admin(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert role is not None
+        assert can_assign_role(role, "super_admin") is False
+        assert can_assign_role(role, "system_admin") is False
+        assert can_assign_role(role, "state_admin") is False
+        assert can_assign_role(role, "test_admin") is True
+        assert can_assign_role(role, "candidate") is False
 
-    def test_get_valid_roles_invalid_role(self) -> None:
-        """Test get_valid_roles for invalid role (should return empty)."""
-        valid_roles = get_valid_roles("invalid_role")
+    def test_candidate(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "candidate")).first()
+        assert role is not None
+        assert can_assign_role(role, "super_admin") is False
+        assert can_assign_role(role, "system_admin") is False
+        assert can_assign_role(role, "state_admin") is False
+        assert can_assign_role(role, "test_admin") is False
+        assert can_assign_role(role, "candidate") is False
 
-        assert valid_roles == []
-
-    def test_can_assign_role_super_admin(self) -> None:
-        """Test can_assign_role for super_admin."""
-        assert can_assign_role("super_admin", "super_admin") is True
-        assert can_assign_role("super_admin", "system_admin") is True
-        assert can_assign_role("super_admin", "state_admin") is True
-        assert can_assign_role("super_admin", "test_admin") is True
-        assert can_assign_role("super_admin", "candidate") is False
-
-    def test_can_assign_role_system_admin(self) -> None:
-        """Test can_assign_role for system_admin."""
-        assert can_assign_role("system_admin", "super_admin") is False
-        assert can_assign_role("system_admin", "system_admin") is True
-        assert can_assign_role("system_admin", "state_admin") is True
-        assert can_assign_role("system_admin", "test_admin") is True
-        assert can_assign_role("system_admin", "candidate") is False
-
-    def test_can_assign_role_state_admin(self) -> None:
-        """Test can_assign_role for state_admin."""
-        assert can_assign_role("state_admin", "super_admin") is False
-        assert can_assign_role("state_admin", "system_admin") is False
-        assert can_assign_role("state_admin", "state_admin") is True
-        assert can_assign_role("state_admin", "test_admin") is True
-        assert can_assign_role("state_admin", "candidate") is False
-
-    def test_can_assign_role_test_admin(self) -> None:
-        """Test can_assign_role for test_admin."""
-        # Test admin can only assign Test admin
-        assert can_assign_role("test_admin", "super_admin") is False
-        assert can_assign_role("test_admin", "system_admin") is False
-        assert can_assign_role("test_admin", "state_admin") is False
-        assert can_assign_role("test_admin", "test_admin") is True
-        assert can_assign_role("test_admin", "candidate") is False
-
-    def test_can_assign_role_candidate(self) -> None:
-        """Test can_assign_role for candidate."""
-        # Candidate cannot assign any roles
-        assert can_assign_role("candidate", "super_admin") is False
-        assert can_assign_role("candidate", "system_admin") is False
-        assert can_assign_role("candidate", "state_admin") is False
-        assert can_assign_role("candidate", "test_admin") is False
-        assert can_assign_role("candidate", "candidate") is False
-
-    def test_can_assign_role_invalid_current_role(self) -> None:
-        """Test can_assign_role with invalid current role."""
-        # Invalid current role cannot assign any roles
-        assert can_assign_role("invalid_role", "super_admin") is False
-        assert can_assign_role("invalid_role", "candidate") is False
-
-    def test_can_assign_role_invalid_role(self) -> None:
-        """Test can_assign_role with roles not in hierarchy."""
-        # No one can assign roles that are not in the hierarchy
-        assert can_assign_role("super_admin", "custom_role") is False
-        assert can_assign_role("system_admin", "custom_role") is False
-        assert can_assign_role("state_admin", "custom_role") is False
-        assert can_assign_role("test_admin", "custom_role") is False
-        assert can_assign_role("candidate", "custom_role") is False
+    def test_custom_role_respects_custom_allowed_roles(self, db: Session) -> None:
+        custom_role = create_random_role(db)
+        custom_role.allowed_roles = ["test_admin"]
+        db.add(custom_role)
+        db.commit()
+        db.refresh(custom_role)
+        assert can_assign_role(custom_role, "test_admin") is True
+        assert can_assign_role(custom_role, "super_admin") is False
 
 
 class TestIsLocationScopedRole:

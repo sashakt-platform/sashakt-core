@@ -129,44 +129,20 @@ def init_roles(session: Session) -> None:
     create_role(session, candidate, candidate_permissions)
 
 
-def get_role_hierarchy() -> dict[str, list[str]]:
+def get_valid_roles(role: Role) -> list[str]:
     """
-    Get the role hierarchy mapping.
-
-    Role hierarchy (top to bottom):
-    - super_admin: can access all roles
-    - system_admin: can access system_admin and below
-    - state_admin: can access state_admin and below
-    - test_admin: limited access
-    - candidate: limited access
+    Get list of role names that the given role can view/create/update,
+    based on that role's own allowed_roles.
     """
-    return {
-        "super_admin": [
-            "super_admin",
-            "system_admin",
-            "state_admin",
-            "test_admin",
-        ],
-        "system_admin": ["system_admin", "state_admin", "test_admin"],
-        "state_admin": ["state_admin", "test_admin"],
-        "test_admin": ["test_admin"],
-    }
+    return role.allowed_roles or []
 
 
-def get_valid_roles(current_user_role: str) -> list[str]:
+def can_assign_role(role: Role, target_role_name: str) -> bool:
     """
-    Get list of role names that the current user can access based on role hierarchy.
+    Check if the given role can assign the target role name,
+    based on that role's own allowed_roles.
     """
-    hierarchy = get_role_hierarchy()
-    return hierarchy.get(current_user_role, [])
-
-
-def can_assign_role(current_user_role: str, target_role: str) -> bool:
-    """
-    Check if the current user can assign the target role based on role hierarchy.
-    """
-    valid_roles = get_valid_roles(current_user_role)
-    return target_role in valid_roles
+    return target_role_name in get_valid_roles(role)
 
 
 def is_location_scoped_role(role: Role) -> bool:

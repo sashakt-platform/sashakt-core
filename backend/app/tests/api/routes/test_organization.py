@@ -859,7 +859,7 @@ def test_get_aggregated_data_for_organization(
 
 def test_aggregated_data_for_state_admin(
     client: TestClient,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
     new_organization = create_random_organization(db)
@@ -894,7 +894,7 @@ def test_aggregated_data_for_state_admin(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -979,10 +979,10 @@ def test_aggregated_data_for_state_admin(
 
 def test_aggregated_data_for_state_admin_for_district(
     client: TestClient,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
-    organization_id = get_current_user_data(client, get_user_superadmin_token)[
+    organization_id = get_current_user_data(client, get_user_systemadmin_token)[
         "organization_id"
     ]
     new_organization = create_random_organization(db)
@@ -1041,7 +1041,7 @@ def test_aggregated_data_for_state_admin_for_district(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -1083,7 +1083,7 @@ def test_aggregated_data_for_state_admin_for_district(
                 "is_mandatory": True,
                 "state_ids": [state_x.id],
             },
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
         assert response.status_code == 200
 
@@ -1102,7 +1102,7 @@ def test_aggregated_data_for_state_admin_for_district(
                 "is_mandatory": True,
                 "state_ids": [state_y.id],
             },
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
         assert response.status_code == 200
 
@@ -1122,7 +1122,7 @@ def test_aggregated_data_for_state_admin_for_district(
                 "state_ids": [state_x.id],
                 "district_ids": [district_x1.id, district_x2.id],
             },
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
         assert response.status_code == 200
 
@@ -1140,7 +1140,7 @@ def test_aggregated_data_for_state_admin_for_district(
                 "state_ids": [state_x.id],
                 "district_ids": [district_x3.id],
             },
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
         assert response.status_code == 200
 
@@ -1157,7 +1157,7 @@ def test_aggregated_data_for_state_admin_for_district(
 
 def test_aggregated_data_for_state_admin_distinct_check(
     client: TestClient,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
     new_organization = create_random_organization(db)
@@ -1192,7 +1192,7 @@ def test_aggregated_data_for_state_admin_distinct_check(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -1335,7 +1335,7 @@ def test_aggregated_data_for_state_admin_distinct_check(
 
 
 def test_get_current_organization(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     org = Organization(
         name=random_lower_string(),
@@ -1362,7 +1362,7 @@ def test_get_current_organization(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     headers_with_org = authentication_token_from_email(
         client=client, email=email_with_org, db=db
@@ -1379,7 +1379,7 @@ def test_get_current_organization(
 
 
 def test_update_current_organization(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     org = Organization(
         name=random_lower_string(),
@@ -1391,7 +1391,7 @@ def test_update_current_organization(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
 
     email = random_email()
@@ -1405,7 +1405,7 @@ def test_update_current_organization(
             "role_id": role.id,
             "organization_id": org.id,
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
 
     headers = authentication_token_from_email(client=client, email=email, db=db)
@@ -1518,7 +1518,7 @@ def test_update_current_organization_with_logo(
 
 
 def test_update_current_organization_without_logo(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """Test updating organization fields without touching logo."""
     org = create_random_organization(db)
@@ -1529,7 +1529,7 @@ def test_update_current_organization_without_logo(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
 
     email = random_email()
@@ -1544,7 +1544,7 @@ def test_update_current_organization_without_logo(
             "role_id": role.id,
             "organization_id": org.id,
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
 
     headers = authentication_token_from_email(client=client, email=email, db=db)
@@ -1698,7 +1698,7 @@ def test_update_organization_logo_replaces_old(
 
 
 def test_delete_current_organization_logo_success(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """Test successful logo deletion."""
     org = create_random_organization(db)
@@ -1709,7 +1709,7 @@ def test_delete_current_organization_logo_success(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
 
     email = random_email()
@@ -1724,7 +1724,7 @@ def test_delete_current_organization_logo_success(
             "role_id": role.id,
             "organization_id": org.id,
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
 
     headers = authentication_token_from_email(client=client, email=email, db=db)

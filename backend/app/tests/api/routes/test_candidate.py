@@ -4924,9 +4924,9 @@ def test_overall_avg_time_two_tests(
 def test_overall_avg_score_state_admin_location_restricted(
     client: TestClient,
     db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
@@ -4958,7 +4958,7 @@ def test_overall_avg_score_state_admin_location_restricted(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -5062,7 +5062,7 @@ def test_overall_avg_score_state_admin_location_restricted(
         client.get(
             f"{settings.API_V1_STR}/candidate/result/{cand_test_id}",
             params={"candidate_uuid": cand_uuid},
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
 
     test2_link = get_test_link(db, test_id=test2.id, admin_id=test2.created_by_id)
@@ -5090,7 +5090,7 @@ def test_overall_avg_score_state_admin_location_restricted(
     client.get(
         f"{settings.API_V1_STR}/candidate/result/{cand_test_id}",
         params={"candidate_uuid": cand_uuid},
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     response = client.get(
         f"{settings.API_V1_STR}/candidate/overall-analytics", headers=token_headers
@@ -5102,9 +5102,9 @@ def test_overall_avg_score_state_admin_location_restricted(
 def test_overall_avg_time_state_admin_location_restricted(
     client: TestClient,
     db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -5137,7 +5137,7 @@ def test_overall_avg_time_state_admin_location_restricted(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -10895,11 +10895,11 @@ def test_candidate_active_inside_time_limit(
 
 
 def test_summary_filtered_by_state(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role is not None
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
@@ -10929,7 +10929,7 @@ def test_summary_filtered_by_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
     user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
@@ -11010,11 +11010,11 @@ def test_summary_filtered_by_state(
 
 
 def test_summary_filtered_by_district(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role is not None
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
@@ -11058,7 +11058,7 @@ def test_summary_filtered_by_district(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
     user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
@@ -11142,11 +11142,11 @@ def test_summary_filtered_by_district(
 
 
 def test_summary_active_submitted_by_state(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role is not None
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
@@ -11176,7 +11176,7 @@ def test_summary_active_submitted_by_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
     user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)
@@ -11258,11 +11258,11 @@ def test_summary_active_submitted_by_state(
 
 
 def test_summary_active_submitted_by_district(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role is not None
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
@@ -11302,7 +11302,7 @@ def test_summary_active_submitted_by_district(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
     user_resp = client.get(f"{settings.API_V1_STR}/users/me", headers=token_headers)

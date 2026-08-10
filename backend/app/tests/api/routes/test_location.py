@@ -1085,7 +1085,7 @@ def test_get_is_active_country(
 
 def test_get_state_admin_state_list(
     client: TestClient,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
     new_organization = create_random_organization(db)
@@ -1114,7 +1114,7 @@ def test_get_state_admin_state_list(
 
     response = client.get(
         f"{settings.API_V1_STR}/location/state/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -1136,7 +1136,7 @@ def test_get_state_admin_state_list(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -1191,7 +1191,7 @@ def test_get_state_admin_state_list(
 
 def test_filter_district_for_state_admin(
     client: TestClient,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: SessionDep,
 ) -> None:
     new_organization = create_random_organization(db)
@@ -1226,7 +1226,7 @@ def test_filter_district_for_state_admin(
 
     response = client.get(
         f"{settings.API_V1_STR}/location/district/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     data = response.json()
     assert response.status_code == 200
@@ -1248,7 +1248,7 @@ def test_filter_district_for_state_admin(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 

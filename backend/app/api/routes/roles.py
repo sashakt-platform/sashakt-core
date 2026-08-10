@@ -33,7 +33,7 @@ def read_roles(
     Retrieve roles based on current user's role hierarchy.
     """
     # get available role names based on current user's role
-    available_roles = get_valid_roles(current_user.role.name)
+    available_roles = get_valid_roles(current_user.role)
 
     if not available_roles:
         # if user has no available roles, return empty result
