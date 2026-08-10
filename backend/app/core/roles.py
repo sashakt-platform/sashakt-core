@@ -94,11 +94,6 @@ def create_role(
             )
         )
     else:
-        if current_role.location_scope != role_create.location_scope:
-            current_role.location_scope = role_create.location_scope
-            session.add(current_role)
-            session.commit()
-            session.refresh(current_role)
         stored_permission_ids = session.exec(
             select(RolePermission.permission_id).where(
                 RolePermission.role_id == current_role.id
