@@ -15,12 +15,14 @@ super_admin = RoleCreate(
     name="super_admin",
     label="Super Admin",
     description="A super-admin has overall access to the system",
+    allowed_roles=["system_admin"],
 )
 
 system_admin = RoleCreate(
     name="system_admin",
     label="System Admin",
     description="System-level admin who can handle organization-level tasks",
+    allowed_roles=["system_admin", "state_admin", "test_admin"],
 )
 
 
@@ -29,6 +31,7 @@ state_admin = RoleCreate(
     label="State Admin",
     description="State-level admin of a organization",
     location_scope=RoleLocationLevel.STATE,
+    allowed_roles=["state_admin", "test_admin"],
 )
 
 
@@ -37,6 +40,7 @@ test_admin = RoleCreate(
     label="Test Admin",
     description="Test Admin who creates and conducts test",
     location_scope=RoleLocationLevel.DISTRICT,
+    allowed_roles=["test_admin"],
 )
 
 
@@ -44,6 +48,7 @@ candidate = RoleCreate(
     name="candidate",
     label="Candidate",
     description="Candidate who attempts Test",
+    allowed_roles=[],
 )
 
 with open("app/core/permission_data.json") as file:
@@ -75,7 +80,7 @@ def create_role(
     ).first()
 
     if not current_role:
-        current_role = Role(**role_create.model_dump())
+        current_role = Role(**role_create.model_dump(), is_restricted=True)
         session.add(current_role)
         session.commit()
         session.refresh(current_role)

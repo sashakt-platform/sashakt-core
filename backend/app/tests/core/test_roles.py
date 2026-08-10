@@ -1,3 +1,5 @@
+from sqlmodel import Session, select
+
 from app.core.roles import (
     can_assign_role,
     get_role_hierarchy,
@@ -5,6 +7,7 @@ from app.core.roles import (
     is_location_scoped_role,
 )
 from app.models import Role, RoleLocationLevel
+from app.tests.utils.role import create_random_role
 
 
 class TestRoleHierarchy:
@@ -169,3 +172,65 @@ class TestIsLocationScopedRole:
     def test_custom_role_without_scope_is_not_scoped(self) -> None:
         custom_role = Role(name="custom_reporter", label="Custom Reporter")
         assert is_location_scoped_role(custom_role) is False
+
+
+class TestRoleSeedData:
+    """Seeded roles must carry allowed_roles/is_restricted per init_roles(),
+    while roles created afterwards (custom roles) get non-restricted defaults."""
+
+    def test_super_admin_allowed_roles(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+        assert role is not None
+        assert set(role.allowed_roles) == {"system_admin"}
+
+    def test_system_admin_allowed_roles(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
+        assert set(role.allowed_roles) == {"system_admin", "state_admin", "test_admin"}
+
+    def test_state_admin_allowed_roles(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+        assert role is not None
+        assert set(role.allowed_roles) == {"state_admin", "test_admin"}
+
+    def test_test_admin_allowed_roles(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert role is not None
+        assert set(role.allowed_roles) == {"test_admin"}
+
+    def test_candidate_allowed_roles(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "candidate")).first()
+        assert role is not None
+        assert set(role.allowed_roles) == set()
+
+    def test_super_admin_is_restricted(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "super_admin")).first()
+        assert role is not None
+        assert role.is_restricted is True
+
+    def test_system_admin_is_restricted(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+        assert role is not None
+        assert role.is_restricted is True
+
+    def test_state_admin_is_restricted(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+        assert role is not None
+        assert role.is_restricted is True
+
+    def test_test_admin_is_restricted(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+        assert role is not None
+        assert role.is_restricted is True
+
+    def test_candidate_is_restricted(self, db: Session) -> None:
+        role = db.exec(select(Role).where(Role.name == "candidate")).first()
+        assert role is not None
+        assert role.is_restricted is True
+
+    def test_custom_role_defaults_to_unrestricted_with_no_allowed_roles(
+        self, db: Session
+    ) -> None:
+        custom_role = create_random_role(db)
+        assert custom_role.is_restricted is False
+        assert custom_role.allowed_roles == []

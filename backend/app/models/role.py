@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
+from sqlmodel import JSON, Column, Field, Relationship, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
     from app.models import Permission, User
@@ -27,6 +27,7 @@ class RoleBase(SQLModel):
     label: str = Field(nullable=False)
     is_active: bool = Field(default=True)
     location_scope: RoleLocationLevel | None = Field(default=None, nullable=True)
+    allowed_roles: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
 
 # Properties to receive on name creation
@@ -42,6 +43,7 @@ class RoleUpdate(RoleBase):
 # Database model, database table inferred from class name
 class Role(RoleBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    is_restricted: bool = Field(default=False)
     users: list["User"] = Relationship(back_populates="role")
     permissions: list["Permission"] | None = Relationship(
         back_populates="roles", link_model=RolePermission
@@ -51,6 +53,7 @@ class Role(RoleBase, table=True):
 # Properties to return via API, id is always required
 class RolePublic(RoleBase):
     id: int
+    is_restricted: bool
     permissions: list[int]
 
 
