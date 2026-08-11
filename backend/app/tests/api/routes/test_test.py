@@ -5854,7 +5854,7 @@ def test_update_test_same_role_different_user_forbidden(
     db.commit()
 
     shared_location = {
-        "state_id": [state.id],
+        "state_ids": [state.id],
         "district_ids": [district.id],
     }
 
@@ -8843,8 +8843,8 @@ def test_district_user_cannot_modify_out_of_scope_test(
     db: SessionDep,
     get_user_systemadmin_token: dict[str, str],
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert test_admin_role
 
     org = get_current_user_data(client, get_user_systemadmin_token)["organization_id"]
 
@@ -8870,9 +8870,9 @@ def test_district_user_cannot_modify_out_of_scope_test(
         "password": random_lower_string(),
         "phone": random_lower_string(),
         "full_name": random_lower_string(),
-        "role_id": state_admin_role.id,
+        "role_id": test_admin_role.id,
         "organization_id": org,
-        "state_id": [state.id],
+        "state_ids": [state.id],
         "district_ids": [district_1.id],
     }
 
@@ -8996,7 +8996,7 @@ def test_get_tests_by_district_user(
 
     email = random_email()
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    state_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
     assert state_admin_role
     state_admin_user_payload = {
         "email": email,
@@ -9005,7 +9005,7 @@ def test_get_tests_by_district_user(
         "full_name": random_lower_string(),
         "role_id": state_admin_role.id,
         "organization_id": org_id,
-        "state_id": state_1.id,
+        "state_ids": [state_1.id],
         "district_ids": [district_1.id],
     }
 

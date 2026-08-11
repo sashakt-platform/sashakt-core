@@ -270,8 +270,7 @@ def validate_user_return_role(
             )
 
         if role.location_scope == RoleLocationLevel.STATE and (
-            (user_in.state_ids is None or len(user_in.state_ids) != 1)
-            and (user_in.district_ids is None or len(user_in.district_ids) != 1)
+            user_in.state_ids is None or len(user_in.state_ids) != 1
         ):
             raise HTTPException(
                 status_code=400,
