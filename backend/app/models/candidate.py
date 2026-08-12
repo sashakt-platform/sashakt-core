@@ -99,6 +99,7 @@ class CandidateReviewResponse(SQLModel):
     question_revision_id: int
     submitted_answer: str | None = None
     correct_answer: CorrectAnswerType = None
+    solution: str | None = None
 
 
 class CandidateTestAnswerUpdate(SQLModel):

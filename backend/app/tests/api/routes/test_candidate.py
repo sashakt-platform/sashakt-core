@@ -13504,6 +13504,7 @@ def test_get_review_feedback_during_test_with_immediate_feedback(
             {"id": 2, "key": "B", "value": "Option 2"},
         ],
         correct_answer=[1],
+        solution=random_lower_string(),
     )
     db.add(question_revision)
     db.flush()
@@ -13561,6 +13562,7 @@ def test_get_review_feedback_during_test_with_immediate_feedback(
     assert data[0]["question_revision_id"] == question_revision.id
     assert data[0]["submitted_answer"] == "[2]"
     assert data[0]["correct_answer"] == [1]
+    assert data[0]["solution"] == question_revision.solution
 
 
 def test_get_review_feedback_during_test_fails_without_immediate_feedback(

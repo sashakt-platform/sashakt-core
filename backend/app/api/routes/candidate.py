@@ -2606,6 +2606,7 @@ def get_review_feedback(
                         candidate_answer.response if candidate_answer else None
                     ),
                     correct_answer=correct_answer,
+                    solution=question_revision.solution,
                 )
             )
 
