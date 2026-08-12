@@ -1315,7 +1315,7 @@ def test_create_state_admin_with_state_id(
 
 
 def test_create_state_admin_with_only_district_id_returns_400(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
@@ -1904,7 +1904,7 @@ def test_update_other_role_to_state_admin_and_add_states(
 
 
 def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
