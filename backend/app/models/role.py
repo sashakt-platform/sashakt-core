@@ -34,10 +34,14 @@ class RoleBase(SQLModel):
 class RoleCreate(RoleBase):
     permissions: list[int] = []
 
+    visible_to_roles: list[str] = []
+
 
 # Properties to receive on name update
 class RoleUpdate(RoleBase):
     permissions: list[int] = []
+
+    visible_to_roles: list[str] = []
 
 
 # Database model, database table inferred from class name

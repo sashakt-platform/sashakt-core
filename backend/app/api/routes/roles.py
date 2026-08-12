@@ -22,6 +22,45 @@ router = APIRouter(
 )
 
 
+def _fetch_roles_by_name(
+    session: SessionDep, role_names: list[str], field_name: str
+) -> list[Role]:
+    """
+    Look up roles by name, failing the whole request up front if any name
+    doesn't match an existing role.
+    """
+    if not role_names:
+        return []
+
+    roles = list(session.exec(select(Role).where(col(Role.name).in_(role_names))).all())
+    missing = set(role_names) - {role.name for role in roles}
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown role name(s) in {field_name}: {', '.join(sorted(missing))}",
+        )
+    return roles
+
+
+def _grant_visibility(
+    session: SessionDep, role_name: str, allow_roles: list[Role]
+) -> None:
+    """
+    Append role_name to each allow role's allowed_roles, if not already
+    present. Caller is responsible for committing - this only stages
+    changes, since session.commit() expires every object tracked by the
+    session (not just the ones just added), which would otherwise blow away
+    attributes the caller is about to read off its own role instance.
+    """
+    for allow_role in allow_roles:
+        if role_name not in (allow_role.allowed_roles or []):
+            allow_role.allowed_roles = [
+                *(allow_role.allowed_roles or []),
+                role_name,
+            ]
+            session.add(allow_role)
+
+
 @router.get(
     "/",
     response_model=RolesPublic,
@@ -105,7 +144,12 @@ def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
     """
     Create new role.
     """
-    role_data = role_in.model_dump(exclude={"permissions"})
+    _fetch_roles_by_name(session, role_in.allowed_roles, "allowed_roles")
+    allow_roles = _fetch_roles_by_name(
+        session, role_in.visible_to_roles, "visible_to_roles"
+    )
+
+    role_data = role_in.model_dump(exclude={"permissions", "visible_to_roles"})
     role = Role.model_validate(role_data)
     session.add(role)
     session.commit()
@@ -117,6 +161,10 @@ def create_role(*, session: SessionDep, role_in: RoleCreate) -> Any:
         ]
         session.add_all(permission_links)
         session.commit()
+    session.refresh(role)
+
+    _grant_visibility(session, role.name, allow_roles)
+    session.commit()
     session.refresh(role)
 
     stored_permission_ids = session.exec(
@@ -149,16 +197,21 @@ def update_role(
     # if not current_user.is_superuser and (role.owner_id != current_user.id):
     #     raise HTTPException(status_code=400, detail="Not enough permissions")
 
+    _fetch_roles_by_name(session, role_update.allowed_roles, "allowed_roles")
+    allow_roles = _fetch_roles_by_name(
+        session, role_update.visible_to_roles, "visible_to_roles"
+    )
+
     # Updating Permission
     permission_remove = [
-        permissions.id
-        for permissions in (role.permissions or [])
-        if permissions.id not in (role_update.permissions or [])
+        permission.id
+        for permission in (role.permissions or [])
+        if permission.id not in (role_update.permissions or [])
     ]
     permissions_add = [
         permission
         for permission in (role_update.permissions or [])
-        if permission not in [t.id for t in (role.permissions or [])]
+        if permission not in [existing.id for existing in (role.permissions or [])]
     ]
 
     if permission_remove:
@@ -182,11 +235,18 @@ def update_role(
         select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
     )
 
-    update_dict = role_update.model_dump(exclude_unset=True)
+    update_dict = role_update.model_dump(
+        exclude_unset=True, exclude={"visible_to_roles"}
+    )
     role.sqlmodel_update(update_dict)
     session.add(role)
     session.commit()
     session.refresh(role)
+
+    _grant_visibility(session, role.name, allow_roles)
+    session.commit()
+    session.refresh(role)
+
     return RolePublic(
         **role.model_dump(),
         permissions=stored_permission_ids,
