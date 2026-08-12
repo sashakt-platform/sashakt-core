@@ -6,6 +6,7 @@ from app.models import (
     Permission,
     Role,
     RoleCreate,
+    RoleLocationLevel,
     RolePermission,
     RolePublic,
 )
@@ -27,6 +28,7 @@ state_admin = RoleCreate(
     name="state_admin",
     label="State Admin",
     description="State-level admin of a organization",
+    location_scope=RoleLocationLevel.STATE,
 )
 
 
@@ -34,6 +36,7 @@ test_admin = RoleCreate(
     name="test_admin",
     label="Test Admin",
     description="Test Admin who creates and conducts test",
+    location_scope=RoleLocationLevel.DISTRICT,
 )
 
 
@@ -159,3 +162,10 @@ def can_assign_role(current_user_role: str, target_role: str) -> bool:
     """
     valid_roles = get_valid_roles(current_user_role)
     return target_role in valid_roles
+
+
+def is_location_scoped_role(role: Role) -> bool:
+    """
+    Check if a role's access is restricted to its assigned states/districts.
+    """
+    return role.location_scope is not None

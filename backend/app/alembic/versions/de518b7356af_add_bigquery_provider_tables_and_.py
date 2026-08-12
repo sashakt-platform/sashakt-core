@@ -118,14 +118,17 @@ def upgrade():
 
         # Assign permission to specified roles
         for role_name in perm_data["roles"]:
-            # Get role
-            role = session.exec(select(Role).where(Role.name == role_name)).first()
+            # Get role id only (avoid selecting columns that may not exist yet
+            # at this point in migration history, e.g. Role.location_scope)
+            role_id = session.exec(
+                select(Role.id).where(Role.name == role_name)
+            ).first()
 
-            if role:
+            if role_id:
                 # Check if role_permission already exists
                 existing_role_perm = session.exec(
                     select(RolePermission).where(
-                        RolePermission.role_id == role.id,
+                        RolePermission.role_id == role_id,
                         RolePermission.permission_id == permission_id,
                     )
                 ).first()
@@ -133,7 +136,7 @@ def upgrade():
                 if not existing_role_perm:
                     # Create role_permission
                     role_permission = RolePermission(
-                        role_id=role.id, permission_id=permission_id
+                        role_id=role_id, permission_id=permission_id
                     )
                     session.add(role_permission)
                     session.commit()

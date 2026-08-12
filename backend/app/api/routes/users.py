@@ -16,10 +16,9 @@ from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
 from app.core.roles import (
     can_assign_role,
-    state_admin,
+    is_location_scoped_role,
     super_admin,
     system_admin,
-    test_admin,
 )
 from app.core.security import get_password_hash, verify_password
 from app.core.sorting import (
@@ -48,7 +47,7 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
-from app.models.role import Role
+from app.models.role import Role, RoleLocationLevel
 from app.models.user import DeleteUser, UserDistrict, UserPublicMe, UserState
 from app.utils import generate_new_account_email, send_email
 
@@ -190,10 +189,7 @@ def read_users(
         statement = statement.where(User.organization_id == organization_id)
 
     # apply role-based filtering
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if is_location_scoped_role(current_user.role):
         current_user_district_ids = (
             [district.id for district in current_user.districts]
             if current_user.districts
@@ -266,20 +262,19 @@ def validate_user_return_role(
             f"Your role '{current_user.role.label}' can only assign roles at or below your level.",
         )
 
-    if role and (role.name == state_admin.name or role.name == test_admin.name):
+    if role and is_location_scoped_role(role):
         if user_in.state_ids and len(user_in.state_ids) > 1:
             raise HTTPException(
                 status_code=400,
                 detail="A user can be linked to only one state.",
             )
 
-        if role.name == state_admin.name and (
-            (user_in.state_ids is None or len(user_in.state_ids) != 1)
-            and (user_in.district_ids is None or len(user_in.district_ids) != 1)
+        if role.location_scope == RoleLocationLevel.STATE and (
+            user_in.state_ids is None or len(user_in.state_ids) != 1
         ):
             raise HTTPException(
                 status_code=400,
-                detail="A location must be selected to create a user with the State Admin role",
+                detail="A state must be selected to create a user with this role",
             )
 
         # Validate state exists
@@ -346,13 +341,13 @@ def create_user(
             status_code=500, detail="User creation failed: no ID assigned"
         )
 
-    if role and role.name == state_admin.name:
+    if role and role.location_scope == RoleLocationLevel.STATE:
         _assign_locations(session, user.id, user_in.state_ids, user_in.district_ids)
 
-    elif role and role.name == test_admin.name:
+    elif role and role.location_scope == RoleLocationLevel.DISTRICT:
         creator_role = current_user.role
 
-        if creator_role and creator_role.name in (state_admin.name, test_admin.name):
+        if creator_role and is_location_scoped_role(creator_role):
             creator_state_ids = (
                 [s.id for s in current_user.states if s.id is not None]
                 if current_user.states
@@ -366,7 +361,7 @@ def create_user(
 
             # State-admin scoping test_admin to a specific district within their state
             if (
-                creator_role.name == state_admin.name
+                creator_role.location_scope == RoleLocationLevel.STATE
                 and not creator_district_ids
                 and user_in.district_ids
             ):
@@ -530,7 +525,7 @@ def read_user_by_id(
     # skip check if user is reading their own profile
     if user_id != current_user.id:
         role = session.get(Role, current_user.role_id)
-        if role and role.name in (state_admin.name, test_admin.name):
+        if role and is_location_scoped_role(role):
             check_user_permission(session, current_user, user)
 
     user_public = crud.get_user_public(db_user=user, session=session)
@@ -555,7 +550,7 @@ def update_user(
             detail="The user with this id does not exist in the system",
         )
     role = session.get(Role, current_user.role_id)
-    if role and role.name in ("state_admin", "test_admin"):
+    if role and is_location_scoped_role(role):
         check_user_permission(session, current_user, db_user)
 
     if user_in.email:
@@ -569,7 +564,7 @@ def update_user(
         session=session, user_in=user_in, current_user=current_user
     )
 
-    if role.name == state_admin.name:
+    if role.location_scope == RoleLocationLevel.STATE:
         if user_in.state_ids:
             db_user.states = list(
                 session.exec(
@@ -583,9 +578,9 @@ def update_user(
                 ).all()
             )
 
-    elif role.name == test_admin.name:
+    elif role.location_scope == RoleLocationLevel.DISTRICT:
         creator_role = session.get(Role, current_user.role_id)
-        if creator_role and creator_role.name == state_admin.name:
+        if creator_role and creator_role.location_scope == RoleLocationLevel.STATE:
             creator_states = list(
                 session.exec(
                     select(State)
@@ -672,7 +667,7 @@ def is_user_deletion_blocked(
     if _is_user_referenced(session, target_user):
         return True
     role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         try:
             check_user_permission(session, current_user, target_user)
         except HTTPException:
@@ -743,7 +738,7 @@ def delete_user(
             detail="Cannot delete user: associated records exist. Reassign or remove them first.",
         )
     role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_user_permission(session, current_user, user)
     try:
         session.delete(user)

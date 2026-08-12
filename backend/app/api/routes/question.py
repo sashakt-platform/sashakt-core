@@ -26,7 +26,7 @@ from typing_extensions import TypedDict
 from app import crud
 from app.api.deps import CurrentUser, Pagination, SessionDep, permission_dependency
 from app.core.provider_config import provider_config_service
-from app.core.roles import state_admin, test_admin
+from app.core.roles import is_location_scoped_role
 from app.core.sorting import (
     QuestionSortConfig,
     SortingParams,
@@ -662,10 +662,7 @@ def get_questions(
         .where(Question.organization_id == current_user.organization_id)
     )
 
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if is_location_scoped_role(current_user.role):
         current_user_state_ids = (
             [state.id for state in current_user.states] if current_user.states else []
         )
@@ -867,7 +864,7 @@ def delete_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_question_permission(session, current_user, question)
 
     if check_linked_test(session, question_id):
@@ -906,7 +903,7 @@ def bulk_delete_question(
         )
     role = session.get(Role, current_user.role_id)
 
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         if current_user.states:
             admin_state_ids = {
                 state.id for state in current_user.states if state.id is not None
@@ -990,7 +987,7 @@ def update_question(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     role = session.get(Role, current_user.role_id)
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_question_permission(session, current_user, question)
 
     # Update basic question attributes
@@ -1039,7 +1036,7 @@ def create_question_revision(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     role = current_user.role
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_question_permission(session, current_user, question)
 
     # Prepare data for JSON serialization
@@ -1212,7 +1209,7 @@ def update_question_locations(
         raise HTTPException(status_code=404, detail="Question not found")
 
     role = current_user.role
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_question_permission(session, current_user, question)
 
     # Get current locations
@@ -1325,7 +1322,7 @@ def update_question_tags(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     role = current_user.role
-    if role and role.name in (state_admin.name, test_admin.name):
+    if role and is_location_scoped_role(role):
         check_question_permission(session, current_user, question)
 
     # Get current tags

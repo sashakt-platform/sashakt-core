@@ -27,7 +27,7 @@ from app.core.question_sets import (
     is_sectioned_test,
     normalize_question_set_ids,
 )
-from app.core.roles import state_admin, test_admin
+from app.core.roles import is_location_scoped_role
 from app.crud import organization_settings as crud_settings
 from app.models import (
     BatchAnswerSubmitRequest,
@@ -614,10 +614,7 @@ def get_overall_tests_analytics(
     )
 
     current_user_state_ids: list[int] = []
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if is_location_scoped_role(current_user.role):
         current_user_state_ids = (
             [state.id for state in current_user.states if state.id is not None]
             if current_user.states
@@ -1651,10 +1648,7 @@ def get_test_summary(
     Get Summary of Tests: total submitted, not submitted (active/inactive)
     """
     current_user_district_ids: list[int] = []
-    if (
-        current_user.role.name == state_admin.name
-        or current_user.role.name == test_admin.name
-    ):
+    if is_location_scoped_role(current_user.role):
         current_user_district_ids = (
             [
                 district.id
