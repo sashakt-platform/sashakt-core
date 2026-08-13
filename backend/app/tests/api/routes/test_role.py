@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -299,6 +301,7 @@ def test_update_role(
         "name": random_lower_string(),
         "description": random_lower_string(),
         "label": random_lower_string(),
+        "permissions": [],
     }
     response = client.put(
         f"{settings.API_V1_STR}/roles/{role.id}",
@@ -312,11 +315,130 @@ def test_update_role(
     assert content["label"] == data["label"]
     assert content["id"] == role.id
     assert content["permissions"] == []
-    assert content["permissions"] not in [
-        permission_a.id,
-        permission_b.id,
-        permission_c.id,
-    ]
+
+
+def test_update_role_partial_put_omits_permissions_unchanged(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Regression test: a PUT payload that omits permissions must leave the
+    existing permission assignments untouched, not clear them."""
+    role = create_random_role(db)
+    permission_a = Permission(
+        name=random_lower_string(), description=random_lower_string()
+    )
+    permission_b = Permission(
+        name=random_lower_string(), description=random_lower_string()
+    )
+    db.add_all([permission_a, permission_b])
+    db.commit()
+    db.refresh(permission_a)
+    db.refresh(permission_b)
+    assert permission_a.id is not None
+    assert permission_b.id is not None
+
+    role_permission_a = RolePermission(role_id=role.id, permission_id=permission_a.id)
+    role_permission_b = RolePermission(role_id=role.id, permission_id=permission_b.id)
+    db.add_all([role_permission_a, role_permission_b])
+    db.commit()
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+    }
+    assert "permissions" not in data
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert sorted(content["permissions"]) == sorted([permission_a.id, permission_b.id])
+
+    stored = db.exec(
+        select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
+    ).all()
+    assert sorted(stored) == sorted([permission_a.id, permission_b.id])
+
+
+def test_update_role_empty_permissions_list_clears_them(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """An explicit permissions: [] in the payload (unlike omitting the key)
+    clears all existing permission assignments."""
+    role = create_random_role(db)
+    permission_a = Permission(
+        name=random_lower_string(), description=random_lower_string()
+    )
+    db.add(permission_a)
+    db.commit()
+
+    role_permission_a = RolePermission(role_id=role.id, permission_id=permission_a.id)
+    db.add(role_permission_a)
+    db.commit()
+
+    data: dict[str, Any] = {
+        "name": role.name,
+        "description": role.description,
+        "label": role.label,
+        "permissions": [],
+    }
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["permissions"] == []
+
+    stored = db.exec(
+        select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
+    ).all()
+    assert stored == []
+
+
+def test_update_role_partial_put_omits_visible_to_roles_unchanged(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Regression test: a PUT payload that omits visible_to_roles must not
+    touch the allowed_roles of any other role."""
+    custom_role = create_random_role(db)
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role is not None
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{custom_role.id}",
+        headers=superuser_token_headers,
+        json={
+            "name": custom_role.name,
+            "label": custom_role.label,
+            "visible_to_roles": ["system_admin"],
+        },
+    )
+    assert response.status_code == 200
+    db.refresh(system_admin_role)
+    granted_allowed_roles = list(system_admin_role.allowed_roles)
+    assert custom_role.name in granted_allowed_roles
+
+    data = {
+        "name": custom_role.name,
+        "description": custom_role.description,
+        "label": custom_role.label,
+    }
+    assert "visible_to_roles" not in data
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{custom_role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+
+    db.refresh(system_admin_role)
+    assert list(system_admin_role.allowed_roles) == granted_allowed_roles
 
 
 def test_update_role_location_scope(

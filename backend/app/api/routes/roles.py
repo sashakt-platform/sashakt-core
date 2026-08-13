@@ -198,42 +198,41 @@ def update_role(
     #     raise HTTPException(status_code=400, detail="Not enough permissions")
 
     _fetch_roles_by_name(session, role_update.allowed_roles, "allowed_roles")
-    allow_roles = _fetch_roles_by_name(
-        session, role_update.visible_to_roles, "visible_to_roles"
+
+    allow_roles = (
+        _fetch_roles_by_name(session, role_update.visible_to_roles, "visible_to_roles")
+        if role_update.visible_to_roles is not None
+        else []
     )
 
-    # Updating Permission
-    permission_remove = [
-        permission.id
-        for permission in (role.permissions or [])
-        if permission.id not in (role_update.permissions or [])
-    ]
-    permissions_add = [
-        permission
-        for permission in (role_update.permissions or [])
-        if permission not in [existing.id for existing in (role.permissions or [])]
-    ]
+    if role_update.permissions is not None:
+        permission_remove = [
+            permission.id
+            for permission in (role.permissions or [])
+            if permission.id not in role_update.permissions
+        ]
+        permissions_add = [
+            permission
+            for permission in role_update.permissions
+            if permission not in [existing.id for existing in (role.permissions or [])]
+        ]
 
-    if permission_remove:
-        for permission in permission_remove:
-            session.delete(
-                session.exec(
-                    select(RolePermission).where(
-                        RolePermission.role_id == role.id,
-                        RolePermission.permission_id == permission,
-                    )
-                ).one()
-            )
-        session.commit()
+        if permission_remove:
+            for permission in permission_remove:
+                session.delete(
+                    session.exec(
+                        select(RolePermission).where(
+                            RolePermission.role_id == role.id,
+                            RolePermission.permission_id == permission,
+                        )
+                    ).one()
+                )
+            session.commit()
 
-    if permissions_add:
-        for permission in permissions_add:
-            session.add(RolePermission(role_id=role.id, permission_id=permission))
-        session.commit()
-
-    stored_permission_ids = session.exec(
-        select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
-    )
+        if permissions_add:
+            for permission in permissions_add:
+                session.add(RolePermission(role_id=role.id, permission_id=permission))
+            session.commit()
 
     update_dict = role_update.model_dump(
         exclude_unset=True, exclude={"visible_to_roles"}
@@ -243,9 +242,14 @@ def update_role(
     session.commit()
     session.refresh(role)
 
-    _grant_visibility(session, role.name, allow_roles)
-    session.commit()
-    session.refresh(role)
+    if role_update.visible_to_roles is not None:
+        _grant_visibility(session, role.name, allow_roles)
+        session.commit()
+        session.refresh(role)
+
+    stored_permission_ids = session.exec(
+        select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
+    )
 
     return RolePublic(
         **role.model_dump(),

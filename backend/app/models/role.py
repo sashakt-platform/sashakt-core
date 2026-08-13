@@ -39,9 +39,9 @@ class RoleCreate(RoleBase):
 
 # Properties to receive on name update
 class RoleUpdate(RoleBase):
-    permissions: list[int] = []
+    permissions: list[int] | None = None
 
-    visible_to_roles: list[str] = []
+    visible_to_roles: list[str] | None = None
 
 
 # Database model, database table inferred from class name
