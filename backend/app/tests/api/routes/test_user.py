@@ -925,7 +925,7 @@ def test_register_user_already_exists_error(
 
 
 def test_update_user(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     username = random_email()
     password = random_lower_string()
@@ -954,7 +954,7 @@ def test_update_user(
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert r.status_code == 200
@@ -1164,6 +1164,7 @@ def test_delete_user_current_super_user_error(
 def test_create_inactive_user_not_listed(
     client: TestClient,
     superuser_token_headers: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: Session,
 ) -> None:
     username = random_email()
@@ -1187,7 +1188,7 @@ def test_create_inactive_user_not_listed(
     }
     r = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=superuser_token_headers,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert r.status_code == 200
@@ -1205,7 +1206,7 @@ def test_create_inactive_user_not_listed(
 
 
 def test_create_state_admin_without_state_id_district_id(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1229,7 +1230,7 @@ def test_create_state_admin_without_state_id_district_id(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=superuser_token_headers,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 400
@@ -1240,9 +1241,9 @@ def test_create_state_admin_without_state_id_district_id(
 
 
 def test_create_state_admin_with_state_id(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     user_id = user_data["id"]
     with (
@@ -1283,7 +1284,7 @@ def test_create_state_admin_with_state_id(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 200
@@ -1300,7 +1301,7 @@ def test_create_state_admin_with_state_id(
         assert len(response_data["states"]) == 1
         r = client.get(
             f"{settings.API_V1_STR}/users/{user_id}",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
         data = r.json()
         assert r.status_code == 200
@@ -1314,9 +1315,9 @@ def test_create_state_admin_with_state_id(
 
 
 def test_create_state_admin_with_only_district_id_returns_400(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1357,7 +1358,7 @@ def test_create_state_admin_with_only_district_id_returns_400(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 400
@@ -1369,9 +1370,9 @@ def test_create_state_admin_with_only_district_id_returns_400(
 
 
 def test_create_user_multiple_state_assignment_error(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1410,7 +1411,7 @@ def test_create_user_multiple_state_assignment_error(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 400
@@ -1418,9 +1419,9 @@ def test_create_user_multiple_state_assignment_error(
 
 
 def test_create_user_multiple_district_assignment(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1468,7 +1469,7 @@ def test_create_user_multiple_district_assignment(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 200
@@ -1478,9 +1479,9 @@ def test_create_user_multiple_district_assignment(
 
 
 def test_create_test_admin_single_state_success(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1519,7 +1520,7 @@ def test_create_test_admin_single_state_success(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 200
@@ -1531,9 +1532,9 @@ def test_create_test_admin_single_state_success(
 
 
 def test_create_test_admin_single_district_success(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1575,7 +1576,7 @@ def test_create_test_admin_single_district_success(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 200
@@ -1587,9 +1588,9 @@ def test_create_test_admin_single_district_success(
 
 
 def test_create_user_without_states(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     with (
         patch("app.utils.send_email", return_value=None),
@@ -1614,7 +1615,7 @@ def test_create_user_without_states(
         }
         response = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=data,
         )
         assert response.status_code == 200
@@ -1627,7 +1628,7 @@ def test_create_user_without_states(
 
         r = client.get(
             f"{settings.API_V1_STR}/users/{user_id}",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
         )
         data = r.json()
         assert r.status_code == 200
@@ -1726,7 +1727,7 @@ def test_update_user_states(
 
 
 def test_update_user_districts(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     role = db.exec(select(Role).where(Role.name == "system_admin")).first()
@@ -1761,7 +1762,7 @@ def test_update_user_districts(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=create_payload,
     )
     assert response.status_code == 200
@@ -1790,7 +1791,7 @@ def test_update_user_districts(
     }
     update_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=valid_patch_with_districts,
     )
     assert update_response.status_code == 200
@@ -1812,7 +1813,7 @@ def test_update_user_districts(
     }
     update_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=valid_patch_with_no_districts,
     )
     assert update_response.status_code == 200
@@ -1835,7 +1836,7 @@ def test_update_user_districts(
     }
     update_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=invalid_role_patch,
     )
     assert update_response.status_code == 404
@@ -1843,7 +1844,7 @@ def test_update_user_districts(
 
 
 def test_update_other_role_to_state_admin_and_add_states(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -1875,7 +1876,7 @@ def test_update_other_role_to_state_admin_and_add_states(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -1893,7 +1894,7 @@ def test_update_other_role_to_state_admin_and_add_states(
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_data,
     )
     assert patch_response.status_code == 200
@@ -1903,7 +1904,7 @@ def test_update_other_role_to_state_admin_and_add_states(
 
 
 def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -1939,7 +1940,7 @@ def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -1957,7 +1958,7 @@ def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_data,
     )
     assert patch_response.status_code == 400
@@ -1966,7 +1967,7 @@ def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
 
 
 def test_update_other_role_to_state_admin_without_state_ids_returns_400(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -1995,7 +1996,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -2012,7 +2013,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_data,
     )
     assert patch_response.status_code == 400
@@ -2021,7 +2022,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
 
 
 def test_update_other_role_to_state_admin_without_district_ids_returns_400(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -2057,7 +2058,7 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -2074,7 +2075,7 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_data,
     )
     assert patch_response.status_code == 400
@@ -2083,7 +2084,7 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
 
 
 def test_update_state_admin_to_other_role_and_remove_states(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -2116,7 +2117,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -2137,7 +2138,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert patch_response.status_code == 200
@@ -2147,7 +2148,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
 
 
 def test_update_state_admin_to_other_role_and_remove_districts(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
@@ -2185,7 +2186,7 @@ def test_update_state_admin_to_other_role_and_remove_districts(
     }
     response = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert response.status_code == 200
@@ -2206,7 +2207,7 @@ def test_update_state_admin_to_other_role_and_remove_districts(
     }
     patch_response = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=data,
     )
     assert patch_response.status_code == 200
@@ -2269,7 +2270,7 @@ def test_cannot_delete_user_if_linked_to_question(
 
 
 def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2306,7 +2307,7 @@ def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
 
     response_admin = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=state_admin_payload,
     )
 
@@ -2357,7 +2358,7 @@ def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
 
 
 def test_state_admin_with_state_access_creates_test_admin_for_district(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     """
     A state_admin linked to a state (state-level access, no district) creates a
@@ -2408,7 +2409,7 @@ def test_state_admin_with_state_access_creates_test_admin_for_district(
         }
         resp = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=state_admin_payload,
         )
         assert resp.status_code == 200
@@ -2457,7 +2458,7 @@ def test_state_admin_with_state_access_creates_test_admin_for_district(
 
 
 def test_test_admin_creates_test_admin_inherits_states_and_districts(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     """
     A test_admin with existing state and district associations creates another
@@ -2505,7 +2506,7 @@ def test_test_admin_creates_test_admin_inherits_states_and_districts(
         }
         resp = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json=creator_payload,
         )
         assert resp.status_code == 200
@@ -2553,7 +2554,7 @@ def test_test_admin_creates_test_admin_inherits_states_and_districts(
 
 
 def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2583,7 +2584,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     }
     resp_user = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=payload,
     )
     assert resp_user.status_code == 200
@@ -2598,7 +2599,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     }
     patch_resp = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_payload,
     )
 
@@ -2607,7 +2608,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
 
 
 def test_update_normal_user_to_test_admin_with_multiple_districts(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2649,7 +2650,7 @@ def test_update_normal_user_to_test_admin_with_multiple_districts(
     }
     resp_user = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=payload,
     )
     assert resp_user.status_code == 200
@@ -2665,7 +2666,7 @@ def test_update_normal_user_to_test_admin_with_multiple_districts(
     }
     patch_resp = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_payload,
     )
 
@@ -2675,7 +2676,7 @@ def test_update_normal_user_to_test_admin_with_multiple_districts(
 
 
 def test_update_normal_user_to_test_admin_without_states_districts(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2708,7 +2709,7 @@ def test_update_normal_user_to_test_admin_without_states_districts(
     }
     resp_user = client.post(
         f"{settings.API_V1_STR}/users/",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=payload,
     )
     assert resp_user.status_code == 200
@@ -2722,7 +2723,7 @@ def test_update_normal_user_to_test_admin_without_states_districts(
     }
     patch_resp = client.patch(
         f"{settings.API_V1_STR}/users/{user_id}",
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
         json=patch_payload,
     )
 
@@ -2852,7 +2853,7 @@ def test_retrieve_users_with_search(
 def test_create_user_role_hierarchy_validation_super_admin(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
-    """Test that super_admin can create users with any role."""
+    """Test that super_admin can create system_admin users (its only allowed_roles entry)."""
 
     role = db.exec(select(Role).where(Role.name == "system_admin")).first()
     assert role is not None
@@ -2875,6 +2876,62 @@ def test_create_user_role_hierarchy_validation_super_admin(
     assert response.status_code == 200
     content = response.json()
     assert content["email"] == data["email"]
+
+
+def test_create_user_role_hierarchy_validation_super_admin_cannot_create_state_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """Test that super_admin cannot directly create a state_admin (narrowed allowed_roles)."""
+
+    role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert role is not None
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 403
+    content = response.json()
+    assert "You do not have permission to assign the role" in content["detail"]
+
+
+def test_create_user_role_hierarchy_validation_super_admin_cannot_create_test_admin(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """Test that super_admin cannot directly create a test_admin (narrowed allowed_roles)."""
+
+    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
+    assert role is not None
+    organization = create_random_organization(session=db)
+
+    data = {
+        "email": random_email(),
+        "password": random_lower_string(),
+        "full_name": random_lower_string(),
+        "phone": random_lower_string(),
+        "role_id": role.id,
+        "organization_id": organization.id,
+    }
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 403
+    content = response.json()
+    assert "You do not have permission to assign the role" in content["detail"]
 
 
 def test_create_user_role_hierarchy_validation_system_admin_can_create_state_admin(
@@ -2966,7 +3023,7 @@ def test_create_user_role_hierarchy_validation_system_admin_cannot_create_super_
 
 
 def test_user_list_state_user(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -3000,7 +3057,7 @@ def test_user_list_state_user(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3035,7 +3092,7 @@ def test_user_list_state_user(
 
 
 def test_state_admin_cannot_delete_general_user(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3071,7 +3128,7 @@ def test_state_admin_cannot_delete_general_user(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3086,7 +3143,7 @@ def test_state_admin_cannot_delete_general_user(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     user_id = resp.json()["id"]
@@ -3101,7 +3158,7 @@ def test_state_admin_cannot_delete_general_user(
 
 
 def test_state_admin_cannot_delete_user_in_other_state(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3131,7 +3188,7 @@ def test_state_admin_cannot_delete_user_in_other_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3147,7 +3204,7 @@ def test_state_admin_cannot_delete_user_in_other_state(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     user_id = resp.json()["id"]
@@ -3161,7 +3218,7 @@ def test_state_admin_cannot_delete_user_in_other_state(
 
 
 def test_state_admin_cannot_delete_user_in_other_district(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3191,7 +3248,7 @@ def test_state_admin_cannot_delete_user_in_other_district(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3207,7 +3264,7 @@ def test_state_admin_cannot_delete_user_in_other_district(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     user_id = resp.json()["id"]
@@ -3221,7 +3278,7 @@ def test_state_admin_cannot_delete_user_in_other_district(
 
 
 def test_state_admin_can_delete_user_in_same_state(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3249,7 +3306,7 @@ def test_state_admin_can_delete_user_in_same_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3265,7 +3322,7 @@ def test_state_admin_can_delete_user_in_same_state(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     user_id = resp.json()["id"]
@@ -3279,7 +3336,7 @@ def test_state_admin_can_delete_user_in_same_state(
 
 
 def test_state_admin_cannot_update_general_user(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3315,7 +3372,7 @@ def test_state_admin_cannot_update_general_user(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3330,7 +3387,7 @@ def test_state_admin_cannot_update_general_user(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     user_id = resp.json()["id"]
 
@@ -3350,7 +3407,7 @@ def test_state_admin_cannot_update_general_user(
 
 
 def test_state_admin_cannot_update_user_in_other_state(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3380,7 +3437,7 @@ def test_state_admin_cannot_update_user_in_other_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3396,7 +3453,7 @@ def test_state_admin_cannot_update_user_in_other_state(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     user_id = resp.json()["id"]
 
@@ -3416,7 +3473,7 @@ def test_state_admin_cannot_update_user_in_other_state(
 
 
 def test_state_admin_can_update_user_in_same_state(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3444,7 +3501,7 @@ def test_state_admin_can_update_user_in_same_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3460,7 +3517,7 @@ def test_state_admin_can_update_user_in_same_state(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     user_id = resp.json()["id"]
 
@@ -3481,7 +3538,7 @@ def test_state_admin_can_update_user_in_same_state(
 
 
 def test_state_admin_can_update_user_in_same_district(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -3515,7 +3572,7 @@ def test_state_admin_can_update_user_in_same_district(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -3532,7 +3589,7 @@ def test_state_admin_can_update_user_in_same_district(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     user_id = resp.json()["id"]
 
@@ -4038,7 +4095,7 @@ def test_cannot_delete_user_with_candidate_test(
 
 def test_state_admin_creates_and_updates_test_admin_district(
     client: TestClient,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
     db: Session,
 ) -> None:
     """
@@ -4051,7 +4108,7 @@ def test_state_admin_creates_and_updates_test_admin_district(
         patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
         patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
     ):
-        superadmin_data = get_current_user_data(client, get_user_superadmin_token)
+        superadmin_data = get_current_user_data(client, get_user_systemadmin_token)
         org_id = superadmin_data["organization_id"]
 
         # Set up geography: country → state X → districts Y and Z
@@ -4089,7 +4146,7 @@ def test_state_admin_creates_and_updates_test_admin_district(
 
         r = client.post(
             f"{settings.API_V1_STR}/users/",
-            headers=get_user_superadmin_token,
+            headers=get_user_systemadmin_token,
             json={
                 "email": state_admin_email,
                 "password": state_admin_password,

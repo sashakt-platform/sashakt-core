@@ -745,7 +745,6 @@ def test_question_count_by_tags(
 def test_read_question_by_id(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-
     # Create organization
     org = Organization(name=random_lower_string())
     db.add(org)
@@ -5544,7 +5543,7 @@ def test_bulk_upload_questions_with_extra_column(
 
 
 def test_state_admin_cannot_delete_question_outside_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -5576,7 +5575,7 @@ def test_state_admin_cannot_delete_question_outside_location(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 
@@ -5597,7 +5596,7 @@ def test_state_admin_cannot_delete_question_outside_location(
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     question_id = response.json()["id"]
@@ -5612,7 +5611,7 @@ def test_state_admin_cannot_delete_question_outside_location(
 
 
 def test_state_admin_cannot_delete_multi_state_question_without_full_access(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -5644,7 +5643,7 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 
@@ -5665,7 +5664,7 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
     response = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     question_id = response.json()["id"]
@@ -5680,7 +5679,7 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
 
 
 def test_state_admin_cannot_delete_general_question(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -5710,7 +5709,7 @@ def test_state_admin_cannot_delete_general_question(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 
@@ -5746,7 +5745,7 @@ def test_state_admin_cannot_delete_general_question(
 
 
 def test_state_admin_delete_question_same_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -5776,7 +5775,7 @@ def test_state_admin_delete_question_same_location(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 
@@ -5811,7 +5810,7 @@ def test_state_admin_delete_question_same_location(
 
 
 def test_state_admin_cannot_update_general_question(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -5841,7 +5840,7 @@ def test_state_admin_cannot_update_general_question(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -5931,7 +5930,7 @@ def test_state_admin_can_update_question_in_their_state(
 
 
 def test_state_admin_cannot_update_question_outside_their_state(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -5967,7 +5966,7 @@ def test_state_admin_cannot_update_question_outside_their_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -5997,7 +5996,7 @@ def test_state_admin_cannot_update_question_outside_their_state(
 
 
 def test_state_admin_cannot_update_tags_for_general_question(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -6051,7 +6050,7 @@ def test_state_admin_cannot_update_tags_for_general_question(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -6067,7 +6066,7 @@ def test_state_admin_cannot_update_tags_for_general_question(
     q_resp = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     q_id = q_resp.json()["id"]
 
@@ -6083,7 +6082,7 @@ def test_state_admin_cannot_update_tags_for_general_question(
 
 
 def test_question_list_state_user(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -6117,7 +6116,7 @@ def test_question_list_state_user(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -6271,7 +6270,7 @@ def test_question_list_state_user(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -6359,7 +6358,7 @@ def test_update_question_locations_not_found(
 
 
 def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -6391,7 +6390,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 
@@ -6426,7 +6425,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     response_1 = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_payload_1,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_1.status_code == 200
     question_id_1 = response_1.json()["id"]
@@ -6434,7 +6433,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     response_2 = client.post(
         f"{settings.API_V1_STR}/questions/",
         json=question_payload_2,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_2.status_code == 200
     question_id_2 = response_2.json()["id"]
@@ -6518,7 +6517,7 @@ def test_create_question_revision_not_found(
 
 
 def test_bulk_delete_state_admin_cannot_delete_general_questions(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -6548,7 +6547,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 
@@ -6610,7 +6609,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
 
 
 def test_bulk_delete_state_admin_delete_questions_same_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -6640,7 +6639,7 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
 

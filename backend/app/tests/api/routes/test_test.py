@@ -4523,9 +4523,9 @@ def test_clone_sectioned_test_preserves_question_sets(
 
 
 def test_bulk_delete_state_admin_cannot_delete_general_tests(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -4552,7 +4552,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
@@ -4584,7 +4584,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
     create_response_one = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload_1,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert create_response_one.status_code == 200
     created_test_id_one = create_response_one.json()["id"]
@@ -4592,7 +4592,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
     create_response_two = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload_2,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert create_response_two.status_code == 200
     created_test_id_two = create_response_two.json()["id"]
@@ -4610,9 +4610,9 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
 
 
 def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -4641,7 +4641,7 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
@@ -4673,7 +4673,7 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
     create_response_one = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload_1,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert create_response_one.status_code == 200
     created_test_id_one = create_response_one.json()["id"]
@@ -4681,7 +4681,7 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
     create_response_two = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload_2,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert create_response_two.status_code == 200
     created_test_id_two = create_response_two.json()["id"]
@@ -4699,9 +4699,9 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
 
 
 def test_bulk_delete_state_admin_delete_tests_same_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -4727,7 +4727,7 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
@@ -4759,7 +4759,7 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
     create_response_one = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload_1,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert create_response_one.status_code == 200
     created_test_id_one = create_response_one.json()["id"]
@@ -4767,7 +4767,7 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
     create_response_two = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload_2,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert create_response_two.status_code == 200
     created_test_id_two = create_response_two.json()["id"]
@@ -7693,7 +7693,7 @@ def test_clone_test_with_organization_id(
 
 
 def test_test_list_state_user(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -7727,7 +7727,7 @@ def test_test_list_state_user(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -7815,7 +7815,7 @@ def test_test_list_state_user(
 
 
 def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -7846,7 +7846,7 @@ def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
             "organization_id": new_organization.id,
             "state_ids": [state_x.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_a.status_code == 200
     token_headers_a = authentication_token_from_email(
@@ -7865,7 +7865,7 @@ def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
             "organization_id": new_organization.id,
             "state_ids": [state_x.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_b.status_code == 200
     creator_id = response_b.json()["id"]
@@ -7892,7 +7892,7 @@ def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
 
 
 def test_state_admin_cannot_see_general_test_no_location(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -7923,7 +7923,7 @@ def test_state_admin_cannot_see_general_test_no_location(
             "organization_id": new_organization.id,
             "state_ids": [state_x.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -7959,7 +7959,7 @@ def test_state_admin_cannot_see_general_test_no_location(
 
 
 def test_state_admin_cannot_see_district_only_test(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -7998,7 +7998,7 @@ def test_state_admin_cannot_see_district_only_test(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -8039,7 +8039,7 @@ def test_state_admin_cannot_see_district_only_test(
 
 
 def test_state_admin_cannot_see_state_and_district_test(
-    client: TestClient, get_user_superadmin_token: dict[str, str], db: SessionDep
+    client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
     db.add(new_organization)
@@ -8078,7 +8078,7 @@ def test_state_admin_cannot_see_state_and_district_test(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -8120,7 +8120,7 @@ def test_state_admin_cannot_see_state_and_district_test(
 
 
 def test_state_admin_can_delete_test_created_by_them(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -8148,7 +8148,7 @@ def test_state_admin_can_delete_test_created_by_them(
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert resp.status_code == 200
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
@@ -8167,7 +8167,7 @@ def test_state_admin_can_delete_test_created_by_them(
     response = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     test_id = response.json()["id"]
 
@@ -8256,7 +8256,7 @@ def test_state_admin_can_delete_test_in_their_state(
 
 
 def test_state_admin_cannot_delete_test_outside_their_state(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -8286,7 +8286,7 @@ def test_state_admin_cannot_delete_test_outside_their_state(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -8304,7 +8304,7 @@ def test_state_admin_cannot_delete_test_outside_their_state(
     response = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     test_id = response.json()["id"]
 
@@ -8317,7 +8317,7 @@ def test_state_admin_cannot_delete_test_outside_their_state(
 
 
 def test_state_admin_cannot_delete_multi_state_test_without_full_access(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -8348,7 +8348,7 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -8366,7 +8366,7 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
     response = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     test_id = response.json()["id"]
     delete_resp = client.delete(
@@ -8453,7 +8453,7 @@ def test_state_admin_can_delete_test_connected_via_district(
 
 
 def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
     assert state_admin_role
@@ -8500,7 +8500,7 @@ def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
     client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
@@ -8517,7 +8517,7 @@ def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
     response = client.post(
         f"{settings.API_V1_STR}/test",
         json=test_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     test_id = response.json()["id"]
 
@@ -8963,9 +8963,9 @@ def test_district_user_cannot_modify_out_of_scope_test(
 
 
 def test_get_tests_by_district_user(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    user_data = get_current_user_data(client, get_user_superadmin_token)
+    user_data = get_current_user_data(client, get_user_systemadmin_token)
     org_id = user_data["organization_id"]
 
     country = Country(name="India", is_active=True)
@@ -9012,7 +9012,7 @@ def test_get_tests_by_district_user(
     response = client.post(
         f"{settings.API_V1_STR}/users/",
         json=state_admin_user_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
@@ -9058,7 +9058,7 @@ def test_get_tests_by_district_user(
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=test_1_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     test_1_name = response.json()["name"]
@@ -9066,7 +9066,7 @@ def test_get_tests_by_district_user(
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=test_11_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     test_11_name = response.json()["name"]
@@ -9074,7 +9074,7 @@ def test_get_tests_by_district_user(
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=test_2_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     test_2_name = response.json()["name"]
@@ -9093,7 +9093,7 @@ def test_get_tests_by_district_user(
     response = client.post(
         f"{settings.API_V1_STR}/test/",
         json=test_state_only_payload,
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
     test_state_only_name = response.json()["name"]
@@ -9116,7 +9116,7 @@ def test_get_tests_by_district_user(
 
 
 def test_test_admin_with_district_can_see_state_level_test(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """
     A test_admin scoped to Ambala district should see tests created by a
@@ -9159,7 +9159,7 @@ def test_test_admin_with_district_can_see_state_level_test(
             "organization_id": new_organization.id,
             "state_ids": [haryana.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     state_admin_token = authentication_token_from_email(
         client=client, email=state_admin_email, db=db
@@ -9180,7 +9180,7 @@ def test_test_admin_with_district_can_see_state_level_test(
             "organization_id": new_organization.id,
             "district_ids": [ambala.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     test_admin_token = authentication_token_from_email(
         client=client, email=test_admin_email, db=db
@@ -9336,7 +9336,7 @@ def test_state_admin_cannot_see_district_level_test(
 
 
 def test_district_user_can_see_test_created_by_peer_in_same_district(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """
     A test_admin scoped to district A should be able to see a test created by
@@ -9380,7 +9380,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
             "organization_id": new_organization.id,
             "district_ids": [district_a.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     creator_token = authentication_token_from_email(
         client=client, email=creator_email, db=db
@@ -9399,7 +9399,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
             "organization_id": new_organization.id,
             "district_ids": [district_a.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     viewer_token = authentication_token_from_email(
         client=client, email=viewer_email, db=db
@@ -9418,7 +9418,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
             "organization_id": new_organization.id,
             "district_ids": [district_b.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     other_district_token = authentication_token_from_email(
         client=client, email=other_district_email, db=db
@@ -9467,7 +9467,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
 
 
 def test_district_user_cannot_see_general_test_no_location(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """
     A test_admin scoped to a district must NOT see General Tests (tests with no
@@ -9508,7 +9508,7 @@ def test_district_user_cannot_see_general_test_no_location(
             "organization_id": new_organization.id,
             "district_ids": [district.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     district_user_token = authentication_token_from_email(
         client=client, email=district_user_email, db=db
@@ -9546,7 +9546,7 @@ def test_district_user_cannot_see_general_test_no_location(
 
 
 def test_district_user_cannot_see_test_from_state_admin_of_different_state(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """
     A test_admin scoped to a district in state X must NOT see tests created by
@@ -9595,7 +9595,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
             "organization_id": new_organization.id,
             "state_ids": [state_x.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_x.status_code == 200
     state_admin_x_token = authentication_token_from_email(
@@ -9615,7 +9615,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
             "organization_id": new_organization.id,
             "state_ids": [state_b.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_b.status_code == 200
     state_admin_b_token = authentication_token_from_email(
@@ -9635,7 +9635,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
             "organization_id": new_organization.id,
             "district_ids": [district_x.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_ta.status_code == 200
     test_admin_token = authentication_token_from_email(
@@ -9683,7 +9683,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
 
 
 def test_unscoped_test_admin_can_see_all_org_tests(
-    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+    client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
     """
     A test_admin with no district or state assigned is not location-restricted
@@ -9718,7 +9718,7 @@ def test_unscoped_test_admin_can_see_all_org_tests(
             "role_id": test_admin_role.id,
             "organization_id": new_organization.id,
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     assert response_unscoped.status_code == 200
     unscoped_token = authentication_token_from_email(
@@ -10439,7 +10439,7 @@ def test_clone_test_does_not_generate_test_link(
 def test_get_tests_my_tests_filter(
     client: TestClient,
     db: SessionDep,
-    get_user_superadmin_token: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
 ) -> None:
     """my_tests=True returns only tests created by the current user;
     my_tests=False excludes them — regardless of location assignment."""
@@ -10480,7 +10480,7 @@ def test_get_tests_my_tests_filter(
             "organization_id": org_district.id,
             "district_ids": [district.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     district_user_headers = authentication_token_from_email(
         client=client, email=email_district, db=db
@@ -10581,7 +10581,7 @@ def test_get_tests_my_tests_filter(
             "organization_id": org_state.id,
             "state_ids": [state_s.id],
         },
-        headers=get_user_superadmin_token,
+        headers=get_user_systemadmin_token,
     )
     state_user_headers = authentication_token_from_email(
         client=client, email=email_state, db=db
