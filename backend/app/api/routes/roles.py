@@ -61,6 +61,37 @@ def _grant_visibility(
             session.add(allow_role)
 
 
+def _revoke_visibility(
+    session: SessionDep, role_name: str, revoke_roles: list[Role]
+) -> None:
+    """
+    Remove role_name from each revoke role's allowed_roles, if present.
+    Caller is responsible for committing - see _grant_visibility.
+    """
+    for revoke_role in revoke_roles:
+        if role_name in (revoke_role.allowed_roles or []):
+            revoke_role.allowed_roles = [
+                allowed_role_name
+                for allowed_role_name in revoke_role.allowed_roles
+                if allowed_role_name != role_name
+            ]
+            session.add(revoke_role)
+
+
+def _roles_visible_to(session: SessionDep, role_name: str) -> list[Role]:
+    """
+    Find every role that currently has role_name in its allowed_roles.
+    allowed_roles is a JSON column, so this scans the (small) roles table
+    rather than issuing a JSON-containment query.
+    """
+    all_roles = session.exec(select(Role)).all()
+    return [
+        existing_role
+        for existing_role in all_roles
+        if role_name in (existing_role.allowed_roles or [])
+    ]
+
+
 @router.get(
     "/",
     response_model=RolesPublic,
@@ -195,12 +226,6 @@ def update_role(
 
     _fetch_roles_by_name(session, role_update.allowed_roles, "allowed_roles")
 
-    allow_roles = (
-        _fetch_roles_by_name(session, role_update.visible_to_roles, "visible_to_roles")
-        if role_update.visible_to_roles is not None
-        else []
-    )
-
     if role_update.permissions is not None:
         permission_remove = [
             permission.id
@@ -239,7 +264,19 @@ def update_role(
     session.refresh(role)
 
     if role_update.visible_to_roles is not None:
-        _grant_visibility(session, role.name, allow_roles)
+        target_roles = _fetch_roles_by_name(
+            session, role_update.visible_to_roles, "visible_to_roles"
+        )
+        target_role_ids = {target_role.id for target_role in target_roles}
+
+        revoke_roles = [
+            currently_visible_role
+            for currently_visible_role in _roles_visible_to(session, role.name)
+            if currently_visible_role.id not in target_role_ids
+        ]
+
+        _grant_visibility(session, role.name, target_roles)
+        _revoke_visibility(session, role.name, revoke_roles)
         session.commit()
         session.refresh(role)
 

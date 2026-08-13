@@ -1185,3 +1185,110 @@ def test_update_role_with_allowed_roles_and_visible_to_roles(
 
     db.refresh(custom_role)
     assert custom_role.allowed_roles == ["test_admin", "state_admin"]
+
+
+def test_update_role_visible_to_roles_moves_grant_between_roles(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Changing visible_to_roles on an update should revoke visibility from
+    roles no longer in the list, not just grant it to the new ones."""
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
+    assert system_admin_role is not None
+    assert state_admin_role is not None
+
+    data = {
+        "name": random_lower_string(),
+        "label": random_lower_string(),
+        "description": random_lower_string(),
+        "visible_to_roles": ["system_admin"],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    new_role_id = response.json()["id"]
+    new_role_name = response.json()["name"]
+
+    db.refresh(system_admin_role)
+    assert new_role_name in system_admin_role.allowed_roles
+    assert new_role_name not in state_admin_role.allowed_roles
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{new_role_id}",
+        headers=superuser_token_headers,
+        json={
+            "name": new_role_name,
+            "label": data["label"],
+            "visible_to_roles": ["state_admin"],
+        },
+    )
+    assert response.status_code == 200
+
+    db.refresh(system_admin_role)
+    db.refresh(state_admin_role)
+    assert new_role_name not in system_admin_role.allowed_roles
+    assert new_role_name in state_admin_role.allowed_roles
+
+
+def test_update_role_empty_visible_to_roles_revokes_system_admin_grant(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    get_user_systemadmin_token: dict[str, str],
+    db: Session,
+) -> None:
+    """Sending visible_to_roles: [] explicitly (unlike omitting the key)
+    revokes every existing grant, so system_admin should stop seeing the
+    role once it is no longer listed."""
+    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
+    assert system_admin_role is not None
+
+    data = {
+        "name": random_lower_string(),
+        "label": random_lower_string(),
+        "description": random_lower_string(),
+        "visible_to_roles": ["system_admin"],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    new_role_id = response.json()["id"]
+    new_role_name = response.json()["name"]
+
+    db.refresh(system_admin_role)
+    assert new_role_name in system_admin_role.allowed_roles
+
+    list_response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_systemadmin_token,
+    )
+    assert list_response.status_code == 200
+    role_names = {role["name"] for role in list_response.json()["data"]}
+    assert new_role_name in role_names
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{new_role_id}",
+        headers=superuser_token_headers,
+        json={
+            "name": new_role_name,
+            "label": data["label"],
+            "visible_to_roles": [],
+        },
+    )
+    assert response.status_code == 200
+
+    db.refresh(system_admin_role)
+    assert new_role_name not in system_admin_role.allowed_roles
+
+    list_response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_systemadmin_token,
+    )
+    assert list_response.status_code == 200
+    role_names = {role["name"] for role in list_response.json()["data"]}
+    assert new_role_name not in role_names
