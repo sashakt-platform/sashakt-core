@@ -231,7 +231,7 @@ def update_role(
             session.commit()
 
     update_dict = role_update.model_dump(
-        exclude_unset=True, exclude={"visible_to_roles"}
+        exclude_unset=True, exclude={"visible_to_roles", "name"}
     )
     role.sqlmodel_update(update_dict)
     session.add(role)

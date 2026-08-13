@@ -258,6 +258,8 @@ def test_update_role(
     db.add_all([role_permission_a, role_permission_b])
     db.commit()
 
+    original_name = role.name
+
     data = {
         "name": random_lower_string(),
         "description": random_lower_string(),
@@ -271,7 +273,7 @@ def test_update_role(
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["name"] == data["name"]
+    assert content["name"] == original_name
     assert content["description"] == data["description"]
     assert content["label"] == data["label"]
     assert content["id"] == role.id
@@ -290,7 +292,7 @@ def test_update_role(
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["name"] == data["name"]
+    assert content["name"] == original_name
     assert content["description"] == data["description"]
     assert content["label"] == data["label"]
     assert content["id"] == role.id
@@ -310,11 +312,41 @@ def test_update_role(
     )
     assert response.status_code == 200
     content = response.json()
-    assert content["name"] == data["name"]
+    assert content["name"] == original_name
     assert content["description"] == data["description"]
     assert content["label"] == data["label"]
     assert content["id"] == role.id
     assert content["permissions"] == []
+
+
+def test_update_role_cannot_change_name(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Regression test: a PUT payload with a different name must not rename
+    the role - name is immutable once a role is created."""
+    role = create_random_role(db)
+    original_name = role.name
+
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+    }
+    assert data["name"] != original_name
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["name"] == original_name
+    assert content["description"] == data["description"]
+    assert content["label"] == data["label"]
+
+    db.refresh(role)
+    assert role.name == original_name
 
 
 def test_update_role_partial_put_omits_permissions_unchanged(
@@ -673,6 +705,7 @@ def test_delete_role_still_assigned_to_a_user_is_blocked(
     role = create_random_role(db)
     org = create_random_organization(db)
     assert role.id is not None
+    assert org.id is not None
     crud.create_user(
         session=db,
         user_create=UserCreate(
