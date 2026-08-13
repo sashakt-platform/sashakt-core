@@ -123,8 +123,6 @@ def read_role(session: SessionDep, id: int) -> Any:
     role = session.get(Role, id)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
-    # if not current_user.is_superuser and (role.owner_id != current_user.id):
-    #     raise HTTPException(status_code=400, detail="Not enough permissions")
     stored_permission_ids = session.exec(
         select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
     )
@@ -194,8 +192,6 @@ def update_role(
     role = session.get(Role, id)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
-    # if not current_user.is_superuser and (role.owner_id != current_user.id):
-    #     raise HTTPException(status_code=400, detail="Not enough permissions")
 
     _fetch_roles_by_name(session, role_update.allowed_roles, "allowed_roles")
 
