@@ -94,12 +94,19 @@ class CandidateSavedAnswer(SQLModel):
     correct_answer: CorrectAnswerType = None
 
 
+class CandidateReviewTag(SQLModel):
+    __test__ = False
+    tag_type: str
+    tag: list[str]
+
+
 class CandidateReviewResponse(SQLModel):
     __test__ = False
     question_revision_id: int
     submitted_answer: str | None = None
     correct_answer: CorrectAnswerType = None
     solution: str | None = None
+    tags: list[CandidateReviewTag] = []
 
 
 class CandidateTestAnswerUpdate(SQLModel):
