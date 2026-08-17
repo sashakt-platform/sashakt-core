@@ -4176,3 +4176,91 @@ def test_state_admin_creates_and_updates_test_admin_district(
         assert {d["id"] for d in updated["districts"]} == {district_z.id}
         assert district_y.id not in {d["id"] for d in updated["districts"]}
         assert {s["id"] for s in updated["states"]} == {state_x.id}
+
+
+def test_create_user_with_role_from_different_org_is_rejected(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A user's role must belong to the same organization the user is being
+    created in - a role from a different org must be rejected."""
+    target_org = create_random_organization(db)
+    other_org = create_random_organization(db)
+    assert target_org.id is not None and other_org.id is not None
+
+    other_org_role = get_org_role(db, other_org.id, "test_admin")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": other_org_role.id,
+            "organization_id": target_org.id,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
+
+
+def test_update_user_with_role_from_different_org_is_rejected(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Re-pointing an existing user's role_id to another org's role must
+    also be rejected, not just at creation time."""
+    target_org = create_random_organization(db)
+    other_org = create_random_organization(db)
+    assert target_org.id is not None and other_org.id is not None
+
+    existing_user = create_random_user(db, organization_id=target_org.id)
+    other_org_role = get_org_role(db, other_org.id, "state_admin")
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{existing_user.id}",
+        headers=superuser_token_headers,
+        json={
+            "full_name": existing_user.full_name,
+            "phone": existing_user.phone,
+            "role_id": other_org_role.id,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
+
+
+def test_cannot_assign_super_admin_to_user_outside_t4d(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """super_admin belongs to T4D alone - assigning it to a user whose own
+    organization is a different org must be rejected by the org check
+    (a 400, not the role-hierarchy 403), regardless of who's asking."""
+    t4d_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    t4d_super_admin = get_org_role(db, t4d_org_id, "super_admin")
+
+    other_org = create_random_organization(db)
+    assert other_org.id is not None
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": t4d_super_admin.id,
+            "organization_id": other_org.id,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
