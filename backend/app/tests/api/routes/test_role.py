@@ -1333,3 +1333,181 @@ def test_update_role_empty_visible_to_roles_revokes_system_admin_grant(
     assert list_response.status_code == 200
     role_names = {role["name"] for role in list_response.json()["data"]}
     assert new_role_name not in role_names
+
+
+def test_cannot_read_role_from_other_organization(
+    client: TestClient, db: Session
+) -> None:
+    """Org A's admin can never read Org B's role by id, even knowing the id."""
+    org_a_token = get_user_token(db=db, role="system_admin")
+    org_b_token = get_user_token(db=db, role="system_admin")
+
+    org_b_id = _org_id(client, org_b_token)
+    org_b_role = get_org_role(db, org_b_id, "system_admin")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/{org_b_role.id}",
+        headers=org_a_token,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Role not found"
+
+
+def test_read_roles_excludes_other_organizations_roles(
+    client: TestClient, db: Session
+) -> None:
+    """GET /roles/ never returns another org's role, even with a matching name."""
+    org_a_token = get_user_token(db=db, role="system_admin")
+    org_b_token = get_user_token(db=db, role="system_admin")
+
+    org_b_id = _org_id(client, org_b_token)
+    org_b_role = get_org_role(db, org_b_id, "system_admin")
+
+    response = client.get(f"{settings.API_V1_STR}/roles/", headers=org_a_token)
+    assert response.status_code == 200
+    returned_ids = {role["id"] for role in response.json()["data"]}
+    assert org_b_role.id not in returned_ids
+
+
+def test_cannot_modify_role_from_other_organization(
+    client: TestClient, db: Session
+) -> None:
+    """PUT/PATCH/DELETE on another org's role id must 404, not succeed."""
+    org_a_token = get_user_token(db=db, role="super_admin")
+    org_b_token = get_user_token(db=db, role="super_admin")
+
+    org_b_id = _org_id(client, org_b_token)
+    org_b_role = get_org_role(db, org_b_id, "test_admin")
+
+    put_response = client.put(
+        f"{settings.API_V1_STR}/roles/{org_b_role.id}",
+        headers=org_a_token,
+        json={"name": org_b_role.name, "label": "hijacked"},
+    )
+    assert put_response.status_code == 404
+    assert put_response.json()["detail"] == "Role not found"
+
+    patch_response = client.patch(
+        f"{settings.API_V1_STR}/roles/{org_b_role.id}",
+        headers=org_a_token,
+        params={"is_active": False},
+    )
+    assert patch_response.status_code == 404
+    assert patch_response.json()["detail"] == "Role not found"
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/roles/{org_b_role.id}",
+        headers=org_a_token,
+    )
+    assert delete_response.status_code == 404
+    assert delete_response.json()["detail"] == "Role not found"
+
+
+def test_super_admin_role_cannot_be_modified_by_anyone(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Not even a T4D super admin can PUT/PATCH/DELETE the super_admin role."""
+    org_id = _org_id(client, superuser_token_headers)
+    super_admin_role = get_org_role(db, org_id, "super_admin")
+
+    put_response = client.put(
+        f"{settings.API_V1_STR}/roles/{super_admin_role.id}",
+        headers=superuser_token_headers,
+        json={"name": "super_admin", "label": "renamed"},
+    )
+    assert put_response.status_code == 403
+    assert put_response.json()["detail"] == "The super_admin role cannot be modified"
+
+    patch_response = client.patch(
+        f"{settings.API_V1_STR}/roles/{super_admin_role.id}",
+        headers=superuser_token_headers,
+        params={"is_active": False},
+    )
+    assert patch_response.status_code == 403
+    assert patch_response.json()["detail"] == "The super_admin role cannot be modified"
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/roles/{super_admin_role.id}",
+        headers=superuser_token_headers,
+    )
+    assert delete_response.status_code == 403
+    assert delete_response.json()["detail"] == "The super_admin role cannot be modified"
+
+
+def test_two_orgs_customize_test_admin_independently(
+    client: TestClient, db: Session
+) -> None:
+    """Turning a permission on for Org A's test_admin (here create_location,
+    off by default for test_admin) must not affect Org B's test_admin
+    permissions."""
+    org_a_token = get_user_token(db=db, role="super_admin")
+    org_b_token = get_user_token(db=db, role="super_admin")
+
+    org_a_id = _org_id(client, org_a_token)
+    org_b_id = _org_id(client, org_b_token)
+
+    new_permission = db.exec(
+        select(Permission).where(Permission.name == "create_location")
+    ).first()
+    assert new_permission is not None
+
+    org_a_test_admin = get_org_role(db, org_a_id, "test_admin")
+    org_b_test_admin = get_org_role(db, org_b_id, "test_admin")
+    org_a_permission_ids = {
+        permission.id for permission in (org_a_test_admin.permissions or [])
+    }
+    org_b_permission_ids_before = {
+        permission.id for permission in (org_b_test_admin.permissions or [])
+    }
+    assert new_permission.id not in org_a_permission_ids
+    assert new_permission.id not in org_b_permission_ids_before
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{org_a_test_admin.id}",
+        headers=org_a_token,
+        json={
+            "name": org_a_test_admin.name,
+            "label": org_a_test_admin.label,
+            "permissions": [*org_a_permission_ids, new_permission.id],
+        },
+    )
+    assert response.status_code == 200
+    assert new_permission.id in response.json()["permissions"]
+
+    db.refresh(org_b_test_admin)
+    org_b_permission_ids_after = {
+        permission.id for permission in (org_b_test_admin.permissions or [])
+    }
+    assert new_permission.id not in org_b_permission_ids_after
+
+
+def test_visible_to_roles_grant_does_not_leak_across_orgs(
+    client: TestClient, db: Session
+) -> None:
+    """Granting visibility to "system_admin" from Org A must only touch Org
+    A's own system_admin row, even though Org B has an identically-named one."""
+    org_a_token = get_user_token(db=db, role="super_admin")
+    org_b_token = get_user_token(db=db, role="super_admin")
+
+    org_a_id = _org_id(client, org_a_token)
+    org_b_id = _org_id(client, org_b_token)
+
+    org_a_system_admin = get_org_role(db, org_a_id, "system_admin")
+    org_b_system_admin = get_org_role(db, org_b_id, "system_admin")
+
+    data = {
+        "name": random_lower_string(),
+        "label": random_lower_string(),
+        "description": random_lower_string(),
+        "visible_to_roles": ["system_admin"],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/", headers=org_a_token, json=data
+    )
+    assert response.status_code == 200
+    new_role_name = response.json()["name"]
+
+    db.refresh(org_a_system_admin)
+    db.refresh(org_b_system_admin)
+    assert new_role_name in org_a_system_admin.allowed_roles
+    assert new_role_name not in org_b_system_admin.allowed_roles
