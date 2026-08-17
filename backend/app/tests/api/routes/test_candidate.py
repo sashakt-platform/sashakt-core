@@ -28,7 +28,6 @@ from app.models.organization_settings import (
     default_organization_settings,
 )
 from app.models.question import QuestionTag, QuestionType
-from app.models.role import Role
 from app.models.tag import Tag, TagType
 from app.models.test import (
     MarksLevelEnum,
@@ -46,6 +45,7 @@ from app.tests.utils.candidate import (
 )
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.role import get_org_role
 from app.tests.utils.test import get_test_link
 from app.tests.utils.user import (
     authentication_token_from_email,
@@ -4930,8 +4930,7 @@ def test_overall_avg_score_state_admin_location_restricted(
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, org_id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5107,8 +5106,7 @@ def test_overall_avg_time_state_admin_location_restricted(
     user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, org_id, "state_admin")
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
     db.commit()
@@ -10897,11 +10895,10 @@ def test_candidate_active_inside_time_limit(
 def test_summary_filtered_by_state(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
     user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
+    state_admin_role = get_org_role(db, org_id, "state_admin")
 
     email = random_email()
 
@@ -11012,11 +11009,10 @@ def test_summary_filtered_by_state(
 def test_summary_filtered_by_district(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
     user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
+    state_admin_role = get_org_role(db, org_id, "state_admin")
 
     email = random_email()
 
@@ -11144,11 +11140,10 @@ def test_summary_filtered_by_district(
 def test_summary_active_submitted_by_state(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
     user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
+    state_admin_role = get_org_role(db, org_id, "state_admin")
 
     email = random_email()
 
@@ -11260,11 +11255,10 @@ def test_summary_active_submitted_by_state(
 def test_summary_active_submitted_by_district(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
     user_data = get_current_user_data(client, get_user_systemadmin_token)
     user_id = user_data["id"]
     org_id = user_data["organization_id"]
+    state_admin_role = get_org_role(db, org_id, "state_admin")
 
     email = random_email()
 
