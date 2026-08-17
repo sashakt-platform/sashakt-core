@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel, UniqueConstraint
 
@@ -49,10 +49,8 @@ class Role(RoleBase, table=True):
     __table_args__ = (UniqueConstraint("organization_id", "name"),)
     id: int | None = Field(default=None, primary_key=True)
     is_restricted: bool = Field(default=False)
-    organization_id: int | None = Field(
-        default=None, foreign_key="organization.id", ondelete="CASCADE"
-    )
-    organization: Optional["Organization"] = Relationship(back_populates="roles")
+    organization_id: int = Field(foreign_key="organization.id", ondelete="CASCADE")
+    organization: "Organization" = Relationship(back_populates="roles")
     users: list["User"] = Relationship(back_populates="role")
     permissions: list["Permission"] | None = Relationship(
         back_populates="roles", link_model=RolePermission
@@ -63,7 +61,7 @@ class Role(RoleBase, table=True):
 class RolePublic(RoleBase):
     id: int
     is_restricted: bool
-    organization_id: int | None
+    organization_id: int
     permissions: list[int]
 
 
