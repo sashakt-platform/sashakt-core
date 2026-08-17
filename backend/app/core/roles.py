@@ -76,7 +76,7 @@ def create_role(
     session: Session,
     role_create: RoleCreate,
     permissions: list[int],
-    organization_id: int | None,
+    organization_id: int,
 ) -> RolePublic:
     current_role = session.exec(
         select(Role).where(
@@ -111,14 +111,18 @@ def create_role(
     return RolePublic(**current_role.model_dump(), permissions=stored_permission_ids)
 
 
-def init_super_admin(session: Session) -> None:
+def init_super_admin_role(session: Session, organization_id: int) -> None:
     """
-    Create the single global super_admin role (organization_id=None), pre-loaded
-    with its default permissions. Idempotent — only ever needs to run once,
-    at startup, before any organization exists.
+    Create the single, global super_admin role, scoped to the T4D organization,
+    pre-loaded with its default permissions.
+
+    This must only ever be called once, for T4D — super_admin is never cloned
+    into any other organization.
     """
     super_admin_permissions = get_role_permissions(super_admin, session)
-    create_role(session, super_admin, super_admin_permissions, organization_id=None)
+    create_role(
+        session, super_admin, super_admin_permissions, organization_id=organization_id
+    )
 
 
 def init_org_roles(session: Session, organization_id: int) -> None:
