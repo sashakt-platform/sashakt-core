@@ -20,6 +20,7 @@ from sqlmodel import Session, select
 
 from app import crud
 from app.core.db import engine
+from app.core.roles import init_org_roles
 from app.crud import organization_settings as crud_organization_settings
 from app.models import (
     District,
@@ -82,8 +83,20 @@ def _already_seeded(session: Session) -> bool:
     return existing is not None
 
 
-def _get_role(session: Session, name: str) -> Role:
-    role = session.exec(select(Role).where(Role.name == name)).first()
+def _get_role(
+    session: Session, name: str, *, organization_id: int | None = None
+) -> Role:
+    """
+    Look up a role by name.
+
+    Pass `organization_id` for any of the four customizable roles, since each
+    organization now has its own copy of them. Leave it unset only for
+    `super_admin`, which is the single, globally unique role.
+    """
+    statement = select(Role).where(Role.name == name)
+    if organization_id is not None:
+        statement = statement.where(Role.organization_id == organization_id)
+    role = session.exec(statement).first()
     if role is None:
         raise RuntimeError(
             f"Role {name!r} not found — run `python app/initial_data.py` first."
@@ -104,6 +117,9 @@ def _get_or_create_organization(session: Session) -> Organization:
     session.add(org)
     session.commit()
     session.refresh(org)
+    if org.id is None:
+        raise RuntimeError("Failed to create Sample Organization")
+    init_org_roles(session, org.id)
     return org
 
 
@@ -498,7 +514,7 @@ def seed(session: Session) -> None:
 
     created_users: list[User] = []
     for spec in USERS:
-        role = _get_role(session, spec["role"])
+        role = _get_role(session, spec["role"], organization_id=org.id)
         assert role.id is not None
         user = _create_user(
             session,

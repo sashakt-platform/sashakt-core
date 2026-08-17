@@ -3,7 +3,6 @@ from unittest.mock import patch
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
@@ -15,7 +14,6 @@ from app.models.question import (
     QuestionRevision,
     QuestionType,
 )
-from app.models.role import Role
 from app.models.test import Test, TestState
 from app.models.user import UserDistrict, UserState
 from app.tests.utils.files import (
@@ -26,6 +24,7 @@ from app.tests.utils.files import (
 from app.tests.utils.organization import (
     create_random_organization,
 )
+from app.tests.utils.role import get_org_role
 from app.tests.utils.user import (
     authentication_token_from_email,
     create_random_user,
@@ -878,8 +877,8 @@ def test_aggregated_data_for_state_admin(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    assert new_organization.id is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -1021,8 +1020,7 @@ def test_aggregated_data_for_state_admin_for_district(
     db.refresh(district_x3)
     db.refresh(district_y1)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, organization_id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -1176,8 +1174,8 @@ def test_aggregated_data_for_state_admin_distinct_check(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    assert new_organization.id is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -1348,8 +1346,8 @@ def test_get_current_organization(
     db.refresh(org)
 
     email_with_org = random_email()
-    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "test_admin")
 
     user_payload = {
         "email": email_with_org,
@@ -1391,8 +1389,8 @@ def test_update_current_organization(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
 
     email = random_email()
     client.post(
@@ -1479,8 +1477,8 @@ def test_update_current_organization_with_logo(
     """Test updating organization with valid logo upload."""
 
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1529,8 +1527,8 @@ def test_update_current_organization_without_logo(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1568,8 +1566,8 @@ def test_update_organization_logo_invalid_file_type(
     """Test rejecting invalid file types (non-image files)."""
 
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1610,8 +1608,8 @@ def test_update_organization_logo_file_too_large(
     """Test rejecting files larger than 2MB."""
 
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1662,8 +1660,8 @@ def test_update_organization_logo_replaces_old(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1709,8 +1707,8 @@ def test_delete_current_organization_logo_success(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1752,8 +1750,8 @@ def test_delete_logo_when_none_exists(
     db.commit()
     db.refresh(org)
 
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1788,8 +1786,8 @@ def test_update_organization_logo_empty_file(
 ) -> None:
     """Test rejecting empty file upload."""
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()
@@ -1830,8 +1828,8 @@ def test_update_organization_logo_no_filename(
     from app.tests.utils.files import create_test_image
 
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "super_admin")
 
     email = random_email()
     password = random_lower_string()

@@ -62,7 +62,9 @@ class Organization(OrganizationBase, table=True):
     tests: list["Test"] = Relationship(back_populates="organization")
     candidates: list["Candidate"] = Relationship(back_populates="organization")
     forms: list["Form"] = Relationship(back_populates="organization")
-    roles: list["Role"] = Relationship(back_populates="organization")
+    roles: list["Role"] = Relationship(
+        back_populates="organization", cascade_delete=True
+    )
     settings: Optional["OrganizationSettings"] = Relationship(
         back_populates="organization",
         sa_relationship_kwargs={"uselist": False},

@@ -6,14 +6,13 @@ import tempfile
 
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
 from app.models.location import Block, Country, District, State
-from app.models.role import Role
 from app.models.test import Test, TestDistrict, TestState
 from app.tests.utils.organization import create_random_organization
+from app.tests.utils.role import get_org_role
 from app.tests.utils.user import authentication_token_from_email, create_random_user
 from app.tests.utils.utils import assert_paginated_response
 
@@ -1120,8 +1119,8 @@ def test_get_state_admin_state_list(
     assert response.status_code == 200
     assert len(data["items"]) > 1
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    assert new_organization.id is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -1152,8 +1151,8 @@ def test_get_state_admin_state_list(
 
     # ---Check test for test admin
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    assert new_organization.id is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     test_admin_email = random_email()
     test_admin_payload = {
@@ -1232,8 +1231,8 @@ def test_filter_district_for_state_admin(
     assert response.status_code == 200
     assert len(data["items"]) > 1
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    assert new_organization.id is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -1266,8 +1265,8 @@ def test_filter_district_for_state_admin(
     assert district_2.id in district_ids
     assert district_3.id not in district_ids
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    assert new_organization.id is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     test_admin_email = random_email()
     test_admin_payload = {

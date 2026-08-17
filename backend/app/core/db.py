@@ -11,7 +11,7 @@ from app.core.permissions import (
 from app.core.providers import init_providers
 from app.core.roles import (
     init_org_roles,
-    init_super_admin,
+    init_super_admin_role,
     super_admin,
 )
 from app.models import (
@@ -52,9 +52,8 @@ def init_db(session: Session) -> None:
         # Creating Initial Permissions
         init_permissions(session)
 
-        # Creating the global super_admin role (belongs to no organization)
-        init_super_admin(session)
-
+        # The T4D organization must exist before any role, since every role now
+        # belongs to a concrete organization.
         initial_organization = Organization(name="T4D", description="T4D Organization")
         session.add(initial_organization)
         session.flush()
@@ -68,10 +67,15 @@ def init_db(session: Session) -> None:
         session.commit()
         session.refresh(initial_organization)
 
+        init_super_admin_role(session, initial_organization.id)
+
         init_org_roles(session, initial_organization.id)
 
         super_admin_role = session.exec(
-            select(Role.id).where(Role.name == super_admin.name)
+            select(Role.id).where(
+                Role.name == super_admin.name,
+                Role.organization_id == initial_organization.id,
+            )
         ).first()
 
         user_in = UserCreate(
