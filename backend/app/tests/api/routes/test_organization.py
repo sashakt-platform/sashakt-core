@@ -3,9 +3,17 @@ from unittest.mock import patch
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
+from app.core.roles import (
+    candidate,
+    get_role_permissions,
+    state_admin,
+    system_admin,
+    test_admin,
+)
 from app.models.location import Country, District, State
 from app.models.organization import Organization
 from app.models.question import (
@@ -14,6 +22,7 @@ from app.models.question import (
     QuestionRevision,
     QuestionType,
 )
+from app.models.role import Role
 from app.models.test import Test, TestState
 from app.models.user import UserDistrict, UserState
 from app.tests.utils.files import (
@@ -1988,3 +1997,40 @@ def test_read_organization_by_id_users_count_is_none(
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["users_count"] is None
+
+
+def test_create_organization_seeds_default_roles(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """A new organization must come up with exactly its own
+    system_admin/state_admin/test_admin/candidate roles (never super_admin),
+    pre-loaded with today's default permissions."""
+    response = client.post(
+        f"{settings.API_V1_STR}/organization/",
+        data={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+        },
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    new_org_id = response.json()["id"]
+
+    seeded_roles = db.exec(select(Role).where(Role.organization_id == new_org_id)).all()
+    seeded_names = {role.name for role in seeded_roles}
+    assert seeded_names == {"system_admin", "state_admin", "test_admin", "candidate"}
+    assert "super_admin" not in seeded_names
+
+    for role_create in (system_admin, state_admin, test_admin, candidate):
+        seeded_role = next(
+            candidate_role
+            for candidate_role in seeded_roles
+            if candidate_role.name == role_create.name
+        )
+        expected_permission_ids = set(get_role_permissions(role_create, db))
+        actual_permission_ids = {
+            permission.id for permission in (seeded_role.permissions or [])
+        }
+        assert actual_permission_ids == expected_permission_ids
