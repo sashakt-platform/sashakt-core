@@ -1,11 +1,19 @@
 from typing import Any
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app import crud
 from app.core.config import settings
-from app.models import Permission, Role, RoleLocationLevel, RolePermission, UserCreate
+from app.core.roles import init_org_roles
+from app.models import (
+    Organization,
+    Permission,
+    Role,
+    RoleLocationLevel,
+    RolePermission,
+    UserCreate,
+)
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.role import create_random_role, get_org_role
 from app.tests.utils.user import (
@@ -1511,3 +1519,33 @@ def test_visible_to_roles_grant_does_not_leak_across_orgs(
     db.refresh(org_b_system_admin)
     assert new_role_name in org_a_system_admin.allowed_roles
     assert new_role_name not in org_b_system_admin.allowed_roles
+
+
+def test_deleting_organization_cascades_to_its_roles(db: Session) -> None:
+    """Deleting an Organization row must cascade-delete every Role scoped to
+    it - the API only ever soft-deletes an org (is_deleted=True), so this
+    exercises the FK/relationship cascade directly at the DB level. Uses a
+    bare Organization (no OrganizationSettings) so the delete only exercises
+    the role cascade, not unrelated relationships."""
+    organization = Organization(name=random_lower_string())
+    db.add(organization)
+    db.commit()
+    db.refresh(organization)
+    assert organization.id is not None
+    init_org_roles(db, organization.id)
+
+    seeded_role_ids = [
+        role.id
+        for role in db.exec(
+            select(Role).where(Role.organization_id == organization.id)
+        ).all()
+    ]
+    assert len(seeded_role_ids) == 4
+
+    db.delete(organization)
+    db.commit()
+
+    remaining_roles = db.exec(
+        select(Role).where(col(Role.id).in_(seeded_role_ids))
+    ).all()
+    assert remaining_roles == []
