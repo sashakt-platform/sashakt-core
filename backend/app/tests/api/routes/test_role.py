@@ -707,6 +707,44 @@ def test_delete_role(
     assert content["detail"] == "Role not found"
 
 
+def test_delete_role_revokes_visibility_grants(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Deleting a role must scrub its name out of every other role's
+    allowed_roles - otherwise the grant becomes a stale string reference
+    that lingers in the hierarchy forever."""
+    org_id = _org_id(client, superuser_token_headers)
+    system_admin_role = get_org_role(db, org_id, "system_admin")
+
+    data = {
+        "name": random_lower_string(),
+        "label": random_lower_string(),
+        "description": random_lower_string(),
+        "visible_to_roles": ["system_admin"],
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert response.status_code == 200
+    new_role_id = response.json()["id"]
+    new_role_name = response.json()["name"]
+
+    db.refresh(system_admin_role)
+    assert new_role_name in system_admin_role.allowed_roles
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/roles/{new_role_id}",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+
+    db.refresh(system_admin_role)
+    assert new_role_name not in system_admin_role.allowed_roles
+    assert db.get(Role, new_role_id) is None
+
+
 def test_delete_role_not_found(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:

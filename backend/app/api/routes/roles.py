@@ -161,6 +161,7 @@ def read_roles(
             col(Role.name).in_(available_roles),
             Role.organization_id == current_user.organization_id,
         )
+        .order_by(col(Role.id))
         .offset(skip)
         .limit(limit)
     )
@@ -173,10 +174,17 @@ def read_roles(
                 RolePermission.role_id == role.id
             )
         )
+        visible_to_roles = [
+            visible_to_role.name
+            for visible_to_role in _roles_visible_to(
+                session, current_user.organization_id, role.name
+            )
+        ]
         role_public.append(
             RolePublic(
                 **role.model_dump(),
                 permissions=stored_permission_ids,
+                visible_to_roles=visible_to_roles,
             )
         )
 
@@ -196,10 +204,17 @@ def read_role(session: SessionDep, current_user: CurrentUser, role_id: int) -> A
     stored_permission_ids = session.exec(
         select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
     )
+    visible_to_roles = [
+        visible_to_role.name
+        for visible_to_role in _roles_visible_to(
+            session, current_user.organization_id, role.name
+        )
+    ]
 
     return RolePublic(
         **role.model_dump(),
         permissions=stored_permission_ids,
+        visible_to_roles=visible_to_roles,
     )
 
 
@@ -245,6 +260,7 @@ def create_role(
     return RolePublic(
         **role.model_dump(),
         permissions=stored_permission_ids,
+        visible_to_roles=[allow_role.name for allow_role in allow_roles],
     )
 
 
@@ -326,10 +342,15 @@ def update_role(
     stored_permission_ids = session.exec(
         select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
     )
+    visible_to_roles = [
+        visible_to_role.name
+        for visible_to_role in _roles_visible_to(session, org_id, role.name)
+    ]
 
     return RolePublic(
         **role.model_dump(),
         permissions=stored_permission_ids,
+        visible_to_roles=visible_to_roles,
     )
 
 
@@ -357,9 +378,16 @@ def set_visibility_role(
     stored_permission_ids = session.exec(
         select(RolePermission.permission_id).where(RolePermission.role_id == role_id)
     )
+    visible_to_roles = [
+        visible_to_role.name
+        for visible_to_role in _roles_visible_to(
+            session, current_user.organization_id, role.name
+        )
+    ]
     return RolePublic(
         **role.model_dump(),
         permissions=stored_permission_ids,
+        visible_to_roles=visible_to_roles,
     )
 
 
@@ -380,6 +408,9 @@ def delete_role(
             status_code=400,
             detail="This role is restricted and cannot be deleted",
         )
+
+    granting_roles = _roles_visible_to(session, current_user.organization_id, role.name)
+    _revoke_visibility(session, role.name, granting_roles)
 
     session.delete(role)
     try:

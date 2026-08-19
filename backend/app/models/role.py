@@ -63,6 +63,7 @@ class RolePublic(RoleBase):
     is_restricted: bool
     organization_id: int
     permissions: list[int]
+    visible_to_roles: list[str] = []
 
 
 class RolesPublic(SQLModel):
