@@ -2594,6 +2594,7 @@ def get_review_feedback(
             .join(TagType, col(TagType.id) == col(Tag.tag_type_id))
             .where(
                 col(QuestionTag.question_id).in_(question_ids),
+                TagType.is_active,
                 TagType.show_to_candidate,
                 Tag.is_active,
             )
