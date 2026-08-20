@@ -13723,6 +13723,131 @@ def test_get_review_feedback_after_completion_with_feedback_enabled(
     assert data[0]["correct_answer"] == [1]
 
 
+def test_get_review_feedback_includes_only_public_tag_types(
+    client: TestClient, db: SessionDep
+) -> None:
+    """review-feedback exposes tags only for tag types with show_to_candidate=True."""
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.flush()
+
+    question_revision = QuestionRevision(
+        question_id=question.id,
+        created_by_id=user.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    db.add(question_revision)
+    db.flush()
+
+    question.last_revision_id = question_revision.id
+    db.commit()
+    db.refresh(question_revision)
+
+    public_tag_type = TagType(
+        name="Difficulty",
+        show_to_candidate=True,
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    private_tag_type = TagType(
+        name="Internal",
+        show_to_candidate=False,
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(public_tag_type)
+    db.add(private_tag_type)
+    db.commit()
+
+    public_tag = Tag(
+        name="Easy",
+        tag_type_id=public_tag_type.id,
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    private_tag = Tag(
+        name="Secret",
+        tag_type_id=private_tag_type.id,
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(public_tag)
+    db.add(private_tag)
+    db.commit()
+
+    db.add(QuestionTag(question_id=question.id, tag_id=public_tag.id))
+    db.add(QuestionTag(question_id=question.id, tag_id=private_tag.id))
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_on_completion=True,
+    )
+    db.add(test)
+    db.commit()
+
+    test_question = TestQuestion(
+        test_id=test.id, question_revision_id=question_revision.id
+    )
+    db.add(test_question)
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test", json=payload
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    answer_payload = {
+        "question_revision_id": question_revision.id,
+        "response": "[2]",
+        "visited": True,
+        "time_spent": 30,
+    }
+
+    client.post(
+        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+        json=answer_payload,
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    candidate_test = db.exec(
+        select(CandidateTest).where(CandidateTest.id == candidate_test_id)
+    ).first()
+    assert candidate_test is not None
+    candidate_test.end_time = datetime.now()
+    db.add(candidate_test)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["tags"] == [{"tag_type": "Difficulty", "tag": ["Easy"]}]
+
+
 def test_get_review_feedback_after_completion_fails_without_feedback_enabled(
     client: TestClient, db: SessionDep
 ) -> None:

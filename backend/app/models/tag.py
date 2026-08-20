@@ -18,6 +18,10 @@ class TagTypeBase(SQLModel):
         default=None, nullable=True, description="Description of the Tag Type"
     )
     is_active: bool = Field(default=True)
+    show_to_candidate: bool = Field(
+        default=False,
+        description="Set true to show tags of this type to candidates during answer review",
+    )
     organization_id: int = Field(
         foreign_key="organization.id",
         nullable=False,

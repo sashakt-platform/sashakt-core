@@ -57,6 +57,7 @@ from app.models import (
 from app.models.candidate import (
     CandidatePositionUpdateRequest,
     CandidateReviewResponse,
+    CandidateReviewTag,
     CandidateSavedAnswer,
     CandidateTimerEventType,
     CandidateTimerSyncRequest,
@@ -75,7 +76,7 @@ from app.models.question import (
     QuestionTag,
     QuestionType,
 )
-from app.models.tag import Tag
+from app.models.tag import Tag, TagType
 from app.models.test import OMRMode, TestDistrict, TestLink, TestState, TestTag
 from app.models.user import User
 from app.models.utils import CorrectAnswerType, MarkingScheme, TimeLeft
@@ -2582,6 +2583,27 @@ def get_review_feedback(
 
     revisions_by_id = {rev.id: rev for rev in question_revisions}
 
+    question_ids = {
+        rev.question_id for rev in question_revisions if rev.question_id is not None
+    }
+    tags_by_question_id: dict[int, dict[str, list[str]]] = {}
+    if question_ids:
+        tag_rows = session.exec(
+            select(QuestionTag.question_id, TagType.name, Tag.name)
+            .join(Tag, col(Tag.id) == col(QuestionTag.tag_id))
+            .join(TagType, col(TagType.id) == col(Tag.tag_type_id))
+            .where(
+                col(QuestionTag.question_id).in_(question_ids),
+                TagType.is_active,
+                TagType.show_to_candidate,
+                Tag.is_active,
+            )
+        ).all()
+        for question_id_, tag_type_name, tag_name in tag_rows:
+            tags_by_question_id.setdefault(question_id_, {}).setdefault(
+                tag_type_name, []
+            ).append(tag_name)
+
     feedback_list: list[CandidateReviewResponse] = []
 
     for question_id in question_ids_to_fetch:
@@ -2599,6 +2621,16 @@ def get_review_feedback(
             ):
                 correct_answer = json.dumps(correct_answer)
 
+            question_tags = (
+                tags_by_question_id.get(question_revision.question_id, {})
+                if question_revision.question_id is not None
+                else {}
+            )
+            tags = [
+                CandidateReviewTag(tag_type=tag_type_name, tag=tag_names)
+                for tag_type_name, tag_names in question_tags.items()
+            ]
+
             feedback_list.append(
                 CandidateReviewResponse(
                     question_revision_id=question_id,
@@ -2607,6 +2639,7 @@ def get_review_feedback(
                     ),
                     correct_answer=correct_answer,
                     solution=question_revision.solution,
+                    tags=tags,
                 )
             )
 
