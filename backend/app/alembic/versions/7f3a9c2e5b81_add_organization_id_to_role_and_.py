@@ -21,11 +21,12 @@ branch_labels = None
 depends_on = None
 
 
-# Expand step of an expand -> backfill -> contract migration. `organization_id`
-# is added nullable here so existing rows can be backfilled; a follow-up
-# revision makes it NOT NULL and adds the (organization_id, name) uniqueness
-# rule once every row has a value.
+# Expand -> backfill -> contract migration, all in one revision.
+# `organization_id` is added nullable so existing rows can be backfilled,
+# then tightened to NOT NULL with a (organization_id, name) uniqueness rule
+# once every row has a value.
 FK_NAME = "role_organization_id_fkey"
+UQ_NAME = "role_organization_id_name_key"
 
 ORG_SCOPED_ROLE_NAMES = ("system_admin", "state_admin", "test_admin", "candidate")
 
@@ -46,8 +47,18 @@ def upgrade():
     _backfill(session)
     session.commit()
 
+    op.alter_column(
+        "role", "organization_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.create_unique_constraint(UQ_NAME, "role", ["organization_id", "name"])
+
 
 def downgrade():
+    op.drop_constraint(UQ_NAME, "role", type_="unique")
+    op.alter_column(
+        "role", "organization_id", existing_type=sa.INTEGER(), nullable=True
+    )
+
     bind = op.get_bind()
     session = Session(bind=bind)
     _revert_backfill(session)
