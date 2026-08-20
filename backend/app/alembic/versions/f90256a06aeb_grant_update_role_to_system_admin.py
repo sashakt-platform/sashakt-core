@@ -1,7 +1,7 @@
 """grant update_role to system_admin
 
 Revision ID: f90256a06aeb
-Revises: 4d6e8a1f9c23
+Revises: 7f3a9c2e5b81
 Create Date: 2026-08-19 12:50:31.434873
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'f90256a06aeb'
-down_revision = '4d6e8a1f9c23'
+down_revision = '7f3a9c2e5b81'
 branch_labels = None
 depends_on = None
 
