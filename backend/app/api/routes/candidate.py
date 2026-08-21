@@ -38,7 +38,6 @@ from app.models import (
     CandidateTest,
     CandidateTestAnswer,
     CandidateTestAnswerCreate,
-    CandidateTestAnswerFeedback,
     CandidateTestAnswerPublic,
     CandidateTestAnswerUpdate,
     CandidateTestCreate,
@@ -1316,10 +1315,9 @@ def submit_test_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTestPublic:
+) -> CandidateTest:
     """
     Submit/finish test for QR code candidates using UUID authentication.
-    Returns the test with all answers and their correct answers.
     """
     # Verify UUID access
     candidate_test = verify_candidate_uuid_access(
@@ -1390,66 +1388,7 @@ def submit_test_for_qr_candidate(
     session.commit()
     session.refresh(candidate_test)
 
-    effective_test_flags = get_effective_test_flags(session, test) if test else {}
-    show_feedback = bool(
-        effective_test_flags.get(
-            "show_feedback_on_completion",
-            test.show_feedback_on_completion if test else False,
-        )
-    )
-
-    answers_with_feedback = None
-    if show_feedback:
-        answers = session.exec(
-            select(CandidateTestAnswer).where(
-                CandidateTestAnswer.candidate_test_id == candidate_test_id
-            )
-        ).all()
-
-        question_revision_ids = [answer.question_revision_id for answer in answers]
-        revisions_by_id: dict[int, QuestionRevision] = {}
-        if question_revision_ids:
-            question_revisions = session.exec(
-                select(QuestionRevision).where(
-                    col(QuestionRevision.id).in_(question_revision_ids)
-                )
-            ).all()
-            revisions_by_id = {rev.id: rev for rev in question_revisions if rev.id}
-
-        answers_with_feedback = []
-        for answer in answers:
-            revision = revisions_by_id.get(answer.question_revision_id)
-            correct_answer: CorrectAnswerType = None
-            if revision:
-                if revision.question_type == QuestionType.matrix_match and isinstance(
-                    revision.correct_answer, dict
-                ):
-                    correct_answer = json.dumps(revision.correct_answer)
-                else:
-                    correct_answer = revision.correct_answer
-            answers_with_feedback.append(
-                CandidateTestAnswerFeedback(
-                    question_revision_id=answer.question_revision_id,
-                    response=answer.response,
-                    correct_answer=correct_answer,
-                )
-            )
-
-    return CandidateTestPublic(
-        id=candidate_test.id,
-        test_id=candidate_test.test_id,
-        candidate_id=candidate_test.candidate_id,
-        device=candidate_test.device,
-        consent=candidate_test.consent,
-        start_time=candidate_test.start_time,
-        end_time=candidate_test.end_time,
-        is_submitted=candidate_test.is_submitted,
-        certificate_data=candidate_test.certificate_data,
-        created_date=candidate_test.created_date,
-        modified_date=candidate_test.modified_date,
-        answers=answers_with_feedback,
-        admin_id=candidate_test.admin_id,
-    )
+    return candidate_test
 
 
 # Get test questions after verification
