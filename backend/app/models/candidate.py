@@ -69,13 +69,6 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     modified_date: datetime
 
 
-class CandidateTestAnswerFeedback(SQLModel):
-    __test__ = False
-    question_revision_id: int
-    response: str | None = None
-    correct_answer: CorrectAnswerType = None
-
-
 class CandidateSavedAnswer(SQLModel):
     """A candidate's own saved answer, for resuming an attempt on another device.
 
@@ -230,7 +223,6 @@ class CandidateTestPublic(CandidateTestBase):
     question_revision_ids: list[int] = Field(default_factory=list)
     question_set_ids: list[int | None] = Field(default_factory=list)
     current_question_revision_id: int | None = None
-    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):
