@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.core.roles import get_valid_roles, super_admin
+from app.core.roles import get_valid_roles, resolve_org_filter, super_admin
 from app.models import (
     Message,
     Role,
@@ -132,12 +132,19 @@ def _roles_visible_to(
     dependencies=[Depends(permission_dependency("read_role"))],
 )
 def read_roles(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 150
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 150,
+    organization_id: int | None = None,
 ) -> Any:
     """
     Retrieve roles based on current user's role hierarchy, scoped to their
-    own organization.
+    own organization. super_admin may pass organization_id to look up
+    another organization's roles (e.g. to create a user there).
     """
+    target_org_id = resolve_org_filter(current_user, organization_id, "roles")
+
     # get available role names based on current user's role
     available_roles = get_valid_roles(current_user.role)
 
@@ -150,7 +157,7 @@ def read_roles(
         .select_from(Role)
         .where(
             col(Role.name).in_(available_roles),
-            Role.organization_id == current_user.organization_id,
+            Role.organization_id == target_org_id,
         )
     )
     count = session.exec(count_statement).one()
@@ -159,7 +166,7 @@ def read_roles(
         select(Role)
         .where(
             col(Role.name).in_(available_roles),
-            Role.organization_id == current_user.organization_id,
+            Role.organization_id == target_org_id,
         )
         .order_by(col(Role.id))
         .offset(skip)
@@ -176,9 +183,7 @@ def read_roles(
         )
         visible_to_roles = [
             visible_to_role.name
-            for visible_to_role in _roles_visible_to(
-                session, current_user.organization_id, role.name
-            )
+            for visible_to_role in _roles_visible_to(session, target_org_id, role.name)
         ]
         role_public.append(
             RolePublic(
