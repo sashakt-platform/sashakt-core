@@ -180,6 +180,49 @@ def test_create_user_new_email_without_org_id(
         assert user.created_by_id == current_user_data["id"]
 
 
+def test_superadmin_can_create_system_admin_for_other_org(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """super_admin (owned by the T4D org) can create a system_admin user
+    for a different organization, since role-assignment is validated by
+    role name hierarchy, not by matching the caller's own organization_id."""
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        current_user_data = get_current_user_data(client, superuser_token_headers)
+        organization = create_random_organization(db)
+        assert organization.id is not None
+        assert organization.id != current_user_data["organization_id"]
+
+        role = get_org_role(db, organization.id, "system_admin")
+        username = random_email()
+
+        data = {
+            "email": username,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "full_name": random_lower_string(),
+            "organization_id": organization.id,
+        }
+        r = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=superuser_token_headers,
+            json=data,
+        )
+        assert r.status_code == 200
+
+        created_user = r.json()
+        assert created_user["organization_id"] == organization.id
+
+        user = crud.get_user_by_email(session=db, email=username)
+        assert user
+        assert user.organization_id == organization.id
+        assert user.role_id == role.id
+
+
 def test_get_existing_user(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:

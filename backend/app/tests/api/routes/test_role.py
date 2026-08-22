@@ -1415,6 +1415,48 @@ def test_read_roles_excludes_other_organizations_roles(
     assert org_b_role.id not in returned_ids
 
 
+def test_superadmin_can_filter_roles_by_organization_id(
+    client: TestClient, db: Session
+) -> None:
+    """super_admin can pass organization_id to fetch another org's roles,
+    e.g. to look up the correct system_admin role_id when creating a user
+    for that org."""
+    superuser_token = get_user_token(db=db, role="super_admin")
+    organization = create_random_organization(db)
+    assert organization.id is not None
+    org_role = get_org_role(db, organization.id, "system_admin")
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token,
+        params={"organization_id": organization.id},
+    )
+    assert response.status_code == 200
+    returned_ids = {role["id"] for role in response.json()["data"]}
+    assert returned_ids == {org_role.id}
+
+
+def test_non_superadmin_cannot_filter_roles_by_other_organization_id(
+    client: TestClient, db: Session
+) -> None:
+    """A non-super_admin cannot use organization_id to peek at another
+    org's roles."""
+    org_a_token = get_user_token(db=db, role="system_admin")
+    org_b_token = get_user_token(db=db, role="system_admin")
+    org_b_id = _org_id(client, org_b_token)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/roles/",
+        headers=org_a_token,
+        params={"organization_id": org_b_id},
+    )
+    assert response.status_code == 403
+    assert (
+        response.json()["detail"]
+        == "You do not have permission to filter roles by another organization."
+    )
+
+
 def test_cannot_modify_role_from_other_organization(
     client: TestClient, db: Session
 ) -> None:
