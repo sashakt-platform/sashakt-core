@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.roles import (
     can_assign_role,
     is_location_scoped_role,
+    resolve_org_filter,
     super_admin,
     system_admin,
 )
@@ -165,16 +166,7 @@ def read_users(
     Retrieve users.
     """
     current_user_organization_id = current_user.organization_id
-
-    if (
-        organization_id is not None
-        and current_user.role.name != super_admin.name
-        and organization_id != current_user_organization_id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to filter users by another organization.",
-        )
+    resolve_org_filter(current_user, organization_id, "users")
 
     if current_user.role.name == super_admin.name:
         statement = select(User).where(

@@ -1,5 +1,6 @@
 import json
 
+from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from app.models import (
@@ -9,6 +10,7 @@ from app.models import (
     RoleLocationLevel,
     RolePermission,
     RolePublic,
+    User,
 )
 
 super_admin = RoleCreate(
@@ -157,3 +159,32 @@ def is_location_scoped_role(role: Role) -> bool:
     Check if a role's access is restricted to its assigned states/districts.
     """
     return role.location_scope is not None
+
+
+def resolve_org_filter(
+    current_user: User, organization_id: int | None, resource_name: str
+) -> int:
+    """
+    Resolve the organization_id to filter a list endpoint by. Only
+    super_admin may pass an organization_id other than their own; anyone
+    else gets a 403. Falls back to the caller's own organization_id when
+    none is given.
+    """
+    if (
+        organization_id is not None
+        and current_user.role.name != super_admin.name
+        and organization_id != current_user.organization_id
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=f"You do not have permission to filter {resource_name} "
+            "by another organization.",
+        )
+    target_org_id = (
+        organization_id if organization_id is not None else current_user.organization_id
+    )
+    if target_org_id is None:
+        raise HTTPException(
+            status_code=500, detail="Current user is not assigned to an organization"
+        )
+    return target_org_id
