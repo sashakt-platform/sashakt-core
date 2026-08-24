@@ -85,6 +85,40 @@ def test_create_role(
     assert content["permissions"] == []
 
 
+def test_create_role_with_duplicate_name_fails(
+    client: TestClient, get_user_superadmin_token: dict[str, str]
+) -> None:
+    """Creating a role whose name already exists in the caller's organization
+    should return a clean 400 error, not an unhandled IntegrityError."""
+    data = {
+        "name": random_lower_string(),
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_superadmin_token,
+        json=data,
+    )
+    assert response.status_code == 200
+
+    duplicate_data = {
+        "name": data["name"],
+        "description": random_lower_string(),
+        "label": random_lower_string(),
+    }
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_superadmin_token,
+        json=duplicate_data,
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "A role with this name already exists in your organization"
+    )
+
+
 def test_create_role_with_location_scope(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:

@@ -249,7 +249,14 @@ def create_role(
     role_data = role_in.model_dump(exclude={"permissions", "visible_to_roles"})
     role = Role(**role_data, organization_id=current_user.organization_id)
     session.add(role)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="A role with this name already exists in your organization",
+        )
     if role_in.permissions:
         permission_ids = role_in.permissions
         permission_links = [
