@@ -425,6 +425,8 @@ class QuestionSetPublic(QuestionSetBase):
 class QuestionSetSummaryPublic(QuestionSetBase):
     id: int
     question_count: int = 0
+    # str, not QuestionType: app.models.question imports this module.
+    question_type: str | None = None
 
 
 class TestPublic(TestBase):
