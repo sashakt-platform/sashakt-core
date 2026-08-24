@@ -1,7 +1,7 @@
 """add organization_id to role and backfill existing data
 
 Revision ID: 7f3a9c2e5b81
-Revises: d8640b20c143
+Revises: ab6df88cf58b
 Create Date: 2026-08-16 00:00:00.000000
 
 """
@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 
 # revision identifiers, used by Alembic.
 revision = '7f3a9c2e5b81'
-down_revision = 'd8640b20c143'
+down_revision = 'ab6df88cf58b'
 branch_labels = None
 depends_on = None
 
