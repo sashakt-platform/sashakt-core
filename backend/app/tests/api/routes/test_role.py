@@ -1051,12 +1051,13 @@ def test_create_user_with_new_custom_role(
     assert user_response.json()["role_id"] == new_role_id
 
 
-def test_create_role_without_visibility_leaves_other_roles_unchanged(
+def test_create_role_without_visibility_grants_system_admin_by_default(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
+    """A newly created role is visible to system_admin by default, even
+    when visible_to_roles is omitted entirely."""
     org_id = _org_id(client, superuser_token_headers)
     system_admin_role = get_org_role(db, org_id, "system_admin")
-    original_allowed_roles = list(system_admin_role.allowed_roles)
 
     data = {
         "name": random_lower_string(),
@@ -1069,9 +1070,10 @@ def test_create_role_without_visibility_leaves_other_roles_unchanged(
         json=data,
     )
     assert response.status_code == 200
+    assert response.json()["visible_to_roles"] == ["system_admin"]
 
     db.refresh(system_admin_role)
-    assert system_admin_role.allowed_roles == original_allowed_roles
+    assert response.json()["name"] in system_admin_role.allowed_roles
 
 
 def test_create_role_with_unknown_visible_to_role_fails(
@@ -1277,16 +1279,19 @@ def test_update_role_visible_to_roles_moves_grant_between_roles(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
     """Changing visible_to_roles on an update should revoke visibility from
-    roles no longer in the list, not just grant it to the new ones."""
+    roles no longer in the list, not just grant it to the new ones -
+    system_admin's own grant is unaffected either way, since it is always
+    implicitly included."""
     org_id = _org_id(client, superuser_token_headers)
     system_admin_role = get_org_role(db, org_id, "system_admin")
     state_admin_role = get_org_role(db, org_id, "state_admin")
+    test_admin_role = get_org_role(db, org_id, "test_admin")
 
     data = {
         "name": random_lower_string(),
         "label": random_lower_string(),
         "description": random_lower_string(),
-        "visible_to_roles": ["system_admin"],
+        "visible_to_roles": ["state_admin"],
     }
     response = client.post(
         f"{settings.API_V1_STR}/roles/",
@@ -1297,9 +1302,10 @@ def test_update_role_visible_to_roles_moves_grant_between_roles(
     new_role_id = response.json()["id"]
     new_role_name = response.json()["name"]
 
-    db.refresh(system_admin_role)
-    assert new_role_name in system_admin_role.allowed_roles
-    assert new_role_name not in state_admin_role.allowed_roles
+    db.refresh(state_admin_role)
+    db.refresh(test_admin_role)
+    assert new_role_name in state_admin_role.allowed_roles
+    assert new_role_name not in test_admin_role.allowed_roles
 
     response = client.put(
         f"{settings.API_V1_STR}/roles/{new_role_id}",
@@ -1307,25 +1313,27 @@ def test_update_role_visible_to_roles_moves_grant_between_roles(
         json={
             "name": new_role_name,
             "label": data["label"],
-            "visible_to_roles": ["state_admin"],
+            "visible_to_roles": ["test_admin"],
         },
     )
     assert response.status_code == 200
 
     db.refresh(system_admin_role)
     db.refresh(state_admin_role)
-    assert new_role_name not in system_admin_role.allowed_roles
-    assert new_role_name in state_admin_role.allowed_roles
+    db.refresh(test_admin_role)
+    assert new_role_name not in state_admin_role.allowed_roles
+    assert new_role_name in test_admin_role.allowed_roles
+    assert new_role_name in system_admin_role.allowed_roles
 
 
-def test_update_role_empty_visible_to_roles_revokes_system_admin_grant(
+def test_update_role_cannot_revoke_system_admin_visibility(
     client: TestClient,
     superuser_token_headers: dict[str, str],
     db: Session,
 ) -> None:
-    """Sending visible_to_roles: [] explicitly (unlike omitting the key)
-    revokes every existing grant, so system_admin should stop seeing the
-    role once it is no longer listed."""
+    """Sending visible_to_roles: [] (or any list omitting system_admin)
+    never revokes system_admin's own visibility grant - only other roles'
+    grants can be revoked this way."""
     org_id = _org_id(client, superuser_token_headers)
     systemadmin_token = get_user_token_for_org(
         db=db, organization_id=org_id, role="system_admin"
@@ -1368,9 +1376,10 @@ def test_update_role_empty_visible_to_roles_revokes_system_admin_grant(
         },
     )
     assert response.status_code == 200
+    assert response.json()["visible_to_roles"] == ["system_admin"]
 
     db.refresh(system_admin_role)
-    assert new_role_name not in system_admin_role.allowed_roles
+    assert new_role_name in system_admin_role.allowed_roles
 
     list_response = client.get(
         f"{settings.API_V1_STR}/roles/",
@@ -1378,7 +1387,7 @@ def test_update_role_empty_visible_to_roles_revokes_system_admin_grant(
     )
     assert list_response.status_code == 200
     role_names = {role["name"] for role in list_response.json()["data"]}
-    assert new_role_name not in role_names
+    assert new_role_name in role_names
 
 
 def test_cannot_read_role_from_other_organization(

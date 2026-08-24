@@ -5,7 +5,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, SessionDep, permission_dependency
-from app.core.roles import get_valid_roles, resolve_org_filter, super_admin
+from app.core.roles import (
+    get_valid_roles,
+    resolve_org_filter,
+    super_admin,
+    system_admin,
+)
 from app.models import (
     Message,
     Role,
@@ -236,8 +241,9 @@ def create_role(
     """
     org_id = current_user.organization_id
     _fetch_roles_by_name(session, org_id, role_in.allowed_roles, "allowed_roles")
+    visible_to_role_names = sorted({*role_in.visible_to_roles, system_admin.name})
     allow_roles = _fetch_roles_by_name(
-        session, org_id, role_in.visible_to_roles, "visible_to_roles"
+        session, org_id, visible_to_role_names, "visible_to_roles"
     )
 
     role_data = role_in.model_dump(exclude={"permissions", "visible_to_roles"})
@@ -328,8 +334,9 @@ def update_role(
     session.refresh(role)
 
     if role_update.visible_to_roles is not None:
+        target_role_names = sorted({*role_update.visible_to_roles, system_admin.name})
         target_roles = _fetch_roles_by_name(
-            session, org_id, role_update.visible_to_roles, "visible_to_roles"
+            session, org_id, target_role_names, "visible_to_roles"
         )
         target_role_ids = {target_role.id for target_role in target_roles}
 
