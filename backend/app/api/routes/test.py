@@ -183,6 +183,7 @@ def transform_to_report(
             report_entries.append(
                 CandidateReport(
                     candidate_id=candidate_test.candidate_id,
+                    candidate_test_id=candidate_test.id,
                     candidate_uuid=candidate.identity,
                     status=status,
                     start_time=candidate_test.start_time,
