@@ -90,6 +90,25 @@ def test_get_logged_user_me_permissions(
     assert set(current_user["permissions"]) == set(permission_names)
 
 
+def test_get_logged_user_me_without_read_user_permission(
+    db: Session, client: TestClient
+) -> None:
+    """A role with no permissions (e.g. a freshly created custom role) must
+    still be able to fetch its own profile via /users/me."""
+    user = create_random_user(db)
+    assert user.role_id is not None
+    role = db.get(Role, user.role_id)
+    assert role is not None
+    assert role.permissions == []
+
+    headers = {"Authorization": f"Bearer {user.token}"}
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 200
+    current_user = r.json()
+    assert current_user["email"] == user.email
+    assert current_user["permissions"] == []
+
+
 def test_create_user_new_email(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:

@@ -8,7 +8,6 @@ from sqlmodel import select
 
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models.organization import Organization
 from app.models.organization_settings import (
     DEFAULT_ORGANIZATION_SETTINGS,
     MAX_NOMENCLATURE_LABEL_LEN,
@@ -131,21 +130,20 @@ def test_create_organization_initializes_settings_row(
 # ---------- GET /organization/{id}/settings ----------
 
 
-def test_get_settings_super_admin_any_org(
+def test_get_settings_super_admin_other_org_forbidden(
     client: TestClient,
     get_user_superadmin_token: dict[str, str],
     get_user_systemadmin_token: dict[str, str],
 ) -> None:
+    """Settings reads are scoped to one's own organization only - even
+    super_admin cannot read another organization's settings."""
     target_org_id = _get_org_id(client, get_user_systemadmin_token)
 
     response = client.get(
         f"{settings.API_V1_STR}/organization/{target_org_id}/settings",
         headers=get_user_superadmin_token,
     )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["organization_id"] == target_org_id
-    assert body["settings"]["version"] == ORGANIZATION_SETTINGS_SCHEMA_VERSION
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_get_settings_returns_defaults_when_row_missing(
@@ -154,13 +152,18 @@ def test_get_settings_returns_defaults_when_row_missing(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """get_or_create: settings row is lazily created with defaults if missing."""
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-    db.refresh(org)
+    own_org_id = _get_org_id(client, get_user_superadmin_token)
+    row = db.exec(
+        select(OrganizationSettings).where(
+            OrganizationSettings.organization_id == own_org_id
+        )
+    ).first()
+    if row is not None:
+        db.delete(row)
+        db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/{org.id}/settings",
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
