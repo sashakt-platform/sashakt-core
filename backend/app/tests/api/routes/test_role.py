@@ -1150,9 +1150,11 @@ def test_create_role_with_unknown_allowed_role_fails(
     assert db.exec(select(Role).where(Role.name == role_name)).first() is None
 
 
-def test_create_role_allowed_roles_starts_empty(
+def test_create_role_allowed_roles_defaults_to_self_only(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:
+    """A role can always assign/view itself, even with no allowed_roles
+    passed in the request."""
     data = {
         "name": random_lower_string(),
         "label": random_lower_string(),
@@ -1165,14 +1167,112 @@ def test_create_role_allowed_roles_starts_empty(
         json=data,
     )
     assert response.status_code == 200
-    assert response.json()["allowed_roles"] == []
+    content = response.json()
+    assert content["allowed_roles"] == [content["name"]]
+
+
+def test_update_role_can_remove_and_readd_self_from_allowed_roles(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    """The self-reference added at creation time is a plain value in
+    allowed_roles, not a protected one - editing can remove it, or add it
+    back, like any other entry."""
+    data = {
+        "name": random_lower_string(),
+        "label": random_lower_string(),
+        "description": random_lower_string(),
+    }
+    create_response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert create_response.status_code == 200
+    role = create_response.json()
+    assert role["allowed_roles"] == [role["name"]]
+
+    remove_response = client.put(
+        f"{settings.API_V1_STR}/roles/{role['id']}",
+        headers=superuser_token_headers,
+        json={
+            "name": role["name"],
+            "label": role["label"],
+            "allowed_roles": [],
+        },
+    )
+    assert remove_response.status_code == 200
+    assert remove_response.json()["allowed_roles"] == []
+
+    readd_response = client.put(
+        f"{settings.API_V1_STR}/roles/{role['id']}",
+        headers=superuser_token_headers,
+        json={
+            "name": role["name"],
+            "label": role["label"],
+            "allowed_roles": [role["name"]],
+        },
+    )
+    assert readd_response.status_code == 200
+    assert readd_response.json()["allowed_roles"] == [role["name"]]
+
+
+def test_update_role_removing_self_from_allowed_roles_is_not_reverted_by_stale_visible_to_roles(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    """A role that contains itself in allowed_roles also shows up in its own
+    visible_to_roles (it IS visible to itself). If a client round-trips that
+    unchanged visible_to_roles value back on an update that also edits
+    allowed_roles, the visible_to_roles processing must not re-grant the
+    role visibility of itself and undo the allowed_roles edit."""
+    data = {
+        "name": random_lower_string(),
+        "label": random_lower_string(),
+        "description": random_lower_string(),
+    }
+    create_response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=superuser_token_headers,
+        json=data,
+    )
+    assert create_response.status_code == 200
+    role_id = create_response.json()["id"]
+
+    get_before = client.get(
+        f"{settings.API_V1_STR}/roles/{role_id}",
+        headers=superuser_token_headers,
+    )
+    assert get_before.status_code == 200
+    role = get_before.json()
+    assert role["allowed_roles"] == [role["name"]]
+    assert set(role["visible_to_roles"]) == {"system_admin", role["name"]}
+
+    update_response = client.put(
+        f"{settings.API_V1_STR}/roles/{role['id']}",
+        headers=superuser_token_headers,
+        json={
+            "name": role["name"],
+            "label": role["label"],
+            "allowed_roles": [],
+            "visible_to_roles": role["visible_to_roles"],
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["allowed_roles"] == []
+
+    get_response = client.get(
+        f"{settings.API_V1_STR}/roles/{role['id']}",
+        headers=superuser_token_headers,
+    )
+    assert get_response.status_code == 200
+    assert get_response.json()["allowed_roles"] == []
 
 
 def test_create_role_accepts_allowed_roles_in_payload(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
     """allowed_roles says which roles this new role can itself assign/see -
-    it's a direct input, independent of visible_to_roles."""
+    it's a direct input, independent of visible_to_roles. The new role's own
+    name is always added on top of whatever was requested."""
     data = {
         "name": random_lower_string(),
         "label": random_lower_string(),
@@ -1185,11 +1285,15 @@ def test_create_role_accepts_allowed_roles_in_payload(
         json=data,
     )
     assert response.status_code == 200
-    assert response.json()["allowed_roles"] == ["test_admin", "state_admin"]
+    assert response.json()["allowed_roles"] == [
+        "test_admin",
+        "state_admin",
+        data["name"],
+    ]
 
     role = db.exec(select(Role).where(Role.name == data["name"])).first()
     assert role is not None
-    assert role.allowed_roles == ["test_admin", "state_admin"]
+    assert role.allowed_roles == ["test_admin", "state_admin", data["name"]]
 
 
 def test_update_role_accepts_allowed_roles_in_payload(
@@ -1268,7 +1372,7 @@ def test_create_role_with_allowed_roles_and_visible_to_roles(
     assert response.status_code == 200
     content = response.json()
     new_role_name = content["name"]
-    assert content["allowed_roles"] == ["test_admin", "state_admin"]
+    assert content["allowed_roles"] == ["test_admin", "state_admin", new_role_name]
 
     db.refresh(system_admin_role)
     assert set(system_admin_role.allowed_roles) == original_allowed_roles | {
@@ -1366,8 +1470,9 @@ def test_update_role_cannot_revoke_system_admin_visibility(
     db: Session,
 ) -> None:
     """Sending visible_to_roles: [] (or any list omitting system_admin)
-    never revokes system_admin's own visibility grant - only other roles'
-    grants can be revoked this way."""
+    never revokes system_admin's own visibility grant, nor a role's
+    self-granted visibility (from allowed_roles containing itself by
+    default) - only other roles' grants can be revoked this way."""
     org_id = _org_id(client, superuser_token_headers)
     systemadmin_token = get_user_token_for_org(
         db=db, organization_id=org_id, role="system_admin"
@@ -1410,7 +1515,7 @@ def test_update_role_cannot_revoke_system_admin_visibility(
         },
     )
     assert response.status_code == 200
-    assert response.json()["visible_to_roles"] == ["system_admin"]
+    assert set(response.json()["visible_to_roles"]) == {"system_admin", new_role_name}
 
     db.refresh(system_admin_role)
     assert new_role_name in system_admin_role.allowed_roles
