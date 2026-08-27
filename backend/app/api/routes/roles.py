@@ -87,6 +87,8 @@ def _grant_visibility(
     attributes the caller is about to read off its own role instance.
     """
     for allow_role in allow_roles:
+        if allow_role.name == role_name:
+            continue
         if role_name not in (allow_role.allowed_roles or []):
             allow_role.allowed_roles = [
                 *(allow_role.allowed_roles or []),
@@ -103,6 +105,8 @@ def _revoke_visibility(
     Caller is responsible for committing - see _grant_visibility.
     """
     for revoke_role in revoke_roles:
+        if revoke_role.name == role_name:
+            continue
         if role_name in (revoke_role.allowed_roles or []):
             revoke_role.allowed_roles = [
                 allowed_role_name
@@ -248,6 +252,7 @@ def create_role(
 
     role_data = role_in.model_dump(exclude={"permissions", "visible_to_roles"})
     role = Role(**role_data, organization_id=current_user.organization_id)
+    role.allowed_roles = [*role.allowed_roles, role.name]
     session.add(role)
     try:
         session.commit()
