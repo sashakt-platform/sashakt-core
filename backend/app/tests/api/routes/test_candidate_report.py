@@ -1964,6 +1964,7 @@ def test_candidate_report_export_accessible_by_test_admin(
 def test_candidate_report_csv_row_matches_headers() -> None:
     entry = CandidateReport(
         candidate_id=1,
+        candidate_test_id=1,
         candidate_uuid=uuid.uuid4(),
         status=CandidateReportStatus.submitted,
         start_time=datetime(2026, 1, 1, 9, 0, 0),
