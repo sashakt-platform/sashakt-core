@@ -4,7 +4,6 @@ from app.api.deps import (
     CurrentUser,
     SessionDep,
     get_user_permissions,
-    permission_dependency,
 )
 from app.core.files import (
     delete_platform_guide_file,
@@ -12,7 +11,6 @@ from app.core.files import (
     save_platform_guide_file,
     validate_platform_guide_upload,
 )
-from app.core.roles import super_admin
 from app.crud import organization_settings as crud_settings
 from app.models.organization import Organization
 from app.models.organization_settings import (
@@ -32,17 +30,6 @@ def _get_active_organization(
     if not organization or organization.is_deleted:
         raise HTTPException(status_code=404, detail="Organization not found")
     return organization
-
-
-def _ensure_read_scope(*, current_user: CurrentUser, organization_id: int) -> None:
-    """super_admin: any org. All other roles: only their own org."""
-    if current_user.role.name == super_admin.name:
-        return
-    if current_user.organization_id != organization_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot access settings for another organization",
-        )
 
 
 def _ensure_update_permission_and_scope(
@@ -83,16 +70,21 @@ def _to_public(row: OrganizationSettings) -> OrganizationSettingsPublic:
 @router.get(
     "/{organization_id}/settings",
     response_model=OrganizationSettingsPublic,
-    dependencies=[Depends(permission_dependency("read_organization"))],
 )
 def get_organization_settings(
     organization_id: int,
     session: SessionDep,
     current_user: CurrentUser,
+    permissions: list[str] = Depends(get_user_permissions),
 ) -> OrganizationSettingsPublic:
     """Retrieve the settings for an organization."""
     _get_active_organization(session=session, organization_id=organization_id)
-    _ensure_read_scope(current_user=current_user, organization_id=organization_id)
+
+    _ensure_update_permission_and_scope(
+        current_user=current_user,
+        permissions=permissions,
+        organization_id=organization_id,
+    )
     row = crud_settings.get_or_create(session=session, organization_id=organization_id)
     return _to_public(row)
 

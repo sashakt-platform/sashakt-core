@@ -455,7 +455,6 @@ def update_password_me(
 @router.get(
     "/me",
     response_model=UserPublicMe,
-    dependencies=[Depends(permission_dependency("read_user"))],
 )
 def read_user_me(
     current_user: CurrentUser,

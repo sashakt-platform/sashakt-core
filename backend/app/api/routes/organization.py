@@ -81,7 +81,6 @@ def _org_page_transformer(
 @router.get(
     "/current",
     response_model=OrganizationPublic,
-    dependencies=[Depends(permission_dependency("read_organization"))],
 )
 def get_current_organization(
     current_user: User = Depends(get_current_user),
