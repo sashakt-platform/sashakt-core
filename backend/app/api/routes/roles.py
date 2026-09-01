@@ -39,6 +39,15 @@ DEFAULT_ROLE_PERMISSIONS = [
 ]
 
 
+IMPLIED_PERMISSIONS: list[tuple[set[str], set[str]]] = [
+    ({"create_user", "update_user"}, {"read_role"}),
+    (
+        {"create_role", "update_role", "delete_role"},
+        {"read_role", "read_permission"},
+    ),
+]
+
+
 def _get_own_org_role(
     session: SessionDep, current_user: CurrentUser, role_id: int
 ) -> Role:
@@ -147,20 +156,31 @@ def _with_default_permissions(
 def _apply_implied_permissions(
     session: SessionDep, permission_ids: set[int]
 ) -> set[int]:
-    """A role that can create or update users must also be able to read
-    roles - otherwise it has no way to load the role list to assign one."""
+    """Add the permissions implied by the ones granted, per
+    IMPLIED_PERMISSIONS. Applied on every write, so a role can never be
+    saved holding a trigger permission without the reads that make it
+    usable. Implied names missing from the permissions table are skipped."""
     granted_names = set(
         session.exec(
             select(Permission.name).where(col(Permission.id).in_(permission_ids))
         ).all()
     )
-    if granted_names & {"create_user", "update_user"}:
-        read_role_id = session.exec(
-            select(Permission.id).where(Permission.name == "read_role")
-        ).first()
-        if read_role_id is not None:
-            permission_ids = {*permission_ids, read_role_id}
-    return permission_ids
+    implied_names = {
+        implied_name
+        for triggers, implied in IMPLIED_PERMISSIONS
+        if granted_names & triggers
+        for implied_name in implied - granted_names
+    }
+    if not implied_names:
+        return permission_ids
+
+    implied_ids = session.exec(
+        select(Permission.id).where(col(Permission.name).in_(implied_names))
+    ).all()
+    return {
+        *permission_ids,
+        *(permission_id for permission_id in implied_ids if permission_id is not None),
+    }
 
 
 def _roles_visible_to(
@@ -309,7 +329,9 @@ def create_role(
             status_code=400,
             detail="A role with this name already exists in your organization",
         )
-    permission_ids = _with_default_permissions(session, role_in.permissions)
+    permission_ids = _apply_implied_permissions(
+        session, _with_default_permissions(session, role_in.permissions)
+    )
     if permission_ids:
         permission_links = [
             RolePermission(role_id=role.id, permission_id=permission_id)

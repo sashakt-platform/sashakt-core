@@ -3101,19 +3101,21 @@ def test_user_list_state_user(
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
-    user_state_x = create_random_user(db, new_organization.id)
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
+
+    user_state_x = create_random_user(db, new_organization.id, test_admin_role.id)
     db.add(user_state_x)
     db.commit()
     db.refresh(user_state_x)
     db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
 
-    user_state_y = create_random_user(db, new_organization.id)
+    user_state_y = create_random_user(db, new_organization.id, test_admin_role.id)
     db.add(user_state_y)
     db.commit()
     db.refresh(user_state_y)
     db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
 
-    another_user = create_random_user(db, new_organization.id)
+    another_user = create_random_user(db, new_organization.id, test_admin_role.id)
     db.add(another_user)
     db.commit()
     db.refresh(another_user)
@@ -3129,6 +3131,46 @@ def test_user_list_state_user(
     assert "items" in content
     items = content["items"]
     assert len(items) == 2
+    assert {item["email"] for item in items} == {email, user_state_x.email}
+
+
+def test_user_list_excludes_roles_above_the_hierarchy(
+    client: TestClient, db: Session
+) -> None:
+    """A custom role only lists itself in allowed_roles, so its users must not
+    see the organization's system_admin or super_admin users - only users
+    holding roles within their own hierarchy."""
+    organization = create_random_organization(db)
+    assert organization.id is not None
+
+    read_user_permission = db.exec(
+        select(Permission).where(Permission.name == "read_user")
+    ).first()
+    assert read_user_permission is not None
+
+    custom_role = create_random_role(db, organization_id=organization.id)
+    assert custom_role.id is not None
+    custom_role.allowed_roles = [custom_role.name]
+    db.add(custom_role)
+    db.add(
+        RolePermission(role_id=custom_role.id, permission_id=read_user_permission.id)
+    )
+    db.commit()
+
+    system_admin_user = create_random_user(
+        db, organization.id, get_org_role(db, organization.id, system_admin.name).id
+    )
+    peer = create_random_user(db, organization.id, custom_role.id)
+    caller = create_random_user(db, organization.id, custom_role.id)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/users/",
+        headers={"Authorization": f"Bearer {caller.token}"},
+    )
+    assert response.status_code == 200
+    emails = {item["email"] for item in response.json()["items"]}
+    assert emails == {caller.email, peer.email}
+    assert system_admin_user.email not in emails
 
 
 def test_state_admin_cannot_delete_general_user(
