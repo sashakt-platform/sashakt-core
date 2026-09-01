@@ -23,7 +23,15 @@ def user_authentication_headers(
     return headers
 
 
-def create_random_user(db: Session, organization_id: int | None = None) -> User:
+def create_random_user(
+    db: Session, organization_id: int | None = None, role_id: int | None = None
+) -> User:
+    """
+    Create a user in the given organization. Without a role_id the user gets
+    a fresh randomly named role, which no other role lists in its
+    allowed_roles - meaning the user is invisible to GET /users/. Pass a
+    role_id when the test needs the user to show up in someone's listing.
+    """
     if organization_id is not None:
         organization = db.get(Organization, organization_id)
         if not organization:
@@ -32,14 +40,16 @@ def create_random_user(db: Session, organization_id: int | None = None) -> User:
         organization = create_random_organization(session=db)
     if organization.id is None:
         raise ValueError("Organization has no id")
-    role = Role(
-        name=random_lower_string(),
-        label=random_lower_string(),
-        organization_id=organization.id,
-    )
-    db.add(role)
-    db.commit()
-    db.refresh(role)
+    if role_id is None:
+        role = Role(
+            name=random_lower_string(),
+            label=random_lower_string(),
+            organization_id=organization.id,
+        )
+        db.add(role)
+        db.commit()
+        db.refresh(role)
+        role_id = role.id
     email = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
@@ -49,7 +59,7 @@ def create_random_user(db: Session, organization_id: int | None = None) -> User:
         password=password,
         phone=phone,
         full_name=full_name,
-        role_id=role.id,
+        role_id=role_id,
         organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)

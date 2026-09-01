@@ -16,6 +16,7 @@ from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
 from app.core.roles import (
     can_assign_role,
+    get_valid_roles,
     is_location_scoped_role,
     resolve_org_filter,
     super_admin,
@@ -62,6 +63,18 @@ UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 def _admin_role_ids_subquery() -> Any:
     return select(Role.id).where(
         col(Role.name).in_([super_admin.name, system_admin.name])
+    )
+
+
+def _visible_role_ids_subquery(role: Role, organization_id: int) -> Any:
+    """
+    IDs of the roles the given role is allowed to see, within one
+    organization - i.e. its own allowed_roles. Mirrors the hierarchy
+    filtering in read_roles, so a role never sees users sitting above it.
+    """
+    return select(Role.id).where(
+        col(Role.name).in_(get_valid_roles(role)),
+        Role.organization_id == organization_id,
     )
 
 
@@ -174,7 +187,12 @@ def read_users(
         )
     else:
         statement = select(User).where(
-            User.organization_id == current_user_organization_id
+            User.organization_id == current_user_organization_id,
+            col(User.role_id).in_(
+                _visible_role_ids_subquery(
+                    current_user.role, current_user_organization_id
+                )
+            ),
         )
 
     if organization_id is not None:

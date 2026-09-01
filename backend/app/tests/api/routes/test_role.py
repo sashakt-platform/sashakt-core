@@ -136,6 +136,120 @@ def test_update_role_granting_update_user_implies_read_role(
     }
 
 
+def test_update_role_granting_create_role_implies_role_reads(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A role that can manage roles must also be able to read roles and read
+    permissions - the role editor can't list the org's roles or populate its
+    permission checkboxes otherwise."""
+    role = create_random_role(
+        db, organization_id=_org_id(client, superuser_token_headers)
+    )
+    create_role_id = _permission_id(db, "create_role")
+    expected = {
+        create_role_id,
+        _permission_id(db, "read_role"),
+        _permission_id(db, "read_permission"),
+    }
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json={
+            "name": role.name,
+            "label": role.label,
+            "permissions": [create_role_id],
+        },
+    )
+    assert response.status_code == 200
+    assert set(response.json()["permissions"]) == expected
+
+    db.refresh(role)
+    assert {permission.id for permission in (role.permissions or [])} == expected
+
+
+def test_update_role_cannot_strip_implied_role_reads(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """The implied reads are re-applied on every write, so a client that
+    unchecks them while keeping update_role gets them back."""
+    role = create_random_role(
+        db, organization_id=_org_id(client, superuser_token_headers)
+    )
+    update_role_id = _permission_id(db, "update_role")
+    read_role_id = _permission_id(db, "read_role")
+    read_permission_id = _permission_id(db, "read_permission")
+
+    for payload_permissions in (
+        [update_role_id, read_role_id, read_permission_id],
+        [update_role_id],
+    ):
+        response = client.put(
+            f"{settings.API_V1_STR}/roles/{role.id}",
+            headers=superuser_token_headers,
+            json={
+                "name": role.name,
+                "label": role.label,
+                "permissions": payload_permissions,
+            },
+        )
+        assert response.status_code == 200
+        assert set(response.json()["permissions"]) == {
+            update_role_id,
+            read_role_id,
+            read_permission_id,
+        }
+
+
+def test_update_role_read_role_alone_does_not_imply_read_permission(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Only the role-management verbs pull in read_permission. Plain read_role
+    is granted just to populate a role picker, which needs no permission
+    catalogue."""
+    role = create_random_role(
+        db, organization_id=_org_id(client, superuser_token_headers)
+    )
+    read_role_id = _permission_id(db, "read_role")
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json={
+            "name": role.name,
+            "label": role.label,
+            "permissions": [read_role_id],
+        },
+    )
+    assert response.status_code == 200
+    assert set(response.json()["permissions"]) == {read_role_id}
+
+
+def test_create_role_granting_delete_role_implies_role_reads(
+    client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
+) -> None:
+    """The implied reads are applied at creation too, not only on update."""
+    delete_role_id = _permission_id(db, "delete_role")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/roles/",
+        headers=get_user_superadmin_token,
+        json={
+            "name": random_lower_string(),
+            "description": random_lower_string(),
+            "label": random_lower_string(),
+            "permissions": [delete_role_id],
+        },
+    )
+    assert response.status_code == 200
+    assert set(response.json()["permissions"]) == {
+        delete_role_id,
+        _permission_id(db, "read_role"),
+        _permission_id(db, "read_permission"),
+        *_default_role_permission_ids(db),
+    }
+
+
 def test_create_role_with_duplicate_name_fails(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
