@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, col, select
 
 from app import crud
+from app.api.routes.roles import DEFAULT_ROLE_PERMISSIONS
 from app.core.config import settings
 from app.core.roles import init_org_roles
 from app.models import (
@@ -30,6 +31,13 @@ def _org_id(client: TestClient, token: dict[str, str]) -> int:
     return org_id
 
 
+def _default_role_permission_ids(db: Session) -> set[int]:
+    ids = db.exec(
+        select(Permission.id).where(col(Permission.name).in_(DEFAULT_ROLE_PERMISSIONS))
+    ).all()
+    return {permission_id for permission_id in ids if permission_id is not None}
+
+
 def test_create_role(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
@@ -39,6 +47,7 @@ def test_create_role(
     db.add(permission)
     db.commit()
     db.refresh(permission)
+    default_permission_ids = _default_role_permission_ids(db)
 
     data = {
         "name": random_lower_string(),
@@ -56,13 +65,16 @@ def test_create_role(
     assert content["name"] == data["name"]
     assert content["description"] == data["description"]
     assert "id" in content
-    assert content["permissions"] == [permission.id]
+    assert set(content["permissions"]) == {permission.id, *default_permission_ids}
 
     role_permission_link = db.exec(
         select(RolePermission).where(RolePermission.role_id == content["id"])
     ).all()
 
-    assert role_permission_link[0].permission_id == permission.id
+    assert {link.permission_id for link in role_permission_link} == {
+        permission.id,
+        *default_permission_ids,
+    }
     assert role_permission_link[0].role_id == content["id"]
     assert hasattr(role_permission_link[0], "id")
 
@@ -82,7 +94,46 @@ def test_create_role(
     assert content["name"] == data["name"]
     assert content["description"] == data["description"]
     assert "id" in content
-    assert content["permissions"] == []
+    assert set(content["permissions"]) == default_permission_ids
+
+
+def _permission_id(db: Session, name: str) -> int:
+    permission = db.exec(select(Permission).where(Permission.name == name)).first()
+    assert permission is not None
+    assert permission.id is not None
+    return permission.id
+
+
+def test_update_role_granting_update_user_implies_read_role(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A role that can update users must also be able to read roles, even if
+    the client's permissions payload for the update didn't include
+    read_role - otherwise it has no way to load the role list to assign
+    one."""
+    role = create_random_role(
+        db, organization_id=_org_id(client, superuser_token_headers)
+    )
+    update_user_id = _permission_id(db, "update_user")
+    read_role_id = _permission_id(db, "read_role")
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=superuser_token_headers,
+        json={
+            "name": role.name,
+            "label": role.label,
+            "permissions": [update_user_id],
+        },
+    )
+    assert response.status_code == 200
+    assert set(response.json()["permissions"]) == {update_user_id, read_role_id}
+
+    db.refresh(role)
+    assert {permission.id for permission in (role.permissions or [])} == {
+        update_user_id,
+        read_role_id,
+    }
 
 
 def test_create_role_with_duplicate_name_fails(

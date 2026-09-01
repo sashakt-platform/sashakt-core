@@ -13,6 +13,7 @@ from app.core.roles import (
 )
 from app.models import (
     Message,
+    Permission,
     Role,
     RoleCreate,
     RolePermission,
@@ -25,6 +26,17 @@ router = APIRouter(
     prefix="/roles",
     tags=["roles"],
 )
+
+
+DEFAULT_ROLE_PERMISSIONS = [
+    "read_test",
+    "create_test",
+    "update_test",
+    "delete_test",
+    "read_question",
+    "read_role",
+    "read_tag",
+]
 
 
 def _get_own_org_role(
@@ -114,6 +126,41 @@ def _revoke_visibility(
                 if allowed_role_name != role_name
             ]
             session.add(revoke_role)
+
+
+def _with_default_permissions(
+    session: SessionDep, permission_ids: list[int] | None
+) -> set[int]:
+    """Every new role starts with the baseline permissions in
+    DEFAULT_ROLE_PERMISSIONS, on top of whatever the caller asked for, so a
+    freshly created role can do useful work without a follow-up update.
+    Names that aren't present in the permissions table are skipped."""
+    default_ids = session.exec(
+        select(Permission.id).where(col(Permission.name).in_(DEFAULT_ROLE_PERMISSIONS))
+    ).all()
+    return {
+        *(permission_ids or []),
+        *(permission_id for permission_id in default_ids if permission_id is not None),
+    }
+
+
+def _apply_implied_permissions(
+    session: SessionDep, permission_ids: set[int]
+) -> set[int]:
+    """A role that can create or update users must also be able to read
+    roles - otherwise it has no way to load the role list to assign one."""
+    granted_names = set(
+        session.exec(
+            select(Permission.name).where(col(Permission.id).in_(permission_ids))
+        ).all()
+    )
+    if granted_names & {"create_user", "update_user"}:
+        read_role_id = session.exec(
+            select(Permission.id).where(Permission.name == "read_role")
+        ).first()
+        if read_role_id is not None:
+            permission_ids = {*permission_ids, read_role_id}
+    return permission_ids
 
 
 def _roles_visible_to(
@@ -262,8 +309,8 @@ def create_role(
             status_code=400,
             detail="A role with this name already exists in your organization",
         )
-    if role_in.permissions:
-        permission_ids = role_in.permissions
+    permission_ids = _with_default_permissions(session, role_in.permissions)
+    if permission_ids:
         permission_links = [
             RolePermission(role_id=role.id, permission_id=permission_id)
             for permission_id in permission_ids
@@ -309,14 +356,17 @@ def update_role(
     _fetch_roles_by_name(session, org_id, role_update.allowed_roles, "allowed_roles")
 
     if role_update.permissions is not None:
+        permission_ids = _apply_implied_permissions(
+            session, set(role_update.permissions)
+        )
         permission_remove = [
             permission.id
             for permission in (role.permissions or [])
-            if permission.id not in role_update.permissions
+            if permission.id not in permission_ids
         ]
         permissions_add = [
             permission
-            for permission in role_update.permissions
+            for permission in permission_ids
             if permission not in [existing.id for existing in (role.permissions or [])]
         ]
 
