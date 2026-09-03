@@ -20,7 +20,7 @@ from app.core.files import (
     save_logo_file,
     validate_logo_upload,
 )
-from app.core.roles import is_location_scoped_role
+from app.core.roles import init_org_roles, is_location_scoped_role
 from app.models import (
     DEFAULT_ORGANIZATION_SETTINGS,
     AggregatedData,
@@ -81,7 +81,6 @@ def _org_page_transformer(
 @router.get(
     "/current",
     response_model=OrganizationPublic,
-    dependencies=[Depends(permission_dependency("read_organization"))],
 )
 def get_current_organization(
     current_user: User = Depends(get_current_user),
@@ -226,6 +225,7 @@ async def create_organization(
     )
 
     try:
+        init_org_roles(session, organization.id)
         session.commit()
         session.refresh(organization)
     except Exception:
