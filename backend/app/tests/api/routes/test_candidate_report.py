@@ -92,6 +92,7 @@ def test_candidate_report_submitted(
 
     entry = data["items"][0]
     assert entry["candidate_uuid"] == str(candidate.identity)
+    assert entry["candidate_test_id"] == candidate_test.id
     assert entry["status"] == "submitted"
     assert entry["result"]["marks_obtained"] == 10.0
     assert entry["start_time"] == "2026-06-10T10:00:00"
@@ -1963,6 +1964,7 @@ def test_candidate_report_export_accessible_by_test_admin(
 def test_candidate_report_csv_row_matches_headers() -> None:
     entry = CandidateReport(
         candidate_id=1,
+        candidate_test_id=1,
         candidate_uuid=uuid.uuid4(),
         status=CandidateReportStatus.submitted,
         start_time=datetime(2026, 1, 1, 9, 0, 0),
@@ -1999,3 +2001,65 @@ def test_candidate_report_csv_row_matches_headers() -> None:
         "Time Taken (seconds)": 2700,
         "Form Response": '{"key": "value"}',
     }
+
+
+def test_candidate_report_id_resolves_the_attempt(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """The reported candidate_test_id works against the per-attempt endpoints."""
+    user = get_org_user(client, db, get_user_superadmin_token)
+
+    revision = create_random_question_revision(
+        db,
+        user_id=user.id,
+        org_id=user.organization_id,
+        marking_scheme={"correct": 10, "wrong": 0, "skipped": 0},
+    )
+    test = create_test_record(
+        db,
+        user_id=user.id,
+        organization_id=user.organization_id,
+        marks_level="question",
+    )
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate = create_test_candidate(db, organization_id=user.organization_id)
+    candidate.identity = uuid.uuid4()
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+
+    candidate_test = create_test_candidate_test(
+        db,
+        admin_id=user.id,
+        test_id=test.id,
+        candidate_id=candidate.id,
+        question_revision_ids=[revision.id],
+        is_submitted=True,
+        end_time="2026-06-10T10:32:00",
+    )
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test.id,
+            question_revision_id=revision.id,
+            response="[1]",
+            visited=True,
+        )
+    )
+    db.commit()
+
+    report = client.get(
+        f"{settings.API_V1_STR}/test/{test.id}/candidate-report",
+        headers=get_user_superadmin_token,
+    )
+    assert report.status_code == 200
+    entry = report.json()["items"][0]
+
+    result = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{entry['candidate_test_id']}",
+        params={"candidate_uuid": entry["candidate_uuid"]},
+    )
+    assert result.status_code == 200
