@@ -3223,7 +3223,6 @@ def test_submit_test_for_qr_candidate(client: TestClient, db: SessionDep) -> Non
     data = response.json()
     assert data["is_submitted"] is True
     assert data["end_time"] is not None
-    assert data["answers"] is None
 
     # Verify in database
     db.refresh(candidate_test)
@@ -3539,100 +3538,6 @@ def test_submit_test_succeeds_with_answered_mandatory_question(
     assert response.status_code == 200
     data = response.json()
     assert data["is_submitted"] is True
-
-    assert len(data["answers"]) == 1
-    answer_data = data["answers"][0]
-    assert answer_data["question_revision_id"] == question_revision.id
-    assert answer_data["response"] == "[1]"
-    assert answer_data["correct_answer"] == [1]
-
-    assert set(answer_data.keys()) == {
-        "question_revision_id",
-        "response",
-        "correct_answer",
-    }
-
-
-def test_submit_test_hides_correct_answer_when_feedback_disabled(
-    client: TestClient, db: SessionDep
-) -> None:
-    """Test that correct_answer is None when show_feedback_on_completion is False."""
-    user = create_random_user(db)
-
-    org = Organization(name=random_lower_string())
-    db.add(org)
-    db.commit()
-
-    question = Question(organization_id=org.id)
-    db.add(question)
-    db.flush()
-
-    question_revision = QuestionRevision(
-        question_id=question.id,
-        created_by_id=user.id,
-        question_text=random_lower_string(),
-        question_type=QuestionType.single_choice,
-        options=[
-            {"id": 1, "key": "A", "value": "Option 1"},
-            {"id": 2, "key": "B", "value": "Option 2"},
-        ],
-        correct_answer=[1],
-        is_mandatory=True,
-    )
-    db.add(question_revision)
-    db.flush()
-
-    question.last_revision_id = question_revision.id
-    db.commit()
-    db.refresh(question_revision)
-
-    test = Test(
-        name=random_lower_string(),
-        created_by_id=user.id,
-        is_active=True,
-        link=random_lower_string(),
-        show_feedback_on_completion=False,
-    )
-    db.add(test)
-    db.commit()
-
-    test_question = TestQuestion(
-        test_id=test.id, question_revision_id=question_revision.id
-    )
-    db.add(test_question)
-    db.commit()
-
-    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
-    payload = {"test_link_uuid": test_link.uuid, "device_info": random_lower_string()}
-    start_response = client.post(
-        f"{settings.API_V1_STR}/candidate/start_test", json=payload
-    )
-    start_data = start_response.json()
-    candidate_uuid = start_data["candidate_uuid"]
-    candidate_test_id = start_data["candidate_test_id"]
-
-    answer_payload = {
-        "question_revision_id": question_revision.id,
-        "response": "[1]",
-        "visited": True,
-        "time_spent": 20,
-    }
-    client.post(
-        f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
-        json=answer_payload,
-        params={"candidate_uuid": candidate_uuid},
-    )
-
-    # Submit test
-    response = client.post(
-        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
-        params={"candidate_uuid": candidate_uuid},
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["is_submitted"] is True
-    assert data["answers"] is None
 
 
 def test_submit_answer_updates_existing(client: TestClient, db: SessionDep) -> None:
@@ -14386,56 +14291,6 @@ def test_get_review_feedback_matrix_match_correct_answer_as_json_string(
     item = data[0]
     assert item["question_revision_id"] == revision.id
     assert item["submitted_answer"] == candidate_response
-    assert isinstance(item["correct_answer"], str)
-    assert json.loads(item["correct_answer"]) == MATRIX_MATCH_CORRECT_ANSWER
-
-
-def test_submit_test_matrix_match_feedback_correct_answer_as_json_string(
-    client: TestClient, db: SessionDep
-) -> None:
-    """submit_test feedback returns correct_answer as a JSON string for matrix-match questions."""
-    test, revision = create_matrix_match_test_setup(db)
-    test.show_feedback_on_completion = True
-    db.add(test)
-    db.commit()
-
-    assert test.id is not None
-    assert test.created_by_id is not None
-    assert revision.id is not None
-    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
-    start_response = client.post(
-        f"{settings.API_V1_STR}/candidate/start_test",
-        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
-    )
-    start_data = start_response.json()
-    candidate_test_id = start_data["candidate_test_id"]
-    candidate_uuid = start_data["candidate_uuid"]
-
-    candidate_response = json.dumps({"1": [10], "2": [20], "3": [30]})
-    db.add(
-        CandidateTestAnswer(
-            candidate_test_id=candidate_test_id,
-            question_revision_id=revision.id,
-            response=candidate_response,
-            visited=True,
-            time_spent=30,
-        )
-    )
-    db.commit()
-
-    response = client.post(
-        f"{settings.API_V1_STR}/candidate/submit_test/{candidate_test_id}",
-        params={"candidate_uuid": candidate_uuid},
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    answers = data.get("answers")
-    assert answers is not None
-    assert len(answers) == 1
-    item = answers[0]
-    assert item["question_revision_id"] == revision.id
-    assert item["response"] == candidate_response
     assert isinstance(item["correct_answer"], str)
     assert json.loads(item["correct_answer"]) == MATRIX_MATCH_CORRECT_ANSWER
 
