@@ -16,7 +16,9 @@ from app.api.routes.utils import get_current_user_location_ids
 from app.core.config import settings
 from app.core.roles import (
     can_assign_role,
+    get_valid_roles,
     is_location_scoped_role,
+    resolve_org_filter,
     super_admin,
     system_admin,
 )
@@ -61,6 +63,18 @@ UserSortingDep = Annotated[SortingParams, Depends(UserSorting)]
 def _admin_role_ids_subquery() -> Any:
     return select(Role.id).where(
         col(Role.name).in_([super_admin.name, system_admin.name])
+    )
+
+
+def _visible_role_ids_subquery(role: Role, organization_id: int) -> Any:
+    """
+    IDs of the roles the given role is allowed to see, within one
+    organization - i.e. its own allowed_roles. Mirrors the hierarchy
+    filtering in read_roles, so a role never sees users sitting above it.
+    """
+    return select(Role.id).where(
+        col(Role.name).in_(get_valid_roles(role)),
+        Role.organization_id == organization_id,
     )
 
 
@@ -165,16 +179,7 @@ def read_users(
     Retrieve users.
     """
     current_user_organization_id = current_user.organization_id
-
-    if (
-        organization_id is not None
-        and current_user.role.name != super_admin.name
-        and organization_id != current_user_organization_id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to filter users by another organization.",
-        )
+    resolve_org_filter(current_user, organization_id, "users")
 
     if current_user.role.name == super_admin.name:
         statement = select(User).where(
@@ -182,7 +187,12 @@ def read_users(
         )
     else:
         statement = select(User).where(
-            User.organization_id == current_user_organization_id
+            User.organization_id == current_user_organization_id,
+            col(User.role_id).in_(
+                _visible_role_ids_subquery(
+                    current_user.role, current_user_organization_id
+                )
+            ),
         )
 
     if organization_id is not None:
@@ -251,10 +261,17 @@ def validate_user_return_role(
     session: SessionDep,
     user_in: UserCreate | UserUpdate,
     current_user: User,
+    target_org: int,
 ) -> Role:
     role = session.get(Role, user_in.role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Invalid Role")
+
+    if role.organization_id != target_org:
+        raise HTTPException(
+            status_code=400,
+            detail="Role does not belong to the user's organization",
+        )
 
     # validate role hierarchy - check if current user can assign this role
     if not can_assign_role(current_user.role, role.name):
@@ -328,9 +345,18 @@ def create_user(
         )
     if not user_in.organization_id:
         user_in.organization_id = current_user.organization_id
+    target_org = user_in.organization_id
+    if target_org is None:
+        raise HTTPException(
+            status_code=400,
+            detail="organization_id is required to create a user",
+        )
 
     role = validate_user_return_role(
-        session=session, user_in=user_in, current_user=current_user
+        session=session,
+        user_in=user_in,
+        current_user=current_user,
+        target_org=target_org,
     )
 
     user = crud.create_user(
@@ -447,7 +473,6 @@ def update_password_me(
 @router.get(
     "/me",
     response_model=UserPublicMe,
-    dependencies=[Depends(permission_dependency("read_user"))],
 )
 def read_user_me(
     current_user: CurrentUser,
@@ -563,7 +588,10 @@ def update_user(
             )
 
     role = validate_user_return_role(
-        session=session, user_in=user_in, current_user=current_user
+        session=session,
+        user_in=user_in,
+        current_user=current_user,
+        target_org=db_user.organization_id,
     )
 
     if role.location_scope == RoleLocationLevel.STATE:

@@ -23,12 +23,13 @@ from app.models.question import (
     QuestionTag,
     QuestionType,
 )
-from app.models.role import Role, RolePermission
+from app.models.role import RolePermission
 from app.models.tag import Tag, TagType
 from app.models.test import Test, TestQuestion
 from app.models.user import UserState
 from app.tests.utils.organization import create_random_organization
 from app.tests.utils.question_revisions import create_random_question_revision
+from app.tests.utils.role import get_org_role
 
 # from app.models.user import User
 from app.tests.utils.user import (
@@ -5545,8 +5546,9 @@ def test_bulk_upload_questions_with_extra_column(
 def test_state_admin_cannot_delete_question_outside_location(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5559,8 +5561,6 @@ def test_state_admin_cannot_delete_question_outside_location(
     db.commit()
     db.refresh(state_x)
     db.refresh(state_y)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5613,8 +5613,9 @@ def test_state_admin_cannot_delete_question_outside_location(
 def test_state_admin_cannot_delete_multi_state_question_without_full_access(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5627,8 +5628,6 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
     db.commit()
     db.refresh(state_a)
     db.refresh(state_b)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5681,8 +5680,9 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
 def test_state_admin_cannot_delete_general_question(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5693,8 +5693,6 @@ def test_state_admin_cannot_delete_general_question(
     db.add(state)
     db.commit()
     db.refresh(state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5747,8 +5745,9 @@ def test_state_admin_cannot_delete_general_question(
 def test_state_admin_delete_question_same_location(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5759,8 +5758,6 @@ def test_state_admin_delete_question_same_location(
     db.add(state)
     db.commit()
     db.refresh(state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5812,8 +5809,9 @@ def test_state_admin_delete_question_same_location(
 def test_state_admin_cannot_update_general_question(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5824,8 +5822,6 @@ def test_state_admin_cannot_update_general_question(
     db.add(state)
     db.commit()
     db.refresh(state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5872,8 +5868,9 @@ def test_state_admin_cannot_update_general_question(
 def test_state_admin_can_update_question_in_their_state(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5884,8 +5881,6 @@ def test_state_admin_can_update_question_in_their_state(
     db.add(state)
     db.commit()
     db.refresh(state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5932,8 +5927,9 @@ def test_state_admin_can_update_question_in_their_state(
 def test_state_admin_cannot_update_question_outside_their_state(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -5950,8 +5946,6 @@ def test_state_admin_cannot_update_question_outside_their_state(
     db.commit()
     db.refresh(admin_state)
     db.refresh(other_state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -5998,15 +5992,16 @@ def test_state_admin_cannot_update_question_outside_their_state(
 def test_state_admin_cannot_update_tags_for_general_question(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-    org = Organization(name=random_lower_string())
-    db.add(org)
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    tag_org = Organization(name=random_lower_string())
+    db.add(tag_org)
     user = create_random_user(db)
     tag_type = TagType(
         name=random_lower_string(),
         created_by_id=user.id,
-        organization_id=org.id,
+        organization_id=tag_org.id,
     )
     db.add(tag_type)
     db.flush()
@@ -6014,7 +6009,7 @@ def test_state_admin_cannot_update_tags_for_general_question(
         name=random_lower_string(),
         tag_type_id=tag_type.id,
         created_by_id=user.id,
-        organization_id=org.id,
+        organization_id=tag_org.id,
     )
     db.add(tag)
     db.commit()
@@ -6034,8 +6029,6 @@ def test_state_admin_cannot_update_tags_for_general_question(
     db.commit()
     db.refresh(admin_state)
     db.refresh(other_state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -6085,6 +6078,7 @@ def test_question_list_state_user(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: SessionDep
 ) -> None:
     new_organization = create_random_organization(db)
+    assert new_organization.id is not None
     db.add(new_organization)
     db.commit()
 
@@ -6100,8 +6094,7 @@ def test_question_list_state_user(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -6254,8 +6247,7 @@ def test_question_list_state_user(
     assert data["total"] == 8
     assert len(data["items"]) == 8
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert test_admin_role is not None
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -6360,8 +6352,9 @@ def test_update_question_locations_not_found(
 def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -6374,8 +6367,6 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     db.commit()
     db.refresh(state_x)
     db.refresh(state_y)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -6519,8 +6510,9 @@ def test_create_question_revision_not_found(
 def test_bulk_delete_state_admin_cannot_delete_general_questions(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -6531,8 +6523,6 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
     db.add(state)
     db.commit()
     db.refresh(state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {
@@ -6611,8 +6601,9 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
 def test_bulk_delete_state_admin_delete_questions_same_location(
     client: TestClient, db: SessionDep, get_user_systemadmin_token: dict[str, str]
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -6623,8 +6614,6 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
     db.add(state)
     db.commit()
     db.refresh(state)
-
-    org = create_random_organization(db)
 
     email = random_email()
     state_admin_payload = {

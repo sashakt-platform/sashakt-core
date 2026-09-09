@@ -1,9 +1,10 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import func, select
+from sqlmodel import col, func, select
 
-from app.api.deps import SessionDep, permission_dependency
+from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.core.roles import super_admin
 from app.models import (
     Message,
     Permission,
@@ -16,40 +17,46 @@ from app.models import (
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 
 
+PERMISSIONS_HIDDEN_FROM_NON_SUPER_ADMIN = (
+    "create_organization",
+    "update_organization",
+    "delete_organization",
+    "read_organization",
+    "create_location",
+    "update_location",
+    "read_location",
+    "create_permission",
+    "update_permission",
+    "delete_permission",
+    "read_permission",
+)
+
+
 @router.get(
     "/",
     response_model=PermissionsPublic,
-    dependencies=[Depends(permission_dependency("create_permission"))],
+    dependencies=[Depends(permission_dependency("read_permission"))],
 )
-def read_permissions(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
+def read_permissions(
+    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100
+) -> Any:
     """
     Retrieve permissions.
     """
 
     count_statement = select(func.count()).select_from(Permission)
-    count = session.exec(count_statement).one()
-    statement = select(Permission).offset(skip).limit(limit)
-    permissions = session.exec(statement).all()
+    statement = select(Permission)
 
-    # if current_user.is_superuser:
-    #     count_statement = select(func.count()).select_from(Permission)
-    #     count = session.exec(count_statement).one()
-    #     statement = select(Permission).offset(skip).limit(limit)
-    #     permissions = session.exec(statement).all()
-    # else:
-    #     count_statement = (
-    #         select(func.count())
-    #         .select_from(Permission)
-    #         .where(Permission.owner_id == current_user.id)
-    #     )
-    #     count = session.exec(count_statement).one()
-    #     statement = (
-    #         select(Permission)
-    #         .where(Permission.owner_id == current_user.id)
-    #         .offset(skip)
-    #         .limit(limit)
-    #     )
-    #     permissions = session.exec(statement).all()
+    if current_user.role.name != super_admin.name:
+        count_statement = count_statement.where(
+            col(Permission.name).not_in(PERMISSIONS_HIDDEN_FROM_NON_SUPER_ADMIN)
+        )
+        statement = statement.where(
+            col(Permission.name).not_in(PERMISSIONS_HIDDEN_FROM_NON_SUPER_ADMIN)
+        )
+
+    count = session.exec(count_statement).one()
+    permissions = session.exec(statement.offset(skip).limit(limit)).all()
 
     return PermissionsPublic(data=permissions, count=count)
 

@@ -31,7 +31,7 @@ from app.models.user import UserState
 from app.tests.utils.organization import (
     create_random_organization,
 )
-from app.tests.utils.role import create_random_role
+from app.tests.utils.role import create_random_role, get_org_role
 from app.tests.utils.user import (
     authentication_token_from_email,
     create_random_user,
@@ -90,6 +90,25 @@ def test_get_logged_user_me_permissions(
     assert set(current_user["permissions"]) == set(permission_names)
 
 
+def test_get_logged_user_me_without_read_user_permission(
+    db: Session, client: TestClient
+) -> None:
+    """A role with no permissions (e.g. a freshly created custom role) must
+    still be able to fetch its own profile via /users/me."""
+    user = create_random_user(db)
+    assert user.role_id is not None
+    role = db.get(Role, user.role_id)
+    assert role is not None
+    assert role.permissions == []
+
+    headers = {"Authorization": f"Bearer {user.token}"}
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 200
+    current_user = r.json()
+    assert current_user["email"] == user.email
+    assert current_user["permissions"] == []
+
+
 def test_create_user_new_email(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
@@ -104,9 +123,9 @@ def test_create_user_new_email(
         phone = random_lower_string()
 
         # use a role from the hierarchy instead of random role
-        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-        assert role is not None
         organization = create_random_organization(db)
+        assert organization.id is not None
+        role = get_org_role(db, organization.id, "system_admin")
         data = {
             "email": username,
             "password": password,
@@ -145,9 +164,13 @@ def test_create_user_new_email_without_org_id(
         password = random_lower_string()
         phone = random_lower_string()
 
-        # use a role from the hierarchy instead of random role
-        role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-        assert role is not None
+        # use a role from the hierarchy instead of random role - no
+        # organization_id in the payload, so the new user (and its role)
+        # must belong to the caller's own organization
+        org_id = get_current_user_data(client, superuser_token_headers)[
+            "organization_id"
+        ]
+        role = get_org_role(db, org_id, "system_admin")
 
         data = {
             "email": username,
@@ -174,6 +197,49 @@ def test_create_user_new_email_without_org_id(
         assert user.organization_id == expected_org_id
         assert created_user["organization_id"] == expected_org_id
         assert user.created_by_id == current_user_data["id"]
+
+
+def test_superadmin_can_create_system_admin_for_other_org(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """super_admin (owned by the T4D org) can create a system_admin user
+    for a different organization, since role-assignment is validated by
+    role name hierarchy, not by matching the caller's own organization_id."""
+    with (
+        patch("app.utils.send_email", return_value=None),
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
+    ):
+        current_user_data = get_current_user_data(client, superuser_token_headers)
+        organization = create_random_organization(db)
+        assert organization.id is not None
+        assert organization.id != current_user_data["organization_id"]
+
+        role = get_org_role(db, organization.id, "system_admin")
+        username = random_email()
+
+        data = {
+            "email": username,
+            "password": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": role.id,
+            "full_name": random_lower_string(),
+            "organization_id": organization.id,
+        }
+        r = client.post(
+            f"{settings.API_V1_STR}/users/",
+            headers=superuser_token_headers,
+            json=data,
+        )
+        assert r.status_code == 200
+
+        created_user = r.json()
+        assert created_user["organization_id"] == organization.id
+
+        user = crud.get_user_by_email(session=db, email=username)
+        assert user
+        assert user.organization_id == organization.id
+        assert user.role_id == role.id
 
 
 def test_get_existing_user(
@@ -929,10 +995,11 @@ def test_update_user(
 ) -> None:
     username = random_email()
     password = random_lower_string()
+    organization = create_random_organization(db)
 
     # use a role from the hierarchy instead of random role
-    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert role is not None
+    assert organization.id is not None
+    role = get_org_role(db, organization.id, "test_admin")
 
     user_in = UserCreate(
         email=username,
@@ -940,7 +1007,7 @@ def test_update_user(
         full_name=random_lower_string(),
         phone=random_lower_string(),
         role_id=role.id,
-        organization_id=create_random_organization(db).id,
+        organization_id=organization.id,
     )
     user = crud.create_user(session=db, user_create=user_in)
 
@@ -1173,10 +1240,10 @@ def test_create_inactive_user_not_listed(
     phone = random_lower_string()
 
     # use a role from the hierarchy instead of random role
-    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert role is not None
-
     organization = create_random_organization(db)
+    assert organization.id is not None
+    role = get_org_role(db, organization.id, "test_admin")
+
     data = {
         "email": username,
         "password": password,
@@ -1217,9 +1284,9 @@ def test_create_state_admin_without_state_id_district_id(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-        assert role is not None
         organization = create_random_organization(db)
+        assert organization.id is not None
+        role = get_org_role(db, organization.id, "state_admin")
         data = {
             "email": email,
             "password": password,
@@ -1255,8 +1322,7 @@ def test_create_state_admin_with_state_id(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "state_admin")
         country = Country(name=random_lower_string(), is_active=True)
         db.add(country)
         db.commit()
@@ -1328,8 +1394,7 @@ def test_create_state_admin_with_only_district_id_returns_400(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "state_admin")
         country = Country(name=random_lower_string(), is_active=True)
         db.add(country)
         db.commit()
@@ -1397,8 +1462,7 @@ def test_create_user_multiple_state_assignment_error(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "test_admin")
 
         data = {
             "email": email,
@@ -1455,8 +1519,7 @@ def test_create_user_multiple_district_assignment(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "test_admin")
 
         data = {
             "email": email,
@@ -1506,8 +1569,7 @@ def test_create_test_admin_single_state_success(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "test_admin")
 
         data = {
             "email": email,
@@ -1562,8 +1624,7 @@ def test_create_test_admin_single_district_success(
         full_name = random_lower_string()
         password = random_lower_string()
         phone = random_lower_string()
-        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "test_admin")
 
         data = {
             "email": email,
@@ -1602,8 +1663,7 @@ def test_create_user_without_states(
         password = random_lower_string()
         phone = random_lower_string()
 
-        role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert role is not None
+        role = get_org_role(db, org_id, "test_admin")
 
         data = {
             "email": email,
@@ -1643,8 +1703,8 @@ def test_update_user_states(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -1671,8 +1731,6 @@ def test_update_user_states(
     assert response.status_code == 200
     user_data = response.json()
     user_id = user_data["id"]
-    role1 = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert role1 is not None
     email = random_email()
     password = random_lower_string()
     phone = random_lower_string()
@@ -1730,8 +1788,8 @@ def test_update_user_districts(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -1768,8 +1826,8 @@ def test_update_user_districts(
     assert response.status_code == 200
     user_data = response.json()
     user_id = user_data["id"]
-    role1 = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert role1 is not None
+    assert org.id is not None
+    role1 = get_org_role(db, org.id, "test_admin")
     assert user_data["districts"] is None
     email = random_email()
     password = random_lower_string()
@@ -1847,11 +1905,9 @@ def test_update_other_role_to_state_admin_and_add_states(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-
-    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert other_role is not None
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    other_role = get_org_role(db, org.id, "test_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -1907,11 +1963,9 @@ def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-
-    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert other_role is not None
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    other_role = get_org_role(db, org.id, "test_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -1970,11 +2024,9 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-
-    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert other_role is not None
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    other_role = get_org_role(db, org.id, "test_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2025,11 +2077,9 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-
-    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert other_role is not None
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    other_role = get_org_role(db, org.id, "test_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2087,11 +2137,9 @@ def test_update_state_admin_to_other_role_and_remove_states(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-
-    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert other_role is not None
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    other_role = get_org_role(db, org.id, "test_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2151,11 +2199,9 @@ def test_update_state_admin_to_other_role_and_remove_districts(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
     org = create_random_organization(db)
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-
-    other_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert other_role is not None
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    other_role = get_org_role(db, org.id, "test_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2221,8 +2267,8 @@ def test_cannot_delete_user_if_linked_to_question(
 ) -> None:
     org = create_random_organization(db)
 
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
 
     data = {
         "email": random_email(),
@@ -2287,12 +2333,11 @@ def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
     db.commit()
     db.refresh(district)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert state_admin_role is not None
-    assert test_admin_role is not None
-
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    test_admin_role = get_org_role(db, org.id, "test_admin")
+
     state_admin_email = random_email()
     state_admin_payload = {
         "email": state_admin_email,
@@ -2387,14 +2432,11 @@ def test_state_admin_with_state_access_creates_test_admin_for_district(
         db.commit()
         db.refresh(district)
 
-        state_admin_role = db.exec(
-            select(Role).where(Role.name == "state_admin")
-        ).first()
-        test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert state_admin_role is not None
-        assert test_admin_role is not None
-
         org = create_random_organization(db)
+        assert org.id is not None
+        state_admin_role = get_org_role(db, org.id, "state_admin")
+        test_admin_role = get_org_role(db, org.id, "test_admin")
+
         state_admin_email = random_email()
 
         # Create state_admin with only state-level access (no district)
@@ -2487,10 +2529,10 @@ def test_test_admin_creates_test_admin_inherits_states_and_districts(
         db.commit()
         db.refresh(district)
 
-        test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert test_admin_role is not None
-
         org = create_random_organization(db)
+        assert org.id is not None
+        test_admin_role = get_org_role(db, org.id, "test_admin")
+
         creator_email = random_email()
 
         # Create the creator test_admin (via superadmin) with state + district
@@ -2568,11 +2610,10 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
     db.refresh(state1)
     db.refresh(state2)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert test_admin_role and other_role
-
     org = create_random_organization(db)
+    assert org.id is not None
+    test_admin_role = get_org_role(db, org.id, "test_admin")
+    other_role = get_org_role(db, org.id, "system_admin")
 
     payload = {
         "email": random_email(),
@@ -2634,11 +2675,10 @@ def test_update_normal_user_to_test_admin_with_multiple_districts(
     db.commit()
     db.refresh(district_2)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert test_admin_role and other_role
-
     org = create_random_organization(db)
+    assert org.id is not None
+    test_admin_role = get_org_role(db, org.id, "test_admin")
+    other_role = get_org_role(db, org.id, "system_admin")
 
     payload = {
         "email": random_email(),
@@ -2693,11 +2733,10 @@ def test_update_normal_user_to_test_admin_without_states_districts(
     db.commit()
     db.refresh(district)
 
-    test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    other_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert test_admin_role and other_role
-
     org = create_random_organization(db)
+    assert org.id is not None
+    test_admin_role = get_org_role(db, org.id, "test_admin")
+    other_role = get_org_role(db, org.id, "system_admin")
 
     payload = {
         "email": random_email(),
@@ -2775,8 +2814,7 @@ def test_retrieve_users_with_search(
     test_email = "john.smith@example.com"
     test_phone = "123-456-7890"
 
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    role = get_org_role(db, current_user["organization_id"], "system_admin")
 
     user_in1 = UserCreate(
         email=test_email,
@@ -2855,9 +2893,9 @@ def test_create_user_role_hierarchy_validation_super_admin(
 ) -> None:
     """Test that super_admin can create system_admin users (its only allowed_roles entry)."""
 
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
     organization = create_random_organization(session=db)
+    assert organization.id is not None
+    role = get_org_role(db, organization.id, "system_admin")
 
     data = {
         "email": random_email(),
@@ -2883,9 +2921,10 @@ def test_create_user_role_hierarchy_validation_super_admin_cannot_create_state_a
 ) -> None:
     """Test that super_admin cannot directly create a state_admin (narrowed allowed_roles)."""
 
-    role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert role is not None
     organization = create_random_organization(session=db)
+
+    assert organization.id is not None
+    role = get_org_role(db, organization.id, "state_admin")
 
     data = {
         "email": random_email(),
@@ -2911,9 +2950,10 @@ def test_create_user_role_hierarchy_validation_super_admin_cannot_create_test_ad
 ) -> None:
     """Test that super_admin cannot directly create a test_admin (narrowed allowed_roles)."""
 
-    role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-    assert role is not None
     organization = create_random_organization(session=db)
+
+    assert organization.id is not None
+    role = get_org_role(db, organization.id, "test_admin")
 
     data = {
         "email": random_email(),
@@ -2943,9 +2983,9 @@ def test_create_user_role_hierarchy_validation_system_admin_can_create_state_adm
     headers = get_user_token(db=db, role="system_admin")
 
     # let's create state_admin user
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
     organization = create_random_organization(session=db)
+    assert organization.id is not None
+    state_admin_role = get_org_role(db, organization.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -2994,9 +3034,9 @@ def test_create_user_role_hierarchy_validation_system_admin_cannot_create_super_
     headers = get_user_token(db=db, role="system_admin")
 
     # try to create super_admin user (should fail)
-    super_admin_role = db.exec(select(Role).where(Role.name == "super_admin")).first()
-    assert super_admin_role is not None
     organization = create_random_organization(session=db)
+    assert organization.id is not None
+    super_admin_role = get_org_role(db, organization.id, "super_admin")
 
     data = {
         "email": random_email(),
@@ -3041,8 +3081,8 @@ def test_user_list_state_user(
     db.refresh(state_x)
     db.refresh(state_y)
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role is not None
+    assert new_organization.id is not None
+    state_admin_role = get_org_role(db, new_organization.id, "state_admin")
 
     email = random_email()
     state_admin_payload = {
@@ -3061,19 +3101,21 @@ def test_user_list_state_user(
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
-    user_state_x = create_random_user(db, new_organization.id)
+    test_admin_role = get_org_role(db, new_organization.id, "test_admin")
+
+    user_state_x = create_random_user(db, new_organization.id, test_admin_role.id)
     db.add(user_state_x)
     db.commit()
     db.refresh(user_state_x)
     db.add(UserState(user_id=user_state_x.id, state_id=state_x.id))
 
-    user_state_y = create_random_user(db, new_organization.id)
+    user_state_y = create_random_user(db, new_organization.id, test_admin_role.id)
     db.add(user_state_y)
     db.commit()
     db.refresh(user_state_y)
     db.add(UserState(user_id=user_state_y.id, state_id=state_y.id))
 
-    another_user = create_random_user(db, new_organization.id)
+    another_user = create_random_user(db, new_organization.id, test_admin_role.id)
     db.add(another_user)
     db.commit()
     db.refresh(another_user)
@@ -3089,16 +3131,55 @@ def test_user_list_state_user(
     assert "items" in content
     items = content["items"]
     assert len(items) == 2
+    assert {item["email"] for item in items} == {email, user_state_x.email}
+
+
+def test_user_list_excludes_roles_above_the_hierarchy(
+    client: TestClient, db: Session
+) -> None:
+    """A custom role only lists itself in allowed_roles, so its users must not
+    see the organization's system_admin or super_admin users - only users
+    holding roles within their own hierarchy."""
+    organization = create_random_organization(db)
+    assert organization.id is not None
+
+    read_user_permission = db.exec(
+        select(Permission).where(Permission.name == "read_user")
+    ).first()
+    assert read_user_permission is not None
+
+    custom_role = create_random_role(db, organization_id=organization.id)
+    assert custom_role.id is not None
+    custom_role.allowed_roles = [custom_role.name]
+    db.add(custom_role)
+    db.add(
+        RolePermission(role_id=custom_role.id, permission_id=read_user_permission.id)
+    )
+    db.commit()
+
+    system_admin_user = create_random_user(
+        db, organization.id, get_org_role(db, organization.id, system_admin.name).id
+    )
+    peer = create_random_user(db, organization.id, custom_role.id)
+    caller = create_random_user(db, organization.id, custom_role.id)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/users/",
+        headers={"Authorization": f"Bearer {caller.token}"},
+    )
+    assert response.status_code == 200
+    emails = {item["email"] for item in response.json()["items"]}
+    assert emails == {caller.email, peer.email}
+    assert system_admin_user.email not in emails
 
 
 def test_state_admin_cannot_delete_general_user(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert system_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    system_admin_role = get_org_role(db, org.id, "system_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3160,9 +3241,9 @@ def test_state_admin_cannot_delete_general_user(
 def test_state_admin_cannot_delete_user_in_other_state(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3220,9 +3301,9 @@ def test_state_admin_cannot_delete_user_in_other_state(
 def test_state_admin_cannot_delete_user_in_other_district(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3280,9 +3361,9 @@ def test_state_admin_cannot_delete_user_in_other_district(
 def test_state_admin_can_delete_user_in_same_state(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3338,11 +3419,10 @@ def test_state_admin_can_delete_user_in_same_state(
 def test_state_admin_cannot_update_general_user(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
-    system_admin_role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert system_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
+    system_admin_role = get_org_role(db, org.id, "system_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3409,9 +3489,9 @@ def test_state_admin_cannot_update_general_user(
 def test_state_admin_cannot_update_user_in_other_state(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3475,9 +3555,9 @@ def test_state_admin_cannot_update_user_in_other_state(
 def test_state_admin_can_update_user_in_same_state(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3540,9 +3620,9 @@ def test_state_admin_can_update_user_in_same_state(
 def test_state_admin_can_update_user_in_same_district(
     client: TestClient, get_user_systemadmin_token: dict[str, str], db: Session
 ) -> None:
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
     org = create_random_organization(db)
+    assert org.id is not None
+    state_admin_role = get_org_role(db, org.id, "state_admin")
 
     country = Country(name=random_lower_string(), is_active=True)
     db.add(country)
@@ -3644,8 +3724,7 @@ def test_get_users_by_district_user(
 
     email = random_email()
 
-    state_admin_role = db.exec(select(Role).where(Role.name == "state_admin")).first()
-    assert state_admin_role
+    state_admin_role = get_org_role(db, org_id, "state_admin")
     state_admin_user_payload = {
         "email": email,
         "password": random_lower_string(),
@@ -3748,8 +3827,7 @@ def test_bulk_delete_users_success(
     """All users are deletable — all deleted."""
     user_data = get_current_user_data(client, get_user_superadmin_token)
     organization_id = user_data["organization_id"]
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    role = get_org_role(db, organization_id, "system_admin")
 
     user_ids = []
     for _ in range(3):
@@ -3789,8 +3867,7 @@ def test_bulk_delete_users_self_deletion_fails(
     user_data = get_current_user_data(client, get_user_superadmin_token)
     organization_id = user_data["organization_id"]
     current_user_id = user_data["id"]
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    role = get_org_role(db, organization_id, "system_admin")
 
     other_user_in = UserCreate(
         email=random_email(),
@@ -3841,9 +3918,9 @@ def test_bulk_delete_users_out_of_org_ids_rejected(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     """User IDs from a different organization are treated as invalid and return 404."""
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
     other_org = create_random_organization(db)
+    assert other_org.id is not None
+    role = get_org_role(db, other_org.id, "system_admin")
 
     other_org_user_in = UserCreate(
         email=random_email(),
@@ -3873,8 +3950,8 @@ def _create_deletable_user(
 ) -> tuple[int, int]:
     """Create a system_admin user in a fresh org; return (user_id, org_id)."""
     org = create_random_organization(db)
-    role = db.exec(select(Role).where(Role.name == "system_admin")).first()
-    assert role is not None
+    assert org.id is not None
+    role = get_org_role(db, org.id, "system_admin")
     resp = client.post(
         f"{settings.API_V1_STR}/users/",
         headers=token,
@@ -4136,10 +4213,7 @@ def test_state_admin_creates_and_updates_test_admin_district(
         db.refresh(district_z)
 
         # Create state admin scoped to state X
-        state_admin_role = db.exec(
-            select(Role).where(Role.name == "state_admin")
-        ).first()
-        assert state_admin_role is not None
+        state_admin_role = get_org_role(db, org_id, "state_admin")
 
         state_admin_email = random_email()
         state_admin_password = random_lower_string()
@@ -4167,8 +4241,7 @@ def test_state_admin_creates_and_updates_test_admin_district(
         )
 
         # Step 1: state admin creates a test admin for district Y
-        test_admin_role = db.exec(select(Role).where(Role.name == "test_admin")).first()
-        assert test_admin_role is not None
+        test_admin_role = get_org_role(db, org_id, "test_admin")
 
         r = client.post(
             f"{settings.API_V1_STR}/users/",
@@ -4207,3 +4280,91 @@ def test_state_admin_creates_and_updates_test_admin_district(
         assert {d["id"] for d in updated["districts"]} == {district_z.id}
         assert district_y.id not in {d["id"] for d in updated["districts"]}
         assert {s["id"] for s in updated["states"]} == {state_x.id}
+
+
+def test_create_user_with_role_from_different_org_is_rejected(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A user's role must belong to the same organization the user is being
+    created in - a role from a different org must be rejected."""
+    target_org = create_random_organization(db)
+    other_org = create_random_organization(db)
+    assert target_org.id is not None and other_org.id is not None
+
+    other_org_role = get_org_role(db, other_org.id, "test_admin")
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": other_org_role.id,
+            "organization_id": target_org.id,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
+
+
+def test_update_user_with_role_from_different_org_is_rejected(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Re-pointing an existing user's role_id to another org's role must
+    also be rejected, not just at creation time."""
+    target_org = create_random_organization(db)
+    other_org = create_random_organization(db)
+    assert target_org.id is not None and other_org.id is not None
+
+    existing_user = create_random_user(db, organization_id=target_org.id)
+    other_org_role = get_org_role(db, other_org.id, "state_admin")
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/users/{existing_user.id}",
+        headers=superuser_token_headers,
+        json={
+            "full_name": existing_user.full_name,
+            "phone": existing_user.phone,
+            "role_id": other_org_role.id,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
+
+
+def test_cannot_assign_super_admin_to_user_outside_t4d(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """super_admin belongs to T4D alone - assigning it to a user whose own
+    organization is a different org must be rejected by the org check
+    (a 400, not the role-hierarchy 403), regardless of who's asking."""
+    t4d_org_id = get_current_user_data(client, superuser_token_headers)[
+        "organization_id"
+    ]
+    t4d_super_admin = get_org_role(db, t4d_org_id, "super_admin")
+
+    other_org = create_random_organization(db)
+    assert other_org.id is not None
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "full_name": random_lower_string(),
+            "phone": random_lower_string(),
+            "role_id": t4d_super_admin.id,
+            "organization_id": other_org.id,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"] == "Role does not belong to the user's organization"
+    )
