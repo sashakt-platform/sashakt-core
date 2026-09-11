@@ -413,6 +413,9 @@ def get_test_question_links(session: SessionDep, test_id: int) -> list[TestQuest
     return list(
         session.exec(
             select(TestQuestion)
+            # Loaded here so the section summary can report question types
+            # without a query per link.
+            .options(selectinload(TestQuestion.question_revision))  # type: ignore[arg-type]
             .where(TestQuestion.test_id == test_id)
             .order_by(col(TestQuestion.id))
         ).all()
@@ -484,6 +487,24 @@ def build_question_set_publics(
     ]
 
 
+def _question_set_question_type(
+    links: list[TestQuestion],
+) -> str | None:
+    """The type shared by a set's questions, or None if the set mixes types.
+
+    Lets the candidate landing page say what a section asks for without sending
+    every question.
+    """
+    types = {
+        link.question_revision.question_type
+        for link in links
+        if link.question_revision is not None
+    }
+    if len(types) == 1:
+        return str(types.pop().value)
+    return None
+
+
 def build_question_set_summary_publics(
     *,
     test_questions: list[TestQuestion],
@@ -506,6 +527,9 @@ def build_question_set_summary_publics(
             display_order=question_set.display_order,
             marking_scheme=question_set.marking_scheme,
             question_count=len(grouped_question_links.get(question_set.id or -1, [])),
+            question_type=_question_set_question_type(
+                grouped_question_links.get(question_set.id or -1, [])
+            ),
         )
         for question_set in question_sets
     ]
