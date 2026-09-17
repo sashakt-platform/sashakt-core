@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NotRequired, Optional, TypeIs
 
 from pydantic import model_validator
@@ -12,6 +11,7 @@ from app.models.candidate import CandidateTestAnswer
 from app.models.test import TestQuestion
 from app.models.user import UserPublic
 from app.models.utils import CorrectAnswerType, MarkingScheme
+from app.models.utils import QuestionType as QuestionType
 
 if TYPE_CHECKING:
     from app.models.candidate import CandidateTest
@@ -20,19 +20,6 @@ if TYPE_CHECKING:
     from app.models.tag import Tag
     from app.models.test import Test
     from app.models.user import User
-
-
-class QuestionType(StrEnum):
-    """Types of questions available in the system"""
-
-    single_choice = "single-choice"
-    multi_choice = "multi-choice"
-    subjective = "subjective"
-    numerical_integer = "numerical-integer"
-    numerical_decimal = "numerical-decimal"
-    matrix_match = "matrix-match"
-    matrix_rating = "matrix-rating"
-    matrix_input = "matrix-input"
 
 
 # Simple structure classes - no SQLModel inheritance
