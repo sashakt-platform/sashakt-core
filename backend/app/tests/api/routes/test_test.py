@@ -4030,6 +4030,139 @@ def test_get_public_test_info_includes_question_set_summaries(
     ]
 
 
+def test_get_public_test_info_question_set_summary_question_type(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        user,
+        india,
+        punjab,
+        goa,
+        organization,
+        tag_type,
+        tag_hindi,
+        tag_marathi,
+        question_one,
+        question_two,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+
+    # A second question pair, used to give the mixed-type section a
+    # single-choice and a multi-choice question.
+    question_three = Question(organization_id=organization.id)
+    question_four = Question(organization_id=organization.id)
+    db.add(question_three)
+    db.add(question_four)
+    db.commit()
+
+    question_revision_three = QuestionRevision(
+        question_id=question_three.id,
+        created_by_id=user.id,
+        question_text="What is the capital of France",
+        question_type=QuestionType.single_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1],
+    )
+    question_revision_four = QuestionRevision(
+        question_id=question_four.id,
+        created_by_id=user.id,
+        question_text="Which of these are prime numbers",
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "Option 1"},
+            {"id": 2, "key": "B", "value": "Option 2"},
+        ],
+        correct_answer=[1, 2],
+    )
+    db.add(question_revision_three)
+    db.add(question_revision_four)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        time_limit=60,
+        marks=100,
+        start_instructions=random_lower_string(),
+        link=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    single_type_set = QuestionSet(
+        test_id=test.id,
+        title="Single type section",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    mixed_type_set = QuestionSet(
+        test_id=test.id,
+        title="Mixed type section",
+        display_order=2,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 4, "wrong": -1, "skipped": 0},
+    )
+    db.add(single_type_set)
+    db.add(mixed_type_set)
+    db.commit()
+    db.refresh(single_type_set)
+    db.refresh(mixed_type_set)
+
+    # Both questions in this section are single-choice.
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=question_revision_one.id,
+            question_set_id=single_type_set.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=question_revision_two.id,
+            question_set_id=single_type_set.id,
+        )
+    )
+    # This section mixes a single-choice and a multi-choice question.
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=question_revision_three.id,
+            question_set_id=mixed_type_set.id,
+        )
+    )
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=question_revision_four.id,
+            question_set_id=mixed_type_set.id,
+        )
+    )
+    db.commit()
+
+    test_link = get_test_link(db, test.id, test.created_by_id)
+    response = client.get(f"{settings.API_V1_STR}/test/public/{test_link.uuid}")
+    data = response.json()
+
+    assert response.status_code == 200
+    question_sets_by_title = {
+        question_set["title"]: question_set for question_set in data["question_sets"]
+    }
+    assert (
+        question_sets_by_title["Single type section"]["question_type"]
+        == "single-choice"
+    )
+    assert question_sets_by_title["Mixed type section"]["question_type"] is None
+
+
 def test_get_public_test_info_with_random_questions(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
