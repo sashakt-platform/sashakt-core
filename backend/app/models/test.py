@@ -9,7 +9,7 @@ from typing_extensions import TypedDict
 from app.core.timezone import get_timezone_aware_now
 from app.models import CandidateTest
 from app.models.organization import Organization
-from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme
+from app.models.utils import DEFAULT_LOCALE, LocaleEnum, MarkingScheme, QuestionType
 
 TestStatus = Literal["In Progress", "Completed", "Scheduled", None]
 
@@ -425,8 +425,7 @@ class QuestionSetPublic(QuestionSetBase):
 class QuestionSetSummaryPublic(QuestionSetBase):
     id: int
     question_count: int = 0
-    # str, not QuestionType: app.models.question imports this module.
-    question_type: str | None = None
+    question_type: QuestionType | None = None
 
 
 class TestPublic(TestBase):

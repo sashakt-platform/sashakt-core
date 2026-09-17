@@ -131,6 +131,7 @@ from .question import (
     QuestionRevisionCreate,
     QuestionTag,
     QuestionTagsUpdate,
+    QuestionType,
     QuestionUpdate,
     TagQuestionCount,
 )
@@ -309,6 +310,7 @@ __all__ = [
     "PermissionsPublic",
     "PermissionUpdate",
     "RolePermission",
+    "QuestionType",
     "QuestionLocationUpdateItem",
     "QuestionLocationsUpdate",
     "QuestionTagsUpdate",

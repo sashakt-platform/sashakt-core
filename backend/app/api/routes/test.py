@@ -42,6 +42,7 @@ from app.models import (
     Message,
     QuestionRevision,
     QuestionSet,
+    QuestionType,
     State,
     Test,
     TestCreate,
@@ -489,7 +490,7 @@ def build_question_set_publics(
 
 def _question_set_question_type(
     links: list[TestQuestion],
-) -> str | None:
+) -> QuestionType | None:
     """The type shared by a set's questions, or None if the set mixes types.
 
     Lets the candidate landing page say what a section asks for without sending
@@ -501,7 +502,7 @@ def _question_set_question_type(
         if link.question_revision is not None
     }
     if len(types) == 1:
-        return str(types.pop().value)
+        return types.pop()
     return None
 
 

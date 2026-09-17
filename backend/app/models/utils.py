@@ -48,6 +48,19 @@ class LocaleEnum(enum.StrEnum):
     Hindi = "hi-IN"
 
 
+class QuestionType(enum.StrEnum):
+    """Types of questions available in the system"""
+
+    single_choice = "single-choice"
+    multi_choice = "multi-choice"
+    subjective = "subjective"
+    numerical_integer = "numerical-integer"
+    numerical_decimal = "numerical-decimal"
+    matrix_match = "matrix-match"
+    matrix_rating = "matrix-rating"
+    matrix_input = "matrix-input"
+
+
 SUPPORTED_LOCALES = {loc.value: loc.name for loc in LocaleEnum}
 
 DEFAULT_LOCALE = LocaleEnum.English
