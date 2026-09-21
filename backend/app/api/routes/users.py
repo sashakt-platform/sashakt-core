@@ -51,7 +51,11 @@ from app.models import (
 )
 from app.models.role import Role, RoleLocationLevel
 from app.models.user import DeleteUser, UserDistrict, UserPublicMe, UserState
-from app.utils import generate_new_account_email, send_email
+from app.utils import (
+    generate_new_account_email,
+    generate_password_reset_token,
+    send_email,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -404,8 +408,9 @@ def create_user(
             _assign_locations(session, user.id, user_in.state_ids, user_in.district_ids)
 
     if settings.emails_enabled and user_in.email:
+        token = generate_password_reset_token(email=user_in.email)
         email_data = generate_new_account_email(
-            email_to=user_in.email, username=user_in.email, password=user_in.password
+            email_to=user_in.email, username=user_in.email, token=token
         )
         send_email(
             email_to=user_in.email,
