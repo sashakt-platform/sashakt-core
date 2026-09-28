@@ -621,11 +621,37 @@ class BigQueryService:
                 partition_field="created_date",
                 clustering_fields=["organization_id", "candidate_test_id", "form_id"],
             ),
+            "question_sets": TableSchema(
+                table_name=self.get_table_name("question_sets"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "title", "type": "STRING", "mode": "NULLABLE"},
+                    {"name": "description", "type": "STRING", "mode": "NULLABLE"},
+                    {
+                        "name": "max_questions_allowed_to_attempt",
+                        "type": "INTEGER",
+                        "mode": "NULLABLE",
+                    },
+                    {"name": "display_order", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "marking_scheme", "type": "JSON", "mode": "NULLABLE"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                    {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id", "test_id"],
+            ),
             "test_questions": TableSchema(
                 table_name=self.get_table_name("test_questions"),
                 columns=[
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {
+                        "name": "question_set_id",
+                        "type": "INTEGER",
+                        "mode": "NULLABLE",
+                    },
                     {
                         "name": "question_revision_id",
                         "type": "INTEGER",
@@ -754,6 +780,7 @@ class BigQueryService:
                 "forms",
                 "form_fields",
                 "form_responses",
+                "question_sets",
                 "test_questions",
                 "test_tags",
                 "test_districts",
