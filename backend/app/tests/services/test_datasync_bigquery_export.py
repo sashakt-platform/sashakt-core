@@ -115,3 +115,16 @@ def test_incremental_sync_keeps_watermark_when_export_fails() -> None:
 
     assert result.success is False
     metadata.assert_not_called()
+
+
+def test_candidates_schema_carries_external_identifier() -> None:
+    """The Avanti-side user id must reach BigQuery.
+
+    candidates.identity holds the anonymous QR uuid, so without this column
+    there is no way to join a Sashakt attempt back to an external user.
+    """
+    service, _ = _service_with_mock_client()
+
+    columns = {c["name"] for c in service._get_table_schema("candidates").columns}
+
+    assert "external_identifier" in columns

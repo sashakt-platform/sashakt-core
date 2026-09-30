@@ -358,6 +358,11 @@ class BigQueryService:
                 columns=[
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "identity", "type": "STRING", "mode": "NULLABLE"},
+                    {
+                        "name": "external_identifier",
+                        "type": "STRING",
+                        "mode": "NULLABLE",
+                    },
                     {"name": "user_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
                     {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},

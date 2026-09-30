@@ -1031,6 +1031,7 @@ class DataSyncService:
         return {
             "id": candidate.id,
             "identity": candidate.identity,
+            "external_identifier": candidate.external_identifier,
             "user_id": candidate.user_id,
             "is_active": candidate.is_active,
             "organization_id": candidate.organization_id,
