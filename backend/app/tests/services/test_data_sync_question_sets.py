@@ -1,5 +1,9 @@
+from datetime import timedelta
+from unittest.mock import patch
+
 from sqlmodel import Session
 
+from app.core.timezone import get_timezone_aware_now
 from app.models import QuestionSet, Test, TestQuestion
 from app.models.user import User
 from app.services.data_sync import DataSyncService
@@ -100,3 +104,46 @@ def test_question_sets_are_synced_before_the_links_that_reference_them(
 
     order = list(data.keys())
     assert order.index("question_sets") < order.index("test_questions")
+
+
+def test_incremental_export_skips_question_sets_already_synced(db: Session) -> None:
+    """An incremental run only sends sets modified since the last sync."""
+    user = _org_user(db)
+    _, question_set = _sectioned_test(db, user)
+
+    service = DataSyncService()
+    later = get_timezone_aware_now() + timedelta(hours=1)
+
+    with patch.object(service, "_get_table_specific_last_sync", return_value=later):
+        rows = service._extract_question_sets_data(db, user.organization_id, True)
+
+    assert all(row["id"] != question_set.id for row in rows)
+
+
+def test_incremental_export_includes_question_sets_changed_since_last_sync(
+    db: Session,
+) -> None:
+    """A set modified after the watermark is still picked up."""
+    user = _org_user(db)
+    _, question_set = _sectioned_test(db, user)
+
+    service = DataSyncService()
+    earlier = get_timezone_aware_now() - timedelta(hours=1)
+
+    with patch.object(service, "_get_table_specific_last_sync", return_value=earlier):
+        rows = service._extract_question_sets_data(db, user.organization_id, True)
+
+    assert any(row["id"] == question_set.id for row in rows)
+
+
+def test_incremental_export_sends_everything_on_the_first_sync(db: Session) -> None:
+    """With no previous sync there is no watermark, so nothing is filtered out."""
+    user = _org_user(db)
+    _, question_set = _sectioned_test(db, user)
+
+    service = DataSyncService()
+
+    with patch.object(service, "_get_table_specific_last_sync", return_value=None):
+        rows = service._extract_question_sets_data(db, user.organization_id, True)
+
+    assert any(row["id"] == question_set.id for row in rows)
