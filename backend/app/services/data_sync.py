@@ -34,6 +34,7 @@ from app.models.form import Form, FormField, FormResponse
 from app.models.provider import ProviderType
 from app.models.test import (
     MarksLevelEnum,
+    QuestionSet,
     TestDistrict,
     TestQuestion,
     TestState,
@@ -402,6 +403,9 @@ class DataSyncService:
                 session, organization_id, incremental
             )
             data["question_tags"] = self._extract_question_tags_data(
+                session, organization_id, incremental
+            )
+            data["question_sets"] = self._extract_question_sets_data(
                 session, organization_id, incremental
             )
             data["test_questions"] = self._extract_test_questions_data(
@@ -792,6 +796,29 @@ class DataSyncService:
         form_fields = session.exec(statement).all()
         return [self._serialize_form_field(ff) for ff in form_fields]
 
+    def _extract_question_sets_data(
+        self, session: Session, organization_id: int, incremental: bool
+    ) -> list[dict[str, Any]]:
+        # Filter question_sets by organization through test.organization_id
+        statement = (
+            select(QuestionSet, Test.organization_id)
+            .join(Test, QuestionSet.test_id == Test.id)  # type: ignore[arg-type]
+            .where(Test.organization_id == organization_id)
+        )
+
+        if incremental:
+            table_last_sync = self._get_table_specific_last_sync(
+                organization_id, "question_sets"
+            )
+            if table_last_sync is not None:
+                statement = statement.where(QuestionSet.modified_date > table_last_sync)  # type: ignore[operator]
+
+        results = session.exec(statement).all()
+        return [
+            self._serialize_question_set(question_set, org_id)
+            for question_set, org_id in results
+        ]
+
     def _extract_test_questions_data(
         self, session: Session, organization_id: int, incremental: bool
     ) -> list[dict[str, Any]]:
@@ -1004,6 +1031,7 @@ class DataSyncService:
         return {
             "id": candidate.id,
             "identity": candidate.identity,
+            "external_identifier": candidate.external_identifier,
             "user_id": candidate.user_id,
             "is_active": candidate.is_active,
             "organization_id": candidate.organization_id,
@@ -1298,11 +1326,38 @@ class DataSyncService:
         return {
             "id": test_question.id,
             "test_id": test_question.test_id,
+            "question_set_id": test_question.question_set_id,
             "question_revision_id": test_question.question_revision_id,
             "organization_id": organization_id,
             "created_date": (
                 test_question.created_date.isoformat()
                 if test_question.created_date
+                else None
+            ),
+        }
+
+    def _serialize_question_set(
+        self, question_set: QuestionSet, organization_id: int | None
+    ) -> dict[str, Any]:
+        return {
+            "id": question_set.id,
+            "test_id": question_set.test_id,
+            "organization_id": organization_id,
+            "title": question_set.title,
+            "description": question_set.description,
+            "max_questions_allowed_to_attempt": (
+                question_set.max_questions_allowed_to_attempt
+            ),
+            "display_order": question_set.display_order,
+            "marking_scheme": question_set.marking_scheme,
+            "created_date": (
+                question_set.created_date.isoformat()
+                if question_set.created_date
+                else None
+            ),
+            "modified_date": (
+                question_set.modified_date.isoformat()
+                if question_set.modified_date
                 else None
             ),
         }

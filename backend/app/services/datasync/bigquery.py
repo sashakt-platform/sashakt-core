@@ -193,7 +193,12 @@ class BigQueryService:
                 bq_schema.append(field)
             job_config.schema = bq_schema
 
-            # Convert data for BigQuery (keeping as dict objects, not JSON strings)
+            # JSON columns take the dict/list itself. Stringifying it here would
+            # store a quoted string, and JSON_VALUE() on it returns NULL.
+            json_columns = {
+                column["name"] for column in schema.columns if column["type"] == "JSON"
+            }
+
             processed_data: list[dict[str, Any]] = []
             for record in data:
                 processed_record: dict[str, Any] = {}
@@ -201,6 +206,8 @@ class BigQueryService:
                     # Handle datetime strings and other types
                     if value is None:
                         processed_record[key] = None
+                    elif key in json_columns:
+                        processed_record[key] = value
                     elif isinstance(value, dict | list):
                         processed_record[key] = json.dumps(value)
                     else:
@@ -351,6 +358,11 @@ class BigQueryService:
                 columns=[
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "identity", "type": "STRING", "mode": "NULLABLE"},
+                    {
+                        "name": "external_identifier",
+                        "type": "STRING",
+                        "mode": "NULLABLE",
+                    },
                     {"name": "user_id", "type": "INTEGER", "mode": "NULLABLE"},
                     {"name": "is_active", "type": "BOOLEAN", "mode": "REQUIRED"},
                     {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
@@ -621,11 +633,37 @@ class BigQueryService:
                 partition_field="created_date",
                 clustering_fields=["organization_id", "candidate_test_id", "form_id"],
             ),
+            "question_sets": TableSchema(
+                table_name=self.get_table_name("question_sets"),
+                columns=[
+                    {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {"name": "organization_id", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "title", "type": "STRING", "mode": "NULLABLE"},
+                    {"name": "description", "type": "STRING", "mode": "NULLABLE"},
+                    {
+                        "name": "max_questions_allowed_to_attempt",
+                        "type": "INTEGER",
+                        "mode": "NULLABLE",
+                    },
+                    {"name": "display_order", "type": "INTEGER", "mode": "NULLABLE"},
+                    {"name": "marking_scheme", "type": "JSON", "mode": "NULLABLE"},
+                    {"name": "created_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                    {"name": "modified_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                ],
+                partition_field="created_date",
+                clustering_fields=["organization_id", "test_id"],
+            ),
             "test_questions": TableSchema(
                 table_name=self.get_table_name("test_questions"),
                 columns=[
                     {"name": "id", "type": "INTEGER", "mode": "REQUIRED"},
                     {"name": "test_id", "type": "INTEGER", "mode": "REQUIRED"},
+                    {
+                        "name": "question_set_id",
+                        "type": "INTEGER",
+                        "mode": "NULLABLE",
+                    },
                     {
                         "name": "question_revision_id",
                         "type": "INTEGER",
@@ -754,6 +792,7 @@ class BigQueryService:
                 "forms",
                 "form_fields",
                 "form_responses",
+                "question_sets",
                 "test_questions",
                 "test_tags",
                 "test_districts",
@@ -838,6 +877,7 @@ class BigQueryService:
             total_records = 0
             tables_created = []
             tables_updated = []
+            failed_tables: list[str] = []
 
             for table_base_name, table_data in export_data.items():
                 table_name = self.get_table_name(table_base_name)
@@ -850,6 +890,12 @@ class BigQueryService:
                         table_name, table_data, schema, mode="replace"
                     )
                     total_records += records_exported
+
+                    # export_data returns 0 on failure, so a table that had rows
+                    # to write and exported none did not reach BigQuery.
+                    if records_exported == 0:
+                        failed_tables.append(table_name)
+                        continue
 
                     # Only count tables with data as created/updated
                     if created:
@@ -878,10 +924,15 @@ class BigQueryService:
                     )
 
             return SyncResult(
-                success=True,
+                success=not failed_tables,
                 records_exported=total_records,
                 tables_created=tables_created,
                 tables_updated=tables_updated,
+                error_message=(
+                    f"Failed to export: {', '.join(failed_tables)}"
+                    if failed_tables
+                    else None
+                ),
                 sync_timestamp=get_timezone_aware_now(),
             )
 
@@ -917,6 +968,7 @@ class BigQueryService:
             total_records = 0
             tables_created = []
             tables_updated = []
+            failed_tables: list[str] = []
 
             for table_base_name, table_data in export_data.items():
                 table_name = self.get_table_name(table_base_name)
@@ -944,6 +996,13 @@ class BigQueryService:
                             table_name, filtered_data, schema, mode="append"
                         )
                         total_records += records_exported
+
+                        # export_data returns 0 on failure. Leave the watermark
+                        # alone in that case, otherwise the rows that failed to
+                        # land are skipped by every later incremental run.
+                        if records_exported == 0:
+                            failed_tables.append(table_name)
+                            continue
 
                         # Only count tables with data as created/updated
                         if created:
@@ -985,10 +1044,15 @@ class BigQueryService:
                     )
 
             return SyncResult(
-                success=True,
+                success=not failed_tables,
                 records_exported=total_records,
                 tables_created=tables_created,
                 tables_updated=tables_updated,
+                error_message=(
+                    f"Failed to export: {', '.join(failed_tables)}"
+                    if failed_tables
+                    else None
+                ),
                 sync_timestamp=get_timezone_aware_now(),
             )
 
