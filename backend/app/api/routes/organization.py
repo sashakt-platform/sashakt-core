@@ -290,7 +290,7 @@ def get_organization(
 
     organizations: Page[OrganizationPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: _org_page_transformer(session, items),
     )

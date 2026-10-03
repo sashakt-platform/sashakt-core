@@ -15,7 +15,7 @@ dependencies = [
     "alembic<2.0.0,>=1.18.0",
     "httpx<1.0.0,>=0.25.1",
     "psycopg[binary]<4.0.0,>=3.1.13",
-    "sqlmodel<1.0.0,>=0.0.39",
+    "sqlmodel<0.0.44,>=0.0.39",
     # Pin bcrypt until passlib supports the latest
     "bcrypt==4.0.1",
     "pydantic-settings<3.0.0,>=2.14.0",
