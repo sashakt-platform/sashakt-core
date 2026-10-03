@@ -1442,7 +1442,7 @@ def get_candidate_report(
 
     result: Page[CandidateReport] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_to_report(
             items, session, test, question_sets_by_id, sectioned

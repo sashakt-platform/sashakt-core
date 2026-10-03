@@ -134,7 +134,7 @@ def get_countries(
 
     countries: Page[CountryPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_countries_to_public(items),
     )
@@ -261,7 +261,7 @@ def get_state(
 
     states: Page[StatePublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_states_to_public(items),
     )
@@ -377,7 +377,7 @@ def get_district(
         if user_state_ids:
             query = query.where(col(District.state_id).in_(user_state_ids))
 
-    districts: Page[DistrictPublic] = paginate(  # type: ignore[type-var]
+    districts: Page[DistrictPublic] = paginate(
         session,
         query,
         params,
@@ -488,7 +488,7 @@ def get_block(
 
     blocks: Page[BlockPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_blocks_to_public(items),
     )
