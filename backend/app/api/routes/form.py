@@ -144,7 +144,7 @@ def get_forms(
 
     forms: Page[FormPublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_forms_to_public(items),
     )
@@ -562,7 +562,7 @@ def get_form_responses(
 
     responses: Page[FormResponsePublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: [
             FormResponsePublic(**item.model_dump()) for item in items

@@ -170,7 +170,7 @@ def get_entitytype(
     if is_active is not None:
         query = query.where(EntityType.is_active == is_active)
 
-    entity_types: Page[EntityTypeListPublic] = paginate(  # type: ignore[type-var]
+    entity_types: Page[EntityTypeListPublic] = paginate(
         session,
         query,
         params,

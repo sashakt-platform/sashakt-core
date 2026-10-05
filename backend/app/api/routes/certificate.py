@@ -87,7 +87,7 @@ def get_certificates(
 
     certificates: Page[CertificatePublic] = paginate(
         session,
-        query,  # type: ignore[arg-type]
+        query,
         params,
         transformer=lambda items: transform_certificates_to_public(items),
     )
