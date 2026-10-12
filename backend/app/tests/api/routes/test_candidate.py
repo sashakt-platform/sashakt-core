@@ -17257,3 +17257,254 @@ def test_submit_answer_visited_defaults_to_true(
     )
     assert r.status_code == 200
     assert r.json()["visited"] is True
+
+
+def _start_candidate_test(
+    client: TestClient, db: SessionDep, test: Test
+) -> tuple[int, str]:
+    assert test.id is not None
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_data = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Test Device"},
+    ).json()
+    return start_data["candidate_test_id"], start_data["candidate_uuid"]
+
+
+def test_result_multi_choice_fully_correct_is_correct_not_partial(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    question = Question(organization_id=org.id)
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    revision = QuestionRevision(
+        created_by_id=user.id,
+        question_id=question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "A"},
+            {"id": 2, "key": "B", "value": "B"},
+            {"id": 3, "key": "C", "value": "C"},
+        ],
+        correct_answer=[1, 2],
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme={
+            "correct": 4,
+            "wrong": -1,
+            "skipped": 0,
+            "partial": {"correct_answers": [{"num_correct_selected": 1, "marks": 1}]},
+        },
+    )
+    db.add(revision)
+    db.commit()
+    db.refresh(revision)
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    candidate_test_id, candidate_uuid = _start_candidate_test(client, db, test)
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=[1, 2],
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["partially_correct"] == 0
+    assert data["incorrect_answer"] == 0
+    assert data["marks_obtained"] == 4
+    assert data["sections"] is None
+
+
+def test_result_numerical_invalid_and_wrong_responses_are_incorrect(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        marks_level="question",
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    revisions = []
+    for question_type, correct_answer in [
+        (QuestionType.numerical_integer, 4),
+        (QuestionType.numerical_integer, 4),
+        (QuestionType.numerical_integer, 4),
+        (QuestionType.numerical_decimal, 3.14),
+    ]:
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+        revision = QuestionRevision(
+            created_by_id=user.id,
+            question_id=question.id,
+            question_text=random_lower_string(),
+            question_type=question_type,
+            correct_answer=correct_answer,
+            is_mandatory=True,
+            is_active=True,
+            marking_scheme={"correct": 2, "wrong": -1, "skipped": 0},
+        )
+        db.add(revision)
+        db.commit()
+        db.refresh(revision)
+        db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+        db.commit()
+        revisions.append(revision)
+
+    candidate_test_id, candidate_uuid = _start_candidate_test(client, db, test)
+    # Non-numeric text, a non-integer for an integer question, a correct integer,
+    # and a decimal outside the tolerance.
+    for revision, response in zip(revisions, ["abc", 4.5, 4, 9.99], strict=True):
+        db.add(
+            CandidateTestAnswer(
+                candidate_test_id=candidate_test_id,
+                question_revision_id=revision.id,
+                response=response,
+            )
+        )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 1
+    assert data["incorrect_answer"] == 3
+    assert data["partially_correct"] == 0
+    assert data["marks_obtained"] == -1  # 2 - 1 - 1 - 1
+    assert data["marks_maximum"] == 8
+
+
+def test_result_matrix_match_response_missing_expected_row_is_incorrect(
+    client: TestClient, db: SessionDep
+) -> None:
+    test, revision = create_matrix_match_test_setup(db)
+    candidate_test_id, candidate_uuid = _start_candidate_test(client, db, test)
+
+    # Row 1 is right, rows 2 and 3 are absent from the response.
+    db.add(
+        CandidateTestAnswer(
+            candidate_test_id=candidate_test_id,
+            question_revision_id=revision.id,
+            response=json.dumps({"1": [10, 20]}),
+        )
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correct_answer"] == 0
+    assert data["partially_correct"] == 0
+    assert data["incorrect_answer"] == 1
+    assert data["marks_obtained"] == -1
+
+
+def test_result_section_with_nothing_attempted_has_zero_rates(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Never answered",
+        correct_answer=1,
+        marking_scheme=None,
+    )
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    section = QuestionSet(
+        test_id=test.id,
+        title="Untouched",
+        display_order=1,
+        max_questions_allowed_to_attempt=1,
+        marking_scheme={"correct": 2, "wrong": -1, "skipped": 0},
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+    db.add(
+        TestQuestion(
+            test_id=test.id,
+            question_revision_id=revision.id,
+            question_set_id=section.id,
+        )
+    )
+    db.commit()
+
+    candidate_test_id, candidate_uuid = _start_candidate_test(client, db, test)
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    [section_result] = response.json()["sections"]
+    assert section_result["total_questions"] == 1
+    assert section_result["attempted"] == 0
+    assert section_result["attempt_rate"] == 0.0
+    assert section_result["accuracy"] == 0.0
+    assert section_result["marks_obtained"] == 0.0
+    assert section_result["marks_maximum"] == 2.0
