@@ -363,8 +363,9 @@ class SectionResult(SQLModel):
     correct_answer: int
     partially_correct: int
     incorrect_answer: int
-    # Percentages (0-100), 0.0 when the denominator is 0. attempt_rate is
-    # attempted / total_questions rounded to 2 decimals;
+    # Whole-number percentages (0-100). attempt_rate is attempted /
+    # max_questions_allowed_to_attempt of the section; accuracy is
+    # (correct_answer + 0.5 * partially_correct) / attempted. 0.0 if denominator is 0.
     attempt_rate: float
     # accuracy is (correct_answer + 0.5 * partially_correct) / attempted, rounded to a whole number.
     accuracy: float

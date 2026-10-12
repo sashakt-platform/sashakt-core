@@ -3971,7 +3971,7 @@ def test_get_test_result_returns_section_summaries(
         title="Physics",
         description="Section A",
         display_order=1,
-        max_questions_allowed_to_attempt=2,
+        max_questions_allowed_to_attempt=4,
         marking_scheme={
             "correct": 4,
             "wrong": -1,
@@ -4101,7 +4101,8 @@ def test_get_test_result_returns_section_summaries(
     assert physics_result["incorrect_answer"] == 0
     assert physics_result["marks_obtained"] == 5.0
     assert physics_result["marks_maximum"] == 8.0
-    assert physics_result["attempt_rate"] == 100.0
+    # attempt_rate is relative to the section limit (4), not its question count (2)
+    assert physics_result["attempt_rate"] == 50.0
     assert physics_result["accuracy"] == 75.0
 
     assert algebra_result["question_set_id"] == algebra.id

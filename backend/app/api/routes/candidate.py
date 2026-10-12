@@ -2104,16 +2104,11 @@ class _ResultTally:
             self.optional_not_attempted += 1
 
 
-def _percentage(numerator: int, denominator: int) -> float:
-    return round(numerator / denominator * 100, 2) if denominator else 0.0
-
-
-def _accuracy(tally: _ResultTally) -> float:
-    """Whole-number percentage where a partially correct answer counts as half."""
-    if not tally.attempted:
+def _percentage(numerator: float, denominator: int) -> float:
+    """Whole-number percentage (half rounds up); 0.0 when the denominator is 0."""
+    if not denominator:
         return 0.0
-    score = tally.correct + 0.5 * tally.partially_correct
-    return float(math.floor(score / tally.attempted * 100 + 0.5))
+    return float(math.floor(numerator / denominator * 100 + 0.5))
 
 
 def compute_result(
@@ -2360,8 +2355,12 @@ def compute_result(
                     correct_answer=tally.correct,
                     partially_correct=tally.partially_correct,
                     incorrect_answer=tally.incorrect,
-                    attempt_rate=_percentage(tally.attempted, tally.total),
-                    accuracy=_accuracy(tally),
+                    attempt_rate=_percentage(
+                        tally.attempted, question_set.max_questions_allowed_to_attempt
+                    ),
+                    accuracy=_percentage(
+                        tally.correct + 0.5 * tally.partially_correct, tally.attempted
+                    ),
                 )
             )
 
