@@ -375,8 +375,9 @@ def build_candidate_question_payload(
         question_revision = question_revisions_map.get(question_revision_id)
         if not question_revision:
             continue
-        question_set = question_sets_by_id.get(
-            question_set_id_by_revision.get(question_revision_id) or -1
+        section_id = question_set_id_by_revision.get(question_revision_id)
+        question_set = (
+            question_sets_by_id.get(section_id) if section_id is not None else None
         )
         effective_marking_scheme = (
             get_effective_marking_scheme(
@@ -2136,9 +2137,9 @@ def compute_result(
 
     overall = _ResultTally()
     section_tallies: dict[int, _ResultTally] = {}
-    for question_set_id in candidate_test.question_set_ids:
-        if question_set_id is not None:
-            section_tallies.setdefault(question_set_id, _ResultTally()).total += 1
+    for section_id in question_set_id_by_revision.values():
+        if section_id is not None:
+            section_tallies.setdefault(section_id, _ResultTally()).total += 1
 
     for question_revision_id in candidate_test.question_revision_ids:
         revision = question_revisions_map.get(question_revision_id)
@@ -2151,8 +2152,9 @@ def compute_result(
         marks = 0.0
 
         answer = answers_by_question_id.get(question_revision_id)
-        question_set = question_sets_by_id.get(
-            question_set_id_by_revision.get(question_revision_id) or -1
+        section_id = question_set_id_by_revision.get(question_revision_id)
+        question_set = (
+            question_sets_by_id.get(section_id) if section_id is not None else None
         )
         marking_scheme = get_effective_marking_scheme(
             test,
@@ -2322,8 +2324,8 @@ def compute_result(
                     outcome = _Outcome.INCORRECT
 
         overall.record(outcome, marks, correct_mark, has_marking_scheme)
-        section_tally = section_tallies.get(
-            question_set_id_by_revision.get(question_revision_id) or -1
+        section_tally = (
+            section_tallies.get(section_id) if section_id is not None else None
         )
         if section_tally:
             section_tally.record(outcome, marks, correct_mark, has_marking_scheme)
