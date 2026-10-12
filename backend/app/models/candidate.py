@@ -349,14 +349,38 @@ class TestCandidatePublic(SQLModel):
     nomenclature: dict[str, str] = Field(default_factory=dict)
 
 
-class Result(SQLModel):
+class SectionResult(SQLModel):
+    """Scored summary of one question set (section) of a candidate's test."""
+
+    question_set_id: int
+    title: str
+    display_order: int
+    marks_obtained: float | None
+    marks_maximum: float | None
+    total_questions: int
+    attempted: int
+    # Fully correct answers only; partially correct answers are counted separately.
     correct_answer: int
+    partially_correct: int
+    incorrect_answer: int
+    # Percentages (0-100) rounded to 2 decimals: attempted / total_questions and
+    # correct_answer / attempted. 0.0 when the denominator is 0.
+    attempt_rate: float
+    accuracy: float
+
+
+class Result(SQLModel):
+    # Fully correct answers only; partially correct answers are counted separately.
+    correct_answer: int
+    partially_correct: int = 0
     incorrect_answer: int
     mandatory_not_attempted: int
     optional_not_attempted: int
     total_questions: int
     marks_obtained: float | None
     marks_maximum: float | None
+    # Per-section summaries ordered by display_order; None for tests without sections.
+    sections: list[SectionResult] | None = None
     certificate_download_url: str | None = None
     # External (e.g. Avanti) user id, when the candidate came via external login;
     # None for anonymous QR candidates.

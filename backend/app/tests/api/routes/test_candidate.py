@@ -3935,6 +3935,233 @@ def test_get_test_result_uses_section_marking_precedence(
     assert data["marks_maximum"] == 9.0
 
 
+def test_get_test_result_returns_section_summaries(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    test = Test(
+        name=random_lower_string(),
+        description=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+
+    # Created out of display order on purpose: the API must sort by display_order.
+    algebra = QuestionSet(
+        test_id=test.id,
+        title="Algebra",
+        description="Section B",
+        display_order=2,
+        max_questions_allowed_to_attempt=2,
+        marking_scheme={"correct": 2, "wrong": -1, "skipped": 0},
+    )
+    physics = QuestionSet(
+        test_id=test.id,
+        title="Physics",
+        description="Section A",
+        display_order=1,
+        max_questions_allowed_to_attempt=2,
+        marking_scheme={
+            "correct": 4,
+            "wrong": -1,
+            "skipped": 0,
+            "partial": {"correct_answers": [{"num_correct_selected": 1, "marks": 1}]},
+        },
+    )
+    db.add(algebra)
+    db.add(physics)
+    db.commit()
+    db.refresh(algebra)
+    db.refresh(physics)
+
+    multi_question = Question(organization_id=org.id)
+    db.add(multi_question)
+    db.commit()
+    db.refresh(multi_question)
+    physics_multi = QuestionRevision(
+        created_by_id=user.id,
+        question_id=multi_question.id,
+        question_text=random_lower_string(),
+        question_type=QuestionType.multi_choice,
+        options=[
+            {"id": 1, "key": "A", "value": "A"},
+            {"id": 2, "key": "B", "value": "B"},
+        ],
+        correct_answer=[1, 2],
+        is_mandatory=True,
+        is_active=True,
+        marking_scheme=None,
+    )
+    db.add(physics_multi)
+    db.commit()
+    db.refresh(physics_multi)
+
+    physics_single = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Physics single",
+        correct_answer=1,
+        marking_scheme=None,
+    )
+    algebra_wrong = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Algebra answered wrong",
+        correct_answer=1,
+        marking_scheme=None,
+    )
+    algebra_skipped = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Algebra skipped",
+        correct_answer=1,
+        marking_scheme=None,
+    )
+
+    for revision, section in [
+        (algebra_wrong, algebra),
+        (algebra_skipped, algebra),
+        (physics_multi, physics),
+        (physics_single, physics),
+    ]:
+        db.add(
+            TestQuestion(
+                test_id=test.id,
+                question_revision_id=revision.id,
+                question_set_id=section.id,
+            )
+        )
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_data = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Result Test Device"},
+    ).json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    # Physics: partial multi-choice (1 of 2 correct) + fully correct single choice.
+    # Algebra: one wrong answer, one skipped.
+    for revision, response in [
+        (physics_multi, "[1]"),
+        (physics_single, "[1]"),
+        (algebra_wrong, "[2]"),
+    ]:
+        answer_response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": revision.id,
+                "response": response,
+                "visited": True,
+                "time_spent": 10,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert answer_response.status_code == 200
+
+    result_response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert result_response.status_code == 200
+    data = result_response.json()
+
+    assert data["total_questions"] == 4
+    assert data["correct_answer"] == 1
+    assert data["partially_correct"] == 1
+    assert data["incorrect_answer"] == 1
+    assert data["marks_obtained"] == 4.0
+    assert data["marks_maximum"] == 12.0
+
+    sections = data["sections"]
+    assert [section["title"] for section in sections] == ["Physics", "Algebra"]
+    assert [section["display_order"] for section in sections] == [1, 2]
+
+    physics_result, algebra_result = sections
+    assert physics_result["question_set_id"] == physics.id
+    assert physics_result["total_questions"] == 2
+    assert physics_result["attempted"] == 2
+    assert physics_result["correct_answer"] == 1
+    assert physics_result["partially_correct"] == 1
+    assert physics_result["incorrect_answer"] == 0
+    assert physics_result["marks_obtained"] == 5.0
+    assert physics_result["marks_maximum"] == 8.0
+    assert physics_result["attempt_rate"] == 100.0
+    assert physics_result["accuracy"] == 50.0
+
+    assert algebra_result["question_set_id"] == algebra.id
+    assert algebra_result["total_questions"] == 2
+    assert algebra_result["attempted"] == 1
+    assert algebra_result["correct_answer"] == 0
+    assert algebra_result["partially_correct"] == 0
+    assert algebra_result["incorrect_answer"] == 1
+    assert algebra_result["marks_obtained"] == -1.0
+    assert algebra_result["marks_maximum"] == 4.0
+    assert algebra_result["attempt_rate"] == 50.0
+    assert algebra_result["accuracy"] == 0.0
+
+
+def test_get_test_result_without_sections_returns_no_section_summaries(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="Unsectioned question",
+        correct_answer=1,
+    )
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_data = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": "Result Test Device"},
+    ).json()
+
+    result_response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{start_data['candidate_test_id']}",
+        params={"candidate_uuid": start_data["candidate_uuid"]},
+    )
+    assert result_response.status_code == 200
+    data = result_response.json()
+    assert data["sections"] is None
+    assert data["partially_correct"] == 0
+
+
 def test_get_test_questions_rejects_mixed_question_set_membership(
     client: TestClient, db: SessionDep
 ) -> None:
@@ -5735,7 +5962,8 @@ def test_result_partial_correct_only(
     )
     data = res.json()
 
-    assert data["correct_answer"] == 1
+    assert data["correct_answer"] == 0
+    assert data["partially_correct"] == 1
     assert data["incorrect_answer"] == 0
     assert data["mandatory_not_attempted"] == 0
     assert data["marks_obtained"] == 3
@@ -6080,7 +6308,8 @@ def test_result_full_correct(
     )
     data = res.json()
 
-    assert data["correct_answer"] == 2
+    assert data["correct_answer"] == 1
+    assert data["partially_correct"] == 1
     assert data["incorrect_answer"] == 0
     assert data["mandatory_not_attempted"] == 0
     assert data["marks_obtained"] == 8
@@ -15384,7 +15613,8 @@ def test_get_test_result_matrix_match_partial_marks(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["correct_answer"] == 1
+    assert data["correct_answer"] == 0
+    assert data["partially_correct"] == 1
     assert data["incorrect_answer"] == 0
     assert data["total_questions"] == 1
     assert data["marks_obtained"] == 2
@@ -15709,7 +15939,8 @@ def test_get_test_result_matrix_match_partial_scheme_with_wrong_column_in_row(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["correct_answer"] == 1
+    assert data["correct_answer"] == 0
+    assert data["partially_correct"] == 1
     assert data["incorrect_answer"] == 0
     assert data["total_questions"] == 1
     assert data["marks_obtained"] == 2
