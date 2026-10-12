@@ -4102,7 +4102,7 @@ def test_get_test_result_returns_section_summaries(
     assert physics_result["marks_obtained"] == 5.0
     assert physics_result["marks_maximum"] == 8.0
     assert physics_result["attempt_rate"] == 100.0
-    assert physics_result["accuracy"] == 50.0
+    assert physics_result["accuracy"] == 75.0
 
     assert algebra_result["question_set_id"] == algebra.id
     assert algebra_result["total_questions"] == 2

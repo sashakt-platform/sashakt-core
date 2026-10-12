@@ -1,4 +1,5 @@
 import json
+import math
 import random
 import uuid
 from collections.abc import Sequence
@@ -2107,6 +2108,14 @@ def _percentage(numerator: int, denominator: int) -> float:
     return round(numerator / denominator * 100, 2) if denominator else 0.0
 
 
+def _accuracy(tally: _ResultTally) -> float:
+    """Whole-number percentage where a partially correct answer counts as half."""
+    if not tally.attempted:
+        return 0.0
+    score = tally.correct + 0.5 * tally.partially_correct
+    return float(math.floor(score / tally.attempted * 100 + 0.5))
+
+
 def compute_result(
     session: SessionDep,
     candidate_test: CandidateTest,
@@ -2352,7 +2361,7 @@ def compute_result(
                     partially_correct=tally.partially_correct,
                     incorrect_answer=tally.incorrect,
                     attempt_rate=_percentage(tally.attempted, tally.total),
-                    accuracy=_percentage(tally.correct, tally.attempted),
+                    accuracy=_accuracy(tally),
                 )
             )
 
