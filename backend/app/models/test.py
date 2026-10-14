@@ -86,7 +86,9 @@ class QuestionSet(QuestionSetBase, table=True):
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
 
     test: "Test" = Relationship(back_populates="question_sets")
-    test_questions: list["TestQuestion"] = Relationship(back_populates="question_set")
+    test_questions: list["TestQuestion"] = Relationship(
+        back_populates="question_set", passive_deletes=True
+    )
 
 
 class TestTag(SQLModel, table=True):
@@ -106,7 +108,9 @@ class TestQuestion(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("test_id", "question_revision_id"),)
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     test_id: int = Field(foreign_key="test.id", ondelete="CASCADE")
-    question_set_id: int | None = Field(default=None, foreign_key="question_set.id")
+    question_set_id: int | None = Field(
+        default=None, foreign_key="question_set.id", ondelete="CASCADE"
+    )
     question_revision_id: int = Field(
         foreign_key="question_revision.id", ondelete="CASCADE"
     )
