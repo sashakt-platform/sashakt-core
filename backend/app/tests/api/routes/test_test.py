@@ -3827,6 +3827,104 @@ def test_bulk_delete_test(
     assert data["delete_failure_list"] is None or len(data["delete_failure_list"]) == 0
 
 
+def _create_sectioned_test(
+    client: TestClient,
+    headers: dict[str, str],
+    question_revision_ids: list[int | None],
+) -> int:
+    response = client.post(
+        f"{settings.API_V1_STR}/test/",
+        json={
+            "name": random_lower_string(),
+            "time_limit": 15,
+            "marks": 10,
+            "link": random_lower_string(),
+            "no_of_attempts": 1,
+            "shuffle": False,
+            "random_questions": False,
+            "question_pagination": 1,
+            "is_template": False,
+            "question_sets": [
+                {
+                    "title": f"Section {index}",
+                    "description": f"Section {index}",
+                    "display_order": index,
+                    "max_questions_allowed_to_attempt": 1,
+                    "marking_scheme": {"correct": 4, "wrong": -1, "skipped": 0},
+                    "question_revision_ids": [question_revision_id],
+                }
+                for index, question_revision_id in enumerate(
+                    question_revision_ids, start=1
+                )
+            ],
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    test_id: int = response.json()["id"]
+    return test_id
+
+
+def test_delete_test_with_question_sets_deletes_sets_and_links(
+    client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
+) -> None:
+    (
+        *_,
+        question_revision_one,
+        question_revision_two,
+    ) = setup_data(client, db, get_user_superadmin_token)
+    revision_ids = [question_revision_one.id, question_revision_two.id]
+
+    original_id = _create_sectioned_test(
+        client, get_user_superadmin_token, revision_ids
+    )
+    clone_response = client.post(
+        f"{settings.API_V1_STR}/test/{original_id}/clone",
+        headers=get_user_superadmin_token,
+    )
+    assert clone_response.status_code == 200
+    clone_id = clone_response.json()["id"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/test/{clone_id}",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+
+    db.expire_all()
+    assert not db.exec(select(QuestionSet).where(QuestionSet.test_id == clone_id)).all()
+    assert not db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == clone_id)
+    ).all()
+    # The original test and its sets/links are untouched by deleting the clone.
+    assert len(
+        db.exec(select(QuestionSet).where(QuestionSet.test_id == original_id)).all()
+    ) == len(revision_ids)
+    assert len(
+        db.exec(select(TestQuestion).where(TestQuestion.test_id == original_id)).all()
+    ) == len(revision_ids)
+
+    response = client.request(
+        "DELETE",
+        f"{settings.API_V1_STR}/test/",
+        json=[original_id],
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json()["delete_success_count"] == 1
+
+    db.expire_all()
+    assert not db.exec(
+        select(QuestionSet).where(QuestionSet.test_id == original_id)
+    ).all()
+    assert not db.exec(
+        select(TestQuestion).where(TestQuestion.test_id == original_id)
+    ).all()
+    # Question revisions live in the question bank and must survive.
+    for revision_id in revision_ids:
+        assert db.get(QuestionRevision, revision_id) is not None
+
+
 def test_get_public_test_info(
     client: TestClient, db: SessionDep, get_user_superadmin_token: dict[str, str]
 ) -> None:
