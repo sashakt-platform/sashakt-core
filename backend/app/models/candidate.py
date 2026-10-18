@@ -69,13 +69,6 @@ class CandidateTestAnswerPublic(CandidateTestAnswerBase):
     modified_date: datetime
 
 
-class CandidateTestAnswerFeedback(SQLModel):
-    __test__ = False
-    question_revision_id: int
-    response: str | None = None
-    correct_answer: CorrectAnswerType = None
-
-
 class CandidateSavedAnswer(SQLModel):
     """A candidate's own saved answer, for resuming an attempt on another device.
 
@@ -230,7 +223,6 @@ class CandidateTestPublic(CandidateTestBase):
     question_revision_ids: list[int] = Field(default_factory=list)
     question_set_ids: list[int | None] = Field(default_factory=list)
     current_question_revision_id: int | None = None
-    answers: list["CandidateTestAnswerFeedback"] | None = None
 
 
 class CandidateTestUpdate(SQLModel):
@@ -357,14 +349,40 @@ class TestCandidatePublic(SQLModel):
     nomenclature: dict[str, str] = Field(default_factory=dict)
 
 
-class Result(SQLModel):
+class SectionResult(SQLModel):
+    """Scored summary of one question set (section) of a candidate's test."""
+
+    question_set_id: int
+    title: str
+    display_order: int
+    marks_obtained: float | None
+    marks_maximum: float | None
+    total_questions: int
+    attempted: int
+    # Fully correct answers only; partially correct answers are counted separately.
     correct_answer: int
+    partially_correct: int
+    incorrect_answer: int
+    # Whole-number percentages (0-100). attempt_rate is attempted /
+    # min(total_questions, max_questions_allowed_to_attempt), capped at 100; accuracy is
+    # (correct_answer + 0.5 * partially_correct) / attempted. 0.0 if denominator is 0.
+    attempt_rate: float
+    # accuracy is (correct_answer + 0.5 * partially_correct) / attempted, rounded to a whole number.
+    accuracy: float
+
+
+class Result(SQLModel):
+    # Fully correct answers only; partially correct answers are counted separately.
+    correct_answer: int
+    partially_correct: int = 0
     incorrect_answer: int
     mandatory_not_attempted: int
     optional_not_attempted: int
     total_questions: int
     marks_obtained: float | None
     marks_maximum: float | None
+    # Per-section summaries ordered by display_order; None for tests without sections.
+    sections: list[SectionResult] | None = None
     certificate_download_url: str | None = None
     # External (e.g. Avanti) user id, when the candidate came via external login;
     # None for anonymous QR candidates.

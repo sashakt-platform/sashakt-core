@@ -1,8 +1,11 @@
 import json
+import math
 import random
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -38,7 +41,6 @@ from app.models import (
     CandidateTest,
     CandidateTestAnswer,
     CandidateTestAnswerCreate,
-    CandidateTestAnswerFeedback,
     CandidateTestAnswerPublic,
     CandidateTestAnswerUpdate,
     CandidateTestCreate,
@@ -66,6 +68,7 @@ from app.models.candidate import (
     ExternalProvisionResponse,
     OverallTestAnalyticsResponse,
     Result,
+    SectionResult,
     StartTestRequest,
     StartTestResponse,
     TestStatusSummary,
@@ -372,8 +375,9 @@ def build_candidate_question_payload(
         question_revision = question_revisions_map.get(question_revision_id)
         if not question_revision:
             continue
-        question_set = question_sets_by_id.get(
-            question_set_id_by_revision.get(question_revision_id) or -1
+        section_id = question_set_id_by_revision.get(question_revision_id)
+        question_set = (
+            question_sets_by_id.get(section_id) if section_id is not None else None
         )
         effective_marking_scheme = (
             get_effective_marking_scheme(
@@ -1317,10 +1321,9 @@ def submit_test_for_qr_candidate(
     candidate_uuid: uuid.UUID = Query(
         ..., description="Candidate UUID for verification"
     ),
-) -> CandidateTestPublic:
+) -> CandidateTest:
     """
     Submit/finish test for QR code candidates using UUID authentication.
-    Returns the test with all answers and their correct answers.
     """
     # Verify UUID access
     candidate_test = verify_candidate_uuid_access(
@@ -1391,66 +1394,7 @@ def submit_test_for_qr_candidate(
     session.commit()
     session.refresh(candidate_test)
 
-    effective_test_flags = get_effective_test_flags(session, test) if test else {}
-    show_feedback = bool(
-        effective_test_flags.get(
-            "show_feedback_on_completion",
-            test.show_feedback_on_completion if test else False,
-        )
-    )
-
-    answers_with_feedback = None
-    if show_feedback:
-        answers = session.exec(
-            select(CandidateTestAnswer).where(
-                CandidateTestAnswer.candidate_test_id == candidate_test_id
-            )
-        ).all()
-
-        question_revision_ids = [answer.question_revision_id for answer in answers]
-        revisions_by_id: dict[int, QuestionRevision] = {}
-        if question_revision_ids:
-            question_revisions = session.exec(
-                select(QuestionRevision).where(
-                    col(QuestionRevision.id).in_(question_revision_ids)
-                )
-            ).all()
-            revisions_by_id = {rev.id: rev for rev in question_revisions if rev.id}
-
-        answers_with_feedback = []
-        for answer in answers:
-            revision = revisions_by_id.get(answer.question_revision_id)
-            correct_answer: CorrectAnswerType = None
-            if revision:
-                if revision.question_type == QuestionType.matrix_match and isinstance(
-                    revision.correct_answer, dict
-                ):
-                    correct_answer = json.dumps(revision.correct_answer)
-                else:
-                    correct_answer = revision.correct_answer
-            answers_with_feedback.append(
-                CandidateTestAnswerFeedback(
-                    question_revision_id=answer.question_revision_id,
-                    response=answer.response,
-                    correct_answer=correct_answer,
-                )
-            )
-
-    return CandidateTestPublic(
-        id=candidate_test.id,
-        test_id=candidate_test.test_id,
-        candidate_id=candidate_test.candidate_id,
-        device=candidate_test.device,
-        consent=candidate_test.consent,
-        start_time=candidate_test.start_time,
-        end_time=candidate_test.end_time,
-        is_submitted=candidate_test.is_submitted,
-        certificate_data=candidate_test.certificate_data,
-        created_date=candidate_test.created_date,
-        modified_date=candidate_test.modified_date,
-        answers=answers_with_feedback,
-        admin_id=candidate_test.admin_id,
-    )
+    return candidate_test
 
 
 # Get test questions after verification
@@ -2113,12 +2057,68 @@ def get_or_create_certificate_download_url(
     return f"/api/v1/certificate/download/{token}"
 
 
+class _Outcome(StrEnum):
+    CORRECT = "correct"
+    PARTIAL = "partial"
+    INCORRECT = "incorrect"
+    MANDATORY_SKIPPED = "mandatory_skipped"
+    OPTIONAL_SKIPPED = "optional_skipped"
+
+
+@dataclass
+class _ResultTally:
+    """Running counters for the test as a whole or for one section."""
+
+    total: int = 0
+    correct: int = 0
+    partially_correct: int = 0
+    incorrect: int = 0
+    mandatory_not_attempted: int = 0
+    optional_not_attempted: int = 0
+    marks_obtained: float = 0.0
+    marks_maximum: float = 0.0
+    has_marking_scheme: bool = False
+
+    @property
+    def attempted(self) -> int:
+        return self.correct + self.partially_correct + self.incorrect
+
+    def record(
+        self,
+        outcome: _Outcome | None,
+        marks: float,
+        correct_mark: float,
+        has_marking_scheme: bool,
+    ) -> None:
+        self.has_marking_scheme = self.has_marking_scheme or has_marking_scheme
+        self.marks_maximum += correct_mark
+        self.marks_obtained += marks
+        if outcome is _Outcome.CORRECT:
+            self.correct += 1
+        elif outcome is _Outcome.PARTIAL:
+            self.partially_correct += 1
+        elif outcome is _Outcome.INCORRECT:
+            self.incorrect += 1
+        elif outcome is _Outcome.MANDATORY_SKIPPED:
+            self.mandatory_not_attempted += 1
+        elif outcome is _Outcome.OPTIONAL_SKIPPED:
+            self.optional_not_attempted += 1
+
+
+def _percentage(numerator: float, denominator: int) -> float:
+    """Whole-number percentage (half rounds up); 0.0 when the denominator is 0."""
+    if not denominator:
+        return 0.0
+    return float(math.floor(numerator / denominator * 100 + 0.5))
+
+
 def compute_result(
     session: SessionDep,
     candidate_test: CandidateTest,
     test: Test,
     question_sets_by_id: dict[int, QuestionSet],
     sectioned: bool,
+    include_sections: bool = True,
 ) -> Result:
     """Compute the scored result for a candidate test (no certificate or auth checks)."""
 
@@ -2136,22 +2136,26 @@ def compute_result(
         candidate_test.question_set_ids,
     )
 
-    correct = 0
-    incorrect = 0
-    mandatory_not_attempted = 0
-    optional_not_attempted = 0
-    marks_obtained = 0.0
-    marks_maximum = 0.0
-    has_marking_scheme = False
+    overall = _ResultTally()
+    section_tallies: dict[int, _ResultTally] = {}
+    for section_id in question_set_id_by_revision.values():
+        if section_id is not None:
+            section_tallies.setdefault(section_id, _ResultTally()).total += 1
 
     for question_revision_id in candidate_test.question_revision_ids:
         revision = question_revisions_map.get(question_revision_id)
         if not revision:
             continue
 
+        # Outcome and marks for this question; recorded on the test and on its
+        # section once evaluated. `None` leaves the question uncounted.
+        outcome: _Outcome | None = None
+        marks = 0.0
+
         answer = answers_by_question_id.get(question_revision_id)
-        question_set = question_sets_by_id.get(
-            question_set_id_by_revision.get(question_revision_id) or -1
+        section_id = question_set_id_by_revision.get(question_revision_id)
+        question_set = (
+            question_sets_by_id.get(section_id) if section_id is not None else None
         )
         marking_scheme = get_effective_marking_scheme(
             test,
@@ -2159,21 +2163,18 @@ def compute_result(
             question_set=question_set,
             sectioned=sectioned,
         )
-        if marking_scheme:
-            has_marking_scheme = True
-
+        has_marking_scheme = bool(marking_scheme)
         correct_mark = marking_scheme["correct"] if marking_scheme else 0
         wrong_mark = marking_scheme["wrong"] if marking_scheme else 0
         skipped_mark = marking_scheme["skipped"] if marking_scheme else 0
 
-        marks_maximum += correct_mark
-
         if answer is None or not is_attempted_response(answer.response):
-            marks_obtained += skipped_mark
-            if revision.is_mandatory:
-                mandatory_not_attempted += 1
-            else:
-                optional_not_attempted += 1
+            marks = skipped_mark
+            outcome = (
+                _Outcome.MANDATORY_SKIPPED
+                if revision.is_mandatory
+                else _Outcome.OPTIONAL_SKIPPED
+            )
         else:
             if (
                 revision.question_type == QuestionType.subjective
@@ -2182,21 +2183,21 @@ def compute_result(
             ):
                 is_attempted = bool(answer.response)
                 if is_attempted:
-                    correct += 1
-                    marks_obtained += correct_mark
+                    outcome = _Outcome.CORRECT
+                    marks = correct_mark
                 else:
-                    incorrect += 1
-                    marks_obtained += wrong_mark
+                    outcome = _Outcome.INCORRECT
+                    marks = wrong_mark
 
             elif revision.question_type is QuestionType.single_choice:
                 response_set = set(convert_to_list(answer.response))
                 correct_set = set(convert_to_list(revision.correct_answer))
                 if response_set == correct_set:
-                    marks_obtained += correct_mark
-                    correct += 1
+                    marks = correct_mark
+                    outcome = _Outcome.CORRECT
                 else:
-                    marks_obtained += wrong_mark
-                    incorrect += 1
+                    marks = wrong_mark
+                    outcome = _Outcome.INCORRECT
 
             elif revision.question_type.value == "multi-choice":
                 response_set = set(convert_to_list(answer.response))
@@ -2208,8 +2209,8 @@ def compute_result(
                     selected_correct == len(correct_set) and selected_wrong == 0
                 )
                 if whole_correct:
-                    marks_obtained += correct_mark
-                    correct += 1
+                    marks = correct_mark
+                    outcome = _Outcome.CORRECT
                 else:
                     if marking_scheme and marking_scheme.get("partial"):
                         partial_rule = marking_scheme["partial"]
@@ -2225,14 +2226,14 @@ def compute_result(
                                     partial = condition["marks"]
                                     break
 
-                            marks_obtained += partial
-                            correct += 1
+                            marks = partial
+                            outcome = _Outcome.PARTIAL
                         else:
-                            marks_obtained += wrong_mark
-                            incorrect += 1
+                            marks = wrong_mark
+                            outcome = _Outcome.INCORRECT
                     else:
-                        marks_obtained += wrong_mark
-                        incorrect += 1
+                        marks = wrong_mark
+                        outcome = _Outcome.INCORRECT
 
             elif revision.question_type.value in [
                 "numerical-integer",
@@ -2244,28 +2245,25 @@ def compute_result(
                         raise TypeError
                     user_value = float(response_value)
                 except (TypeError, ValueError):
-                    incorrect += 1
-                    marks_obtained += wrong_mark
-                    continue
-
-                if isinstance(revision.correct_answer, int | float):
-                    correct_value = float(revision.correct_answer)
+                    outcome = _Outcome.INCORRECT
+                    marks = wrong_mark
                 else:
-                    continue
+                    # A non-numeric correct answer leaves the question uncounted.
+                    if isinstance(revision.correct_answer, int | float):
+                        correct_value = float(revision.correct_answer)
+                        if revision.question_type.value == "numerical-integer":
+                            is_correct = user_value.is_integer() and int(
+                                user_value
+                            ) == int(correct_value)
+                        else:
+                            is_correct = abs(user_value - correct_value) <= TOLERANCE
 
-                if revision.question_type.value == "numerical-integer":
-                    is_correct = user_value.is_integer() and int(user_value) == int(
-                        correct_value
-                    )
-                else:
-                    is_correct = abs(user_value - correct_value) <= TOLERANCE
-
-                if is_correct:
-                    correct += 1
-                    marks_obtained += correct_mark
-                else:
-                    incorrect += 1
-                    marks_obtained += wrong_mark
+                        if is_correct:
+                            outcome = _Outcome.CORRECT
+                            marks = correct_mark
+                        else:
+                            outcome = _Outcome.INCORRECT
+                            marks = wrong_mark
 
             elif revision.question_type.value == "matrix-match":
                 try:
@@ -2274,9 +2272,7 @@ def compute_result(
                         raise TypeError
                     candidate_matrix_response = json.loads(matrix_response)
                 except (TypeError, ValueError, json.JSONDecodeError):
-                    incorrect += 1
-                    marks_obtained += wrong_mark
-                    continue
+                    candidate_matrix_response = None
 
                 expected_matrix_answer = revision.correct_answer
 
@@ -2303,8 +2299,8 @@ def compute_result(
                             correctly_matched_rows += 1
 
                     if correctly_matched_rows == len(expected_row_to_columns):
-                        marks_obtained += correct_mark
-                        correct += 1
+                        marks = correct_mark
+                        outcome = _Outcome.CORRECT
                     elif (
                         marking_scheme
                         and marking_scheme.get("partial")
@@ -2319,27 +2315,77 @@ def compute_result(
                             ),
                             0.0,
                         )
-                        marks_obtained += partial_marks
-                        correct += 1
+                        marks = partial_marks
+                        outcome = _Outcome.PARTIAL
                     else:
-                        marks_obtained += wrong_mark
-                        incorrect += 1
+                        marks = wrong_mark
+                        outcome = _Outcome.INCORRECT
                 else:
-                    marks_obtained += wrong_mark
-                    incorrect += 1
+                    marks = wrong_mark
+                    outcome = _Outcome.INCORRECT
 
-    total_questions = len(candidate_test.question_revision_ids)
+        overall.record(outcome, marks, correct_mark, has_marking_scheme)
+        section_tally = (
+            section_tallies.get(section_id) if section_id is not None else None
+        )
+        if section_tally:
+            section_tally.record(outcome, marks, correct_mark, has_marking_scheme)
 
     candidate = session.get(Candidate, candidate_test.candidate_id)
 
+    sections: list[SectionResult] | None = None
+    if sectioned and include_sections:
+        sections = []
+        for question_set in sorted(
+            question_sets_by_id.values(), key=lambda qs: qs.display_order
+        ):
+            tally = section_tallies.get(question_set.id) if question_set.id else None
+            if tally is None or tally.total == 0:
+                continue
+            sections.append(
+                SectionResult(
+                    question_set_id=question_set.id,
+                    title=question_set.title,
+                    display_order=question_set.display_order,
+                    marks_obtained=tally.marks_obtained
+                    if tally.has_marking_scheme
+                    else None,
+                    marks_maximum=tally.marks_maximum
+                    if tally.has_marking_scheme
+                    else None,
+                    total_questions=tally.total,
+                    attempted=tally.attempted,
+                    correct_answer=tally.correct,
+                    partially_correct=tally.partially_correct,
+                    incorrect_answer=tally.incorrect,
+                    attempt_rate=min(
+                        _percentage(
+                            tally.attempted,
+                            min(
+                                tally.total,
+                                question_set.max_questions_allowed_to_attempt,
+                            ),
+                        ),
+                        100.0,
+                    ),
+                    accuracy=_percentage(
+                        tally.correct + 0.5 * tally.partially_correct, tally.attempted
+                    ),
+                )
+            )
+
+    total_questions = len(candidate_test.question_revision_ids)
+
     return Result(
-        correct_answer=correct,
-        incorrect_answer=incorrect,
-        mandatory_not_attempted=mandatory_not_attempted,
-        optional_not_attempted=optional_not_attempted,
+        correct_answer=overall.correct,
+        partially_correct=overall.partially_correct,
+        incorrect_answer=overall.incorrect,
+        mandatory_not_attempted=overall.mandatory_not_attempted,
+        optional_not_attempted=overall.optional_not_attempted,
         total_questions=total_questions,
-        marks_obtained=marks_obtained if has_marking_scheme else None,
-        marks_maximum=marks_maximum if has_marking_scheme else None,
+        marks_obtained=overall.marks_obtained if overall.has_marking_scheme else None,
+        marks_maximum=overall.marks_maximum if overall.has_marking_scheme else None,
+        sections=sections,
         external_identifier=candidate.external_identifier if candidate else None,
     )
 

@@ -164,6 +164,7 @@ def transform_to_report(
                     test,
                     question_sets_by_id,
                     sectioned,
+                    include_sections=False,
                 )
                 had_token = bool(
                     candidate_test.certificate_data
@@ -206,6 +207,7 @@ CANDIDATE_REPORT_CSV_HEADERS = [
     "Marks Obtained",
     "Marks Maximum",
     "Correct Answers",
+    "Partially Correct Answers",
     "Incorrect Answers",
     "Mandatory Not Attempted",
     "Optional Not Attempted",
@@ -228,11 +230,12 @@ def format_form_response_for_csv(form_response: dict[str, Any] | None) -> str:
 
 def result_to_csv_fields(result: Result | None) -> list[Any]:
     if result is None:
-        return [""] * 7
+        return [""] * 8
     return [
         result.marks_obtained,
         result.marks_maximum,
         result.correct_answer,
+        result.partially_correct,
         result.incorrect_answer,
         result.mandatory_not_attempted,
         result.optional_not_attempted,
