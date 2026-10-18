@@ -369,6 +369,7 @@ class Test(TestBase, table=True):
     question_revisions: list["QuestionRevision"] | None = Relationship(
         back_populates="tests",
         link_model=TestQuestion,
+        passive_deletes=True,
         sa_relationship_kwargs={"overlaps": "question_revision,test_questions"},
     )
     question_sets: list["QuestionSet"] | None = Relationship(
