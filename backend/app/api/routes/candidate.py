@@ -2118,6 +2118,7 @@ def compute_result(
     test: Test,
     question_sets_by_id: dict[int, QuestionSet],
     sectioned: bool,
+    include_sections: bool = True,
 ) -> Result:
     """Compute the scored result for a candidate test (no certificate or auth checks)."""
 
@@ -2333,7 +2334,7 @@ def compute_result(
     candidate = session.get(Candidate, candidate_test.candidate_id)
 
     sections: list[SectionResult] | None = None
-    if sectioned:
+    if sectioned and include_sections:
         sections = []
         for question_set in sorted(
             question_sets_by_id.values(), key=lambda qs: qs.display_order
@@ -2357,8 +2358,15 @@ def compute_result(
                     correct_answer=tally.correct,
                     partially_correct=tally.partially_correct,
                     incorrect_answer=tally.incorrect,
-                    attempt_rate=_percentage(
-                        tally.attempted, question_set.max_questions_allowed_to_attempt
+                    attempt_rate=min(
+                        _percentage(
+                            tally.attempted,
+                            min(
+                                tally.total,
+                                question_set.max_questions_allowed_to_attempt,
+                            ),
+                        ),
+                        100.0,
                     ),
                     accuracy=_percentage(
                         tally.correct + 0.5 * tally.partially_correct, tally.attempted

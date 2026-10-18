@@ -4101,8 +4101,9 @@ def test_get_test_result_returns_section_summaries(
     assert physics_result["incorrect_answer"] == 0
     assert physics_result["marks_obtained"] == 5.0
     assert physics_result["marks_maximum"] == 8.0
-    # attempt_rate is relative to the section limit (4), not its question count (2)
-    assert physics_result["attempt_rate"] == 50.0
+    # attempt_rate is relative to the lesser of the section limit (4) and its
+    # question count (2)
+    assert physics_result["attempt_rate"] == 100.0
     assert physics_result["accuracy"] == 75.0
 
     assert algebra_result["question_set_id"] == algebra.id
@@ -17508,3 +17509,91 @@ def test_result_section_with_nothing_attempted_has_zero_rates(
     assert section_result["accuracy"] == 0.0
     assert section_result["marks_obtained"] == 0.0
     assert section_result["marks_maximum"] == 2.0
+
+
+def test_result_section_attempt_rate_uses_limit_and_is_capped(
+    client: TestClient, db: SessionDep
+) -> None:
+    user = create_random_user(db)
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert user.id is not None
+    assert org.id is not None
+
+    revisions = [
+        create_single_choice_question_revision(
+            db,
+            user_id=user.id,
+            organization_id=org.id,
+            question_text=f"Question {index}",
+            correct_answer=1,
+            marking_scheme=None,
+        )
+        for index in range(3)
+    ]
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    section = QuestionSet(
+        test_id=test.id,
+        title="Choose two",
+        display_order=1,
+        max_questions_allowed_to_attempt=2,
+        marking_scheme={"correct": 1, "wrong": 0, "skipped": 0},
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+    for revision in revisions:
+        db.add(
+            TestQuestion(
+                test_id=test.id,
+                question_revision_id=revision.id,
+                question_set_id=section.id,
+            )
+        )
+    db.commit()
+
+    candidate_test_id, candidate_uuid = _start_candidate_test(client, db, test)
+    for revision in revisions[:2]:
+        answer_response = client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": revision.id,
+                "response": "[1]",
+                "visited": True,
+                "time_spent": 10,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        )
+        assert answer_response.status_code == 200
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    [section_result] = response.json()["sections"]
+    assert section_result["total_questions"] == 3
+    assert section_result["attempted"] == 2
+    assert section_result["attempt_rate"] == 100.0
+
+    section.max_questions_allowed_to_attempt = 1
+    db.add(section)
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+    [section_result] = response.json()["sections"]
+    assert section_result["attempt_rate"] == 100.0
