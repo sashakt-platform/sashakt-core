@@ -488,10 +488,6 @@ def set_visibility_role(
     """
     role = _get_own_org_role(session, current_user, role_id)
     _ensure_not_super_admin(role)
-    if not is_active and role.id == current_user.role_id:
-        raise HTTPException(
-            status_code=400, detail="You cannot deactivate your own role"
-        )
     role.is_active = is_active
     session.add(role)
     session.commit()
