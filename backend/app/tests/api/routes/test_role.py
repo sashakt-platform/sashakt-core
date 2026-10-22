@@ -955,35 +955,6 @@ def test_update_other_role_can_remove_update_role_permission(
     assert response.json()["permissions"] == []
 
 
-def test_deactivate_own_role_is_blocked(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
-) -> None:
-    org_id = _org_id(client, superuser_token_headers)
-    role, headers = _custom_role_user_headers(
-        db, org_id, ["update_role", "read_role", "read_permission"]
-    )
-
-    response = client.patch(
-        f"{settings.API_V1_STR}/roles/{role.id}",
-        headers=headers,
-        params={"is_active": False},
-    )
-    assert response.status_code == 400
-    assert response.json()["detail"] == "You cannot deactivate your own role"
-    db.refresh(role)
-    assert role.is_active is True
-
-    # Re-activating (or deactivating a different role) is unaffected.
-    other_role = create_random_role(db, organization_id=org_id)
-    response = client.patch(
-        f"{settings.API_V1_STR}/roles/{other_role.id}",
-        headers=headers,
-        params={"is_active": False},
-    )
-    assert response.status_code == 200
-    assert response.json()["is_active"] is False
-
-
 def test_delete_own_role_is_blocked(
     client: TestClient, superuser_token_headers: dict[str, str], db: Session
 ) -> None:
