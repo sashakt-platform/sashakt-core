@@ -867,6 +867,139 @@ def test_visibility_role(
     assert content["is_active"] is True
 
 
+def _custom_role_user_headers(
+    db: Session, organization_id: int, permission_names: list[str]
+) -> tuple[Role, dict[str, str]]:
+    """A custom role holding `permission_names`, plus a token for a user in it."""
+    role_name = random_lower_string()
+    headers = get_user_token_for_org(
+        db=db, organization_id=organization_id, role=role_name
+    )
+    role = get_org_role(db, organization_id, role_name)
+    assert role.id is not None
+    for permission_name in permission_names:
+        db.add(
+            RolePermission(
+                role_id=role.id, permission_id=_permission_id(db, permission_name)
+            )
+        )
+    db.commit()
+    return role, headers
+
+
+def test_update_own_role_cannot_remove_update_role_permission(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """A user can't strip update_role from their own role - they'd be locked
+    out of ever editing it again."""
+    role, headers = _custom_role_user_headers(
+        db,
+        _org_id(client, superuser_token_headers),
+        ["update_role", "read_role", "read_permission", "read_test"],
+    )
+    read_test_id = _permission_id(db, "read_test")
+    update_role_id = _permission_id(db, "update_role")
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=headers,
+        json={"name": role.name, "label": role.label, "permissions": [read_test_id]},
+    )
+    assert response.status_code == 400
+    assert (
+        response.json()["detail"]
+        == "You cannot remove the update_role permission from your own role"
+    )
+
+    stored = db.exec(
+        select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
+    ).all()
+    assert update_role_id in stored
+    assert read_test_id in stored
+
+    # Edits that keep update_role still go through.
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=headers,
+        json={
+            "name": role.name,
+            "label": role.label,
+            "permissions": [update_role_id],
+        },
+    )
+    assert response.status_code == 200
+    assert update_role_id in response.json()["permissions"]
+
+
+def test_update_other_role_can_remove_update_role_permission(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """The guard only protects the caller's own role."""
+    org_id = _org_id(client, superuser_token_headers)
+    _, headers = _custom_role_user_headers(
+        db, org_id, ["update_role", "read_role", "read_permission"]
+    )
+    other_role, _ = _custom_role_user_headers(db, org_id, ["update_role"])
+    other_role_id = other_role.id
+
+    response = client.put(
+        f"{settings.API_V1_STR}/roles/{other_role_id}",
+        headers=headers,
+        json={
+            "name": other_role.name,
+            "label": other_role.label,
+            "permissions": [],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["permissions"] == []
+
+
+def test_deactivate_own_role_is_blocked(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    org_id = _org_id(client, superuser_token_headers)
+    role, headers = _custom_role_user_headers(
+        db, org_id, ["update_role", "read_role", "read_permission"]
+    )
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/roles/{role.id}",
+        headers=headers,
+        params={"is_active": False},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "You cannot deactivate your own role"
+    db.refresh(role)
+    assert role.is_active is True
+
+    # Re-activating (or deactivating a different role) is unaffected.
+    other_role = create_random_role(db, organization_id=org_id)
+    response = client.patch(
+        f"{settings.API_V1_STR}/roles/{other_role.id}",
+        headers=headers,
+        params={"is_active": False},
+    )
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+def test_delete_own_role_is_blocked(
+    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+) -> None:
+    """Deleting your own role is already refused because the caller is still
+    assigned to it."""
+    role, headers = _custom_role_user_headers(
+        db,
+        _org_id(client, superuser_token_headers),
+        ["delete_role", "read_role", "read_permission"],
+    )
+
+    response = client.delete(f"{settings.API_V1_STR}/roles/{role.id}", headers=headers)
+    assert response.status_code == 400
+    assert db.get(Role, role.id) is not None
+
+
 # TODO: Fix this once we have permisions in place
 # def test_update_role_not_enough_permissions(
 #     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
