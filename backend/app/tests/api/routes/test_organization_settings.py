@@ -275,7 +275,7 @@ def test_put_settings_persists_round_trip(
     assert settings_body["answer_review"]["value"]["default"] == "end_of_test"
 
 
-def test_put_settings_preserves_external_login(
+def test_put_settings_preserves_external_login_when_omitted(
     client: TestClient,
     db: SessionDep,
     get_user_systemadmin_token: dict[str, str],
@@ -294,6 +294,42 @@ def test_put_settings_preserves_external_login(
 
     new_payload = default_organization_settings()
     new_payload.questions_per_page.value.question_pagination = 3
+    # Older clients omit external_login entirely
+    settings_json = new_payload.model_dump(mode="json")
+    del settings_json["external_login"]
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": settings_json},
+    )
+    assert response.status_code == 200
+    body = response.json()["settings"]
+    assert body["questions_per_page"]["value"]["question_pagination"] == 3
+    assert body["external_login"]["value"] == {
+        "enabled": True,
+        "block_anonymous_starts": True,
+    }
+
+
+def test_put_settings_disables_external_login_when_provided(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+    current = default_organization_settings()
+    current.external_login.value.enabled = True
+    current.external_login.value.block_anonymous_starts = True
+    db.add(
+        OrganizationSettings(
+            organization_id=own_org_id,
+            settings=current.model_dump(mode="json"),
+        )
+    )
+    db.commit()
+
+    new_payload = default_organization_settings()
 
     response = client.put(
         f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
@@ -301,9 +337,38 @@ def test_put_settings_preserves_external_login(
         json={"settings": new_payload.model_dump(mode="json")},
     )
     assert response.status_code == 200
-    body = response.json()["settings"]
-    assert body["questions_per_page"]["value"]["question_pagination"] == 3
-    assert body["external_login"]["value"] == {
+    assert response.json()["settings"]["external_login"]["value"] == {
+        "enabled": False,
+        "block_anonymous_starts": False,
+    }
+
+
+def test_put_settings_updates_external_login_when_provided(
+    client: TestClient,
+    get_user_systemadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_systemadmin_token)
+
+    new_payload = default_organization_settings()
+    new_payload.external_login.value.enabled = True
+    new_payload.external_login.value.block_anonymous_starts = True
+
+    response = client.put(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+        json={"settings": new_payload.model_dump(mode="json")},
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"]["external_login"]["value"] == {
+        "enabled": True,
+        "block_anonymous_starts": True,
+    }
+
+    get_resp = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_systemadmin_token,
+    )
+    assert get_resp.json()["settings"]["external_login"]["value"] == {
         "enabled": True,
         "block_anonymous_starts": True,
     }
