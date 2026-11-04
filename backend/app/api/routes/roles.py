@@ -39,6 +39,8 @@ DEFAULT_ROLE_PERMISSIONS = [
 ]
 
 
+UPDATE_ROLE_PERMISSION = "update_role"
+
 IMPLIED_PERMISSIONS: list[tuple[set[str], set[str]]] = [
     ({"create_user", "update_user"}, {"read_role"}),
     (
@@ -67,6 +69,25 @@ def _ensure_not_super_admin(role: Role) -> None:
     if role.name == super_admin.name:
         raise HTTPException(
             status_code=403, detail="The super_admin role cannot be modified"
+        )
+
+
+def _ensure_keeps_update_role(
+    session: SessionDep, current_user: CurrentUser, role: Role, permission_ids: set[int]
+) -> None:
+    """
+    Block a user from stripping `update_role` from their own role, which would
+    leave that role unable to ever edit itself (or add the permission back).
+    """
+    if role.id != current_user.role_id:
+        return
+    update_role_id = session.exec(
+        select(Permission.id).where(Permission.name == UPDATE_ROLE_PERMISSION)
+    ).first()
+    if update_role_id is not None and update_role_id not in permission_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"You cannot remove the {UPDATE_ROLE_PERMISSION} permission from your own role",
         )
 
 
@@ -381,6 +402,7 @@ def update_role(
         permission_ids = _apply_implied_permissions(
             session, set(role_update.permissions)
         )
+        _ensure_keeps_update_role(session, current_user, role, permission_ids)
         permission_remove = [
             permission.id
             for permission in (role.permissions or [])
