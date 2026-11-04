@@ -29,7 +29,7 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 
 
 @router.get(
-    "/",
+    "",
     response_model=Page[ProviderPublic],
     dependencies=[Depends(permission_dependency("update_my_organization"))],
 )
@@ -46,7 +46,7 @@ def get_providers(
 
 
 @router.post(
-    "/",
+    "",
     response_model=ProviderPublic,
     dependencies=[Depends(permission_dependency("update_my_organization"))],
 )

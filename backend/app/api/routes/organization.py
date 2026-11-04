@@ -184,7 +184,7 @@ async def delete_current_organization_logo(
 
 # Create a Organization
 @router.post(
-    "/",
+    "",
     response_model=OrganizationPublic,
     dependencies=[Depends(permission_dependency("create_organization"))],
 )
@@ -239,7 +239,7 @@ async def create_organization(
 
 # Get all Organizations
 @router.get(
-    "/",
+    "",
     response_model=Page[OrganizationPublic],
     dependencies=[Depends(permission_dependency("read_organization"))],
 )

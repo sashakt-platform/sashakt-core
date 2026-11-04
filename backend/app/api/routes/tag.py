@@ -132,7 +132,7 @@ def check_linked_question_or_test(session: SessionDep, tag_id: int) -> bool:
 
 
 @router_tagtype.post(
-    "/",
+    "",
     response_model=TagTypePublic,
     dependencies=[Depends(permission_dependency("create_tag"))],
 )
@@ -165,7 +165,7 @@ def create_tagtype(
 
 
 @router_tagtype.get(
-    "/",
+    "",
     response_model=Page[TagTypePublicWithTags],
     dependencies=[Depends(permission_dependency("read_tag"))],
 )
@@ -291,7 +291,7 @@ def delete_tagtype(tagtype_id: int, session: SessionDep) -> Message:
 
 
 @router_tagtype.delete(
-    "/",
+    "",
     response_model=DeleteTagtype,
 )
 def bulk_delete_tagtype(
@@ -336,7 +336,7 @@ def bulk_delete_tagtype(
 
 # Create a Tag
 @router_tag.post(
-    "/",
+    "",
     response_model=TagPublic,
     dependencies=[Depends(permission_dependency("create_tag"))],
 )
@@ -393,7 +393,7 @@ def create_tag(
 
 # Get all Tags
 @router_tag.get(
-    "/",
+    "",
     response_model=Page[TagPublic],
     dependencies=[Depends(permission_dependency("read_tag"))],
 )
@@ -554,7 +554,7 @@ def delete_tag(tag_id: int, session: SessionDep) -> Message:
 
 
 @router_tag.delete(
-    "/",
+    "",
     response_model=DeleteTag,
     dependencies=[Depends(permission_dependency("delete_tag"))],
 )

@@ -1544,7 +1544,7 @@ def get_test_questions(
 
 # Create a Candidate
 @router.post(
-    "/",
+    "",
     response_model=CandidatePublic,
     dependencies=[Depends(permission_dependency("create_candidate"))],
 )
@@ -1563,7 +1563,7 @@ def create_candidate(
 
 # Get all Candidates
 @router.get(
-    "/",
+    "",
     response_model=list[CandidatePublic],
     dependencies=[Depends(permission_dependency("read_candidate"))],
 )
@@ -1767,7 +1767,7 @@ def delete_candidate(
 
 
 @router.delete(
-    "/",
+    "",
     response_model=DeleteCandidate,
     dependencies=[Depends(permission_dependency("delete_candidate"))],
 )
@@ -1815,7 +1815,7 @@ def bulk_delete_candidate(
 
 # Create a Candidate-Test Link
 @router_candidate_test.post(
-    "/",
+    "",
     response_model=CandidateTestPublic,
     dependencies=[Depends(permission_dependency("create_candidate"))],
 )
@@ -1832,7 +1832,7 @@ def create_candidate_test(
 
 # Get all Candidate-Test Link
 @router_candidate_test.get(
-    "/",
+    "",
     response_model=list[CandidateTestPublic],
     dependencies=[Depends(permission_dependency("read_candidate"))],
 )
@@ -1891,7 +1891,7 @@ def update_candidate_test(
 
 # Create a Candidate-Test & Answers Link
 @router_candidate_test_answer.post(
-    "/",
+    "",
     response_model=CandidateTestAnswerPublic,
     dependencies=[Depends(permission_dependency("create_candidate"))],
 )
@@ -1910,7 +1910,7 @@ def create_candidate_test_answer(
 
 # Get all Candidate-Test  & Answer Link
 @router_candidate_test_answer.get(
-    "/",
+    "",
     response_model=list[CandidateTestAnswerPublic],
     dependencies=[Depends(permission_dependency("read_candidate"))],
 )

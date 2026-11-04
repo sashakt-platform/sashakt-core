@@ -110,7 +110,7 @@ def test_create_organization_initializes_settings_row(
 ) -> None:
     name = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={"name": name, "description": random_lower_string()},
         headers=get_user_superadmin_token,
     )
@@ -667,7 +667,7 @@ def test_create_test_applies_all_fixed_overrides(
     assert get_resp.status_code == 200
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(),
         headers=get_user_superadmin_token,
     )
@@ -691,7 +691,7 @@ def test_create_test_flexible_passes_client_values_through(
         client=client, session=db, auth_header=get_user_superadmin_token
     )
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(),
         headers=get_user_superadmin_token,
     )
@@ -719,7 +719,7 @@ def test_update_test_reapplies_fixed_overrides(
     org_id = _get_org_id(client, get_user_superadmin_token)
 
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(),
         headers=get_user_superadmin_token,
     )
@@ -756,7 +756,7 @@ def test_fixed_value_change_does_not_affect_existing_tests(
     org_id = _get_org_id(client, get_user_superadmin_token)
 
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(time_limit=42),
         headers=get_user_superadmin_token,
     )
@@ -788,7 +788,7 @@ def _create_startable_test(
 ) -> dict[str, Any]:
     """Create a test via POST + attach one question so the candidate flow has work to do."""
     body = _create_test_payload() if payload is None else payload
-    response = client.post(f"{settings.API_V1_STR}/test/", headers=headers, json=body)
+    response = client.post(f"{settings.API_V1_STR}/test", headers=headers, json=body)
     assert response.status_code == 200, response.text
     data: dict[str, Any] = response.json()
     org_id = data["organization_id"]
@@ -1109,7 +1109,7 @@ def test_create_test_applies_pause_test_fixed_override(
     _put_settings(client, get_user_superadmin_token, org_id, locked)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(pause_timer_when_inactive=False),
         headers=get_user_superadmin_token,
     )
@@ -1190,7 +1190,7 @@ def test_pause_test_fixed_to_flexible_true_passes_client_value_through(
     assert pause_test_updated["value"]["default"] is True
 
     resp_false = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(pause_timer_when_inactive=False),
         headers=get_user_superadmin_token,
     )
@@ -1198,7 +1198,7 @@ def test_pause_test_fixed_to_flexible_true_passes_client_value_through(
     assert resp_false.json()["pause_timer_when_inactive"] is False
 
     resp_true = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=_create_test_payload(pause_timer_when_inactive=True),
         headers=get_user_superadmin_token,
     )

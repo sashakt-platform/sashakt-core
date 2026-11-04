@@ -27,7 +27,7 @@ def test_create_form(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -53,7 +53,7 @@ def test_create_form_duplicate_name(
     # Create first form
     data = {"name": form_name}
     response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -61,7 +61,7 @@ def test_create_form_duplicate_name(
 
     # Try to create duplicate
     response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -77,13 +77,13 @@ def test_get_forms(
     # Create a form
     data = {"name": random_lower_string()}
     client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         headers=get_user_superadmin_token,
     )
 
@@ -101,7 +101,7 @@ def test_get_form_by_id(
     # Create a form
     data = {"name": random_lower_string(), "description": "Test description"}
     create_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -137,7 +137,7 @@ def test_update_form(
     # Create a form
     data = {"name": random_lower_string()}
     create_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -170,7 +170,7 @@ def test_delete_form(
     # Create a form
     data = {"name": random_lower_string()}
     create_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -197,14 +197,14 @@ def test_delete_form_with_fields_fails(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     form_id = form_response.json()["id"]
 
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Name", "name": "name"},
         headers=get_user_superadmin_token,
     )
@@ -224,12 +224,12 @@ def test_bulk_delete_forms_success(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     form_a_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     form_b_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
@@ -238,7 +238,7 @@ def test_bulk_delete_forms_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=[form_a_id, form_b_id],
         headers=get_user_superadmin_token,
     )
@@ -257,12 +257,12 @@ def test_bulk_delete_forms_blocked_by_associated_test(
     organization_id = user_data["organization_id"]
 
     free_form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     linked_form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
@@ -280,7 +280,7 @@ def test_bulk_delete_forms_blocked_by_associated_test(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=[free_form_id, linked_form_id],
         headers=get_user_superadmin_token,
     )
@@ -301,12 +301,12 @@ def test_bulk_delete_forms_blocked_by_responses(
     organization_id = user_data["organization_id"]
 
     free_form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     form_with_responses_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
@@ -348,7 +348,7 @@ def test_bulk_delete_forms_blocked_by_responses(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=[free_form_id, form_with_responses_id],
         headers=get_user_superadmin_token,
     )
@@ -365,7 +365,7 @@ def test_bulk_delete_forms_missing_ids_returns_404(
 ) -> None:
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=[-1, -2],
         headers=get_user_superadmin_token,
     )
@@ -386,7 +386,7 @@ def test_add_field_to_form(
     # Create a form
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -401,7 +401,7 @@ def test_add_field_to_form(
         "is_required": True,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json=field_data,
         headers=get_user_superadmin_token,
     )
@@ -423,7 +423,7 @@ def test_add_select_field_with_options(
     # Create a form
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -442,7 +442,7 @@ def test_add_select_field_with_options(
         ],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json=field_data,
         headers=get_user_superadmin_token,
     )
@@ -461,7 +461,7 @@ def test_add_duplicate_field_name(
     # Create a form
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -474,7 +474,7 @@ def test_add_duplicate_field_name(
         "name": "user_name",
     }
     response = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json=field_data,
         headers=get_user_superadmin_token,
     )
@@ -487,7 +487,7 @@ def test_add_duplicate_field_name(
         "name": "user_name",  # Same name
     }
     response = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json=duplicate_field,
         headers=get_user_superadmin_token,
     )
@@ -502,7 +502,7 @@ def test_add_field_with_reserved_token_name(
 
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -515,7 +515,7 @@ def test_add_field_with_reserved_token_name(
             "name": token["token"],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/form/{form_id}/field/",
+            f"{settings.API_V1_STR}/form/{form_id}/field",
             json=field_data,
             headers=get_user_superadmin_token,
         )
@@ -531,7 +531,7 @@ def test_get_form_fields(
     # Create a form and add fields
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -539,19 +539,19 @@ def test_get_form_fields(
 
     # Add two fields
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Field 1", "name": "field1"},
         headers=get_user_superadmin_token,
     )
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "email", "label": "Field 2", "name": "field2"},
         headers=get_user_superadmin_token,
     )
 
     # Get fields
     response = client.get(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         headers=get_user_superadmin_token,
     )
 
@@ -568,14 +568,14 @@ def test_update_form_field(
     # Create form and add field
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
     form_id = form_response.json()["id"]
 
     field_response = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Original", "name": "original_field"},
         headers=get_user_superadmin_token,
     )
@@ -608,14 +608,14 @@ def test_delete_form_field(
     # Create form and add field
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
     form_id = form_response.json()["id"]
 
     field_response = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "To Delete", "name": "delete_field"},
         headers=get_user_superadmin_token,
     )
@@ -639,7 +639,7 @@ def test_reorder_form_fields(
     # Create form and add multiple fields
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -647,17 +647,17 @@ def test_reorder_form_fields(
 
     # Add three fields
     field1_resp = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Field 1", "name": "f1"},
         headers=get_user_superadmin_token,
     )
     field2_resp = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Field 2", "name": "f2"},
         headers=get_user_superadmin_token,
     )
     field3_resp = client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Field 3", "name": "f3"},
         headers=get_user_superadmin_token,
     )
@@ -695,7 +695,7 @@ def test_public_test_includes_form(
     # Create a form with fields
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -703,7 +703,7 @@ def test_public_test_includes_form(
 
     # Add a field
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={
             "field_type": "text",
             "label": "Name",
@@ -744,7 +744,7 @@ def test_start_test_with_form_responses(
     # Create a form
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -752,12 +752,12 @@ def test_start_test_with_form_responses(
 
     # Add fields
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "full_name", "label": "Name", "name": "full_name"},
         headers=get_user_superadmin_token,
     )
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "email", "label": "Email", "name": "email"},
         headers=get_user_superadmin_token,
     )
@@ -820,7 +820,7 @@ def test_form_requires_permission(
 ) -> None:
     # Candidate role should not have form permissions
     response = client.get(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         headers=get_user_candidate_token,
     )
     assert response.status_code == 401  # User Not Permitted
@@ -831,7 +831,7 @@ def test_form_accessible_by_test_admin(
 ) -> None:
     # Test admin should have form permissions
     response = client.get(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         headers=get_user_testadmin_token,
     )
     assert response.status_code == 200

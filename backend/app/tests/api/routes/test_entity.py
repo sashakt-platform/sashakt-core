@@ -39,7 +39,7 @@ def test_create_entitytype(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -58,7 +58,7 @@ def test_create_entitytype(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -87,7 +87,7 @@ def test_prevent_duplicate_entitytype_creation(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -101,7 +101,7 @@ def test_prevent_duplicate_entitytype_creation(
         "name": "SCHOOL",
     }
     response_upper = client.post(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=data_upper,
         headers=get_user_superadmin_token,
     )
@@ -117,7 +117,7 @@ def test_prevent_duplicate_entitytype_creation(
         "name": "   school  ",
     }
     response_spaces = client.post(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=data_spaces,
         headers=get_user_superadmin_token,
     )
@@ -134,7 +134,7 @@ def test_prevent_duplicate_entitytype_creation(
         "description": random_lower_string(),
     }
     response_unique = client.post(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=data_unique,
         headers=get_user_superadmin_token,
     )
@@ -165,7 +165,7 @@ def test_get_entity_type(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -184,7 +184,7 @@ def test_get_entity_type(
 
     for name_query in ["Testentity", "TESTENTITY", " TeStEnTiTy"]:
         response = client.get(
-            f"{settings.API_V1_STR}/entitytype/?name={name_query}",
+            f"{settings.API_V1_STR}/entitytype?name={name_query}",
             headers=get_user_superadmin_token,
         )
         assert response.status_code == 200
@@ -202,7 +202,7 @@ def test_get_entity_type(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/?name=TESTENTITY",
+        f"{settings.API_V1_STR}/entitytype?name=TESTENTITY",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -441,7 +441,7 @@ def test_bulk_delete_entitytype_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=entity_type_ids,
         headers=get_user_superadmin_token,
     )
@@ -499,7 +499,7 @@ def test_bulk_delete_entitytype_partial_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=[safe_entity_type.id, blocked_entity_type.id],
         headers=get_user_superadmin_token,
     )
@@ -557,7 +557,7 @@ def test_bulk_delete_entitytype_all_fail(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=entity_type_ids,
         headers=get_user_superadmin_token,
     )
@@ -575,7 +575,7 @@ def test_bulk_delete_entitytype_invalid_ids(
     """Scenario 4: IDs that don't exist — returns 404."""
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         json=[-1, -2, -3],
         headers=get_user_superadmin_token,
     )
@@ -607,7 +607,7 @@ def test_create_entity(
         "entity_type_id": entity_type.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -630,7 +630,7 @@ def test_create_entity(
         "entity_type_id": entity_type.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -712,7 +712,7 @@ def test_create_entity_with_full_location(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -746,7 +746,7 @@ def test_create_entity_missing_entitytype(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=invalid_data,
         headers=get_user_superadmin_token,
     )
@@ -773,7 +773,7 @@ def test_create_entity_with_invalid_entitytype(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=invalid_data,
         headers=get_user_superadmin_token,
     )
@@ -817,7 +817,7 @@ def test_prevent_duplicate_entity_creation(
         "entity_type_id": entitytype.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -829,7 +829,7 @@ def test_prevent_duplicate_entity_creation(
     assert response_data["entity_type"]["id"] == entitytype.id
 
     response1 = client.post(
-        f"{settings.API_V1_STR}/entity/", json=data, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity", json=data, headers=get_user_superadmin_token
     )
     assert response1.status_code == 400
     assert "already exists" in response1.json()["detail"]
@@ -839,7 +839,7 @@ def test_prevent_duplicate_entity_creation(
         "entity_type_id": entitytype2.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data2,
         headers=get_user_superadmin_token,
     )
@@ -850,7 +850,7 @@ def test_prevent_duplicate_entity_creation(
     assert response_data["entity_type"]["id"] == entitytype2.id
 
     response = client.post(
-        f"{settings.API_V1_STR}/entity/", json=data2, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity", json=data2, headers=get_user_superadmin_token
     )
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
@@ -913,7 +913,7 @@ def test_prevent_duplicate_entity_creation_with_location(
         "block_id": block.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -923,7 +923,7 @@ def test_prevent_duplicate_entity_creation_with_location(
     assert response_data["entity_type"]["id"] == entitytype.id
 
     response1 = client.post(
-        f"{settings.API_V1_STR}/entity/", json=data, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity", json=data, headers=get_user_superadmin_token
     )
     assert response1.status_code == 400
     assert "already exists" in response1.json()["detail"]
@@ -936,7 +936,7 @@ def test_prevent_duplicate_entity_creation_with_location(
         "block_id": block.id,
     }
     response2 = client.post(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=data2,
         headers=get_user_superadmin_token,
     )
@@ -946,7 +946,7 @@ def test_prevent_duplicate_entity_creation_with_location(
     assert response_data2["entity_type"]["id"] == entitytype2.id
 
     response3 = client.post(
-        f"{settings.API_V1_STR}/entity/", json=data2, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity", json=data2, headers=get_user_superadmin_token
     )
     assert response3.status_code == 400
     assert "already exists" in response3.json()["detail"]
@@ -979,7 +979,7 @@ def test_get_entities_base_case(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?name=entity", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity?name=entity", headers=get_user_superadmin_token
     )
     assert response.status_code == 200
     base_response = response.json()
@@ -1000,7 +1000,7 @@ def test_get_entities_base_case(
         for item in base_response["items"]
     )
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?name=entity", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity?name=entity", headers=get_user_superadmin_token
     )
     assert response.status_code == 200
     filter_response = response.json()
@@ -1065,7 +1065,7 @@ def test_get_entities(
     db.commit()
     db.refresh(entity)
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?name=test", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/entity?name=test", headers=get_user_superadmin_token
     )
     assert response.status_code == 200
     data = response.json()
@@ -1146,7 +1146,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity name ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=name&sort_order=asc",
+        f"{settings.API_V1_STR}/entity?sort_by=name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1158,7 +1158,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity name DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=name&sort_order=desc",
+        f"{settings.API_V1_STR}/entity?sort_by=name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1169,7 +1169,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity_type_name ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=entity_type_name&sort_order=asc",
+        f"{settings.API_V1_STR}/entity?sort_by=entity_type_name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1185,7 +1185,7 @@ def test_read_entity_with_sort(
 
     # Sort by entity_type_name DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=entity_type_name&sort_order=desc",
+        f"{settings.API_V1_STR}/entity?sort_by=entity_type_name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1662,7 +1662,7 @@ def test_bulk_delete_entity_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=entity_ids,
         headers=get_user_superadmin_token,
     )
@@ -1713,7 +1713,7 @@ def test_bulk_delete_entity_partial_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=[safe_entity.id, blocked_entity.id],
         headers=get_user_superadmin_token,
     )
@@ -1755,7 +1755,7 @@ def test_bulk_delete_entity_all_fail(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=[blocked_entity_one.id, blocked_entity_two.id],
         headers=get_user_superadmin_token,
     )
@@ -1773,7 +1773,7 @@ def test_bulk_delete_entity_invalid_ids(
     """Scenario 4: IDs that don't exist — returns 404."""
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=[-1, -2, -3],
         headers=get_user_superadmin_token,
     )
@@ -1947,7 +1947,7 @@ def test_bulk_delete_entity_referenced_by_custom_field_name(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         json=[safe_entity.id, referenced_entity.id],
         headers=get_user_superadmin_token,
     )
@@ -2303,13 +2303,13 @@ def test_permission_check_entity(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
     response = client.get(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
     )
     assert response.status_code == 401
 
@@ -2318,13 +2318,13 @@ def test_permission_check_entity_type(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
     )
     assert response.status_code == 401
 
@@ -2436,7 +2436,7 @@ def test_get_entities_filtered_by_organization(
 
     # User1 should only see entities from org1
     response = client.get(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         headers=user1_token,
     )
     assert response.status_code == 200
@@ -2456,7 +2456,7 @@ def test_get_entities_filtered_by_organization(
 
     # User2 should only see entities from org2
     response = client.get(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         headers=user2_token,
     )
     assert response.status_code == 200
@@ -2563,7 +2563,7 @@ def test_entity_filter_by_entity_type(
 
     # Test 1: Filter by entity_type_1
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?entity_type_id={entity_type_1.id}",
+        f"{settings.API_V1_STR}/entity?entity_type_id={entity_type_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2585,7 +2585,7 @@ def test_entity_filter_by_entity_type(
 
     # Test 2: Filter by entity_type_2
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?entity_type_id={entity_type_2.id}",
+        f"{settings.API_V1_STR}/entity?entity_type_id={entity_type_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2607,7 +2607,7 @@ def test_entity_filter_by_entity_type(
 
     # Test 3: Filter by entity_type_3
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?entity_type_id={entity_type_3.id}",
+        f"{settings.API_V1_STR}/entity?entity_type_id={entity_type_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2623,7 +2623,7 @@ def test_entity_filter_by_entity_type(
 
     # Test 4: No filter - should return all entities
     response = client.get(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2746,7 +2746,7 @@ def test_sort_entity_by_state_district_block(
 
     # Test 1: Sort by state ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=state&sort_order=asc",
+        f"{settings.API_V1_STR}/entity?sort_by=state&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2762,7 +2762,7 @@ def test_sort_entity_by_state_district_block(
 
     # Test 2: Sort by state DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=state&sort_order=desc",
+        f"{settings.API_V1_STR}/entity?sort_by=state&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2780,7 +2780,7 @@ def test_sort_entity_by_state_district_block(
 
     # Test 3: Sort by district ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=district&sort_order=asc",
+        f"{settings.API_V1_STR}/entity?sort_by=district&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2797,7 +2797,7 @@ def test_sort_entity_by_state_district_block(
 
     # Test 4: Sort by district DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=district&sort_order=desc",
+        f"{settings.API_V1_STR}/entity?sort_by=district&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2816,7 +2816,7 @@ def test_sort_entity_by_state_district_block(
 
     # Test 5: Sort by block ASC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=block&sort_order=asc",
+        f"{settings.API_V1_STR}/entity?sort_by=block&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2832,7 +2832,7 @@ def test_sort_entity_by_state_district_block(
 
     # Test 6: Sort by block DESC
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?sort_by=block&sort_order=desc",
+        f"{settings.API_V1_STR}/entity?sort_by=block&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2960,7 +2960,7 @@ def test_get_entities_intersection_both_districts(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_b"].id}
@@ -2976,7 +2976,7 @@ def test_get_entities_intersection_test_districts_user_states(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_a"].id}
@@ -2992,7 +2992,7 @@ def test_get_entities_intersection_test_states_user_districts(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_b"].id}
@@ -3008,7 +3008,7 @@ def test_get_entities_intersection_both_states(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_a"].id, s["e_b"].id}
@@ -3024,7 +3024,7 @@ def test_get_entities_intersection_disjoint_returns_empty(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     assert response.json()["items"] == []
 
@@ -3038,7 +3038,7 @@ def test_get_entities_creator_has_no_locations_falls_back_to_test(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_a"].id}
@@ -3053,7 +3053,7 @@ def test_get_entities_test_has_no_locations_falls_back_to_creator(
     db.commit()
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_c"].id}
@@ -3066,7 +3066,7 @@ def test_get_entities_both_empty_returns_all_org_entities(
     s = _setup_entity_scope_scene(db)
     link = get_test_link(db, test_id=s["test"].id, admin_id=s["creator"].id)
 
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link={link.uuid}")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link={link.uuid}")
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
     assert ids == {s["e_a"].id, s["e_b"].id, s["e_c"].id}
@@ -3075,7 +3075,7 @@ def test_get_entities_both_empty_returns_all_org_entities(
 def test_get_entities_unknown_test_link_returns_404(
     client: TestClient,
 ) -> None:
-    response = client.get(f"{settings.API_V1_STR}/entity/?test_link=does-not-exist")
+    response = client.get(f"{settings.API_V1_STR}/entity?test_link=does-not-exist")
     assert response.status_code == 404
 
 
@@ -3083,7 +3083,7 @@ def test_get_entities_no_auth_no_test_link_returns_401(
     client: TestClient,
 ) -> None:
     """Unauthenticated callers must supply test_link to scope the org."""
-    response = client.get(f"{settings.API_V1_STR}/entity/")
+    response = client.get(f"{settings.API_V1_STR}/entity")
     assert response.status_code == 401
 
 
@@ -3100,7 +3100,7 @@ def test_get_entities_org_is_always_test_org(
 
     # superadmin belongs to a different (seed) organization
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?test_link={link.uuid}",
+        f"{settings.API_V1_STR}/entity?test_link={link.uuid}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3119,7 +3119,7 @@ def test_get_entities_name_filter_combines_with_scope(
 
     # Filter by e_a's exact name; only e_a matches both name and scope.
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?test_link={link.uuid}&name={s['e_a'].name}"
+        f"{settings.API_V1_STR}/entity?test_link={link.uuid}&name={s['e_a'].name}"
     )
     assert response.status_code == 200
     ids = _get_returned_ids(response.json())
@@ -3152,7 +3152,7 @@ def test_get_entitytype_filter_by_is_active(
     db.refresh(inactive_entity_type)
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/?is_active=true",
+        f"{settings.API_V1_STR}/entitytype?is_active=true",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3161,7 +3161,7 @@ def test_get_entitytype_filter_by_is_active(
     assert inactive_entity_type.id not in ids
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/?is_active=false",
+        f"{settings.API_V1_STR}/entitytype?is_active=false",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3196,7 +3196,7 @@ def test_get_entitytype_no_is_active_filter_returns_all(
     db.refresh(inactive_entity_type)
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3240,7 +3240,7 @@ def test_get_entities_filter_by_is_active(
     db.refresh(inactive_entity)
 
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?is_active=true",
+        f"{settings.API_V1_STR}/entity?is_active=true",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3249,7 +3249,7 @@ def test_get_entities_filter_by_is_active(
     assert inactive_entity.id not in ids
 
     response = client.get(
-        f"{settings.API_V1_STR}/entity/?is_active=false",
+        f"{settings.API_V1_STR}/entity?is_active=false",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3293,7 +3293,7 @@ def test_get_entities_no_is_active_filter_returns_all(
     db.refresh(inactive_entity)
 
     response = client.get(
-        f"{settings.API_V1_STR}/entity/",
+        f"{settings.API_V1_STR}/entity",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3322,7 +3322,7 @@ def test_entitytype_list_total_records_zero_when_no_entities(
     db.refresh(entity_type)
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3370,7 +3370,7 @@ def test_entitytype_list_total_records_counts_entities(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -3429,7 +3429,7 @@ def test_entitytype_list_total_records_independent_per_type(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/entitytype/",
+        f"{settings.API_V1_STR}/entitytype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200

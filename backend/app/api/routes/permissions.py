@@ -33,7 +33,7 @@ PERMISSIONS_HIDDEN_FROM_NON_SUPER_ADMIN = (
 
 
 @router.get(
-    "/",
+    "",
     response_model=PermissionsPublic,
     dependencies=[Depends(permission_dependency("read_permission"))],
 )
@@ -79,7 +79,7 @@ def read_permission(session: SessionDep, id: int) -> Any:
 
 
 @router.post(
-    "/",
+    "",
     response_model=PermissionPublic,
     dependencies=[Depends(permission_dependency("create_permission"))],
 )

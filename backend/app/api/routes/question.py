@@ -439,7 +439,7 @@ def is_duplicate_question(
 
 
 @router.post(
-    "/",
+    "",
     response_model=QuestionPublic,
     dependencies=[Depends(permission_dependency("create_question"))],
 )
@@ -627,7 +627,7 @@ def transform_questions_to_public(
 
 
 @router.get(
-    "/",
+    "",
     response_model=Page[QuestionPublic],
     dependencies=[Depends(permission_dependency("read_question"))],
 )
@@ -879,7 +879,7 @@ def delete_question(
 
 
 @router.delete(
-    "/",
+    "",
     response_model=DeleteQuestion,
     dependencies=[Depends(permission_dependency("delete_question"))],
 )

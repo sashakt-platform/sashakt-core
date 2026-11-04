@@ -946,7 +946,7 @@ def get_public_test_info(test_uuid: str, session: SessionDep) -> TestPublicLimit
 
 # Create a Test
 @router.post(
-    "/",
+    "",
     response_model=TestPublic,
     dependencies=[Depends(require_create_test_permission)],
 )
@@ -1040,7 +1040,7 @@ def create_test(
 
 # Get All Tests
 @router.get(
-    "/",
+    "",
     response_model=Page[TestPublic],
     dependencies=[Depends(require_list_test_permission)],
 )
@@ -1757,7 +1757,7 @@ def delete_test(
 
 
 @router.delete(
-    "/",
+    "",
     response_model=DeleteTest,
 )
 def bulk_delete_question(

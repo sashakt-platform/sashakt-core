@@ -27,7 +27,7 @@ def test_create_country(
 ) -> None:
     country = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/location/country/",
+        f"{settings.API_V1_STR}/location/country",
         json={"name": country},
         headers=get_user_superadmin_token,
     )
@@ -41,7 +41,7 @@ def test_create_country(
     assert data["name"] == country
 
     response = client.post(
-        f"{settings.API_V1_STR}/location/country/",
+        f"{settings.API_V1_STR}/location/country",
         json={"name": country},
         headers=get_user_candidate_token,
     )
@@ -65,7 +65,7 @@ def test_get_country(
     db.refresh(austria)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/location/country", headers=get_user_superadmin_token
     )
     data = response.json()
     items = data["items"]
@@ -84,7 +84,7 @@ def test_get_country(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?page=2",
+        f"{settings.API_V1_STR}/location/country?page=2",
         headers=get_user_superadmin_token,
     )
 
@@ -93,7 +93,7 @@ def test_get_country(
     assert data["page"] == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/",
+        f"{settings.API_V1_STR}/location/country",
         headers=get_user_superadmin_token,
     )
 
@@ -102,7 +102,7 @@ def test_get_country(
     assert_paginated_response(response, min_expected_total=12, min_expected_pages=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?is_active=False",
+        f"{settings.API_V1_STR}/location/country?is_active=False",
         headers=get_user_superadmin_token,
     )
 
@@ -180,7 +180,7 @@ def test_create_state(
     db.commit()
     state_name = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state",
         json={"name": state_name, "country_id": india.id},
         headers=get_user_superadmin_token,
     )
@@ -196,7 +196,7 @@ def test_get_state(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -217,7 +217,7 @@ def test_get_state(
     db.refresh(goa)
     db.refresh(punjab)
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?size=100",
+        f"{settings.API_V1_STR}/location/state?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -231,7 +231,7 @@ def test_get_state(
     assert any(item["country_id"] == india.id for item in items)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?country={india.id}",
+        f"{settings.API_V1_STR}/location/state?country={india.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -246,7 +246,7 @@ def test_get_state(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?is_active=False",
+        f"{settings.API_V1_STR}/location/state?is_active=False",
         headers=get_user_superadmin_token,
     )
 
@@ -272,7 +272,7 @@ def test_get_state_filter_by_name(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?name=randomstate",
+        f"{settings.API_V1_STR}/location/state?name=randomstate",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -284,7 +284,7 @@ def test_get_state_filter_by_name(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?name=random",
+        f"{settings.API_V1_STR}/location/state?name=random",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -295,7 +295,7 @@ def test_get_state_filter_by_name(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?name=randomnonmatch",
+        f"{settings.API_V1_STR}/location/state?name=randomnonmatch",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -307,7 +307,7 @@ def test_get_state_filter_by_name(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?name=random",
+        f"{settings.API_V1_STR}/location/state?name=random",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -407,7 +407,7 @@ def test_create_district(
     db.commit()
     district_name = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district",
         json={"name": district_name, "state_id": kerala.id},
         headers=get_user_superadmin_token,
     )
@@ -438,7 +438,7 @@ def test_get_district(
     db.refresh(ernakulam)
     db.refresh(thrissur)
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?size=100&state_ids={kerala.id}",
+        f"{settings.API_V1_STR}/location/district?size=100&state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -453,7 +453,7 @@ def test_get_district(
     assert any(item["state"]["id"] == kerala.id for item in data)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -461,7 +461,7 @@ def test_get_district(
     assert_paginated_response(response, min_expected_total=10, min_expected_pages=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?state_ids={kerala.id}",
+        f"{settings.API_V1_STR}/location/district?state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -494,7 +494,7 @@ def test_get_district_by_state_ids_filter(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?state_ids={kerala.id}&state_ids={karnataka.id}",
+        f"{settings.API_V1_STR}/location/district?state_ids={kerala.id}&state_ids={karnataka.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -514,7 +514,7 @@ def test_get_district_by_state_ids_filter(
     assert tamil_nadu.id not in state_ids_in_response
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?state_ids={tamil_nadu.id}",
+        f"{settings.API_V1_STR}/location/district?state_ids={tamil_nadu.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -545,7 +545,7 @@ def test_get_district_by_name_filter(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?name=north zone extension",
+        f"{settings.API_V1_STR}/location/district?name=north zone extension",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -555,7 +555,7 @@ def test_get_district_by_name_filter(
     assert data["items"][0]["name"] == "North Zone Extension"
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?name=North Zone",
+        f"{settings.API_V1_STR}/location/district?name=North Zone",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -566,7 +566,7 @@ def test_get_district_by_name_filter(
     assert "North Zone Extension" in names
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?name=Central Zone",
+        f"{settings.API_V1_STR}/location/district?name=Central Zone",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -574,7 +574,7 @@ def test_get_district_by_name_filter(
     assert len(data["items"]) == 0
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?name=north zone",
+        f"{settings.API_V1_STR}/location/district?name=north zone",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -696,7 +696,7 @@ def test_create_block(
     ernakulam, thrissur = setup_district(db)
     block_name = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/location/block/",
+        f"{settings.API_V1_STR}/location/block",
         json={"name": block_name, "district_id": ernakulam.id},
         headers=get_user_superadmin_token,
     )
@@ -722,7 +722,7 @@ def test_get_block(
         db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/",
+        f"{settings.API_V1_STR}/location/block",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -737,7 +737,7 @@ def test_get_block(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?size=100&block={kovil.id}&block={mayani.id}&block={kumuram.id}",
+        f"{settings.API_V1_STR}/location/block?size=100&block={kovil.id}&block={mayani.id}&block={kumuram.id}",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -753,7 +753,7 @@ def test_get_block(
     assert any(item["district_id"] == kovil.district_id for item in data)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?district_ids={thrissur.id}",
+        f"{settings.API_V1_STR}/location/block?district_ids={thrissur.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -771,7 +771,7 @@ def test_get_block(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?is_active=False",
+        f"{settings.API_V1_STR}/location/block?is_active=False",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -881,7 +881,7 @@ def test_create_inactive_country_not_listed(
 ) -> None:
     country_name = "InactiveLand"
     response = client.post(
-        f"{settings.API_V1_STR}/location/country/",
+        f"{settings.API_V1_STR}/location/country",
         json={"name": country_name, "is_active": False},
         headers=get_user_superadmin_token,
     )
@@ -890,7 +890,7 @@ def test_create_inactive_country_not_listed(
     assert data["is_active"] is False
     country_id = data["id"]
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?is_active=true",
+        f"{settings.API_V1_STR}/location/country?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -909,7 +909,7 @@ def test_create_inactive_state_not_listed(
     db.commit()
     db.refresh(country)
     response = client.post(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state",
         json={"name": "InactiveState", "country_id": country.id, "is_active": False},
         headers=get_user_superadmin_token,
     )
@@ -918,21 +918,21 @@ def test_create_inactive_state_not_listed(
     state_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?is_active=true",
+        f"{settings.API_V1_STR}/location/state?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert all(item["id"] != state_id for item in data["items"])
     assert all(item["is_active"] is True for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?is_active=false",
+        f"{settings.API_V1_STR}/location/state?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert any(item["id"] == state_id for item in data["items"])
     assert all(item["is_active"] is False for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?size=100",
+        f"{settings.API_V1_STR}/location/state?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -954,7 +954,7 @@ def test_create_inactive_district_not_listed(
     db.refresh(state)
 
     response = client.post(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district",
         json={
             "name": "InactiveDistrict",
             "state_id": state.id,
@@ -967,13 +967,13 @@ def test_create_inactive_district_not_listed(
     district_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?is_active=true",
+        f"{settings.API_V1_STR}/location/district?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert all(item["id"] != district_id for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/?is_active=false",
+        f"{settings.API_V1_STR}/location/district?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -999,7 +999,7 @@ def test_create_inactive_block_not_listed(
     db.commit()
     db.refresh(district)
     response = client.post(
-        f"{settings.API_V1_STR}/location/block/",
+        f"{settings.API_V1_STR}/location/block",
         json={
             "name": "InactiveBlock",
             "district_id": district.id,
@@ -1012,13 +1012,13 @@ def test_create_inactive_block_not_listed(
     block_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?is_active=true",
+        f"{settings.API_V1_STR}/location/block?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
     assert all(item["id"] != block_id for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/location/block/?is_active=false",
+        f"{settings.API_V1_STR}/location/block?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1041,7 +1041,7 @@ def test_get_is_active_country(
     db.refresh(austria)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?size=100",
+        f"{settings.API_V1_STR}/location/country?size=100",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1060,7 +1060,7 @@ def test_get_is_active_country(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?is_active=false",
+        f"{settings.API_V1_STR}/location/country?is_active=false",
         headers=get_user_superadmin_token,
     )
 
@@ -1073,7 +1073,7 @@ def test_get_is_active_country(
     assert all(item["is_active"] is False for item in data["items"])
     data = response.json()
     response = client.get(
-        f"{settings.API_V1_STR}/location/country/?is_active=true",
+        f"{settings.API_V1_STR}/location/country?is_active=true",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1112,7 +1112,7 @@ def test_get_state_admin_state_list(
     db.refresh(state_3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state",
         headers=get_user_systemadmin_token,
     )
     data = response.json()
@@ -1133,14 +1133,14 @@ def test_get_state_admin_state_list(
         "state_ids": [state_3.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state",
         headers=token_headers,
     )
     data = response.json()
@@ -1164,7 +1164,7 @@ def test_get_state_admin_state_list(
         "organization_id": new_organization.id,
     }
     create_response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=token_headers,
         json=test_admin_payload,
     )
@@ -1177,7 +1177,7 @@ def test_get_state_admin_state_list(
 
     # Check districts available to the new admin
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/",
+        f"{settings.API_V1_STR}/location/state",
         headers=new_admin_token,
     )
     data = response.json()
@@ -1224,7 +1224,7 @@ def test_filter_district_for_state_admin(
     db.refresh(district_3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district",
         headers=get_user_systemadmin_token,
     )
     data = response.json()
@@ -1245,14 +1245,14 @@ def test_filter_district_for_state_admin(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district",
         headers=token_headers,
     )
     data = response.json()
@@ -1278,7 +1278,7 @@ def test_filter_district_for_state_admin(
         "organization_id": new_organization.id,
     }
     create_response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=token_headers,
         json=test_admin_payload,
     )
@@ -1292,7 +1292,7 @@ def test_filter_district_for_state_admin(
 
     # Check districts available to the new admin
     response = client.get(
-        f"{settings.API_V1_STR}/location/district/",
+        f"{settings.API_V1_STR}/location/district",
         headers=new_admin_token,
     )
     data = response.json()
@@ -1563,7 +1563,7 @@ def test_get_states_filtered_by_test_id(client: TestClient, db: SessionDep) -> N
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?test_id={test.id}&country={country.id}"
+        f"{settings.API_V1_STR}/location/state?test_id={test.id}&country={country.id}"
     )
     assert response.status_code == 200
     data = response.json()
@@ -1609,7 +1609,7 @@ def test_get_states_filtered_by_test_districts(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/location/state/?test_id={test.id}&country={country.id}"
+        f"{settings.API_V1_STR}/location/state?test_id={test.id}&country={country.id}"
     )
     assert response.status_code == 200
     data = response.json()
@@ -1650,7 +1650,7 @@ def test_get_districts_filtered_by_test_id(client: TestClient, db: SessionDep) -
     db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/location/district/?test_id={test.id}")
+    response = client.get(f"{settings.API_V1_STR}/location/district?test_id={test.id}")
     assert response.status_code == 200
     data = response.json()
     returned_ids = {item["id"] for item in data["items"]}
@@ -1695,7 +1695,7 @@ def test_get_districts_filtered_by_test_state(
     db.add(TestState(test_id=test.id, state_id=state_a.id))
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/location/district/?test_id={test.id}")
+    response = client.get(f"{settings.API_V1_STR}/location/district?test_id={test.id}")
     assert response.status_code == 200
     data = response.json()
     returned_ids = {item["id"] for item in data["items"]}
@@ -1744,7 +1744,7 @@ def test_get_blocks_filtered_by_test_districts(
     db.add(TestDistrict(test_id=test.id, district_id=district_a.id))
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/location/block/?test_id={test.id}")
+    response = client.get(f"{settings.API_V1_STR}/location/block?test_id={test.id}")
     assert response.status_code == 200
     data = response.json()
     returned_ids = {item["id"] for item in data["items"]}

@@ -124,7 +124,7 @@ alembic upgrade head
 - Adminer (DB admin): http://localhost:8080
 - Traefik UI: http://localhost:8090
 - MailCatcher: http://localhost:1080
-- Health check: http://localhost:8000/api/v1/utils/health-check/
+- Health check: http://localhost:8000/api/v1/utils/health-check
 
 ## Plans
 

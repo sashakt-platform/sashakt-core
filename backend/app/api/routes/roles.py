@@ -203,7 +203,7 @@ def _roles_visible_to(
 
 
 @router.get(
-    "/",
+    "",
     response_model=RolesPublic,
     dependencies=[Depends(permission_dependency("read_role"))],
 )
@@ -300,7 +300,7 @@ def read_role(session: SessionDep, current_user: CurrentUser, role_id: int) -> A
 
 
 @router.post(
-    "/",
+    "",
     response_model=RolePublic,
     dependencies=[Depends(permission_dependency("create_role"))],
 )

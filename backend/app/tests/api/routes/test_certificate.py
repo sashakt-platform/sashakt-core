@@ -35,7 +35,7 @@ def test_create_certificate(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -71,7 +71,7 @@ def test_get_certificates(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         headers=get_user_superadmin_token,
     )
 
@@ -93,7 +93,7 @@ def test_get_certificates(
 
     for name_query in ["Testcertificate", "TESTCERTIFICATE", " TeStCeRtIfIcAtE"]:
         response = client.get(
-            f"{settings.API_V1_STR}/certificate/?name={name_query}",
+            f"{settings.API_V1_STR}/certificate?name={name_query}",
             headers=get_user_superadmin_token,
         )
         assert response.status_code == 200
@@ -112,7 +112,7 @@ def test_get_certificates(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/certificate/?name=TESTCERTIFICATE",
+        f"{settings.API_V1_STR}/certificate?name=TESTCERTIFICATE",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -150,7 +150,7 @@ def test_get_certificates_filter_is_active(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/certificate/?is_active=true",
+        f"{settings.API_V1_STR}/certificate?is_active=true",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -160,7 +160,7 @@ def test_get_certificates_filter_is_active(
     assert not any(item["name"] == inactive_cert.name for item in items)
 
     response = client.get(
-        f"{settings.API_V1_STR}/certificate/?is_active=false",
+        f"{settings.API_V1_STR}/certificate?is_active=false",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -170,7 +170,7 @@ def test_get_certificates_filter_is_active(
     assert not any(item["name"] == active_cert.name for item in items)
 
     response = client.get(
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -455,7 +455,7 @@ def test_bulk_delete_certificates_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         json=[cert_a.id, cert_b.id],
         headers=get_user_superadmin_token,
     )
@@ -506,7 +506,7 @@ def test_bulk_delete_certificates_partial_failure_due_to_associated_tests(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         json=[cert_free.id, cert_with_test.id],
         headers=get_user_superadmin_token,
     )
@@ -528,7 +528,7 @@ def test_bulk_delete_certificates_missing_ids_returns_404(
 ) -> None:
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         json=[-1, -2],
         headers=get_user_superadmin_token,
     )
@@ -568,7 +568,7 @@ def test_bulk_delete_certificates_all_blocked_by_tests(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/certificate/",
+        f"{settings.API_V1_STR}/certificate",
         json=[cert.id],
         headers=get_user_superadmin_token,
     )
@@ -808,7 +808,7 @@ def test_get_certificate_tokens_with_form(
     # Create a form
     form_data = {"name": random_lower_string()}
     form_response = client.post(
-        f"{settings.API_V1_STR}/form/",
+        f"{settings.API_V1_STR}/form",
         json=form_data,
         headers=get_user_superadmin_token,
     )
@@ -817,12 +817,12 @@ def test_get_certificate_tokens_with_form(
 
     # Add form fields
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "text", "label": "Full Name", "name": "full_name"},
         headers=get_user_superadmin_token,
     )
     client.post(
-        f"{settings.API_V1_STR}/form/{form_id}/field/",
+        f"{settings.API_V1_STR}/form/{form_id}/field",
         json={"field_type": "email", "label": "Email Address", "name": "email"},
         headers=get_user_superadmin_token,
     )
