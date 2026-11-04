@@ -23,6 +23,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
+    redirect_slashes=False,
 )
 
 # Initialize upload directories on startup
