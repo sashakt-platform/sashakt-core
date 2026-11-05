@@ -99,7 +99,7 @@ def transform_blocks_to_public(
 
 # Create a Country
 @country_router.post(
-    "/",
+    "",
     response_model=CountryPublic,
     dependencies=[Depends(permission_dependency("create_location"))],
 )
@@ -117,7 +117,7 @@ def create_country(
 
 # Get all Countries
 @country_router.get(
-    "/",
+    "",
     response_model=Page[CountryPublic],
     dependencies=[Depends(permission_dependency("read_location"))],
 )
@@ -186,7 +186,7 @@ def update_country(
 
 # Create a State
 @state_router.post(
-    "/",
+    "",
     response_model=StatePublic,
     dependencies=[Depends(permission_dependency("create_location"))],
 )
@@ -205,7 +205,7 @@ def create_state(
 
 # Get all States
 @state_router.get(
-    "/",
+    "",
     response_model=Page[StatePublic],
 )
 def get_state(
@@ -314,7 +314,7 @@ def update_state(
 
 # Create a District
 @district_router.post(
-    "/",
+    "",
     response_model=DistrictPublic,
     dependencies=[Depends(permission_dependency("create_location"))],
 )
@@ -333,7 +333,7 @@ def create_district(
 
 # Get all Districts
 @district_router.get(
-    "/",
+    "",
     response_model=Page[DistrictPublic],
 )
 def get_district(
@@ -432,7 +432,7 @@ def update_district(
 
 # Create a Block
 @block_router.post(
-    "/",
+    "",
     response_model=BlockPublic,
     dependencies=[Depends(permission_dependency("create_location"))],
 )
@@ -451,7 +451,7 @@ def create_block(
 
 # Get all Blocks
 @block_router.get(
-    "/",
+    "",
     response_model=Page[BlockPublic],
 )
 def get_block(

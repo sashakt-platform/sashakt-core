@@ -38,7 +38,7 @@ def transform_certificates_to_public(
 
 
 @router.post(
-    "/",
+    "",
     response_model=CertificatePublic,
     dependencies=[Depends(permission_dependency("create_certificate"))],
 )
@@ -61,7 +61,7 @@ def create_certificate(
 
 
 @router.get(
-    "/",
+    "",
     response_model=Page[CertificatePublic],
     dependencies=[Depends(permission_dependency("read_certificate"))],
 )
@@ -201,7 +201,7 @@ def delete_certificate(
 
 
 @router.delete(
-    "/",
+    "",
     response_model=DeleteCertificate,
     dependencies=[Depends(permission_dependency("delete_certificate"))],
 )

@@ -10,7 +10,7 @@ def test_create_permission(
 ) -> None:
     data = {"name": "Foo", "description": "Fighters"}
     response = client.post(
-        f"{settings.API_V1_STR}/permissions/",
+        f"{settings.API_V1_STR}/permissions",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -69,7 +69,7 @@ def test_read_permissions(
     create_random_permission(db)
     create_random_permission(db)
     response = client.get(
-        f"{settings.API_V1_STR}/permissions/",
+        f"{settings.API_V1_STR}/permissions",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200

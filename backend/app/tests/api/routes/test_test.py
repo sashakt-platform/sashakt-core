@@ -214,7 +214,7 @@ def test_create_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -301,7 +301,7 @@ def test_create_test(
         "state_ids": [punjab.id, goa.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -362,7 +362,7 @@ def test_create_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -457,7 +457,7 @@ def test_create_sectioned_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -539,7 +539,7 @@ def test_create_sectioned_test_rejects_empty_question_set(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -590,7 +590,7 @@ def test_create_sectioned_test_rejects_duplicate_questions_across_sets(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -635,7 +635,7 @@ def test_create_sectioned_test_rejects_random_tag_count(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -665,7 +665,7 @@ def test_create_sectioned_test_rejects_random_questions(
     ) = setup_data(client, db, get_user_superadmin_token)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -716,7 +716,7 @@ def test_create_sectioned_test_rejects_duplicate_questions_within_set(
     ) = setup_data(client, db, get_user_superadmin_token)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -761,7 +761,7 @@ def test_create_sectioned_test_rejects_duplicate_display_order(
     ) = setup_data(client, db, get_user_superadmin_token)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -810,7 +810,7 @@ def test_create_sectioned_test_rejects_attempt_limit_greater_than_section_size(
     ) = setup_data(client, db, get_user_superadmin_token)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -852,7 +852,7 @@ def test_create_sectioned_test_rejects_mandatory_questions_exceeding_attempt_lim
     ) = setup_data(client, db, get_user_superadmin_token)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -897,7 +897,7 @@ def test_create_test_rejects_duplicate_question_revision_ids(
     ) = setup_data(client, db, get_user_superadmin_token)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -919,7 +919,7 @@ def test_create_test_rejects_missing_question_revision_ids(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "link": random_lower_string(),
@@ -951,7 +951,7 @@ def test_create_test_with_random_tag_count(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -978,7 +978,7 @@ def test_create_test_random_question_field(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -993,7 +993,7 @@ def test_create_test_random_question_field(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -1008,7 +1008,7 @@ def test_create_test_random_question_field(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -1022,7 +1022,7 @@ def test_create_test_random_question_field(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -1086,7 +1086,7 @@ def test_get_tests(
     db.commit()
 
     get_response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
     response = get_response.json()
@@ -1176,7 +1176,7 @@ def test_get_tests_with_tag_random_count(
     db.commit()
 
     get_response = client.get(
-        f"{settings.API_V1_STR}/test/?name={test.name}",
+        f"{settings.API_V1_STR}/test?name={test.name}",
         headers=get_user_superadmin_token,
     )
     response = get_response.json()
@@ -1236,14 +1236,14 @@ def test_get_test_by_filter_name(
     db.refresh(test_3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name={test_name_1}",
+        f"{settings.API_V1_STR}/test?name={test_name_1}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
 
@@ -1251,7 +1251,7 @@ def test_get_test_by_filter_name(
     assert_paginated_response(response, min_expected_total=3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name={test_name_2}",
+        f"{settings.API_V1_STR}/test?name={test_name_2}",
         headers=get_user_superadmin_token,
     )
 
@@ -1301,21 +1301,21 @@ def test_get_test_by_filter_description(
     db.refresh(test_3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?description={random_text_1}",
+        f"{settings.API_V1_STR}/test?description={random_text_1}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, min_expected_total=3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?description={random_text_2}",
+        f"{settings.API_V1_STR}/test?description={random_text_2}",
         headers=get_user_superadmin_token,
     )
 
@@ -1370,33 +1370,33 @@ def test_get_test_by_filter_start_time(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-25T00:00:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-25T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=4)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T00:00:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T15:30:59Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=1)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-28T19:31:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1406,21 +1406,21 @@ def test_get_test_by_filter_start_time(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-24T00:00:00Z&start_time_lte=2025-07-26T00:00:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-24T00:00:00Z&start_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-07-27T12:30:00Z&start_time_lte=2025-07-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-07-27T12:30:00Z&start_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_lte=2025-07-28T15:30:00Z&start_time_gte=2025-07-25T10:30:00Z",
+        f"{settings.API_V1_STR}/test?start_time_lte=2025-07-28T15:30:00Z&start_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -1474,31 +1474,31 @@ def test_get_test_by_filter_end_time(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-25T00:00:00Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-25T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=4)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T00:00:00Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-27T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=3)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T15:30:59Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-28T15:30:59Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=1)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-28T19:31:00Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-28T19:31:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -1507,19 +1507,19 @@ def test_get_test_by_filter_end_time(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-24T00:00:00Z&end_time_lte=2025-07-26T00:00:00Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-24T00:00:00Z&end_time_lte=2025-07-26T00:00:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=1)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_gte=2025-07-27T12:30:00Z&end_time_lte=2025-07-28T15:30:00Z",
+        f"{settings.API_V1_STR}/test?end_time_gte=2025-07-27T12:30:00Z&end_time_lte=2025-07-28T15:30:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?end_time_lte=2025-07-28T15:30:00Z&end_time_gte=2025-07-25T10:30:00Z",
+        f"{settings.API_V1_STR}/test?end_time_lte=2025-07-28T15:30:00Z&end_time_gte=2025-07-25T10:30:00Z",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
@@ -1577,14 +1577,14 @@ def test_get_test_by_filter_start_end_time(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_gte=2025-04-24T10:00:00Z&end_time_lte=2025-04-27T12:30:00Z",
+        f"{settings.API_V1_STR}/test?start_time_gte=2025-04-24T10:00:00Z&end_time_lte=2025-04-27T12:30:00Z",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_time_lte=2025-04-28T00:00:00Z&end_time_gte=2025-04-27T12:30:00Z",
+        f"{settings.API_V1_STR}/test?start_time_lte=2025-04-28T00:00:00Z&end_time_gte=2025-04-27T12:30:00Z",
         headers=get_user_superadmin_token,
     )
 
@@ -1638,21 +1638,21 @@ def test_get_test_by_filter_time_limit(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_gte=25&time_limit_lte=40&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?time_limit_gte=25&time_limit_lte=40&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_gte=31&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?time_limit_gte=31&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?time_limit_lte=40&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?time_limit_lte=40&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -1700,26 +1700,26 @@ def test_get_test_by_filter_completion_message(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?completion_message={random_text_1}",
+        f"{settings.API_V1_STR}/test?completion_message={random_text_1}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, min_expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?completion_message={random_text_2}",
+        f"{settings.API_V1_STR}/test?completion_message={random_text_2}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, min_expected_total=3, min_expected_pages=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?completion_message={random_lower_string()}",
+        f"{settings.API_V1_STR}/test?completion_message={random_lower_string()}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(
@@ -1768,25 +1768,25 @@ def test_get_test_by_filter_start_instructions(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_instructions={random_text_1}",
+        f"{settings.API_V1_STR}/test?start_instructions={random_text_1}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, min_expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_instructions={random_text_2}",
+        f"{settings.API_V1_STR}/test?start_instructions={random_text_2}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, min_expected_total=3, min_expected_pages=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?start_instructions={random_lower_string()}",
+        f"{settings.API_V1_STR}/test?start_instructions={random_lower_string()}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(
@@ -1829,31 +1829,31 @@ def test_get_test_by_filter_no_of_attempts(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts_gte=1&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_attempts_gte=1&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts_gte=2&no_of_attempts_lte=3&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_attempts_gte=2&no_of_attempts_lte=3&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts_lte=2&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_attempts_lte=2&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts=1&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_attempts=1&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_attempts=7&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_attempts=7&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=0, expected_pages=0)
@@ -1902,17 +1902,17 @@ def test_get_test_by_filter_shuffle(
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?shuffle=true&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?shuffle=true&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?shuffle=false&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?shuffle=false&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=4)
@@ -1961,19 +1961,19 @@ def test_get_test_by_filter_random_questions(
     db.add_all([test_1, test_2, test_3, test_4])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?random_questions=true&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?random_questions=true&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?random_questions=false&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?random_questions=false&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=4)
@@ -2010,25 +2010,25 @@ def test_get_test_by_filter_no_random_questions(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=10&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_random_questions_gte=10&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_random_questions_lte=10&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_random_questions_lte=10&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?no_of_random_questions_gte=20&no_of_random_questions_lte=45&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?no_of_random_questions_gte=20&no_of_random_questions_lte=45&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
@@ -2067,19 +2067,19 @@ def test_get_test_by_filter_question_pagination(
     db.add_all([test_1, test_2, test_3])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?question_pagination=1&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?question_pagination=1&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?question_pagination=2&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?question_pagination=2&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
@@ -2120,19 +2120,19 @@ def test_get_test_by_filter_is_template(
     db.add_all([test_1, test_2, test_3])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_template=true&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?is_template=true&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_template=false&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?is_template=false&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=1)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
@@ -2170,14 +2170,14 @@ def test_get_test_by_filter_created_by(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user_1.id}&created_by={user_2.id}",
+        f"{settings.API_V1_STR}/test?created_by={user_1.id}&created_by={user_2.id}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user_1.id}",
+        f"{settings.API_V1_STR}/test?created_by={user_1.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=2)
@@ -2220,7 +2220,7 @@ def test_get_test_order_by(
     test_names = sorted([test_1.name, test_2.name, test_3.name], key=str.lower)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?sort_by=name&sort_order=asc&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?sort_by=name&sort_order=asc&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2232,7 +2232,7 @@ def test_get_test_order_by(
     assert data[2]["name"] == test_names[2]
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?sort_by=name&sort_order=desc&created_by={user.id}",
+        f"{settings.API_V1_STR}/test?sort_by=name&sort_order=desc&created_by={user.id}",
         headers=get_user_superadmin_token,
     )
 
@@ -2246,7 +2246,7 @@ def test_get_test_order_by(
 
     # Test default sorting, i.e modified_date DESC
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}",
+        f"{settings.API_V1_STR}/test?created_by={user.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2259,7 +2259,7 @@ def test_get_test_order_by(
     assert sorted_test_modified_dates_desc == test_modified_dates
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&sort_by=created_date&sort_order=desc",
+        f"{settings.API_V1_STR}/test?created_by={user.id}&sort_by=created_date&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2271,7 +2271,7 @@ def test_get_test_order_by(
     assert sorted_test_created_date == test_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?created_by={user.id}&sort_by=created_date&sort_order=asc",
+        f"{settings.API_V1_STR}/test?created_by={user.id}&sort_by=created_date&sort_order=asc",
         headers=get_user_superadmin_token,
     )
 
@@ -2284,7 +2284,7 @@ def test_get_test_order_by(
     assert sorted_by_created_date == test_created_dates
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-setting",
+        f"{settings.API_V1_STR}/organization?order_by=-setting",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -2293,7 +2293,7 @@ def test_get_test_order_by(
     assert "invalid" in data["detail"].lower()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-",
+        f"{settings.API_V1_STR}/organization?order_by=-",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -3817,7 +3817,7 @@ def test_bulk_delete_test(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[test.id, test2.id],
         headers=get_user_superadmin_token,
     )
@@ -3833,7 +3833,7 @@ def _create_sectioned_test(
     question_revision_ids: list[int | None],
 ) -> int:
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 15,
@@ -3906,7 +3906,7 @@ def test_delete_test_with_question_sets_deletes_sets_and_links(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[original_id],
         headers=get_user_superadmin_token,
     )
@@ -4527,7 +4527,7 @@ def test_get_inactive_tests_listed(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -4536,7 +4536,7 @@ def test_get_inactive_tests_listed(
     assert data["is_active"] is False
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_active=false",
+        f"{settings.API_V1_STR}/test?is_active=false",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -4779,7 +4779,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -4828,7 +4828,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_tests(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[created_test_id_one, created_test_id_two],
         headers=token_headers,
     )
@@ -4867,7 +4867,7 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
         "state_ids": [state_y.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -4916,7 +4916,7 @@ def test_bulk_delete_state_admin_cannot_delete_tests_outside_location(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[created_test_id_one, created_test_id_two],
         headers=token_headers,
     )
@@ -4952,7 +4952,7 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5009,7 +5009,7 @@ def test_bulk_delete_state_admin_delete_tests_same_location(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[created_test_id_one, created_test_id_two],
         headers=token_headers,
     )
@@ -5054,7 +5054,7 @@ def test_bulk_delete_bypasses_ownership_with_access_all_tests(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[test_one.id, test_two.id],
         headers=get_user_systemadmin_token,
     )
@@ -5241,7 +5241,7 @@ def test_get_test_by_filter_case_insensitive_name(
     db.refresh(test_3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name=python",
+        f"{settings.API_V1_STR}/test?name=python",
         headers=get_user_superadmin_token,
     )
 
@@ -5251,7 +5251,7 @@ def test_get_test_by_filter_case_insensitive_name(
     assert len(items) == 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
 
@@ -5261,7 +5261,7 @@ def test_get_test_by_filter_case_insensitive_name(
     assert len(items) >= 3
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name=PYTHON",
+        f"{settings.API_V1_STR}/test?name=PYTHON",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
@@ -5365,7 +5365,7 @@ def test_get_tests_by_tags_filter(
     )
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}",
+        f"{settings.API_V1_STR}/test?tag_ids={tag_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5374,7 +5374,7 @@ def test_get_tests_by_tags_filter(
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_1.id, test_4.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}",
+        f"{settings.API_V1_STR}/test?tag_ids={tag_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5383,7 +5383,7 @@ def test_get_tests_by_tags_filter(
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_2.id, test_5.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_ids={tag_3.id}",
+        f"{settings.API_V1_STR}/test?tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5394,14 +5394,14 @@ def test_get_tests_by_tags_filter(
     assert_paginated_response(response, expected_total=2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_ids={tag_1.id}&tag_ids={tag_2.id}",
+        f"{settings.API_V1_STR}/test?tag_ids={tag_1.id}&tag_ids={tag_2.id}",
         headers=get_user_superadmin_token,
     )
 
     assert_paginated_response(response, expected_total=4)
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
+        f"{settings.API_V1_STR}/test?tag_ids={tag_2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert_paginated_response(response, expected_total=3)
@@ -5527,7 +5527,7 @@ def test_get_tests_by_tags_type_filter(
     )
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type1.id}",
+        f"{settings.API_V1_STR}/test?tag_type_ids={tag_type1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5540,7 +5540,7 @@ def test_get_tests_by_tags_type_filter(
         test_5.id,
     }
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}",
+        f"{settings.API_V1_STR}/test?tag_type_ids={tag_type2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5548,7 +5548,7 @@ def test_get_tests_by_tags_type_filter(
     assert len(data["items"]) == 2
     assert {test["id"] for test in data["items"]} == {test_3.id, test_5.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_type_ids={tag_type1.id}",
+        f"{settings.API_V1_STR}/test?tag_type_ids={tag_type2.id}&tag_type_ids={tag_type1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5557,7 +5557,7 @@ def test_get_tests_by_tags_type_filter(
     assert data["total"] == 5
     assert test_6.id not in (test["id"] for test in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type3.id}",
+        f"{settings.API_V1_STR}/test?tag_type_ids={tag_type3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5565,7 +5565,7 @@ def test_get_tests_by_tags_type_filter(
     assert data["items"] == []
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_3.id}",
+        f"{settings.API_V1_STR}/test?tag_type_ids={tag_type2.id}&tag_ids={tag_3.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5574,7 +5574,7 @@ def test_get_tests_by_tags_type_filter(
     assert data["total"] == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?tag_type_ids={tag_type2.id}&tag_ids={tag_1.id}",
+        f"{settings.API_V1_STR}/test?tag_type_ids={tag_type2.id}&tag_ids={tag_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5633,7 +5633,7 @@ def test_get_tests_by_state_filter(
     db.add_all([test_state_1, test_state_2, test_state_3a, test_state_3b])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}",
+        f"{settings.API_V1_STR}/test?state_ids={state_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5642,7 +5642,7 @@ def test_get_tests_by_state_filter(
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_1.id, test_3.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?state_ids={state_2.id}",
+        f"{settings.API_V1_STR}/test?state_ids={state_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5651,7 +5651,7 @@ def test_get_tests_by_state_filter(
     assert len(items) == 2
     assert {test["id"] for test in items} == {test_2.id, test_3.id}
     response = client.get(
-        f"{settings.API_V1_STR}/test/?state_ids={state_1.id}&state_ids={state_2.id}",
+        f"{settings.API_V1_STR}/test?state_ids={state_1.id}&state_ids={state_2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5722,7 +5722,7 @@ def test_get_tests_by_combined_name_tag_state_filter(
     db.add(test_2)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?name=python&tag_ids={tag.id}&state_ids={state.id}",
+        f"{settings.API_V1_STR}/test?name=python&tag_ids={tag.id}&state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5768,7 +5768,7 @@ def test_get_tests_by_case_insensitive_description_filter(
     db.add_all([test_1, test_2, test_3])
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?description={keyword}",
+        f"{settings.API_V1_STR}/test?description={keyword}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5827,7 +5827,7 @@ def test_get_tests_filtered_by_organization(
     db.add(test2)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?size=100",
+        f"{settings.API_V1_STR}/test?size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5862,7 +5862,7 @@ def test_get_all_tests_includes_active_and_inactive(
     db.add(inactive_test)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/test/?size=100",
+        f"{settings.API_V1_STR}/test?size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5872,7 +5872,7 @@ def test_get_all_tests_includes_active_and_inactive(
     assert "Active Test" in test_names
     assert "Inactive Test" in test_names
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_active=true&size=100",
+        f"{settings.API_V1_STR}/test?is_active=true&size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5882,7 +5882,7 @@ def test_get_all_tests_includes_active_and_inactive(
     assert "Active Test" in names
     assert "Inactive Test" not in names
     response = client.get(
-        f"{settings.API_V1_STR}/test/?is_active=false&size=100",
+        f"{settings.API_V1_STR}/test?is_active=false&size=100",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5909,7 +5909,7 @@ def test_create_test_end_time_before_start_time(
         "time_limit": 10,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -5933,7 +5933,7 @@ def test_create_test_time_limit_exceeds_duration(
         "time_limit": 70,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6013,7 +6013,7 @@ def test_update_test_not_created_by_user(
 
     email_a = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_a,
             "password": random_lower_string(),
@@ -6028,7 +6028,7 @@ def test_update_test_not_created_by_user(
 
     email_b = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_b,
             "password": random_lower_string(),
@@ -6042,7 +6042,7 @@ def test_update_test_not_created_by_user(
     token_b = authentication_token_from_email(client=client, email=email_b, db=db)
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
         headers=token_a,
     )
@@ -6084,7 +6084,7 @@ def test_update_test_same_role_different_user_forbidden(
 
     email_a = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_a,
             "password": random_lower_string(),
@@ -6100,7 +6100,7 @@ def test_update_test_same_role_different_user_forbidden(
 
     email_b = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_b,
             "password": random_lower_string(),
@@ -6116,7 +6116,7 @@ def test_update_test_same_role_different_user_forbidden(
 
     # User A creates a test in the shared location
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -6148,7 +6148,7 @@ def test_super_admin_bypasses_ownership_to_update_and_delete_test(
     update/delete a test it did not create — the bypass this refactor added,
     previously untested."""
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
         headers=get_user_testadmin_token,
     )
@@ -6179,7 +6179,7 @@ def test_system_admin_bypasses_ownership_to_update_and_delete_test(
     update/delete a test it did not create — the bypass this refactor added,
     previously untested."""
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
         headers=get_user_testadmin_token,
     )
@@ -6210,7 +6210,7 @@ def test_revoking_access_all_tests_enforces_ownership(
     """Once access_all_tests is revoked from a role, ownership enforcement
     must kick back in for that role's users."""
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
         headers=get_user_testadmin_token,
     )
@@ -6263,7 +6263,7 @@ def test_custom_role_with_access_all_tests_bypasses_ownership(
     org_id = get_current_user_data(client, get_user_superadmin_token)["organization_id"]
 
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={"name": random_lower_string(), "time_limit": 30, "locale": "en-US"},
         headers=get_user_superadmin_token,
     )
@@ -6365,7 +6365,7 @@ def test_test_check_unsupported_language(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6377,7 +6377,7 @@ def test_test_check_unsupported_language(
 
     payload["locale"] = "en-US"
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6427,7 +6427,7 @@ def test_localization_default_language(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6452,7 +6452,7 @@ def test_create_test_start_and_end_time_same(
         "end_time": end_time,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6474,7 +6474,7 @@ def test_create_test_valid_data_success(
         "time_limit": 30,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6566,7 +6566,7 @@ def test_random_questions_validation(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6614,7 +6614,7 @@ def test_random_questions_valid_case(
         "state_ids": [punjab.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -7033,7 +7033,7 @@ def test_default_marks_level_question(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -7087,7 +7087,7 @@ def test_create_test_marks_level_test(
         "marking_scheme": {"correct": 5.0, "wrong": 0.0, "skipped": 0.0},
     }
     response1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question1_data,
         headers=get_user_superadmin_token,
     )
@@ -7110,7 +7110,7 @@ def test_create_test_marks_level_test(
         "is_mandatory": True,
     }
     response2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question2_data,
         headers=get_user_superadmin_token,
     )
@@ -7142,7 +7142,7 @@ def test_create_test_marks_level_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -7179,7 +7179,7 @@ def test_create_test_marks_level_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -7232,7 +7232,7 @@ def test_mapping_test_with_district(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload,
         headers=get_user_superadmin_token,
     )
@@ -7338,7 +7338,7 @@ def test_get_tests_by_district_filter(
     db.refresh(district_2)
 
     response_1 = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "description": random_lower_string(),
@@ -7351,7 +7351,7 @@ def test_get_tests_by_district_filter(
     test_data_1 = response_1.json()
 
     response_2 = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "description": random_lower_string(),
@@ -7364,7 +7364,7 @@ def test_get_tests_by_district_filter(
     test_data_2 = response_2.json()
 
     response_3 = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "description": random_lower_string(),
@@ -7377,7 +7377,7 @@ def test_get_tests_by_district_filter(
     test_data_3 = response_3.json()
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?district_ids={district_1.id}",
+        f"{settings.API_V1_STR}/test?district_ids={district_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -7387,7 +7387,7 @@ def test_get_tests_by_district_filter(
     assert any(test_data_2["id"] == item["id"] for item in data["items"])
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?district_ids={district_2.id}&&district_ids={district_1.id}",
+        f"{settings.API_V1_STR}/test?district_ids={district_2.id}&&district_ids={district_1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -7399,7 +7399,7 @@ def test_get_tests_by_district_filter(
     assert any(test_data_3["id"] == item["id"] for item in data["items"])
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?district_ids=-1",
+        f"{settings.API_V1_STR}/test?district_ids=-1",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -7641,7 +7641,7 @@ def test_bulk_delete_test_with_attempted_candidate_should_fail(
     test_id2 = response.json()["id"]
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[test_id, test_id2],
         headers=get_user_superadmin_token,
     )
@@ -7686,7 +7686,7 @@ def test_bulk_delete_multiple_tenant(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[test_a.id, test_b.id],
         headers=get_user_superadmin_token,
     )
@@ -7948,7 +7948,7 @@ def test_test_list_state_user(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8056,7 +8056,7 @@ def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
 
     email_a = random_email()
     response_a = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_a,
             "password": random_lower_string(),
@@ -8075,7 +8075,7 @@ def test_state_admin_can_see_test_created_by_another_state_admin_same_state(
 
     email_b = random_email()
     response_b = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_b,
             "password": random_lower_string(),
@@ -8130,7 +8130,7 @@ def test_state_admin_cannot_see_general_test_no_location(
 
     email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": random_lower_string(),
@@ -8210,7 +8210,7 @@ def test_state_admin_cannot_see_district_only_test(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8287,7 +8287,7 @@ def test_state_admin_cannot_see_state_and_district_test(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8357,7 +8357,7 @@ def test_state_admin_can_delete_test_created_by_them(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8425,7 +8425,7 @@ def test_state_admin_can_delete_test_in_their_state(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_superadmin_token,
     )
@@ -8495,7 +8495,7 @@ def test_state_admin_cannot_delete_test_outside_their_state(
         "state_ids": [state_y.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8557,7 +8557,7 @@ def test_state_admin_cannot_delete_multi_state_test_without_full_access(
         "state_ids": [state_a.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8624,7 +8624,7 @@ def test_state_admin_can_delete_test_connected_via_district(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_superadmin_token,
     )
@@ -8708,7 +8708,7 @@ def test_state_admin_cannot_delete_multi_district_test_unless_self_created(
         "state_ids": [state_a.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8744,7 +8744,7 @@ def test_localization_list(
     client: TestClient, get_user_testadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/languages/",
+        f"{settings.API_V1_STR}/languages",
         headers=get_user_testadmin_token,
     )
 
@@ -8781,7 +8781,7 @@ def test_create_test_with_show_question_palette_true(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -8811,7 +8811,7 @@ def test_create_test_with_show_question_palette_false(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -8840,7 +8840,7 @@ def test_create_test_show_question_palette_defaults_to_false(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -8869,7 +8869,7 @@ def test_update_test_show_question_palette(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=create_payload,
         headers=get_user_superadmin_token,
     )
@@ -8915,7 +8915,7 @@ def test_get_test_returns_show_question_palette(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -8965,7 +8965,7 @@ def test_create_test_with_certificate(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload,
         headers=get_user_superadmin_token,
     )
@@ -9006,7 +9006,7 @@ def test_update_test_with_certificate(
     }
 
     create_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload,
         headers=get_user_superadmin_token,
     )
@@ -9085,7 +9085,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -9107,7 +9107,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload,
         headers=token_headers,
     )
@@ -9140,7 +9140,7 @@ def test_district_user_cannot_modify_out_of_scope_test(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload_district_2,
         headers=get_user_systemadmin_token,
     )
@@ -9217,7 +9217,7 @@ def test_get_tests_by_district_user(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -9263,7 +9263,7 @@ def test_get_tests_by_district_user(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_1_payload,
         headers=get_user_systemadmin_token,
     )
@@ -9271,7 +9271,7 @@ def test_get_tests_by_district_user(
     test_1_name = response.json()["name"]
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_11_payload,
         headers=get_user_systemadmin_token,
     )
@@ -9279,7 +9279,7 @@ def test_get_tests_by_district_user(
     test_11_name = response.json()["name"]
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_2_payload,
         headers=get_user_systemadmin_token,
     )
@@ -9298,7 +9298,7 @@ def test_get_tests_by_district_user(
         "state_ids": [state_1.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_state_only_payload,
         headers=get_user_systemadmin_token,
     )
@@ -9306,7 +9306,7 @@ def test_get_tests_by_district_user(
     test_state_only_name = response.json()["name"]
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=token_headers,
     )
     assert response.status_code == 200
@@ -9353,7 +9353,7 @@ def test_test_admin_with_district_can_see_state_level_test(
     state_admin_role = get_org_role(db, new_organization.id, "state_admin")
     state_admin_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": state_admin_email,
             "password": random_lower_string(),
@@ -9373,7 +9373,7 @@ def test_test_admin_with_district_can_see_state_level_test(
     test_admin_role = get_org_role(db, new_organization.id, "test_admin")
     test_admin_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": test_admin_email,
             "password": random_lower_string(),
@@ -9391,7 +9391,7 @@ def test_test_admin_with_district_can_see_state_level_test(
 
     # State-admin creates a test for Haryana (state-level, no district)
     haryana_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9407,7 +9407,7 @@ def test_test_admin_with_district_can_see_state_level_test(
 
     # State-admin creates a test scoped specifically to Rohtak (different district)
     rohtak_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9421,7 +9421,7 @@ def test_test_admin_with_district_can_see_state_level_test(
     assert rohtak_test_response.status_code == 200
     rohtak_test_id = rohtak_test_response.json()["id"]
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=test_admin_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
@@ -9458,7 +9458,7 @@ def test_state_admin_cannot_see_district_level_test(
     state_admin_role = get_org_role(db, new_organization.id, "state_admin")
     state_admin_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": state_admin_email,
             "password": random_lower_string(),
@@ -9478,7 +9478,7 @@ def test_state_admin_cannot_see_district_level_test(
     test_admin_role = get_org_role(db, new_organization.id, "test_admin")
     test_admin_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": test_admin_email,
             "password": random_lower_string(),
@@ -9496,7 +9496,7 @@ def test_state_admin_cannot_see_district_level_test(
 
     # test_admin creates a test scoped to Ambala district
     ambala_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9512,7 +9512,7 @@ def test_state_admin_cannot_see_district_level_test(
 
     # state_admin creates a state-level test for Haryana
     haryana_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9526,7 +9526,7 @@ def test_state_admin_cannot_see_district_level_test(
     assert haryana_test_response.status_code == 200
     haryana_test_id = haryana_test_response.json()["id"]
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=state_admin_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=state_admin_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
@@ -9566,7 +9566,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
     # First test_admin — scoped to district_a (creator)
     creator_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": creator_email,
             "password": random_lower_string(),
@@ -9585,7 +9585,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
     # Second test_admin — scoped to the same district_a (viewer)
     viewer_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": viewer_email,
             "password": random_lower_string(),
@@ -9604,7 +9604,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
     # Third test_admin — scoped to district_b (different district, same state)
     other_district_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": other_district_email,
             "password": random_lower_string(),
@@ -9622,7 +9622,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
 
     # Creator creates a test for district_a
     district_a_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9638,7 +9638,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
 
     # Other-district user creates a test for district_b
     district_b_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9652,7 +9652,7 @@ def test_district_user_can_see_test_created_by_peer_in_same_district(
     assert district_b_test_response.status_code == 200
     district_b_test_id = district_b_test_response.json()["id"]
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=viewer_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=viewer_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
@@ -9691,7 +9691,7 @@ def test_district_user_cannot_see_general_test_no_location(
 
     district_user_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": district_user_email,
             "password": random_lower_string(),
@@ -9730,7 +9730,7 @@ def test_district_user_cannot_see_general_test_no_location(
     db.add(TestDistrict(test_id=district_test.id, district_id=district.id))
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=district_user_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=district_user_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
@@ -9774,7 +9774,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
     # state_admin scoped to state X
     state_admin_x_email = random_email()
     response_x = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": state_admin_x_email,
             "password": random_lower_string(),
@@ -9794,7 +9794,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
     # state_admin scoped to state B (different state, same org)
     state_admin_b_email = random_email()
     response_b = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": state_admin_b_email,
             "password": random_lower_string(),
@@ -9814,7 +9814,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
     # test_admin scoped to district in state X
     test_admin_email = random_email()
     response_ta = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": test_admin_email,
             "password": random_lower_string(),
@@ -9833,7 +9833,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
 
     # state_admin B creates a state-level test for state B
     state_b_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9849,7 +9849,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
 
     # state_admin X creates a state-level test for state X (positive control)
     state_x_test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -9863,7 +9863,7 @@ def test_district_user_cannot_see_test_from_state_admin_of_different_state(
     assert state_x_test_response.status_code == 200
     state_x_test_id = state_x_test_response.json()["id"]
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=test_admin_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
@@ -9895,7 +9895,7 @@ def test_unscoped_test_admin_can_see_all_org_tests(
     # test_admin with no district or state assigned
     unscoped_email = random_email()
     response_unscoped = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": unscoped_email,
             "password": random_lower_string(),
@@ -9926,7 +9926,7 @@ def test_unscoped_test_admin_can_see_all_org_tests(
     db.add(TestState(test_id=org_test.id, state_id=state.id))
     db.commit()
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=unscoped_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=unscoped_token)
     assert response.status_code == 200
     item_ids = [item["id"] for item in response.json()["items"]]
 
@@ -9948,7 +9948,7 @@ def test_create_test_show_mark_for_review_true(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -9978,7 +9978,7 @@ def test_create_test_show_mark_for_review_false(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -10002,7 +10002,7 @@ def test_create_test_show_mark_for_review_defaults_to_true(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -10034,7 +10034,7 @@ def test_update_test_show_mark_for_review(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=create_payload,
         headers=get_user_superadmin_token,
     )
@@ -10083,7 +10083,7 @@ def test_get_test_by_id_returns_show_mark_for_review(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -10116,13 +10116,13 @@ def test_get_tests_list_returns_show_mark_for_review(
     }
 
     client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
 
     list_response = client.get(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_superadmin_token,
     )
 
@@ -10272,7 +10272,7 @@ def test_create_test_with_show_marks_true(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -10297,7 +10297,7 @@ def test_create_test_with_show_marks_false(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -10586,7 +10586,7 @@ def test_create_test_response_has_no_link_field(
         "is_active": True,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -10655,7 +10655,7 @@ def test_get_tests_my_tests_filter(
 
     email_district = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_district,
             "password": random_lower_string(),
@@ -10721,7 +10721,7 @@ def test_get_tests_my_tests_filter(
     assert d_other_test_2.id is not None
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=true",
+        f"{settings.API_V1_STR}/test?my_tests=true",
         headers=district_user_headers,
     )
     assert response.status_code == 200
@@ -10732,7 +10732,7 @@ def test_get_tests_my_tests_filter(
     assert d_other_test_2.id not in returned_ids
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=false",
+        f"{settings.API_V1_STR}/test?my_tests=false",
         headers=district_user_headers,
     )
     assert response.status_code == 200
@@ -10758,7 +10758,7 @@ def test_get_tests_my_tests_filter(
 
     email_state = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email_state,
             "password": random_lower_string(),
@@ -10824,7 +10824,7 @@ def test_get_tests_my_tests_filter(
     assert s_other_test_2.id is not None
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=true",
+        f"{settings.API_V1_STR}/test?my_tests=true",
         headers=state_user_headers,
     )
     assert response.status_code == 200
@@ -10835,7 +10835,7 @@ def test_get_tests_my_tests_filter(
     assert s_other_test_2.id not in returned_ids
 
     response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=false",
+        f"{settings.API_V1_STR}/test?my_tests=false",
         headers=state_user_headers,
     )
     assert response.status_code == 200
@@ -10886,7 +10886,7 @@ def test_get_tests_my_tests_filter_no_location_user(
 
     # my_tests=True: only tests created by the current user
     response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=true",
+        f"{settings.API_V1_STR}/test?my_tests=true",
         headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
@@ -10898,7 +10898,7 @@ def test_get_tests_my_tests_filter_no_location_user(
 
     # my_tests=False: tests NOT created by the current user
     response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=false",
+        f"{settings.API_V1_STR}/test?my_tests=false",
         headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
@@ -10933,7 +10933,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
     state_admin_role = get_org_role(db, new_organization.id, "state_admin")
     state_admin_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": state_admin_email,
             "password": random_lower_string(),
@@ -10951,7 +10951,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
 
     # state_admin creates a test mapped to state_B (outside their own state_A scope)
     outside_test_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -10966,7 +10966,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
 
     # state_admin creates a test mapped to their own state_A (within scope)
     in_scope_test_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -10979,7 +10979,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
     assert in_scope_test_resp.status_code == 200
     in_scope_test_id = in_scope_test_resp.json()["id"]
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=state_admin_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=state_admin_token)
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
 
@@ -10989,7 +10989,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
 
     # my_tests=true: both tests are visible because the state_admin created them
     my_tests_response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=true", headers=state_admin_token
+        f"{settings.API_V1_STR}/test?my_tests=true", headers=state_admin_token
     )
     assert my_tests_response.status_code == 200
     my_tests_ids = {item["id"] for item in my_tests_response.json()["items"]}
@@ -10998,7 +10998,7 @@ def test_state_admin_can_see_tests_they_created_outside_their_location(
 
     # my_tests=false: neither test is visible because both were created by the state_admin
     not_my_tests_response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=false", headers=state_admin_token
+        f"{settings.API_V1_STR}/test?my_tests=false", headers=state_admin_token
     )
     assert not_my_tests_response.status_code == 200
     not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
@@ -11035,7 +11035,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
     test_admin_role = get_org_role(db, new_organization.id, "test_admin")
     test_admin_email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": test_admin_email,
             "password": random_lower_string(),
@@ -11053,7 +11053,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
 
     # test_admin creates a test mapped to district_B (outside their district_A scope)
     outside_test_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -11068,7 +11068,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
 
     # test_admin creates a test mapped to their own district_A (within scope)
     in_scope_test_resp = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json={
             "name": random_lower_string(),
             "time_limit": 30,
@@ -11081,7 +11081,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
     assert in_scope_test_resp.status_code == 200
     in_scope_test_id = in_scope_test_resp.json()["id"]
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=test_admin_token)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=test_admin_token)
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
 
@@ -11091,7 +11091,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
 
     # my_tests=true: both tests are visible because the test_admin created them
     my_tests_response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=true", headers=test_admin_token
+        f"{settings.API_V1_STR}/test?my_tests=true", headers=test_admin_token
     )
     assert my_tests_response.status_code == 200
     my_tests_ids = {item["id"] for item in my_tests_response.json()["items"]}
@@ -11100,7 +11100,7 @@ def test_test_admin_can_see_tests_they_created_outside_their_district(
 
     # my_tests=false: neither test is visible because both were created by the test_admin
     not_my_tests_response = client.get(
-        f"{settings.API_V1_STR}/test/?my_tests=false", headers=test_admin_token
+        f"{settings.API_V1_STR}/test?my_tests=false", headers=test_admin_token
     )
     assert not_my_tests_response.status_code == 200
     not_my_tests_ids = {item["id"] for item in not_my_tests_response.json()["items"]}
@@ -11115,7 +11115,7 @@ def test_create_test_template_forbidden_for_state_and_test_admin(
 ) -> None:
     for token_headers in (get_user_stateadmin_token, get_user_testadmin_token):
         regular_response = client.post(
-            f"{settings.API_V1_STR}/test/",
+            f"{settings.API_V1_STR}/test",
             json={"name": random_lower_string(), "is_template": False},
             headers=token_headers,
         )
@@ -11124,7 +11124,7 @@ def test_create_test_template_forbidden_for_state_and_test_admin(
         assert "id" in regular_response.json()
 
         template_response = client.post(
-            f"{settings.API_V1_STR}/test/",
+            f"{settings.API_V1_STR}/test",
             json={"name": random_lower_string(), "is_template": True},
             headers=token_headers,
         )
@@ -11142,7 +11142,7 @@ def test_create_test_template_allowed_for_super_and_system_admin(
 ) -> None:
     for token_headers in (get_user_superadmin_token, get_user_systemadmin_token):
         response = client.post(
-            f"{settings.API_V1_STR}/test/",
+            f"{settings.API_V1_STR}/test",
             json={"name": random_lower_string(), "is_template": True},
             headers=token_headers,
         )
@@ -11367,7 +11367,7 @@ def test_bulk_delete_templates_fail_permission_while_regular_tests_succeed(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=[regular_test.id, template_test.id],
         headers=get_user_stateadmin_token,
     )
@@ -11421,7 +11421,7 @@ def test_list_tests_unfiltered_excludes_templates_for_regular_test_only_role(
     assert regular_test.id is not None
     assert template_test.id is not None
 
-    response = client.get(f"{settings.API_V1_STR}/test/", headers=headers)
+    response = client.get(f"{settings.API_V1_STR}/test", headers=headers)
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
     assert regular_test.id in returned_ids

@@ -40,7 +40,7 @@ def test_create_tagtype(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -61,7 +61,7 @@ def test_create_tagtype(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -91,7 +91,7 @@ def test_prevent_duplicate_tagtype_creation(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -105,7 +105,7 @@ def test_prevent_duplicate_tagtype_creation(
         "organization_id": organization.id,
     }
     response_upper = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data_upper,
         headers=get_user_superadmin_token,
     )
@@ -121,7 +121,7 @@ def test_prevent_duplicate_tagtype_creation(
         "organization_id": organization.id,
     }
     response_spaces = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data_spaces,
         headers=get_user_superadmin_token,
     )
@@ -137,7 +137,7 @@ def test_prevent_duplicate_tagtype_creation(
         "description": random_lower_string(),
     }
     response_unique = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data_unique,
         headers=get_user_superadmin_token,
     )
@@ -166,7 +166,7 @@ def test_get_tagtype(
     db.add(tagtype)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -184,7 +184,7 @@ def test_get_tagtype(
     assert "created_date" in response_data[total_length]
     assert "modified_date" in response_data[total_length]
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name=Sample",
+        f"{settings.API_V1_STR}/tagtype?name=Sample",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -192,7 +192,7 @@ def test_get_tagtype(
     assert len(data["items"]) == 1
     assert any(item["name"].lower() == "sample" for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name=SAMPLE",
+        f"{settings.API_V1_STR}/tagtype?name=SAMPLE",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -200,7 +200,7 @@ def test_get_tagtype(
     assert len(data["items"]) == 1
     assert any(item["name"].lower() == "sample" for item in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name= SaMPlE",
+        f"{settings.API_V1_STR}/tagtype?name= SaMPlE",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -218,7 +218,7 @@ def test_get_tagtype(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name=SAMPLE",
+        f"{settings.API_V1_STR}/tagtype?name=SAMPLE",
         headers=get_user_superadmin_token,
     )
 
@@ -434,7 +434,7 @@ def test_bulk_delete_tagtype_with_dependency(
     db.refresh(tag)
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
         json=[-90],
     )
@@ -443,7 +443,7 @@ def test_bulk_delete_tagtype_with_dependency(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
         json=[tagtype1.id, tagtype2.id, tagtype3.id],
     )
@@ -483,7 +483,7 @@ def test_bulk_delete_tagtype(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
         json=[tagtype1.id, tagtype2.id],
     )
@@ -527,7 +527,7 @@ def test_bulk_delete_tagtype_multiple_tenants(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_systemadmin_token,
         json=[tagtype1.id, tagtype2.id],
     )
@@ -566,7 +566,7 @@ def test_create_tag(
         "created_by_id": user_b.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -590,7 +590,7 @@ def test_create_tag(
         "created_by_id": user_b.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -637,7 +637,7 @@ def test_create_tag(
     assert "Tag Type deleted" in response_data["message"]
 
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -678,7 +678,7 @@ def test_prevent_duplicate_tag_creation(
         "tag_type_id": tagtype.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -689,7 +689,7 @@ def test_prevent_duplicate_tag_creation(
     assert response_data["tag_type"]["name"] == tagtype.name
     assert response_data["tag_type"]["id"] == tagtype.id
     response1 = client.post(
-        f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/tag", json=data, headers=get_user_superadmin_token
     )
     assert response1.status_code == 400
     assert "already exists" in response1.json()["detail"]
@@ -699,7 +699,7 @@ def test_prevent_duplicate_tag_creation(
         "tag_type_id": tagtype2.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data2,
         headers=get_user_superadmin_token,
     )
@@ -710,7 +710,7 @@ def test_prevent_duplicate_tag_creation(
 
     assert response_data["tag_type"]["id"] == tagtype2.id
     response = client.post(
-        f"{settings.API_V1_STR}/tag/", json=data2, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/tag", json=data2, headers=get_user_superadmin_token
     )
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
@@ -719,12 +719,12 @@ def test_prevent_duplicate_tag_creation(
         "name": name,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/tag", json=data, headers=get_user_superadmin_token
     )
     assert response.status_code == 200
     assert response.json()["tag_type"] is None
     response = client.post(
-        f"{settings.API_V1_STR}/tag/", json=data, headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/tag", json=data, headers=get_user_superadmin_token
     )
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
@@ -739,7 +739,7 @@ def test_read_tag(
     user_id = user_data["id"]
     organization_id = user_data["organization_id"]
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -768,7 +768,7 @@ def test_read_tag(
     db.flush()
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -822,7 +822,7 @@ def test_read_tag(
     assert response.status_code == 400
     assert "cannot delete" in response_data["detail"].lower()
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -863,7 +863,7 @@ def test_read_tag_filter_by_tag_name(
     db.flush()
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?name= FilterMatch ",
+        f"{settings.API_V1_STR}/tag?name= FilterMatch ",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -871,7 +871,7 @@ def test_read_tag_filter_by_tag_name(
     assert response.status_code == 200
     assert any(tag["name"] == "FilterMatch" for tag in data["items"])
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?name=Filter",
+        f"{settings.API_V1_STR}/tag?name=Filter",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -893,7 +893,7 @@ def test_read_tag_filter_by_tag_name(
     db.flush()
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?name=filter",
+        f"{settings.API_V1_STR}/tag?name=filter",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -906,7 +906,7 @@ def test_get_tags_filter_no_match(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?name=NonExistentTag",
+        f"{settings.API_V1_STR}/tag?name=NonExistentTag",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1277,7 +1277,7 @@ def test_bulk_delete_tags_with_invalid_id(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
         json=[tag1.id, tag2.id, -90],
     )
@@ -1332,7 +1332,7 @@ def test_bulk_delete_tags_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
         json=[tag1.id, tag2.id],
     )
@@ -1388,7 +1388,7 @@ def test_bulk_delete_tags_linked_to_test(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
         json=[tag1.id, tag2.id],
     )
@@ -1463,7 +1463,7 @@ def test_bulk_delete_tags_linked_to_question(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
         json=[tag1.id, tag2.id, tag3.id],
     )
@@ -1505,7 +1505,7 @@ def test_bulk_delete_tags_multiple_tenant(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_systemadmin_token,
         json=[tag1.id, tag2.id],
     )
@@ -1544,7 +1544,7 @@ def test_inactive_tag_not_listed(
         "is_active": False,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -1555,7 +1555,7 @@ def test_inactive_tag_not_listed(
 
     # Verify the inactive tag is NOT in the list
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1591,7 +1591,7 @@ def test_tag_is_active_toggle(
         "is_active": True,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -1638,7 +1638,7 @@ def test_inactive_tagtype_not_listed(
         "is_active": False,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -1647,7 +1647,7 @@ def test_inactive_tagtype_not_listed(
     tagtype_id = data["id"]
     assert data["is_active"] is False
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
     )
     response_data = response.json()
@@ -1669,7 +1669,7 @@ def test_create_tag_without_tag_type(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=request_data,
         headers=get_user_superadmin_token,
     )
@@ -1721,7 +1721,7 @@ def test_create_tag_with_invalid_tag_type_id(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -1752,7 +1752,7 @@ def test_update_tag_to_remove_tag_type(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -1866,7 +1866,7 @@ def test_get_tag_with_tagtype_of_different_organization_returns_tag_type_none(
     db.commit()
     db.refresh(tag)
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1963,7 +1963,7 @@ def test_read_tag_with_sort(
     expected = ["C++", "Django", "Git", "Python"]
     expected_tagtypes = ["AlphaType", "BetaType", "GammaType"]
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?sort_by=name&sort_order=asc",
+        f"{settings.API_V1_STR}/tag?sort_by=name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1971,7 +1971,7 @@ def test_read_tag_with_sort(
     response_names = [tag["name"] for tag in data["items"] if tag["name"] in expected]
     assert response_names == sorted(expected)
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?sort_by=name&sort_order=desc",
+        f"{settings.API_V1_STR}/tag?sort_by=name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1979,7 +1979,7 @@ def test_read_tag_with_sort(
     assert response_names == sorted(expected, reverse=True)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?sort_by=tag_type_name&sort_order=asc",
+        f"{settings.API_V1_STR}/tag?sort_by=tag_type_name&sort_order=asc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -1993,7 +1993,7 @@ def test_read_tag_with_sort(
     assert tagtypes == sorted(tagtypes)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?sort_by=tag_type_name&sort_order=desc",
+        f"{settings.API_V1_STR}/tag?sort_by=tag_type_name&sort_order=desc",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2035,7 +2035,7 @@ def test_get_tags_with_invalid_sort_field(
     db.add(tag)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=randomfield",
+        f"{settings.API_V1_STR}/tag?order_by=randomfield",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2083,7 +2083,7 @@ def test_get_tags_includes_with_and_without_tag_types(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/tag/?order_by=tag_type_name&order_by=name",
+        f"{settings.API_V1_STR}/tag?order_by=tag_type_name&order_by=name",
         headers=get_user_superadmin_token,
     )
 
@@ -2114,7 +2114,7 @@ def test_create_tag_and_validate_created_date_in_IST(
         "created_by_id": user.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json=data,
         headers=get_user_superadmin_token,
     )
@@ -2225,7 +2225,7 @@ def test_delete_tag_after_associated_question_is_deleted(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -2326,7 +2326,7 @@ def test_delete_tag_after_associated_test_is_deleted(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload,
         headers=get_user_superadmin_token,
     )
@@ -2407,7 +2407,7 @@ def test_get_tagtype_returns_associated_tags(
     db.refresh(tag2)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2454,7 +2454,7 @@ def test_get_tagtype_with_no_tags_returns_empty_list(
     db.refresh(tagtype)
 
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2504,7 +2504,7 @@ def test_get_tagtype_search_by_tag_name(
 
     # Search by tag name — should return the parent tag type
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name={search_term}",
+        f"{settings.API_V1_STR}/tagtype?name={search_term}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2516,7 +2516,7 @@ def test_get_tagtype_search_by_tag_name(
 
     # Search by tag type name — should still work as before
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name=category_{unique_suffix}",
+        f"{settings.API_V1_STR}/tagtype?name=category_{unique_suffix}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2527,7 +2527,7 @@ def test_get_tagtype_search_by_tag_name(
 
     # Search with a term that matches neither — should not return this tag type
     response = client.get(
-        f"{settings.API_V1_STR}/tagtype/?name=zzznomatch_{unique_suffix}",
+        f"{settings.API_V1_STR}/tagtype?name=zzznomatch_{unique_suffix}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2603,7 +2603,7 @@ def test_read_tags_filter_by_tag_type_ids(
 
     # Filter by a single tag type — only tag_a should be returned
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         params={"tag_type_ids": tagtype_a.id},
         headers=get_user_superadmin_token,
     )
@@ -2616,7 +2616,7 @@ def test_read_tags_filter_by_tag_type_ids(
 
     # Filter by two tag types — tag_a and tag_b should be returned, not tag_c
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         params={"tag_type_ids": [tagtype_a.id, tagtype_b.id]},
         headers=get_user_superadmin_token,
     )
@@ -2629,7 +2629,7 @@ def test_read_tags_filter_by_tag_type_ids(
 
     # Filter by a non-existent tag type id — should return no results
     response = client.get(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         params={"tag_type_ids": -1},
         headers=get_user_superadmin_token,
     )

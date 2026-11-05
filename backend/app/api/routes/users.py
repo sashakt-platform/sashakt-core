@@ -167,7 +167,7 @@ def check_user_permission(
 
 
 @router.get(
-    "/",
+    "",
     dependencies=[Depends(permission_dependency("read_user"))],
     response_model=Page[UserPublic],
 )
@@ -328,7 +328,7 @@ def validate_user_return_role(
 
 
 @router.post(
-    "/",
+    "",
     dependencies=[Depends(permission_dependency("create_user"))],
     response_model=UserPublic,
 )
@@ -711,7 +711,7 @@ def is_user_deletion_blocked(
 
 
 @router.delete(
-    "/",
+    "",
     response_model=DeleteUser,
     dependencies=[Depends(permission_dependency("delete_user"))],
 )

@@ -133,7 +133,7 @@ def test_create_candidate(
     user = create_random_user(db)
 
     response = client.post(
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         json={"user_id": user.id},
         headers=get_user_candidate_token,
     )
@@ -144,7 +144,7 @@ def test_create_candidate(
     assert data["user_id"] == user.id
 
     response = client.post(
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_candidate_token,
         json={},
     )
@@ -591,7 +591,7 @@ def test_bulk_delete_candidates(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_systemadmin_token,
         json=[candidate_one.id, candidate_two.id, candidate_three.id],
     )
@@ -612,7 +612,7 @@ def test_bulk_delete_candidates_invalid_ids(
     _ = db
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_systemadmin_token,
         json=[-999, -888],
     )
@@ -629,7 +629,7 @@ def test_bulk_delete_candidates_different_organization(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_systemadmin_token,
         json=[candidate.id],
     )
@@ -701,7 +701,7 @@ def test_bulk_delete_candidates_cascades_related_records(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_systemadmin_token,
         json=[candidate_one.id, candidate_two.id],
     )
@@ -730,7 +730,7 @@ def test_bulk_delete_candidates_superadmin(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         json=[candidate_one.id, candidate_two.id],
         headers=get_user_superadmin_token,
     )
@@ -755,7 +755,7 @@ def test_bulk_delete_candidates_mixed_valid_and_invalid_ids(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_systemadmin_token,
         json=[candidate.id, -999999],
     )
@@ -777,7 +777,7 @@ def test_bulk_delete_candidates_state_admin_not_permitted(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_stateadmin_token,
         json=[candidate.id],
     )
@@ -799,7 +799,7 @@ def test_bulk_delete_candidates_test_admin_not_permitted(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_testadmin_token,
         json=[candidate.id],
     )
@@ -816,7 +816,7 @@ def test_bulk_delete_candidates_unauthenticated(
     _ = db
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         json=[1, 2, 3],
     )
 
@@ -861,7 +861,7 @@ def test_create_candidate_test(
     end_time = "2025-03-19T12:00:00Z"
 
     response = client.post(
-        f"{settings.API_V1_STR}/candidate_test/",
+        f"{settings.API_V1_STR}/candidate_test",
         json={
             "test_id": test.id,
             "candidate_id": candidate.id,
@@ -934,7 +934,7 @@ def test_read_candidate_test(
     db.add(candidate_test)
     db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/candidate_test/",
+        f"{settings.API_V1_STR}/candidate_test",
         headers=get_user_stateadmin_token,
     )
     data = response.json()
@@ -1272,7 +1272,7 @@ def test_create_candidate_test_answers(
     db.refresh(question_revision_a)
 
     response = client.post(
-        f"{settings.API_V1_STR}/candidate_test_answer/",
+        f"{settings.API_V1_STR}/candidate_test_answer",
         json={
             "candidate_test_id": candidate_test.id,
             "question_revision_id": question_revision_a.id,  # Use the revision ID
@@ -1414,7 +1414,7 @@ def test_read_candidate_test_answer(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate_test_answer/",
+        f"{settings.API_V1_STR}/candidate_test_answer",
         headers=get_user_systemadmin_token,
     )
     data = response.json()
@@ -4381,7 +4381,7 @@ def test_get_score_and_time_test_not_found(
     db.refresh(district)
 
     resp = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 200
@@ -4390,7 +4390,7 @@ def test_get_score_and_time_test_not_found(
     assert data["overall_avg_time_minutes"] == 0.0
     assert data["overall_score_percent"] == 0.0
     resp = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 200
@@ -4399,7 +4399,7 @@ def test_get_score_and_time_test_not_found(
     assert data["overall_avg_time_minutes"] == 0.0
     assert data["overall_score_percent"] == 0.0
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?tag_type_ids={tag_type.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4573,21 +4573,21 @@ def test_overall_avg_score_two_tests(
         assert response.status_code == 200
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?tag_type_ids={tag_type.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
     assert data["overall_score_percent"] == 62.5
     response1 = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response1.status_code == 200
     data1 = response1.json()
     assert data1["overall_score_percent"] == 62.5
     response1 = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}&district_ids={district.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?state_ids={state.id}&district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response1.status_code == 200
@@ -4699,14 +4699,14 @@ def test_overall_avg_score_two_tests(
         assert response.status_code == 200
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?tag_type_ids={tag_type.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?tag_type_ids={tag_type.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
     assert data["overall_score_percent"] == 72.5
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4808,7 +4808,7 @@ def test_overall_avg_score_two_tests(
         )
         assert response.status_code == 200
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/",
+        f"{settings.API_V1_STR}/candidate/overall-analytics",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4816,7 +4816,7 @@ def test_overall_avg_score_two_tests(
     assert data["overall_score_percent"] == 72.78
 
     response1 = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert response1.status_code == 200
@@ -4824,7 +4824,7 @@ def test_overall_avg_score_two_tests(
     assert data1["overall_score_percent"] == 69
 
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4909,14 +4909,14 @@ def test_overall_avg_score_two_tests(
         db.add(candidate_test)
         db.commit()
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/",
+        f"{settings.API_V1_STR}/candidate/overall-analytics",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
     data = response.json()
     assert data["overall_score_percent"] == 70.45
     response = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -5029,7 +5029,7 @@ def test_overall_avg_time_two_tests(
         db.commit()
 
     resp = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?state_ids={state.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?state_ids={state.id}",
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 200
@@ -5044,7 +5044,7 @@ def test_overall_avg_time_two_tests(
     assert data["overall_avg_time_minutes"] == expected_avg_time
 
     resp = client.get(
-        f"{settings.API_V1_STR}/candidate/overall-analytics/?district_ids={district.id}",
+        f"{settings.API_V1_STR}/candidate/overall-analytics?district_ids={district.id}",
         headers=get_user_superadmin_token,
     )
     assert resp.status_code == 200
@@ -5089,7 +5089,7 @@ def test_overall_avg_score_state_admin_location_restricted(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5267,7 +5267,7 @@ def test_overall_avg_time_state_admin_location_restricted(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -8854,7 +8854,7 @@ def test_candidate_inactive_not_listed(
     user = create_random_user(db)
 
     response = client.post(
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         json={"user_id": user.id, "is_active": False},
         headers=get_user_candidate_token,
     )
@@ -10106,7 +10106,7 @@ def test_candidate_test_question_ids_in_order(
     }
 
     test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=test_payload,
         headers=get_user_stateadmin_token,
     )
@@ -11060,7 +11060,7 @@ def test_summary_filtered_by_state(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -11188,7 +11188,7 @@ def test_summary_filtered_by_district(
         "district_ids": [district_x1.id, district_x2.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -11305,7 +11305,7 @@ def test_summary_active_submitted_by_state(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -11430,7 +11430,7 @@ def test_summary_active_submitted_by_district(
         "district_ids": [district_x1.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -12135,7 +12135,7 @@ def test_create_candidate_with_organization(
     get_user_candidate_token: dict[str, str],
 ) -> None:
     response = client.post(
-        f"{settings.API_V1_STR}/candidate/",
+        f"{settings.API_V1_STR}/candidate",
         headers=get_user_candidate_token,
         json={},
     )
@@ -12152,7 +12152,7 @@ def test_start_test_candidate_with_organization(
     get_user_testadmin_token: dict[str, str],
 ) -> None:
     test_response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         headers=get_user_testadmin_token,
         json={
             "name": "Org Test",

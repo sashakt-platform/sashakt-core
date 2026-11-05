@@ -54,7 +54,7 @@ def test_create_organization(
     name = random_lower_string()
     description = random_lower_string()
     response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={
             "name": name,
             "description": description,
@@ -69,7 +69,7 @@ def test_create_organization(
     assert "id" in data
     assert data["is_active"] is True
     response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={
             "name": name,
             "description": description,
@@ -87,7 +87,7 @@ def test_create_organization_with_logo(
 ) -> None:
     logo_file = create_test_image(width=200, height=200, format="PNG")
     response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={"name": random_lower_string()},
         files={"logo": ("logo.png", logo_file, "image/png")},
         headers=get_user_superadmin_token,
@@ -108,7 +108,7 @@ def test_create_organization_logo_cleanup_on_db_failure(
         with patch.object(db, "commit", side_effect=Exception("simulated DB failure")):
             with pytest.raises(Exception, match="simulated DB failure"):
                 client.post(
-                    f"{settings.API_V1_STR}/organization/",
+                    f"{settings.API_V1_STR}/organization",
                     data={"name": random_lower_string()},
                     files={"logo": ("logo.png", logo_file, "image/png")},
                     headers=get_user_superadmin_token,
@@ -121,7 +121,7 @@ def test_create_organization_without_logo(
     get_user_superadmin_token: dict[str, str],
 ) -> None:
     response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
@@ -140,7 +140,7 @@ def test_read_organization(
         create_random_organization(db)
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -153,7 +153,7 @@ def test_read_organization(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?page=2",
+        f"{settings.API_V1_STR}/organization?page=2",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -167,7 +167,7 @@ def test_read_organization(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -179,7 +179,7 @@ def test_read_organization(
         min_expected_pages=1,
     )
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_candidate_token,
     )
     assert response.status_code == 200
@@ -213,7 +213,7 @@ def test_read_organization_filter_by_name(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?name={organization_name}",
+        f"{settings.API_V1_STR}/organization?name={organization_name}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -229,7 +229,7 @@ def test_read_organization_filter_by_name(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?name={organization_name_2}",
+        f"{settings.API_V1_STR}/organization?name={organization_name_2}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -238,7 +238,7 @@ def test_read_organization_filter_by_name(
     assert len(items) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?name={random_lower_string()}",
+        f"{settings.API_V1_STR}/organization?name={random_lower_string()}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -271,7 +271,7 @@ def test_read_organization_filter_by_description(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?description={organization_description}",
+        f"{settings.API_V1_STR}/organization?description={organization_description}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -286,7 +286,7 @@ def test_read_organization_filter_by_description(
     )
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?description={organization_description_2}",
+        f"{settings.API_V1_STR}/organization?description={organization_description_2}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -295,7 +295,7 @@ def test_read_organization_filter_by_description(
     assert len(items) == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?description={random_lower_string()}",
+        f"{settings.API_V1_STR}/organization?description={random_lower_string()}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -315,7 +315,7 @@ def test_read_organization_order_by(
     create_random_organization(db)
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -328,7 +328,7 @@ def test_read_organization_order_by(
     assert sorted_organization_created_date == organization_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-created_date",
+        f"{settings.API_V1_STR}/organization?order_by=-created_date",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -340,7 +340,7 @@ def test_read_organization_order_by(
     assert sorted_organization_created_date == organization_created_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=name",
+        f"{settings.API_V1_STR}/organization?order_by=name",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -352,7 +352,7 @@ def test_read_organization_order_by(
     assert sorted_organization_name == organization_name
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-name",
+        f"{settings.API_V1_STR}/organization?order_by=-name",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -364,7 +364,7 @@ def test_read_organization_order_by(
     assert sorted_organization_name == organization_name
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-name&order_by=created_date",
+        f"{settings.API_V1_STR}/organization?order_by=-name&order_by=created_date",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -379,7 +379,7 @@ def test_read_organization_order_by(
     assert sorted_array == organization_name_date
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-test",
+        f"{settings.API_V1_STR}/organization?order_by=-test",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -388,7 +388,7 @@ def test_read_organization_order_by(
     assert "invalid" in data["detail"].lower()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?order_by=-",
+        f"{settings.API_V1_STR}/organization?order_by=-",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -714,7 +714,7 @@ def test_read_organization_shows_active_and_inactive(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -742,7 +742,7 @@ def test_read_organization_filter_by_is_active(
 
     # Filter active only
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?is_active=true",
+        f"{settings.API_V1_STR}/organization?is_active=true",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -754,7 +754,7 @@ def test_read_organization_filter_by_is_active(
 
     # Filter inactive only
     response = client.get(
-        f"{settings.API_V1_STR}/organization/?is_active=false",
+        f"{settings.API_V1_STR}/organization?is_active=false",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -900,7 +900,7 @@ def test_aggregated_data_for_state_admin(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -1046,7 +1046,7 @@ def test_aggregated_data_for_state_admin_for_district(
         ],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -1077,7 +1077,7 @@ def test_aggregated_data_for_state_admin_for_district(
 
     for _ in range(4):
         response = client.post(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions",
             json={
                 "organization_id": organization_id,
                 "question_text": random_lower_string(),
@@ -1096,7 +1096,7 @@ def test_aggregated_data_for_state_admin_for_district(
 
     for _ in range(2):
         response = client.post(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions",
             json={
                 "organization_id": organization_id,
                 "question_text": random_lower_string(),
@@ -1117,7 +1117,7 @@ def test_aggregated_data_for_state_admin_for_district(
 
     for _ in range(3):
         response = client.post(
-            f"{settings.API_V1_STR}/test/",
+            f"{settings.API_V1_STR}/test",
             json={
                 "name": random_lower_string(),
                 "description": random_lower_string(),
@@ -1135,7 +1135,7 @@ def test_aggregated_data_for_state_admin_for_district(
 
     for _ in range(2):
         response = client.post(
-            f"{settings.API_V1_STR}/test/",
+            f"{settings.API_V1_STR}/test",
             json={
                 "name": random_lower_string(),
                 "description": random_lower_string(),
@@ -1197,7 +1197,7 @@ def test_aggregated_data_for_state_admin_distinct_check(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -1367,7 +1367,7 @@ def test_get_current_organization(
         "organization_id": org.id,
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -1403,7 +1403,7 @@ def test_update_current_organization(
 
     email = random_email()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": random_lower_string(),
@@ -1492,7 +1492,7 @@ def test_update_current_organization_with_logo(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1542,7 +1542,7 @@ def test_update_current_organization_without_logo(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1581,7 +1581,7 @@ def test_update_organization_logo_invalid_file_type(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1623,7 +1623,7 @@ def test_update_organization_logo_file_too_large(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1675,7 +1675,7 @@ def test_update_organization_logo_replaces_old(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1722,7 +1722,7 @@ def test_delete_current_organization_logo_success(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1765,7 +1765,7 @@ def test_delete_logo_when_none_exists(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1801,7 +1801,7 @@ def test_update_organization_logo_empty_file(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1843,7 +1843,7 @@ def test_update_organization_logo_no_filename(
     email = random_email()
     password = random_lower_string()
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json={
             "email": email,
             "password": password,
@@ -1884,7 +1884,7 @@ def test_read_organization_list_includes_users_count(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == status.HTTP_200_OK
@@ -1913,7 +1913,7 @@ def test_read_organization_list_users_count_multiple_orgs(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == status.HTTP_200_OK
@@ -1938,7 +1938,7 @@ def test_read_organization_list_users_count_zero_for_empty_org(
     db.refresh(org)
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == status.HTTP_200_OK
@@ -1966,7 +1966,7 @@ def test_read_organization_list_users_count_excludes_inactive_users(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == status.HTTP_200_OK
@@ -2008,7 +2008,7 @@ def test_create_organization_seeds_default_roles(
     system_admin/state_admin/test_admin/candidate roles (never super_admin),
     pre-loaded with today's default permissions."""
     response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={
             "name": random_lower_string(),
             "description": random_lower_string(),

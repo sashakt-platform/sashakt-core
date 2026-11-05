@@ -11,7 +11,7 @@ def test_create_user(client: TestClient, db: Session) -> None:
     role = create_random_role(db)
     organization = create_random_organization(db)
     r = client.post(
-        f"{settings.API_V1_STR}/private/users/",
+        f"{settings.API_V1_STR}/private/users",
         json={
             "email": "pollo@listo.com",
             "password": "password123",
