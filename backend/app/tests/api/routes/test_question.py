@@ -46,7 +46,7 @@ def test_create_question(
     # First create an organization
     org_name = random_lower_string()
     org_response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={"name": org_name},
         headers=get_user_superadmin_token,
     )
@@ -56,7 +56,7 @@ def test_create_question(
     user_id = user_data["id"]
     # Create a tag type
     tag_type_response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json={
             "name": random_lower_string(),
             "description": "For testing",
@@ -69,7 +69,7 @@ def test_create_question(
 
     # Create a tag
     tag_response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json={
             "name": "Test Tag",
             "description": "For testing questions",
@@ -97,7 +97,7 @@ def test_create_question(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -139,14 +139,14 @@ def test_create_subjective_question_with_options_should_fail(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     org_response = client.post(
-        f"{settings.API_V1_STR}/organization/",
+        f"{settings.API_V1_STR}/organization",
         data={"name": random_lower_string()},
         headers=get_user_superadmin_token,
     )
     org_id = org_response.json()["id"]
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org_id,
             "question_text": random_lower_string(),
@@ -196,7 +196,7 @@ def test_read_questions(
 
     # Check empty list first
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -259,7 +259,7 @@ def test_read_questions(
 
     # Get all questions
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -287,7 +287,7 @@ def test_read_questions(
 
     # Test filtering by tag
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_ids={tag.id}",
+        f"{settings.API_V1_STR}/questions?tag_ids={tag.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -298,7 +298,7 @@ def test_read_questions(
 
     # Test filtering by created_by
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?created_by_id={user_id}",
+        f"{settings.API_V1_STR}/questions?created_by_id={user_id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -308,7 +308,7 @@ def test_read_questions(
 
     # Verify that filtering works
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?organization_id={org_id}",
+        f"{settings.API_V1_STR}/questions?organization_id={org_id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -450,7 +450,7 @@ def test_read_questions_filter_by_tag_type_ids(
     db.refresh(q3)
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}",
+        f"{settings.API_V1_STR}/questions?tag_type_ids={tag_type1.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -462,7 +462,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert q1.id in returned_ids
     assert any(tag["tag_type"]["id"] == tag_type1.id for tag in items[0]["tags"])
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type2.id}",
+        f"{settings.API_V1_STR}/questions?tag_type_ids={tag_type2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -474,7 +474,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert q2.id in returned_ids
     assert any(tag["tag_type"]["id"] == tag_type2.id for tag in items[0]["tags"])
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -485,7 +485,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert q1.id in returned_ids
     assert q2.id in returned_ids
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
+        f"{settings.API_V1_STR}/questions?tag_type_ids={tag_type1.id}&tag_type_ids={tag_type2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -499,7 +499,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert tag_type1.id in returned_tag_type_ids
     assert tag_type2.id in returned_tag_type_ids
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids=-10",
+        f"{settings.API_V1_STR}/questions?tag_type_ids=-10",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -508,7 +508,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert data["items"] == []
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_ids={tag1.id}",
+        f"{settings.API_V1_STR}/questions?tag_type_ids={tag_type1.id}&tag_ids={tag1.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -518,7 +518,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert data["total"] == 2
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type1.id}&tag_ids={tag2.id}",
+        f"{settings.API_V1_STR}/questions?tag_type_ids={tag_type1.id}&tag_ids={tag2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -528,7 +528,7 @@ def test_read_questions_filter_by_tag_type_ids(
     assert data["total"] == 1
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_type_ids={tag_type3.id}&tag_ids={tag2.id}",
+        f"{settings.API_V1_STR}/questions?tag_type_ids={tag_type3.id}&tag_ids={tag2.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -634,7 +634,7 @@ def test_read_questions_filter_by_tags(
     db.refresh(q1)
     db.refresh(q2)
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_ids={tag1.id}&tag_ids={tag2.id}",
+        f"{settings.API_V1_STR}/questions?tag_ids={tag1.id}&tag_ids={tag2.id}",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -1228,7 +1228,7 @@ def test_question_tag_operations(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1315,7 +1315,7 @@ def test_question_validation_multiple_correct_answers_for_single_choice(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1347,7 +1347,7 @@ def test_question_validation_no_correct_answer_for_multi_choice(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1379,7 +1379,7 @@ def test_question_validation_invalid_question_type(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1406,7 +1406,7 @@ def test_update_question_validation_multiple_correct_answers_for_single_choice(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1457,7 +1457,7 @@ def test_question_validation_valid_single_and_multi_choice(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=valid_single_question,
         headers=get_user_superadmin_token,
     )
@@ -1481,7 +1481,7 @@ def test_question_validation_valid_single_and_multi_choice(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=valid_multi_question,
         headers=get_user_superadmin_token,
     )
@@ -1509,7 +1509,7 @@ def test_question_validation_numerical_integer_valid_positive(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1536,7 +1536,7 @@ def test_question_validation_numerical_integer_valid_negative(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1563,7 +1563,7 @@ def test_question_validation_numerical_integer_valid_zero(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1590,7 +1590,7 @@ def test_question_validation_numerical_integer_string_invalid(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1619,7 +1619,7 @@ def test_question_validation_numerical_integer_valid_float_whole_number(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1646,7 +1646,7 @@ def test_question_validation_numerical_integer_invalid_decimal(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1674,7 +1674,7 @@ def test_question_validation_numerical_integer_invalid_string_decimal(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1702,7 +1702,7 @@ def test_question_validation_numerical_integer_invalid_list(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1730,7 +1730,7 @@ def test_question_validation_numerical_decimal_valid_positive(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1757,7 +1757,7 @@ def test_question_validation_numerical_decimal_valid_negative(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1784,7 +1784,7 @@ def test_question_validation_numerical_decimal_valid_zero(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1811,7 +1811,7 @@ def test_question_validation_numerical_decimal_valid_integer_as_decimal(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1838,7 +1838,7 @@ def test_question_validation_numerical_decimal_string_invalid(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1864,7 +1864,7 @@ def test_question_validation_numerical_decimal_valid_small_decimal(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1891,7 +1891,7 @@ def test_question_validation_numerical_decimal_valid_large_decimal(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1918,7 +1918,7 @@ def test_question_validation_numerical_integer_none_allowed(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1945,7 +1945,7 @@ def test_question_validation_numerical_integer_update_revision_valid(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -1986,7 +1986,7 @@ def test_question_validation_numerical_integer_update_revision_invalid(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -2029,7 +2029,7 @@ def test_question_validation_numerical_decimal_update_revision_valid(
     }
 
     create_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -2106,7 +2106,7 @@ def test_question_location_operations(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -2216,7 +2216,7 @@ def test_question_location_operations(
 
     # Verify we can still filter by location
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}",
+        f"{settings.API_V1_STR}/questions?state_ids={kerala.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2258,7 +2258,7 @@ def test_question_filter_by_location(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -2277,7 +2277,7 @@ def test_question_filter_by_location(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -2285,7 +2285,7 @@ def test_question_filter_by_location(
     assert response.status_code == 200
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?state_ids={kerala.id}&state_ids={tamilnadu.id}",
+        f"{settings.API_V1_STR}/questions?state_ids={kerala.id}&state_ids={tamilnadu.id}",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2427,7 +2427,7 @@ def test_delete_bulk_question(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[q1.id, q2.id, 99999],
         headers=get_user_superadmin_token,
     )
@@ -2436,7 +2436,7 @@ def test_delete_bulk_question(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[q1.id, q2.id],
         headers=get_user_superadmin_token,
     )
@@ -2500,7 +2500,7 @@ def test_bulk_delete_multiple_tenants(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[question_a.id, question_b.id],
         headers=get_user_systemadmin_token,
     )
@@ -2686,7 +2686,7 @@ def test_bulk_upload_questions(
 
     # Create tag type
     response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json={
             "name": "Test Tag Type",
             "description": "For testing",
@@ -2783,7 +2783,7 @@ What are prime numbers?,Numbers divisible only by 1 and themselves,Even numbers,
 
         # Check that questions were created
         response = client.get(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions",
             headers=get_user_superadmin_token,
         )
         data = response.json()
@@ -2919,7 +2919,7 @@ def test_latest_question_revision(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3036,7 +3036,7 @@ def test_invalid_correct_option(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3071,7 +3071,7 @@ def test_valid_correct_option(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3115,7 +3115,7 @@ def test_valid_ids_option(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3149,7 +3149,7 @@ def test_duplicate_option_ids_error_message(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3213,7 +3213,7 @@ def test_bulk_tag_operations(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3322,7 +3322,7 @@ def test_add_and_delete_question_with_state_link(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3423,7 +3423,7 @@ def test_bulk_location_operations(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3593,7 +3593,7 @@ def test_mixed_single_and_bulk_operations(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3870,7 +3870,7 @@ def test_inactive_question_listed(
         "is_active": False,  # Set question as inactive
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3885,7 +3885,7 @@ def test_inactive_question_listed(
     question_id = data["id"]
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?is_active=true",
+        f"{settings.API_V1_STR}/questions?is_active=true",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -3916,7 +3916,7 @@ def test_deactivate_question_with_new_revision(
         "is_mandatory": True,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -3958,7 +3958,7 @@ def test_deactivate_question_with_new_revision(
 
     # Fetch the latest revision to ensure it is inactive
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -4012,7 +4012,7 @@ def test_filter_questions_by_latest_revision_text(
     db.commit()
     db.refresh(q)
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?question_text=Unique+latest+revision+text",
+        f"{settings.API_V1_STR}/questions?question_text=Unique+latest+revision+text",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4020,7 +4020,7 @@ def test_filter_questions_by_latest_revision_text(
     ids = [item["id"] for item in data["items"]]
     assert q.id in ids
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?question_text=First+revision+text",
+        f"{settings.API_V1_STR}/questions?question_text=First+revision+text",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4072,7 +4072,7 @@ def test_filter_questions_by_latest_revision_subtext(
     db.commit()
     db.refresh(question)
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?question_text=Unique",
+        f"{settings.API_V1_STR}/questions?question_text=Unique",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4080,7 +4080,7 @@ def test_filter_questions_by_latest_revision_subtext(
     ids = [item["id"] for item in data["items"]]
     assert question.id in ids
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?question_text=First+revision+text",
+        f"{settings.API_V1_STR}/questions?question_text=First+revision+text",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4196,7 +4196,7 @@ def test_get_questions_by_is_active_filter(
     db.refresh(active_question)
     db.refresh(inactive_question)
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4205,7 +4205,7 @@ def test_get_questions_by_is_active_filter(
     assert active_question.id in ids
     assert inactive_question.id in ids
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?is_active=true",
+        f"{settings.API_V1_STR}/questions?is_active=true",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4214,7 +4214,7 @@ def test_get_questions_by_is_active_filter(
     assert active_question.id in ids
     assert inactive_question.id not in ids
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?is_active=false",
+        f"{settings.API_V1_STR}/questions?is_active=false",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -4269,7 +4269,7 @@ What subject combines numbers and shapes?,Math,Science,History,Art,A,"Math, Geom
         assert data["uploaded_questions"] == 2
         assert data["success_questions"] == 2
         response = client.get(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions",
             headers=get_user_superadmin_token,
         )
         data = response.json()
@@ -4335,7 +4335,7 @@ What is 10+10?,20,10,30,40,A,"Math, math, MATH",Punjab
         assert data["success_questions"] == 1
 
         response = client.get(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions",
             headers=get_user_superadmin_token,
         )
         data = response.json()
@@ -4362,7 +4362,7 @@ def test_create_duplicate_question(
     org_id = user_data["organization_id"]
     # user_id = user_data["id"]
     tag_type_response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json={
             "name": random_lower_string(),
             "description": "For testing",
@@ -4373,7 +4373,7 @@ def test_create_duplicate_question(
     tag_type_data = tag_type_response.json()
     tag_type_id = tag_type_data["id"]
     tag_response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json={
             "name": "Test Tag",
             "description": "For testing questions",
@@ -4398,7 +4398,7 @@ def test_create_duplicate_question(
         "tag_ids": [tag_id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -4412,7 +4412,7 @@ def test_create_duplicate_question(
     question = db.get(Question, data["id"])
     assert question is not None
     duplicate_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -4498,7 +4498,7 @@ def test_create_question_same_text_different_tags_should_pass(
         "tag_ids": [different_tag.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=duplicate_question_data,
         headers=get_user_superadmin_token,
     )
@@ -4557,7 +4557,7 @@ def test_create_same_question_different_organizations(
     }
 
     response_org1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data_org1,
         headers=headers_org1,
     )
@@ -4578,7 +4578,7 @@ def test_create_same_question_different_organizations(
     }
 
     response_org2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data_org2,
         headers=headers_org2,
     )
@@ -4634,7 +4634,7 @@ def test_create_question_same_text_no_tags_vs_with_tags_should_pass(
         "tag_ids": [],
     }
     response1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question1_data,
         headers=get_user_superadmin_token,
     )
@@ -4657,7 +4657,7 @@ def test_create_question_same_text_no_tags_vs_with_tags_should_pass(
     }
 
     response2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question2_data,
         headers=get_user_superadmin_token,
     )
@@ -4714,7 +4714,7 @@ def test_bulk_upload_questions_with_duplicate(
         "tag_ids": [tag1.id],
     }
     response1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question1_data,
         headers=get_user_superadmin_token,
     )
@@ -4809,7 +4809,7 @@ def test_duplicate_question_detected_if_any_tag_matches(
         "tag_ids": [tag1.id],
     }
     response1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question1_data,
         headers=get_user_superadmin_token,
     )
@@ -4831,7 +4831,7 @@ def test_duplicate_question_detected_if_any_tag_matches(
     }
 
     response2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question2_data,
         headers=get_user_superadmin_token,
     )
@@ -4881,7 +4881,7 @@ def test_question_revision_with_same_text_and_tags_is_allowed(
         "tag_ids": [tag.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=get_user_superadmin_token,
     )
@@ -4952,7 +4952,7 @@ def test_check_question_duplication_if_deleted(
         "tag_ids": [tag.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -4970,7 +4970,7 @@ def test_check_question_duplication_if_deleted(
     # Delete the question
     delete_response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[question_id],
         headers=get_user_superadmin_token,
     )
@@ -4991,7 +4991,7 @@ def test_check_question_duplication_if_deleted(
         "tag_ids": [tag.id],
     }
     duplicate_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=duplicate_question_data,
         headers=get_user_superadmin_token,
     )
@@ -5023,7 +5023,7 @@ def test_check_question_duplication_if_deleted(
     }
 
     another_duplicate_response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=duplicate_question_data,
         headers=get_user_superadmin_token,
     )
@@ -5049,7 +5049,7 @@ def test_create_duplicate_questions_with_same_text_and_no_tags(
     }
 
     response1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question1_data,
         headers=get_user_superadmin_token,
     )
@@ -5072,7 +5072,7 @@ def test_create_duplicate_questions_with_same_text_and_no_tags(
     }
 
     response2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question2_data,
         headers=get_user_superadmin_token,
     )
@@ -5131,7 +5131,7 @@ def test_create_same_text_one_with_tags_one_without(
         "tag_ids": [],
     }
     response1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question1_data,
         headers=get_user_superadmin_token,
     )
@@ -5153,7 +5153,7 @@ def test_create_same_text_one_with_tags_one_without(
         "tag_ids": [tag1.id, tag2.id],
     }
     response2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question2_data,
         headers=get_user_superadmin_token,
     )
@@ -5282,7 +5282,7 @@ def test_read_questions_with_pagination(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/questions", headers=get_user_superadmin_token
     )
     data = response.json()
     assert response.status_code == 200
@@ -5294,7 +5294,7 @@ def test_read_questions_with_pagination(
     assert data["total"] >= 26
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?page=10", headers=get_user_superadmin_token
+        f"{settings.API_V1_STR}/questions?page=10", headers=get_user_superadmin_token
     )
     data = response.json()
     assert response.status_code == 200
@@ -5310,7 +5310,7 @@ def test_get_questions_with_invalid_fields_returns_empty(
     client: TestClient, get_user_superadmin_token: dict[str, str]
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?created_by_id=-99999",
+        f"{settings.API_V1_STR}/questions?created_by_id=-99999",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -5318,7 +5318,7 @@ def test_get_questions_with_invalid_fields_returns_empty(
     assert data["items"] == []
     assert data["total"] == 0
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?state_ids=-99999",  # assuming this state ID doesn't exist
+        f"{settings.API_V1_STR}/questions?state_ids=-99999",  # assuming this state ID doesn't exist
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -5326,7 +5326,7 @@ def test_get_questions_with_invalid_fields_returns_empty(
     assert data["items"] == []
     assert data["total"] == 0
     response = client.get(
-        f"{settings.API_V1_STR}/questions/?tag_ids=-99999",
+        f"{settings.API_V1_STR}/questions?tag_ids=-99999",
         headers=get_user_superadmin_token,
     )
     data = response.json()
@@ -5573,7 +5573,7 @@ def test_state_admin_cannot_delete_question_outside_location(
         "state_ids": [state_y.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5594,7 +5594,7 @@ def test_state_admin_cannot_delete_question_outside_location(
         "state_ids": [state_x.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5640,7 +5640,7 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
         "state_ids": [state_a.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5661,7 +5661,7 @@ def test_state_admin_cannot_delete_multi_state_question_without_full_access(
         "state_ids": [state_a.id, state_b.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5705,7 +5705,7 @@ def test_state_admin_cannot_delete_general_question(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5726,7 +5726,7 @@ def test_state_admin_cannot_delete_general_question(
         "state_ids": [],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=token_headers,
     )
@@ -5770,7 +5770,7 @@ def test_state_admin_delete_question_same_location(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5791,7 +5791,7 @@ def test_state_admin_delete_question_same_location(
         "state_ids": [state.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=token_headers,
     )
@@ -5834,7 +5834,7 @@ def test_state_admin_cannot_update_general_question(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5850,7 +5850,7 @@ def test_state_admin_cannot_update_general_question(
         "state_ids": [],
     }
     q_resp = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=token_headers,
     )
@@ -5893,7 +5893,7 @@ def test_state_admin_can_update_question_in_their_state(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_superadmin_token,
     )
@@ -5909,7 +5909,7 @@ def test_state_admin_can_update_question_in_their_state(
         "state_ids": [state.id],
     }
     q_resp = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=token_headers,
     )
@@ -5958,7 +5958,7 @@ def test_state_admin_cannot_update_question_outside_their_state(
         "state_ids": [admin_state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -5974,7 +5974,7 @@ def test_state_admin_cannot_update_question_outside_their_state(
         "state_ids": [other_state.id],
     }
     q_resp = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=token_headers,
     )
@@ -6041,7 +6041,7 @@ def test_state_admin_cannot_update_tags_for_general_question(
         "state_ids": [admin_state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -6057,7 +6057,7 @@ def test_state_admin_cannot_update_tags_for_general_question(
         "state_ids": [other_state.id],
     }
     q_resp = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload,
         headers=get_user_systemadmin_token,
     )
@@ -6107,7 +6107,7 @@ def test_question_list_state_user(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -6239,7 +6239,7 @@ def test_question_list_state_user(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=token_headers,
     )
     data = response.json()
@@ -6260,14 +6260,14 @@ def test_question_list_state_user(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
     token_headers = authentication_token_from_email(client=client, email=email, db=db)
 
     response = client.get(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         headers=token_headers,
     )
     data = response.json()
@@ -6379,7 +6379,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
         "state_ids": [state_y.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -6414,7 +6414,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     }
 
     response_1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload_1,
         headers=get_user_systemadmin_token,
     )
@@ -6422,7 +6422,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
     question_id_1 = response_1.json()["id"]
 
     response_2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload_2,
         headers=get_user_systemadmin_token,
     )
@@ -6431,7 +6431,7 @@ def test_bulk_delete_state_admin_cannot_delete_questions_outside_location(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[question_id_1, question_id_2],
         headers=token_headers,
     )
@@ -6535,7 +6535,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -6570,7 +6570,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
     }
 
     response_1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload_1,
         headers=token_headers,
     )
@@ -6578,7 +6578,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
     question_id_1 = response_1.json()["id"]
 
     response_2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload_2,
         headers=token_headers,
     )
@@ -6587,7 +6587,7 @@ def test_bulk_delete_state_admin_cannot_delete_general_questions(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[question_id_1, question_id_2],
         headers=token_headers,
     )
@@ -6626,7 +6626,7 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -6661,7 +6661,7 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
     }
 
     response_1 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload_1,
         headers=token_headers,
     )
@@ -6669,7 +6669,7 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
     question_id_1 = response_1.json()["id"]
 
     response_2 = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_payload_2,
         headers=token_headers,
     )
@@ -6678,7 +6678,7 @@ def test_bulk_delete_state_admin_delete_questions_same_location(
 
     delete_resp = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=[question_id_1, question_id_2],
         headers=token_headers,
     )
@@ -6762,7 +6762,7 @@ def test_create_test_with_subjective_question(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/test/",
+        f"{settings.API_V1_STR}/test",
         json=payload,
         headers=get_user_superadmin_token,
     )
@@ -6814,7 +6814,7 @@ def test_create_matrix_match_question_valid(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -6845,7 +6845,7 @@ def test_create_matrix_match_question_no_correct_answer(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json=question_data,
         headers=get_user_superadmin_token,
     )
@@ -6865,7 +6865,7 @@ def test_create_matrix_match_question_missing_options_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -6892,7 +6892,7 @@ def test_create_matrix_match_question_options_as_list_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -6929,7 +6929,7 @@ def test_create_matrix_match_question_empty_column_items_should_fail(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -6955,7 +6955,7 @@ def test_create_matrix_match_question_invalid_correct_answer_key_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -6979,7 +6979,7 @@ def test_create_matrix_match_question_invalid_correct_answer_value_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7003,7 +7003,7 @@ def test_create_matrix_match_question_correct_answer_not_dict_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7031,7 +7031,7 @@ def test_non_matrix_question_with_dict_options_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7080,7 +7080,7 @@ def test_create_matrix_rating_question_valid(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7110,7 +7110,7 @@ def test_create_matrix_rating_question_correct_answer_ignored(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7136,7 +7136,7 @@ def test_create_matrix_rating_question_missing_options_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7163,7 +7163,7 @@ def test_create_matrix_rating_question_options_as_list_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7193,7 +7193,7 @@ def test_create_matrix_rating_question_empty_row_items_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7226,7 +7226,7 @@ def test_create_matrix_rating_question_empty_column_items_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7259,7 +7259,7 @@ def test_create_matrix_rating_question_full_subjects_and_ratings(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7297,7 +7297,7 @@ def test_bulk_upload_questions_case_insensitive_tags(
 
     # Create tag type with specific casing
     response = client.post(
-        f"{settings.API_V1_STR}/tagtype/",
+        f"{settings.API_V1_STR}/tagtype",
         json={
             "name": "Difficulty",
             "description": "Difficulty level",
@@ -7310,7 +7310,7 @@ def test_bulk_upload_questions_case_insensitive_tags(
 
     # Create a tag under that tag type with specific casing
     response = client.post(
-        f"{settings.API_V1_STR}/tag/",
+        f"{settings.API_V1_STR}/tag",
         json={
             "name": "Easy",
             "description": "Easy questions",
@@ -7348,7 +7348,7 @@ What is 3+3?,6,5,7,8,A, Easy ,Punjab
 
         # Verify all 3 questions were created (none failed due to tag mismatch)
         response = client.get(
-            f"{settings.API_V1_STR}/questions/",
+            f"{settings.API_V1_STR}/questions",
             headers=get_user_superadmin_token,
         )
         data = response.json()
@@ -7429,7 +7429,7 @@ def test_create_matrix_input_question_valid_number_type(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7459,7 +7459,7 @@ def test_create_matrix_input_question_valid_text_type(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7489,7 +7489,7 @@ def test_create_matrix_input_question_correct_answer_ignored(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7515,7 +7515,7 @@ def test_create_matrix_input_question_missing_options_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7542,7 +7542,7 @@ def test_create_matrix_input_question_options_as_list_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7572,7 +7572,7 @@ def test_create_matrix_input_question_empty_row_items_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7601,7 +7601,7 @@ def test_create_matrix_input_question_missing_columns_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7630,7 +7630,7 @@ def test_create_matrix_input_question_missing_input_type_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7660,7 +7660,7 @@ def test_create_matrix_input_question_invalid_input_type_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7693,7 +7693,7 @@ def test_create_matrix_input_question_duplicate_row_ids_should_fail(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7729,7 +7729,7 @@ def test_create_single_choice_question_strips_empty_options(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7761,7 +7761,7 @@ def test_create_multi_choice_question_strips_empty_options(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7791,7 +7791,7 @@ def test_create_matrix_match_question_strips_empty_items(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),
@@ -7832,7 +7832,7 @@ def test_create_matrix_input_question_strips_empty_row_items(
     db.refresh(org)
 
     response = client.post(
-        f"{settings.API_V1_STR}/questions/",
+        f"{settings.API_V1_STR}/questions",
         json={
             "organization_id": org.id,
             "question_text": random_lower_string(),

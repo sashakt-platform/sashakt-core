@@ -109,7 +109,7 @@ def transform_entities_to_public(
 
 # Routers for EntityType
 @router_entitytype.post(
-    "/",
+    "",
     response_model=EntityTypePublic,
     dependencies=[Depends(permission_dependency("create_entity"))],
 )
@@ -144,7 +144,7 @@ def create_entitytype(
 
 
 @router_entitytype.get(
-    "/",
+    "",
     response_model=Page[EntityTypeListPublic],
     dependencies=[Depends(permission_dependency("read_entity"))],
 )
@@ -232,7 +232,7 @@ def is_entitytype_referenced(session: SessionDep, entitytype: EntityType) -> boo
 
 
 @router_entitytype.delete(
-    "/",
+    "",
     response_model=DeleteEntityType,
     dependencies=[Depends(permission_dependency("delete_entity"))],
 )
@@ -300,7 +300,7 @@ def delete_entitytype(entitytype_id: int, session: SessionDep) -> Message:
 
 # Create an Entity (EntityType required)
 @router_entity.post(
-    "/",
+    "",
     response_model=EntityPublic,
     dependencies=[Depends(permission_dependency("create_entity"))],
 )
@@ -374,7 +374,7 @@ def build_entity_location_filter(state_ids: list[int], district_ids: list[int]) 
 
 # Get all Entities
 @router_entity.get(
-    "/",
+    "",
     response_model=Page[EntityPublic],
 )
 def get_entities(
@@ -597,7 +597,7 @@ def add_entity_to_failure_list(
 
 
 @router_entity.delete(
-    "/",
+    "",
     response_model=DeleteEntity,
     dependencies=[Depends(permission_dependency("delete_entity"))],
 )

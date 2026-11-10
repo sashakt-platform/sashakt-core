@@ -202,7 +202,7 @@ def test_reset_password(client: TestClient, db: Session) -> None:
     data = {"new_password": new_password, "token": token}
 
     r = client.post(
-        f"{settings.API_V1_STR}/reset-password/",
+        f"{settings.API_V1_STR}/reset-password",
         headers=headers,
         json=data,
     )
@@ -219,7 +219,7 @@ def test_reset_password_invalid_token(
 ) -> None:
     data = {"new_password": "changethis", "token": "invalid"}
     r = client.post(
-        f"{settings.API_V1_STR}/reset-password/",
+        f"{settings.API_V1_STR}/reset-password",
         headers=superuser_token_headers,
         json=data,
     )

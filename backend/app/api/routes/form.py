@@ -64,7 +64,7 @@ def build_form_public(form: Form) -> FormPublic:
 
 
 @router.post(
-    "/",
+    "",
     response_model=FormPublic,
     dependencies=[Depends(permission_dependency("create_form"))],
 )
@@ -113,7 +113,7 @@ def create_form(
 
 
 @router.get(
-    "/",
+    "",
     response_model=Page[FormPublic],
     dependencies=[Depends(permission_dependency("read_form"))],
 )
@@ -279,7 +279,7 @@ def delete_form(
 
 
 @router.delete(
-    "/",
+    "",
     response_model=DeleteForm,
     dependencies=[Depends(permission_dependency("delete_form"))],
 )
@@ -331,7 +331,7 @@ def bulk_delete_form(
 
 
 @router.post(
-    "/{form_id}/field/",
+    "/{form_id}/field",
     response_model=FormFieldPublic,
     dependencies=[Depends(permission_dependency("update_form"))],
 )
@@ -383,7 +383,7 @@ def add_field_to_form(
 
 
 @router.get(
-    "/{form_id}/field/",
+    "/{form_id}/field",
     response_model=list[FormFieldPublic],
     dependencies=[Depends(permission_dependency("read_form"))],
 )

@@ -135,7 +135,7 @@ def test_create_user_new_email(
             "organization_id": organization.id,
         }
         r = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=superuser_token_headers,
             json=data,
         )
@@ -181,7 +181,7 @@ def test_create_user_new_email_without_org_id(
         }
 
         r = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=superuser_token_headers,
             json=data,
         )
@@ -227,7 +227,7 @@ def test_superadmin_can_create_system_admin_for_other_org(
             "organization_id": organization.id,
         }
         r = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=superuser_token_headers,
             json=data,
         )
@@ -370,7 +370,7 @@ def test_create_user_existing_username(
         "organization_id": organization.id,
     }
     r = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -387,7 +387,7 @@ def test_create_user_existing_username(
 #     password = random_lower_string()
 #     data = {"email": username, "password": password}
 #     r = client.post(
-#         f"{settings.API_V1_STR}/users/",
+#         f"{settings.API_V1_STR}/users",
 #         headers=normal_user_token_headers,
 #         json=data,
 #     )
@@ -404,7 +404,7 @@ def test_retrieve_users(
     ).first()
     assert super_admin_role is not None
 
-    r = client.get(f"{settings.API_V1_STR}/users/", headers=superuser_token_headers)
+    r = client.get(f"{settings.API_V1_STR}/users", headers=superuser_token_headers)
     all_users = r.json()
 
     assert_paginated_response(r, min_expected_total=1)
@@ -439,7 +439,7 @@ def test_superadmin_sees_admin_users_across_all_orgs(
     crud.create_user(session=db, user_create=user_in)
 
     r = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         params={"search": other_email},
         headers=get_user_superadmin_token,
     )
@@ -471,7 +471,7 @@ def test_superadmin_excludes_lower_role_users_from_other_orgs(
     crud.create_user(session=db, user_create=user_in)
 
     res = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         params={"search": lower_role_email},
         headers=get_user_superadmin_token,
     )
@@ -502,7 +502,7 @@ def test_non_superadmin_only_sees_own_org_users(
     crud.create_user(session=db, user_create=user_in)
 
     r = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         params={"search": other_email},
         headers=get_user_systemadmin_token,
     )
@@ -538,7 +538,7 @@ def test_superadmin_can_filter_users_by_organization_id(
     crud.create_user(session=db, user_create=user_in)
 
     r = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         params={"organization_id": other_org.id},
         headers=get_user_superadmin_token,
     )
@@ -588,7 +588,7 @@ def test_superadmin_filter_by_organization_id_excludes_other_org_users(
     crud.create_user(session=db, user_create=org2_user_in)
 
     r = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         params={"organization_id": org1.id},
         headers=get_user_superadmin_token,
     )
@@ -610,7 +610,7 @@ def test_non_superadmin_cannot_filter_users_by_other_organization_id(
     other_org = create_random_organization(db)
 
     r = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         params={"organization_id": other_org.id},
         headers=get_user_systemadmin_token,
     )
@@ -1254,7 +1254,7 @@ def test_create_inactive_user_not_listed(
         "is_active": False,  # Create inactive user
     }
     r = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -1264,7 +1264,7 @@ def test_create_inactive_user_not_listed(
     user_id = created_user["id"]
     assert created_user["is_active"] is False
     r = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=superuser_token_headers,
     )
     all_users = r.json()
@@ -1296,7 +1296,7 @@ def test_create_state_admin_without_state_id_district_id(
             "organization_id": organization.id,
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1349,7 +1349,7 @@ def test_create_state_admin_with_state_id(
             "state_ids": [state1.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1422,7 +1422,7 @@ def test_create_state_admin_with_only_district_id_returns_400(
             "district_ids": [district_1.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1474,7 +1474,7 @@ def test_create_user_multiple_state_assignment_error(
             "state_ids": [state1.id, state2.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1531,7 +1531,7 @@ def test_create_user_multiple_district_assignment(
             "district_ids": [district_1.id, district_2.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1581,7 +1581,7 @@ def test_create_test_admin_single_state_success(
             "state_ids": [state1.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1636,7 +1636,7 @@ def test_create_test_admin_single_district_success(
             "district_ids": [district_1.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1674,7 +1674,7 @@ def test_create_user_without_states(
             "organization_id": org_id,
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=data,
         )
@@ -1724,7 +1724,7 @@ def test_update_user_states(
         "organization_id": org.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
         json=create_payload,
     )
@@ -1819,7 +1819,7 @@ def test_update_user_districts(
         "district_ids": [district_1.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=create_payload,
     )
@@ -1931,7 +1931,7 @@ def test_update_other_role_to_state_admin_and_add_states(
         "organization_id": org.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -1993,7 +1993,7 @@ def test_update_other_role_to_state_admin_with_only_district_ids_returns_400(
         "organization_id": org.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -2047,7 +2047,7 @@ def test_update_other_role_to_state_admin_without_state_ids_returns_400(
         "organization_id": org.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -2107,7 +2107,7 @@ def test_update_other_role_to_state_admin_without_district_ids_returns_400(
         "organization_id": org.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -2164,7 +2164,7 @@ def test_update_state_admin_to_other_role_and_remove_states(
         "state_ids": [state1.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -2231,7 +2231,7 @@ def test_update_state_admin_to_other_role_and_remove_districts(
         "district_ids": [district_1.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=data,
     )
@@ -2279,7 +2279,7 @@ def test_cannot_delete_user_if_linked_to_question(
         "organization_id": org.id,
     }
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -2351,7 +2351,7 @@ def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
     }
 
     response_admin = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=state_admin_payload,
     )
@@ -2371,7 +2371,7 @@ def test_create_test_admin_auto_inherits_state_admin_states_and_districts(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=token_headers,
         json=payload,
     )
@@ -2450,7 +2450,7 @@ def test_state_admin_with_state_access_creates_test_admin_for_district(
             "state_ids": [state.id],
         }
         resp = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=state_admin_payload,
         )
@@ -2476,7 +2476,7 @@ def test_state_admin_with_state_access_creates_test_admin_for_district(
             "district_ids": [district.id],
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=token_headers,
             json=test_admin_payload,
         )
@@ -2547,7 +2547,7 @@ def test_test_admin_creates_test_admin_inherits_states_and_districts(
             "district_ids": [district.id],
         }
         resp = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json=creator_payload,
         )
@@ -2571,7 +2571,7 @@ def test_test_admin_creates_test_admin_inherits_states_and_districts(
             "organization_id": org.id,
         }
         response = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=token_headers,
             json=new_test_admin_payload,
         )
@@ -2624,7 +2624,7 @@ def test_update_normal_user_to_test_admin_with_multiple_states_should_fail(
         "organization_id": org.id,
     }
     resp_user = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=payload,
     )
@@ -2689,7 +2689,7 @@ def test_update_normal_user_to_test_admin_with_multiple_districts(
         "organization_id": org.id,
     }
     resp_user = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=payload,
     )
@@ -2747,7 +2747,7 @@ def test_update_normal_user_to_test_admin_without_states_districts(
         "organization_id": org.id,
     }
     resp_user = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_systemadmin_token,
         json=payload,
     )
@@ -2790,7 +2790,7 @@ def test_user_public_list_returns_role_name(
     client: TestClient, get_user_superadmin_token: dict[str, str], db: Session
 ) -> None:
     response = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
     )
     assert response.status_code == 200
@@ -2839,7 +2839,7 @@ def test_retrieve_users_with_search(
 
     # test search by full name
     r = client.get(
-        f"{settings.API_V1_STR}/users/?search=John", headers=superuser_token_headers
+        f"{settings.API_V1_STR}/users?search=John", headers=superuser_token_headers
     )
     assert r.status_code == 200
     search_results = r.json()
@@ -2849,7 +2849,7 @@ def test_retrieve_users_with_search(
 
     # test search by email
     r = client.get(
-        f"{settings.API_V1_STR}/users/?search=john.smith",
+        f"{settings.API_V1_STR}/users?search=john.smith",
         headers=superuser_token_headers,
     )
     assert r.status_code == 200
@@ -2860,7 +2860,7 @@ def test_retrieve_users_with_search(
 
     # test search by phone
     r = client.get(
-        f"{settings.API_V1_STR}/users/?search=123-456", headers=superuser_token_headers
+        f"{settings.API_V1_STR}/users?search=123-456", headers=superuser_token_headers
     )
     assert r.status_code == 200
     search_results = r.json()
@@ -2870,7 +2870,7 @@ def test_retrieve_users_with_search(
 
     # test case insensitive search
     r = client.get(
-        f"{settings.API_V1_STR}/users/?search=JOHN", headers=superuser_token_headers
+        f"{settings.API_V1_STR}/users?search=JOHN", headers=superuser_token_headers
     )
     assert r.status_code == 200
     search_results = r.json()
@@ -2880,7 +2880,7 @@ def test_retrieve_users_with_search(
 
     # test search with no results
     r = client.get(
-        f"{settings.API_V1_STR}/users/?search=nonexistent",
+        f"{settings.API_V1_STR}/users?search=nonexistent",
         headers=superuser_token_headers,
     )
     assert r.status_code == 200
@@ -2907,7 +2907,7 @@ def test_create_user_role_hierarchy_validation_super_admin(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -2936,7 +2936,7 @@ def test_create_user_role_hierarchy_validation_super_admin_cannot_create_state_a
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -2965,7 +2965,7 @@ def test_create_user_role_hierarchy_validation_super_admin_cannot_create_test_ad
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -3014,7 +3014,7 @@ def test_create_user_role_hierarchy_validation_system_admin_can_create_state_adm
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=headers,
         json=data,
     )
@@ -3048,7 +3048,7 @@ def test_create_user_role_hierarchy_validation_system_admin_cannot_create_super_
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=headers,
         json=data,
     )
@@ -3095,7 +3095,7 @@ def test_user_list_state_user(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3123,7 +3123,7 @@ def test_user_list_state_user(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=token_headers,
     )
     assert response.status_code == 200
@@ -3164,7 +3164,7 @@ def test_user_list_excludes_roles_above_the_hierarchy(
     caller = create_random_user(db, organization.id, custom_role.id)
 
     response = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers={"Authorization": f"Bearer {caller.token}"},
     )
     assert response.status_code == 200
@@ -3207,7 +3207,7 @@ def test_state_admin_cannot_delete_general_user(
         "district_ids": [district.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3222,7 +3222,7 @@ def test_state_admin_cannot_delete_general_user(
         "organization_id": org.id,
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3267,7 +3267,7 @@ def test_state_admin_cannot_delete_user_in_other_state(
         "state_ids": [state_y.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3283,7 +3283,7 @@ def test_state_admin_cannot_delete_user_in_other_state(
         "state_ids": [state_x.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3327,7 +3327,7 @@ def test_state_admin_cannot_delete_user_in_other_district(
         "state_ids": [state_x.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3343,7 +3343,7 @@ def test_state_admin_cannot_delete_user_in_other_district(
         "state_ids": [state_y.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3385,7 +3385,7 @@ def test_state_admin_can_delete_user_in_same_state(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3401,7 +3401,7 @@ def test_state_admin_can_delete_user_in_same_state(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3450,7 +3450,7 @@ def test_state_admin_cannot_update_general_user(
         "district_ids": [district_1.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3465,7 +3465,7 @@ def test_state_admin_cannot_update_general_user(
         "organization_id": org.id,
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3515,7 +3515,7 @@ def test_state_admin_cannot_update_user_in_other_state(
         "state_ids": [state_y.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3531,7 +3531,7 @@ def test_state_admin_cannot_update_user_in_other_state(
         "state_ids": [state_x.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3579,7 +3579,7 @@ def test_state_admin_can_update_user_in_same_state(
         "state_ids": [state.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3595,7 +3595,7 @@ def test_state_admin_can_update_user_in_same_state(
         "state_ids": [state.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3650,7 +3650,7 @@ def test_state_admin_can_update_user_in_same_district(
         "district_ids": [district.id],
     }
     client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3667,7 +3667,7 @@ def test_state_admin_can_update_user_in_same_district(
         "district_ids": [district.id],
     }
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3737,7 +3737,7 @@ def test_get_users_by_district_user(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=state_admin_user_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3781,7 +3781,7 @@ def test_get_users_by_district_user(
     }
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_1_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3790,7 +3790,7 @@ def test_get_users_by_district_user(
     user_1 = data["id"]
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_11_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3798,7 +3798,7 @@ def test_get_users_by_district_user(
     data = response.json()
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_2_payload,
         headers=get_user_systemadmin_token,
     )
@@ -3806,7 +3806,7 @@ def test_get_users_by_district_user(
     data = response.json()
 
     response = client.get(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=token_headers,
     )
     assert response.status_code == 200
@@ -3845,7 +3845,7 @@ def test_bulk_delete_users_success(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=user_ids,
         headers=get_user_superadmin_token,
     )
@@ -3882,7 +3882,7 @@ def test_bulk_delete_users_self_deletion_fails(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=[current_user_id, other_user.id],
         headers=get_user_superadmin_token,
     )
@@ -3904,7 +3904,7 @@ def test_bulk_delete_users_invalid_ids(
     """IDs that do not exist or belong to another org return 404."""
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=[-1, -2, -3],
         headers=get_user_superadmin_token,
     )
@@ -3935,7 +3935,7 @@ def test_bulk_delete_users_out_of_org_ids_rejected(
 
     response = client.request(
         "DELETE",
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         json=[other_org_user.id],
         headers=get_user_superadmin_token,
     )
@@ -3953,7 +3953,7 @@ def _create_deletable_user(
     assert org.id is not None
     role = get_org_role(db, org.id, "system_admin")
     resp = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=token,
         json={
             "email": random_email(),
@@ -4219,7 +4219,7 @@ def test_state_admin_creates_and_updates_test_admin_district(
         state_admin_password = random_lower_string()
 
         r = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=get_user_systemadmin_token,
             json={
                 "email": state_admin_email,
@@ -4244,7 +4244,7 @@ def test_state_admin_creates_and_updates_test_admin_district(
         test_admin_role = get_org_role(db, org_id, "test_admin")
 
         r = client.post(
-            f"{settings.API_V1_STR}/users/",
+            f"{settings.API_V1_STR}/users",
             headers=state_admin_headers,
             json={
                 "email": random_email(),
@@ -4294,7 +4294,7 @@ def test_create_user_with_role_from_different_org_is_rejected(
     other_org_role = get_org_role(db, other_org.id, "test_admin")
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=superuser_token_headers,
         json={
             "email": random_email(),
@@ -4353,7 +4353,7 @@ def test_cannot_assign_super_admin_to_user_outside_t4d(
     assert other_org.id is not None
 
     response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=superuser_token_headers,
         json={
             "email": random_email(),

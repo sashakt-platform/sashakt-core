@@ -56,7 +56,7 @@ def test_create_role(
         "permissions": [permission.id],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -84,7 +84,7 @@ def test_create_role(
         "label": random_lower_string(),
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -232,7 +232,7 @@ def test_create_role_granting_delete_role_implies_role_reads(
     delete_role_id = _permission_id(db, "delete_role")
 
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json={
             "name": random_lower_string(),
@@ -261,7 +261,7 @@ def test_create_role_with_duplicate_name_fails(
         "label": random_lower_string(),
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -273,7 +273,7 @@ def test_create_role_with_duplicate_name_fails(
         "label": random_lower_string(),
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=duplicate_data,
     )
@@ -294,7 +294,7 @@ def test_create_role_with_location_scope(
         "location_scope": "state",
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -313,7 +313,7 @@ def test_create_role_with_location_scope(
         "location_scope": "district",
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -331,7 +331,7 @@ def test_create_role_with_location_scope(
         "label": random_lower_string(),
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_superadmin_token,
         json=data,
     )
@@ -444,7 +444,7 @@ def test_read_roles(
     db.commit()
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=get_user_systemadmin_token,
     )
     assert response.status_code == 200
@@ -922,7 +922,7 @@ def test_delete_role_revokes_visibility_grants(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1028,7 +1028,7 @@ def test_read_roles_super_admin_sees_all_roles(client: TestClient, db: Session) 
     headers = get_user_token(db=db, role="super_admin")
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=headers,
     )
     assert response.status_code == 200
@@ -1046,7 +1046,7 @@ def test_read_roles_system_admin_filtered(client: TestClient, db: Session) -> No
     headers = get_user_token(db=db, role="system_admin")
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=headers,
     )
     assert response.status_code == 200
@@ -1071,7 +1071,7 @@ def test_read_roles_state_admin_filtered(client: TestClient, db: Session) -> Non
     headers = get_user_token(db=db, role="state_admin")
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=headers,
     )
     assert response.status_code == 200
@@ -1096,7 +1096,7 @@ def test_read_roles_test_admin_filtered(client: TestClient, db: Session) -> None
     headers = get_user_token(db=db, role="test_admin")
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=headers,
     )
     assert response.status_code == 200
@@ -1119,7 +1119,7 @@ def test_read_roles_candidate_no_access(client: TestClient, db: Session) -> None
     headers = get_user_token(db=db, role="candidate")
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=headers,
     )
 
@@ -1137,7 +1137,7 @@ def test_read_roles_invalid_role_empty_result(client: TestClient, db: Session) -
     headers = get_user_token(db=db, role=custom_role.name)
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=headers,
     )
 
@@ -1167,7 +1167,7 @@ def test_create_role_updates_allowed_roles_on_target_role(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1195,7 +1195,7 @@ def test_get_roles_includes_role_visible_to_system_admin(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1203,7 +1203,7 @@ def test_get_roles_includes_role_visible_to_system_admin(
     new_role_name = response.json()["name"]
 
     list_response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=systemadmin_token,
     )
     assert list_response.status_code == 200
@@ -1227,7 +1227,7 @@ def test_create_user_with_new_custom_role(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1235,7 +1235,7 @@ def test_create_user_with_new_custom_role(
     new_role_id = response.json()["id"]
 
     user_response = client.post(
-        f"{settings.API_V1_STR}/users/",
+        f"{settings.API_V1_STR}/users",
         headers=systemadmin_token,
         json={
             "email": random_email(),
@@ -1264,7 +1264,7 @@ def test_create_role_without_visibility_grants_system_admin_by_default(
         "description": random_lower_string(),
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1286,7 +1286,7 @@ def test_create_role_with_unknown_visible_to_role_fails(
         "visible_to_roles": ["not_a_real_role"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1306,7 +1306,7 @@ def test_create_role_with_unknown_allowed_role_fails(
         "allowed_roles": ["not_a_real_role"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1327,7 +1327,7 @@ def test_create_role_allowed_roles_defaults_to_self_only(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1348,7 +1348,7 @@ def test_update_role_can_remove_and_readd_self_from_allowed_roles(
         "description": random_lower_string(),
     }
     create_response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1395,7 +1395,7 @@ def test_update_role_removing_self_from_allowed_roles_is_not_reverted_by_stale_v
         "description": random_lower_string(),
     }
     create_response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1445,7 +1445,7 @@ def test_create_role_accepts_allowed_roles_in_payload(
         "allowed_roles": ["test_admin", "state_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1530,7 +1530,7 @@ def test_create_role_with_allowed_roles_and_visible_to_roles(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1597,7 +1597,7 @@ def test_update_role_visible_to_roles_moves_grant_between_roles(
         "visible_to_roles": ["state_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1651,7 +1651,7 @@ def test_update_role_cannot_revoke_system_admin_visibility(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token_headers,
         json=data,
     )
@@ -1663,7 +1663,7 @@ def test_update_role_cannot_revoke_system_admin_visibility(
     assert new_role_name in system_admin_role.allowed_roles
 
     list_response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=systemadmin_token,
     )
     assert list_response.status_code == 200
@@ -1686,7 +1686,7 @@ def test_update_role_cannot_revoke_system_admin_visibility(
     assert new_role_name in system_admin_role.allowed_roles
 
     list_response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=systemadmin_token,
     )
     assert list_response.status_code == 200
@@ -1722,7 +1722,7 @@ def test_read_roles_excludes_other_organizations_roles(
     org_b_id = _org_id(client, org_b_token)
     org_b_role = get_org_role(db, org_b_id, "system_admin")
 
-    response = client.get(f"{settings.API_V1_STR}/roles/", headers=org_a_token)
+    response = client.get(f"{settings.API_V1_STR}/roles", headers=org_a_token)
     assert response.status_code == 200
     returned_ids = {role["id"] for role in response.json()["data"]}
     assert org_b_role.id not in returned_ids
@@ -1740,7 +1740,7 @@ def test_superadmin_can_filter_roles_by_organization_id(
     org_role = get_org_role(db, organization.id, "system_admin")
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=superuser_token,
         params={"organization_id": organization.id},
     )
@@ -1759,7 +1759,7 @@ def test_non_superadmin_cannot_filter_roles_by_other_organization_id(
     org_b_id = _org_id(client, org_b_token)
 
     response = client.get(
-        f"{settings.API_V1_STR}/roles/",
+        f"{settings.API_V1_STR}/roles",
         headers=org_a_token,
         params={"organization_id": org_b_id},
     )
@@ -1903,7 +1903,7 @@ def test_visible_to_roles_grant_does_not_leak_across_orgs(
         "visible_to_roles": ["system_admin"],
     }
     response = client.post(
-        f"{settings.API_V1_STR}/roles/", headers=org_a_token, json=data
+        f"{settings.API_V1_STR}/roles", headers=org_a_token, json=data
     )
     assert response.status_code == 200
     new_role_name = response.json()["name"]

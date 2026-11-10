@@ -7,7 +7,7 @@ router = APIRouter(prefix="/languages", tags=["Languages"])
 
 
 @router.get(
-    "/",
+    "",
     response_model=dict[str, str],
     dependencies=[Depends(permission_dependency("create_test"))],
 )
