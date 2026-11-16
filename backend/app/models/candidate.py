@@ -256,6 +256,13 @@ class Candidate(CandidateBase, table=True):
         default=None
     )  # External (e.g. Avanti) user id; reused across tests per (organization, external_identifier).
     # Uniqueness + lookup covered by the partial unique index in the migration.
+    # Display-only attributes supplied by the external system (name, display id,
+    # school, ...). Sashakt stores them without interpreting them, so the caller
+    # can add a field without a schema change here. Not part of candidate
+    # identity: the reuse key stays (organization_id, external_identifier).
+    external_attributes: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON)
+    )
     created_date: datetime | None = Field(default_factory=get_timezone_aware_now)
     modified_date: datetime | None = Field(
         default_factory=get_timezone_aware_now,
@@ -387,6 +394,8 @@ class Result(SQLModel):
     # External (e.g. Avanti) user id, when the candidate came via external login;
     # None for anonymous QR candidates.
     external_identifier: str | None = None
+    # Display-only attributes sent by the external system at provision time.
+    external_attributes: dict[str, Any] | None = None
 
 
 class TestStatusSummary(SQLModel):
@@ -414,6 +423,9 @@ class ExternalProvisionRequest(SQLModel):
 
     test_link_uuid: str
     external_identifier: str
+    # Display-only attributes for this candidate. Overwritten on each launch so
+    # a renamed or re-batched student is picked up next time.
+    external_attributes: dict[str, Any] | None = None
 
 
 class ExternalProvisionResponse(SQLModel):
