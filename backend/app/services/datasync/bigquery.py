@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -180,6 +181,13 @@ class BigQueryService:
             job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
             job_config.autodetect = False
 
+            # An incremental run re-sends a row every time it is edited, because
+            # most tables filter on `modified_date > last_sync`. Appending those
+            # rows stored one copy per edit: prod had user id=68 eighteen times,
+            # and candidate_test 32806 twice - once mid-attempt, once submitted -
+            # so counting attempts or joining through candidate_tests was wrong.
+            # Load into a temp table and MERGE on `id` instead, so a re-sent row
+            # replaces the one already there.
             if mode == "replace":
                 job_config.write_disposition = bigquery.WriteDisposition.WRITE_TRUNCATE
             else:
@@ -218,11 +226,20 @@ class BigQueryService:
                         )
                 processed_data.append(processed_record)
 
-            job = client.load_table_from_json(
-                processed_data, table_ref, job_config=job_config
-            )
-            job.result()
+            has_id = any(column["name"] == "id" for column in schema.columns)
+            if mode == "replace" or not has_id:
+                # A full sync truncates, so a plain load is already correct.
+                # Every table currently carries `id`; the guard keeps a future
+                # keyless table working rather than merging on a missing column.
+                job = client.load_table_from_json(
+                    processed_data, table_ref, job_config=job_config
+                )
+                job.result()
+                return len(data)
 
+            self._merge_on_id(
+                client, dataset_id, table_name, schema, processed_data, job_config
+            )
             return len(data)
         except Exception as e:
             print(f"BigQuery export_data error: {str(e)}")
@@ -230,6 +247,61 @@ class BigQueryService:
 
             traceback.print_exc()
             return 0
+
+    def _merge_on_id(
+        self,
+        client: bigquery.Client,
+        dataset_id: str,
+        table_name: str,
+        schema: TableSchema,
+        rows: list[dict[str, Any]],
+        job_config: bigquery.LoadJobConfig,
+    ) -> None:
+        """Upsert rows into table_name keyed on `id`, via a temp table.
+
+        The temp table is created in the same dataset (BigQuery cannot MERGE
+        across datasets) and expires on its own, so an interrupted run leaves
+        nothing behind to clean up.
+        """
+        staging_name = f"_merge_{table_name}_{uuid.uuid4().hex[:8]}"
+        staging_ref = client.dataset(dataset_id).table(staging_name)
+
+        staging_config = bigquery.LoadJobConfig()
+        staging_config.source_format = job_config.source_format
+        staging_config.autodetect = False
+        staging_config.schema = job_config.schema
+        staging_config.write_disposition = bigquery.WriteDisposition.WRITE_TRUNCATE
+
+        try:
+            client.load_table_from_json(
+                rows, staging_ref, job_config=staging_config
+            ).result()
+
+            columns = [column["name"] for column in schema.columns]
+            assignments = ", ".join(f"T.`{c}` = S.`{c}`" for c in columns if c != "id")
+            insert_columns = ", ".join(f"`{c}`" for c in columns)
+            insert_values = ", ".join(f"S.`{c}`" for c in columns)
+
+            # Several edits to one row inside a single batch would make the
+            # MERGE fail ("UPDATE/MERGE must match at most one source row"), so
+            # collapse the batch to one row per id first, keeping the last.
+            merge_sql = f"""
+            MERGE `{self.config["project_id"]}.{dataset_id}.{table_name}` T
+            USING (
+                SELECT * EXCEPT(_row_number) FROM (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY `id` ORDER BY `id`
+                    ) AS _row_number
+                    FROM `{self.config["project_id"]}.{dataset_id}.{staging_name}`
+                ) WHERE _row_number = 1
+            ) S
+            ON T.`id` = S.`id`
+            WHEN MATCHED THEN UPDATE SET {assignments}
+            WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})
+            """
+            client.query(merge_sql).result()
+        finally:
+            client.delete_table(staging_ref, not_found_ok=True)
 
     def update_sync_metadata(
         self, table_name: str, timestamp: datetime, last_synced_id: int | None = None
