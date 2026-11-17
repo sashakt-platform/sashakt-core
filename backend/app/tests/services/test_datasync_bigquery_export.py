@@ -128,3 +128,77 @@ def test_candidates_schema_carries_external_identifier() -> None:
     columns = {c["name"] for c in service._get_table_schema("candidates").columns}
 
     assert "external_identifier" in columns
+
+
+def test_incremental_export_merges_instead_of_appending() -> None:
+    """An edited row must replace its copy, not add a second one.
+
+    Most tables filter on `modified_date > last_sync`, so every edit re-sends
+    the row. Appending stored one copy per edit: prod had user id=68 eighteen
+    times, and candidate_test 32806 twice (mid-attempt and submitted), which
+    made any count of attempts wrong.
+    """
+    service, client = _service_with_mock_client()
+
+    service.export_data(
+        "question_sets", [{"id": 1, "title": "Physics"}], SCHEMA, mode="append"
+    )
+
+    # The rows land in a staging table, then a MERGE keyed on id folds them in.
+    staging_name = client.dataset.return_value.table.call_args[0][0]
+    assert staging_name.startswith("_merge_question_sets_")
+
+    merge_sql = client.query.call_args[0][0]
+    assert "MERGE" in merge_sql
+    assert "ON T.`id` = S.`id`" in merge_sql
+    assert "WHEN MATCHED THEN UPDATE SET" in merge_sql
+    assert "T.`title` = S.`title`" in merge_sql
+    # id identifies the row; overwriting it with itself is noise.
+    assert "T.`id` = S.`id`," not in merge_sql
+
+
+def test_merge_collapses_repeated_ids_within_one_batch() -> None:
+    """Two edits to one row in a single batch must not break the MERGE.
+
+    BigQuery rejects a MERGE whose source matches a target row more than once
+    ("UPDATE/MERGE must match at most one source row").
+    """
+    service, client = _service_with_mock_client()
+
+    service.export_data(
+        "question_sets",
+        [{"id": 1, "title": "first"}, {"id": 1, "title": "second"}],
+        SCHEMA,
+        mode="append",
+    )
+
+    merge_sql = client.query.call_args[0][0]
+    assert "ROW_NUMBER() OVER" in merge_sql
+    assert "PARTITION BY `id`" in merge_sql
+
+
+def test_merge_drops_the_staging_table() -> None:
+    """The staging table must not survive the run, even if the MERGE fails."""
+    service, client = _service_with_mock_client()
+    client.query.side_effect = RuntimeError("merge blew up")
+
+    exported = service.export_data(
+        "question_sets", [{"id": 1, "title": "Physics"}], SCHEMA, mode="append"
+    )
+
+    # A failed merge reports 0 so the caller leaves the watermark alone.
+    assert exported == 0
+    client.delete_table.assert_called_once()
+
+
+def test_full_sync_still_truncates_without_merging() -> None:
+    """A full sync replaces the table, so it needs no staging round-trip."""
+    service, client = _service_with_mock_client()
+
+    service.export_data(
+        "question_sets", [{"id": 1, "title": "Physics"}], SCHEMA, mode="replace"
+    )
+
+    target_name = client.dataset.return_value.table.call_args[0][0]
+    assert target_name == "question_sets"
+    client.query.assert_not_called()
