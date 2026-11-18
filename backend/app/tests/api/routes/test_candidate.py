@@ -16754,6 +16754,294 @@ def test_external_provision_distinct_users_get_distinct_candidates(
     assert first_data["candidate_uuid"] != second_data["candidate_uuid"]
 
 
+def test_external_provision_stores_and_refreshes_attributes(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Attributes are stored on first launch and refreshed on later ones.
+
+    They are display-only, so a renamed student is picked up next time, while a
+    launch that sends none leaves what was already stored untouched.
+    """
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_external_org_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    token_headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+
+    def provision(attributes: dict[str, Any] | None) -> str:
+        payload: dict[str, Any] = {
+            "test_link_uuid": test_link.uuid,
+            "external_identifier": "375220",
+        }
+        if attributes is not None:
+            payload["external_attributes"] = attributes
+        response = client.post(
+            f"{settings.API_V1_STR}/candidate/external/provision",
+            json=payload,
+            headers=token_headers,
+        )
+        assert response.status_code == 200
+        candidate_uuid: str = response.json()["candidate_uuid"]
+        return candidate_uuid
+
+    def stored(candidate_uuid: str) -> dict[str, Any] | None:
+        candidate = db.exec(
+            select(Candidate).where(Candidate.identity == uuid.UUID(candidate_uuid))
+        ).one()
+        db.refresh(candidate)
+        attributes: dict[str, Any] | None = candidate.external_attributes
+        return attributes
+
+    first_uuid = provision({"name": "Asha", "display_id": "STU-1"})
+    assert stored(first_uuid) == {"name": "Asha", "display_id": "STU-1"}
+
+    # Same external user, renamed upstream: the attributes are replaced, and the
+    # candidate is still the same one.
+    second_uuid = provision({"name": "Asha Kumari", "display_id": "STU-1"})
+    assert second_uuid == first_uuid
+    assert stored(second_uuid) == {"name": "Asha Kumari", "display_id": "STU-1"}
+
+    # A launch that sends no attributes must not wipe the stored ones.
+    third_uuid = provision(None)
+    assert third_uuid == first_uuid
+    assert stored(third_uuid) == {"name": "Asha Kumari", "display_id": "STU-1"}
+
+
+def test_external_provision_without_attributes_stores_none(
+    client: TestClient, db: SessionDep
+) -> None:
+    """The field is optional: omitting it leaves the candidate's attributes unset."""
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    enable_external_org_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    token_headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json={"test_link_uuid": test_link.uuid, "external_identifier": "375221"},
+        headers=token_headers,
+    )
+
+    assert response.status_code == 200
+    candidate = db.exec(
+        select(Candidate).where(
+            Candidate.identity == uuid.UUID(response.json()["candidate_uuid"])
+        )
+    ).one()
+    assert candidate.external_attributes is None
+
+
+def _setup_external_result_test(
+    client: TestClient, db: SessionDep, *, external_login: bool = True
+) -> tuple[str, dict[str, str]]:
+    """Create an org with a one-question test, external login on by default.
+
+    Returns the test link UUID and the token headers to provision with.
+    """
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    assert org.id is not None
+    if external_login:
+        enable_external_org_login(db, organization_id=org.id)
+
+    user = create_random_user(db, organization_id=org.id)
+    assert user.id is not None
+    revision = create_single_choice_question_revision(
+        db,
+        user_id=user.id,
+        organization_id=org.id,
+        question_text="External result question",
+        correct_answer=1,
+    )
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        organization_id=org.id,
+    )
+    db.add(test)
+    db.commit()
+    db.refresh(test)
+    db.add(TestQuestion(test_id=test.id, question_revision_id=revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=user.id)
+    token_headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+    return test_link.uuid, token_headers
+
+
+def _provision_start_and_get_result(
+    client: TestClient,
+    test_link_uuid: str,
+    token_headers: dict[str, str],
+    external_identifier: str,
+    external_attributes: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Provision an external candidate, start the test, and fetch its result."""
+    payload: dict[str, Any] = {
+        "test_link_uuid": test_link_uuid,
+        "external_identifier": external_identifier,
+    }
+    if external_attributes is not None:
+        payload["external_attributes"] = external_attributes
+    provision_response = client.post(
+        f"{settings.API_V1_STR}/candidate/external/provision",
+        json=payload,
+        headers=token_headers,
+    )
+    assert provision_response.status_code == 200
+    candidate_uuid = provision_response.json()["candidate_uuid"]
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        params={"candidate_uuid": candidate_uuid},
+        json={"test_link_uuid": test_link_uuid, "device_info": "Mobile"},
+    )
+    assert start_response.status_code == 200
+    candidate_test_id = start_response.json()["candidate_test_id"]
+
+    result_response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{candidate_test_id}",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert result_response.status_code == 200
+    data: dict[str, Any] = result_response.json()
+    return data
+
+
+def test_result_includes_external_attributes(
+    client: TestClient, db: SessionDep
+) -> None:
+    """The result page gets the attributes sent at provision time, as given."""
+    test_link_uuid, token_headers = _setup_external_result_test(client, db)
+    attributes = {
+        "name": "Asha",
+        "display_id": "STU-1",
+        "school": {"name": "GHS Pune", "batch": 2026},
+    }
+
+    data = _provision_start_and_get_result(
+        client, test_link_uuid, token_headers, "375230", attributes
+    )
+
+    assert data["external_identifier"] == "375230"
+    assert data["external_attributes"] == attributes
+
+
+def test_result_reflects_refreshed_external_attributes(
+    client: TestClient, db: SessionDep
+) -> None:
+    """A later launch with new attributes updates what the result returns, and a
+    launch without attributes keeps showing the last ones sent."""
+    test_link_uuid, token_headers = _setup_external_result_test(client, db)
+
+    first = _provision_start_and_get_result(
+        client,
+        test_link_uuid,
+        token_headers,
+        "375231",
+        {"name": "Asha", "display_id": "STU-1"},
+    )
+    assert first["external_attributes"] == {"name": "Asha", "display_id": "STU-1"}
+
+    renamed = _provision_start_and_get_result(
+        client,
+        test_link_uuid,
+        token_headers,
+        "375231",
+        {"name": "Asha Kumari", "display_id": "STU-1"},
+    )
+    assert renamed["external_attributes"] == {
+        "name": "Asha Kumari",
+        "display_id": "STU-1",
+    }
+
+    omitted = _provision_start_and_get_result(
+        client, test_link_uuid, token_headers, "375231", None
+    )
+    assert omitted["external_attributes"] == {
+        "name": "Asha Kumari",
+        "display_id": "STU-1",
+    }
+
+
+def test_result_external_attributes_null_when_not_sent(
+    client: TestClient, db: SessionDep
+) -> None:
+    """An external candidate provisioned without attributes gets null, not {}."""
+    test_link_uuid, token_headers = _setup_external_result_test(client, db)
+
+    data = _provision_start_and_get_result(
+        client, test_link_uuid, token_headers, "375232", None
+    )
+
+    assert data["external_identifier"] == "375232"
+    assert data["external_attributes"] is None
+
+
+def test_result_external_attributes_null_for_anonymous_candidate(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Anonymous (QR) candidates have no external attributes on their result."""
+    test_link_uuid, _ = _setup_external_result_test(client, db, external_login=False)
+
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link_uuid, "device_info": "Browser"},
+    )
+    assert start_response.status_code == 200
+    start_data = start_response.json()
+
+    result_response = client.get(
+        f"{settings.API_V1_STR}/candidate/result/{start_data['candidate_test_id']}",
+        params={"candidate_uuid": start_data["candidate_uuid"]},
+    )
+
+    assert result_response.status_code == 200
+    data = result_response.json()
+    assert data["external_identifier"] is None
+    assert data["external_attributes"] is None
+
+
 def test_external_start_gives_a_separate_attempt_per_test(
     client: TestClient, db: SessionDep
 ) -> None:

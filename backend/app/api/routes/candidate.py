@@ -868,12 +868,19 @@ def _create_anonymous_candidate(session: SessionDep, test: Test) -> Candidate:
 
 
 def _get_or_create_external_candidate(
-    session: SessionDep, test: Test, external_identifier: str
+    session: SessionDep,
+    test: Test,
+    external_identifier: str,
+    external_attributes: dict[str, Any] | None = None,
 ) -> Candidate:
     """Reuse a single candidate per (organization, external_identifier).
 
     Unlike anonymous QR candidates (a fresh row per start), an external user is a
     recurring student: the same candidate is returned across all their tests.
+
+    Attributes are display-only and are refreshed on every launch that sends
+    them, so a renamed or re-batched student is picked up on their next test.
+    Omitting them leaves whatever was stored before untouched.
     """
     candidate = session.exec(
         select(Candidate)
@@ -881,12 +888,16 @@ def _get_or_create_external_candidate(
         .where(Candidate.external_identifier == external_identifier)
     ).first()
     if candidate is not None:
+        if external_attributes is not None:
+            candidate.external_attributes = external_attributes
+            session.add(candidate)
         return candidate
 
     candidate = Candidate(
         identity=uuid.uuid4(),
         organization_id=test.organization_id,
         external_identifier=external_identifier,
+        external_attributes=external_attributes,
     )
     session.add(candidate)
     session.flush()  # assigns candidate.id; the caller commits
@@ -1044,7 +1055,10 @@ def provision_external_candidate_test(
     _validate_test_start_window(session, test)
 
     candidate = _get_or_create_external_candidate(
-        session, test, provision_request.external_identifier
+        session,
+        test,
+        provision_request.external_identifier,
+        provision_request.external_attributes,
     )
     session.commit()
     return ExternalProvisionResponse(candidate_uuid=candidate.identity)
@@ -2387,6 +2401,7 @@ def compute_result(
         marks_maximum=overall.marks_maximum if overall.has_marking_scheme else None,
         sections=sections,
         external_identifier=candidate.external_identifier if candidate else None,
+        external_attributes=candidate.external_attributes if candidate else None,
     )
 
 
