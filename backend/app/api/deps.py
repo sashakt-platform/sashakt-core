@@ -2,7 +2,7 @@ from collections.abc import Callable, Generator
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_pagination import Params
 from jwt.exceptions import InvalidTokenError
@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.core import security
-from app.core.config import PAGINATION_SIZE, settings
+from app.core.config import PAGINATION_SIZE, REVIEW_FEEDBACK_PAGE_SIZE, settings
 from app.core.db import engine
 from app.models import TokenPayload, User
 
@@ -125,3 +125,7 @@ def permission_dependency(
 
 class Pagination(Params):
     size: int = PAGINATION_SIZE
+
+
+class ReviewFeedbackPagination(Params):
+    size: int = Query(REVIEW_FEEDBACK_PAGE_SIZE, ge=1, le=100, description="Page size")

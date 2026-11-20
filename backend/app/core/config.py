@@ -135,6 +135,8 @@ class Settings(BaseSettings):
 
 PAGINATION_SIZE: int = 25
 
+REVIEW_FEEDBACK_PAGE_SIZE: int = 10
+
 TOLERANCE: float = 0.05
 
 

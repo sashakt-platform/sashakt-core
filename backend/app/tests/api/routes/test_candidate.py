@@ -13687,7 +13687,7 @@ def test_get_review_feedback_during_test_with_immediate_feedback(
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = response.json()["items"]
     assert len(data) == 1
     assert data[0]["question_revision_id"] == question_revision.id
     assert data[0]["submitted_answer"] == "[2]"
@@ -13846,7 +13846,7 @@ def test_get_review_feedback_after_completion_with_feedback_enabled(
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = response.json()["items"]
     assert len(data) == 1
     assert data[0]["question_revision_id"] == question_revision.id
     assert data[0]["submitted_answer"] == "[2]"
@@ -13973,7 +13973,7 @@ def test_get_review_feedback_includes_only_public_tag_types(
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = response.json()["items"]
     assert len(data) == 1
     assert data[0]["tags"] == [{"tag_type": "Difficulty", "tag": ["Easy"]}]
 
@@ -14225,7 +14225,9 @@ def test_get_review_feedback_with_specific_question_ids(
     )
 
     assert response.status_code == 200
-    data = response.json()
+    body = response.json()
+    assert body["total"] == 1
+    data = body["items"]
     assert len(data) == 1
     assert data[0]["question_revision_id"] == question_revision1.id
 
@@ -14301,6 +14303,215 @@ def test_get_review_feedback_invalid_uuid(client: TestClient, db: SessionDep) ->
     )
 
     assert response.status_code == 404
+
+
+def _setup_review_feedback_test(
+    client: TestClient, db: SessionDep, num_questions: int
+) -> tuple[int, str, list[int]]:
+    """Start a test with ``num_questions`` answered questions and instant feedback.
+
+    Returns (candidate_test_id, candidate_uuid, assigned question revision ids in
+    the candidate's order).
+    """
+    user = create_random_user(db)
+
+    org = Organization(name=random_lower_string())
+    db.add(org)
+    db.commit()
+
+    test = Test(
+        name=random_lower_string(),
+        created_by_id=user.id,
+        is_active=True,
+        link=random_lower_string(),
+        show_feedback_immediately=True,
+    )
+    db.add(test)
+    db.commit()
+
+    for _ in range(num_questions):
+        question = Question(organization_id=org.id)
+        db.add(question)
+        db.flush()
+        question_revision = QuestionRevision(
+            question_id=question.id,
+            created_by_id=user.id,
+            question_text=random_lower_string(),
+            question_type=QuestionType.single_choice,
+            options=[{"id": 1, "key": "A", "value": "Option 1"}],
+            correct_answer=[1],
+        )
+        db.add(question_revision)
+        db.flush()
+        question.last_revision_id = question_revision.id
+        db.add(TestQuestion(test_id=test.id, question_revision_id=question_revision.id))
+    db.commit()
+
+    test_link = get_test_link(db, test_id=test.id, admin_id=test.created_by_id)
+    start_response = client.post(
+        f"{settings.API_V1_STR}/candidate/start_test",
+        json={"test_link_uuid": test_link.uuid, "device_info": random_lower_string()},
+    )
+    start_data = start_response.json()
+    candidate_uuid = start_data["candidate_uuid"]
+    candidate_test_id = start_data["candidate_test_id"]
+
+    candidate_test = db.get(CandidateTest, candidate_test_id)
+    assert candidate_test is not None
+    assigned_ids = list(candidate_test.question_revision_ids)
+    assert len(assigned_ids) == num_questions
+
+    for question_revision_id in assigned_ids:
+        client.post(
+            f"{settings.API_V1_STR}/candidate/submit_answer/{candidate_test_id}",
+            json={
+                "question_revision_id": question_revision_id,
+                "response": "[1]",
+                "visited": True,
+                "time_spent": 5,
+            },
+            params={"candidate_uuid": candidate_uuid},
+        )
+
+    return candidate_test_id, candidate_uuid, assigned_ids
+
+
+def test_get_review_feedback_default_page_size_is_ten(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Without ids, review-feedback returns the first 10 questions in order."""
+    candidate_test_id, candidate_uuid, assigned_ids = _setup_review_feedback_test(
+        client, db, num_questions=25
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 25
+    assert body["page"] == 1
+    assert body["size"] == 10
+    assert body["pages"] == 3
+    assert [item["question_revision_id"] for item in body["items"]] == assigned_ids[:10]
+
+
+def test_get_review_feedback_last_and_out_of_range_pages(
+    client: TestClient, db: SessionDep
+) -> None:
+    """The last page holds the remainder; a page past the end is empty."""
+    candidate_test_id, candidate_uuid, assigned_ids = _setup_review_feedback_test(
+        client, db, num_questions=25
+    )
+    url = f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback"
+
+    last_page = client.get(url, params={"candidate_uuid": candidate_uuid, "page": 3})
+    assert last_page.status_code == 200
+    last_body = last_page.json()
+    assert last_body["total"] == 25
+    assert [
+        item["question_revision_id"] for item in last_body["items"]
+    ] == assigned_ids[20:]
+
+    beyond = client.get(url, params={"candidate_uuid": candidate_uuid, "page": 4})
+    assert beyond.status_code == 200
+    beyond_body = beyond.json()
+    assert beyond_body["items"] == []
+    assert beyond_body["total"] == 25
+
+
+def test_get_review_feedback_custom_page_size(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Clients can override the page size."""
+    candidate_test_id, candidate_uuid, assigned_ids = _setup_review_feedback_test(
+        client, db, num_questions=12
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid, "page": 2, "size": 5},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 12
+    assert body["pages"] == 3
+    assert [item["question_revision_id"] for item in body["items"]] == assigned_ids[
+        5:10
+    ]
+
+
+def test_get_review_feedback_rejects_out_of_range_page_size(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Page size must stay within 1..100."""
+    candidate_test_id, candidate_uuid, _ = _setup_review_feedback_test(
+        client, db, num_questions=1
+    )
+    url = f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback"
+
+    for size in (0, 101):
+        response = client.get(
+            url, params={"candidate_uuid": candidate_uuid, "size": size}
+        )
+        assert response.status_code == 422
+
+    response = client.get(url, params={"candidate_uuid": candidate_uuid, "size": 100})
+    assert response.status_code == 200
+
+
+def test_get_review_feedback_marks_only_current_page_reviewed(
+    client: TestClient, db: SessionDep
+) -> None:
+    """Only answers on the returned page are marked as reviewed."""
+    candidate_test_id, candidate_uuid, assigned_ids = _setup_review_feedback_test(
+        client, db, num_questions=15
+    )
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={"candidate_uuid": candidate_uuid},
+    )
+    assert response.status_code == 200
+
+    answers = db.exec(
+        select(CandidateTestAnswer).where(
+            CandidateTestAnswer.candidate_test_id == candidate_test_id
+        )
+    ).all()
+    for answer in answers:
+        db.refresh(answer)
+    reviewed = {a.question_revision_id for a in answers if a.is_reviewed}
+    assert reviewed == set(assigned_ids[:10])
+
+
+def test_get_review_feedback_specific_ids_ignores_unassigned_in_total(
+    client: TestClient, db: SessionDep
+) -> None:
+    """With explicit ids, total counts only ids assigned to the candidate."""
+    candidate_test_id, candidate_uuid, assigned_ids = _setup_review_feedback_test(
+        client, db, num_questions=3
+    )
+    unassigned_id = max(assigned_ids) + 100_000
+
+    response = client.get(
+        f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
+        params={
+            "candidate_uuid": candidate_uuid,
+            "question_revision_ids": [assigned_ids[1], unassigned_id, assigned_ids[0]],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert [item["question_revision_id"] for item in body["items"]] == [
+        assigned_ids[1],
+        assigned_ids[0],
+    ]
 
 
 def test_get_review_feedback_nonexistent_test(
