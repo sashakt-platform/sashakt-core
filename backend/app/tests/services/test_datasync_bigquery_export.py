@@ -202,3 +202,108 @@ def test_full_sync_still_truncates_without_merging() -> None:
     target_name = client.dataset.return_value.table.call_args[0][0]
     assert target_name == "question_sets"
     client.query.assert_not_called()
+
+
+def _record_load_dispositions(client: MagicMock) -> list[tuple[str, int, str]]:
+    """Capture (target, row count, write disposition) for every load job.
+
+    The load config is one object mutated between chunks, so the disposition
+    has to be read at call time rather than from call_args afterwards.
+    """
+    loads: list[tuple[str, int, str]] = []
+
+    def _load(rows: list[dict[str, Any]], _table_ref: Any, job_config: Any) -> Any:
+        target = client.dataset.return_value.table.call_args[0][0]
+        loads.append((target, len(rows), job_config.write_disposition))
+        return MagicMock()
+
+    client.load_table_from_json.side_effect = _load
+    return loads
+
+
+def test_large_incremental_export_is_staged_in_chunks() -> None:
+    """A big table must load in bounded chunks, then merge once.
+
+    One load job per table held every row encoded twice in memory. The ~7k
+    question revisions from a bulk ingest (~50 KB each, inline images) killed
+    the prod worker mid-sync every night, so nothing after question_revisions -
+    candidates, attempts, answers - reached BigQuery.
+    """
+    service, client = _service_with_mock_client()
+    loads = _record_load_dispositions(client)
+    rows = [{"id": i, "title": f"q{i}"} for i in range(1, 1202)]
+
+    with patch("app.services.datasync.bigquery.EXPORT_CHUNK_MAX_ROWS", 500):
+        exported = service.export_data("question_sets", rows, SCHEMA, mode="append")
+
+    assert exported == 1201
+    assert [count for _, count, _ in loads] == [500, 500, 201]
+    assert all(target.startswith("_merge_question_sets_") for target, _, _ in loads)
+    # The first chunk resets the staging table; the rest accumulate behind it.
+    assert [disposition for _, _, disposition in loads] == [
+        "WRITE_TRUNCATE",
+        "WRITE_APPEND",
+        "WRITE_APPEND",
+    ]
+    client.query.assert_called_once()
+    client.delete_table.assert_called_once()
+
+
+def test_chunk_closes_on_byte_budget() -> None:
+    """Image-heavy rows must split on size, not just on row count."""
+    service, client = _service_with_mock_client()
+    loads = _record_load_dispositions(client)
+    rows = [{"id": i, "title": "x" * 1000} for i in range(1, 7)]
+
+    with patch("app.services.datasync.bigquery.EXPORT_CHUNK_MAX_BYTES", 2500):
+        service.export_data("question_sets", rows, SCHEMA, mode="append")
+
+    # ~1 KB a row against a 2.5 KB budget: each chunk closes on its third row.
+    assert [count for _, count, _ in loads] == [3, 3]
+
+
+def test_full_sync_truncates_once_then_appends_chunks() -> None:
+    """Only the first chunk of a full sync may truncate the table.
+
+    Truncating on every chunk would leave just the last chunk behind.
+    """
+    service, client = _service_with_mock_client()
+    loads = _record_load_dispositions(client)
+    rows = [{"id": i, "title": f"q{i}"} for i in range(1, 6)]
+
+    with patch("app.services.datasync.bigquery.EXPORT_CHUNK_MAX_ROWS", 2):
+        exported = service.export_data("question_sets", rows, SCHEMA, mode="replace")
+
+    assert exported == 5
+    assert loads == [
+        ("question_sets", 2, "WRITE_TRUNCATE"),
+        ("question_sets", 2, "WRITE_APPEND"),
+        ("question_sets", 1, "WRITE_APPEND"),
+    ]
+    client.query.assert_not_called()
+
+
+def test_failed_chunk_reports_zero_and_drops_staging() -> None:
+    """A chunk that fails to load must fail the whole table export.
+
+    Reporting the rows as exported would advance the watermark past rows that
+    never landed.
+    """
+    service, client = _service_with_mock_client()
+    calls = {"n": 0}
+
+    def _load(*_args: Any, **_kwargs: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("load failed")
+        return MagicMock()
+
+    client.load_table_from_json.side_effect = _load
+    rows = [{"id": i, "title": f"q{i}"} for i in range(1, 6)]
+
+    with patch("app.services.datasync.bigquery.EXPORT_CHUNK_MAX_ROWS", 2):
+        exported = service.export_data("question_sets", rows, SCHEMA, mode="append")
+
+    assert exported == 0
+    client.query.assert_not_called()
+    client.delete_table.assert_called_once()

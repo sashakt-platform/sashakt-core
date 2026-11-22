@@ -1,5 +1,6 @@
 import json
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,6 +10,15 @@ from google.oauth2 import service_account
 
 from app.core.timezone import get_timezone_aware_now
 from app.services.datasync.base import SyncResult, TableSchema
+
+# One load job per chunk instead of one per table. A question revision carries
+# its full content, inline base64 images included (prod averages ~50 KB a row,
+# up to ~1 MB), and loading a whole table at once built every row twice in
+# memory - once as dicts, once as the NDJSON body. The ~7k revisions from a
+# bulk test ingest were enough to kill the worker mid-sync, every night, so
+# no table after question_revisions (candidates, attempts, answers) synced.
+EXPORT_CHUNK_MAX_ROWS = 500
+EXPORT_CHUNK_MAX_BYTES = 16 * 1024 * 1024
 
 
 class BigQueryService:
@@ -207,38 +217,26 @@ class BigQueryService:
                 column["name"] for column in schema.columns if column["type"] == "JSON"
             }
 
-            processed_data: list[dict[str, Any]] = []
-            for record in data:
-                processed_record: dict[str, Any] = {}
-                for key, value in record.items():
-                    # Handle datetime strings and other types
-                    if value is None:
-                        processed_record[key] = None
-                    elif key in json_columns:
-                        processed_record[key] = value
-                    elif isinstance(value, dict | list):
-                        processed_record[key] = json.dumps(value)
-                    else:
-                        processed_record[key] = (
-                            str(value)
-                            if not isinstance(value, bool | int | float)
-                            else value
-                        )
-                processed_data.append(processed_record)
+            chunks = self._iter_chunks(data, json_columns)
 
             has_id = any(column["name"] == "id" for column in schema.columns)
             if mode == "replace" or not has_id:
-                # A full sync truncates, so a plain load is already correct.
+                # A full sync truncates, so a plain load is already correct:
+                # the first chunk truncates, the rest append behind it.
                 # Every table currently carries `id`; the guard keeps a future
                 # keyless table working rather than merging on a missing column.
-                job = client.load_table_from_json(
-                    processed_data, table_ref, job_config=job_config
-                )
-                job.result()
+                for index, chunk in enumerate(chunks):
+                    if mode == "replace" and index > 0:
+                        job_config.write_disposition = (
+                            bigquery.WriteDisposition.WRITE_APPEND
+                        )
+                    client.load_table_from_json(
+                        chunk, table_ref, job_config=job_config
+                    ).result()
                 return len(data)
 
             self._merge_on_id(
-                client, dataset_id, table_name, schema, processed_data, job_config
+                client, dataset_id, table_name, schema, chunks, job_config
             )
             return len(data)
         except Exception as e:
@@ -248,13 +246,56 @@ class BigQueryService:
             traceback.print_exc()
             return 0
 
+    @staticmethod
+    def _encode_record(
+        record: dict[str, Any], json_columns: set[str]
+    ) -> dict[str, Any]:
+        encoded: dict[str, Any] = {}
+        for key, value in record.items():
+            if value is None:
+                encoded[key] = None
+            elif key in json_columns:
+                encoded[key] = value
+            elif isinstance(value, dict | list):
+                encoded[key] = json.dumps(value)
+            else:
+                encoded[key] = (
+                    str(value) if not isinstance(value, bool | int | float) else value
+                )
+        return encoded
+
+    def _iter_chunks(
+        self, data: list[dict[str, Any]], json_columns: set[str]
+    ) -> Iterator[list[dict[str, Any]]]:
+        """Encode records lazily and yield them in load-sized chunks.
+
+        A chunk closes at EXPORT_CHUNK_MAX_ROWS rows or once its encoded size
+        reaches EXPORT_CHUNK_MAX_BYTES, whichever comes first, so a table of
+        image-heavy rows never has to be held encoded all at once.
+        """
+        chunk: list[dict[str, Any]] = []
+        chunk_bytes = 0
+        for record in data:
+            encoded = self._encode_record(record, json_columns)
+            chunk.append(encoded)
+            chunk_bytes += len(json.dumps(encoded, default=str))
+            if (
+                len(chunk) >= EXPORT_CHUNK_MAX_ROWS
+                or chunk_bytes >= EXPORT_CHUNK_MAX_BYTES
+            ):
+                yield chunk
+                chunk = []
+                chunk_bytes = 0
+        if chunk:
+            yield chunk
+
     def _merge_on_id(
         self,
         client: bigquery.Client,
         dataset_id: str,
         table_name: str,
         schema: TableSchema,
-        rows: list[dict[str, Any]],
+        chunks: Iterator[list[dict[str, Any]]],
         job_config: bigquery.LoadJobConfig,
     ) -> None:
         """Upsert rows into table_name keyed on `id`, via a temp table.
@@ -270,12 +311,19 @@ class BigQueryService:
         staging_config.source_format = job_config.source_format
         staging_config.autodetect = False
         staging_config.schema = job_config.schema
-        staging_config.write_disposition = bigquery.WriteDisposition.WRITE_TRUNCATE
 
         try:
-            client.load_table_from_json(
-                rows, staging_ref, job_config=staging_config
-            ).result()
+            # Every chunk lands in the one staging table, so the target still
+            # gets a single MERGE and a re-sent row in any chunk replaces its copy.
+            for index, chunk in enumerate(chunks):
+                staging_config.write_disposition = (
+                    bigquery.WriteDisposition.WRITE_TRUNCATE
+                    if index == 0
+                    else bigquery.WriteDisposition.WRITE_APPEND
+                )
+                client.load_table_from_json(
+                    chunk, staging_ref, job_config=staging_config
+                ).result()
 
             columns = [column["name"] for column in schema.columns]
             assignments = ", ".join(f"T.`{c}` = S.`{c}`" for c in columns if c != "id")
