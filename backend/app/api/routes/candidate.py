@@ -9,9 +9,15 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi_pagination import Page, create_page
 from sqlmodel import and_, col, not_, select
 
-from app.api.deps import CurrentUser, SessionDep, permission_dependency
+from app.api.deps import (
+    CurrentUser,
+    ReviewFeedbackPagination,
+    SessionDep,
+    permission_dependency,
+)
 from app.api.routes.question import (
     enrich_media_with_signed_urls,
     enrich_options_with_signed_urls,
@@ -2563,7 +2569,7 @@ def update_candidate_current_position(
 
 @router.get(
     "/{candidate_test_id}/review-feedback",
-    response_model=list[CandidateReviewResponse],
+    response_model=Page[CandidateReviewResponse],
 )
 def get_review_feedback(
     candidate_test_id: int,
@@ -2574,8 +2580,13 @@ def get_review_feedback(
     question_revision_ids: list[int] | None = Query(
         None, description="Optional list of question revision IDs for feedback"
     ),
-) -> list[CandidateReviewResponse]:
-    """Return correct answers and feedback for a candidate's completed test attempt."""
+    params: ReviewFeedbackPagination = Depends(),
+) -> Page[CandidateReviewResponse]:
+    """Return a page of correct answers and feedback for a candidate's test attempt.
+
+    Questions are paginated in the candidate's assigned order (10 per page by
+    default). Only questions on the returned page are marked as reviewed.
+    """
     candidate_test = verify_candidate_uuid_access(
         session, candidate_test_id, candidate_uuid
     )
@@ -2610,10 +2621,14 @@ def get_review_feedback(
     else:
         question_ids_to_fetch = candidate_test.question_revision_ids
 
+    total = len(question_ids_to_fetch)
+    offset = (params.page - 1) * params.size
+    page_ids = question_ids_to_fetch[offset : offset + params.size]
+
     submitted_answers = session.exec(
         select(CandidateTestAnswer).where(
             CandidateTestAnswer.candidate_test_id == candidate_test_id,
-            col(CandidateTestAnswer.question_revision_id).in_(question_ids_to_fetch),
+            col(CandidateTestAnswer.question_revision_id).in_(page_ids),
         )
     ).all()
 
@@ -2622,9 +2637,7 @@ def get_review_feedback(
     }
 
     question_revisions = session.exec(
-        select(QuestionRevision).where(
-            col(QuestionRevision.id).in_(question_ids_to_fetch)
-        )
+        select(QuestionRevision).where(col(QuestionRevision.id).in_(page_ids))
     ).all()
 
     revisions_by_id = {rev.id: rev for rev in question_revisions}
@@ -2652,7 +2665,7 @@ def get_review_feedback(
 
     feedback_list: list[CandidateReviewResponse] = []
 
-    for question_id in question_ids_to_fetch:
+    for question_id in page_ids:
         if question_revision := revisions_by_id.get(question_id):
             candidate_answer = answers_by_question_id.get(question_id)
 
@@ -2691,4 +2704,4 @@ def get_review_feedback(
 
     session.commit()
 
-    return feedback_list
+    return create_page(feedback_list, total=total, params=params)  # type: ignore[return-value]
