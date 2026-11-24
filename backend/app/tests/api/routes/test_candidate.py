@@ -14585,7 +14585,7 @@ def test_get_review_feedback_unanswered_questions(
     )
 
     assert response.status_code == 200
-    data = response.json()
+    data = response.json()["items"]
     assert len(data) == 1
     assert data[0]["question_revision_id"] == question_revision.id
     assert data[0]["submitted_answer"] is None
@@ -14720,7 +14720,7 @@ def test_get_review_feedback_matrix_match_correct_answer_as_json_string(
         f"{settings.API_V1_STR}/candidate/{candidate_test_id}/review-feedback",
         params={"candidate_uuid": candidate_uuid},
     )
-    data = response.json()
+    data = response.json()["items"]
     assert response.status_code == 200
 
     assert len(data) == 1
