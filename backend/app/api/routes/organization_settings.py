@@ -51,6 +51,26 @@ def _ensure_update_permission_and_scope(
     )
 
 
+def _ensure_read_scope(
+    *,
+    current_user: CurrentUser,
+    permissions: list[str],
+    organization_id: int,
+) -> None:
+    """Settings reads are scoped to one's own organization only - any member with
+    read_organization can read them (needed for nomenclature and org-level test
+    defaults), while writes still require update_my_organization."""
+    if (
+        "read_organization" in permissions
+        and current_user.organization_id == organization_id
+    ):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not permitted to read settings for this organization",
+    )
+
+
 def _to_public(row: OrganizationSettings) -> OrganizationSettingsPublic:
     """Validate the row's JSON, resolve platform_guide.file_path to an absolute URL,
     and return a response object."""
@@ -80,13 +100,21 @@ def get_organization_settings(
     """Retrieve the settings for an organization."""
     _get_active_organization(session=session, organization_id=organization_id)
 
-    _ensure_update_permission_and_scope(
+    _ensure_read_scope(
         current_user=current_user,
         permissions=permissions,
         organization_id=organization_id,
     )
     row = crud_settings.get_or_create(session=session, organization_id=organization_id)
-    return _to_public(row)
+    public = _to_public(row)
+    # The analytics URL may point at an unauthenticated dashboard - only expose it
+    # to roles allowed to view analytics, or to those who manage the setting.
+    if (
+        "view_analytics" not in permissions
+        and "update_my_organization" not in permissions
+    ):
+        public.settings.analytics_link.value.url = None
+    return public
 
 
 @router.put(

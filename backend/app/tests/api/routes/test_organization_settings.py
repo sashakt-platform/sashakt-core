@@ -198,6 +198,156 @@ def test_get_settings_system_admin_other_org_forbidden(
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
+def test_get_settings_low_privilege_admins_can_read_own_org(
+    client: TestClient,
+    db: SessionDep,
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    """state_admin / test_admin lack update_my_organization but must still read
+    their own org's settings so nomenclature and org test defaults apply."""
+    for headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        own_org_id = _get_org_id(client, headers)
+        row = db.exec(
+            select(OrganizationSettings).where(
+                OrganizationSettings.organization_id == own_org_id
+            )
+        ).first()
+        payload = default_organization_settings()
+        payload.platform_nomenclature = PlatformNomenclatureSetting(
+            mode="custom",
+            value=PlatformNomenclatureValue(tests="Assessments"),
+        )
+        if row is None:
+            row = OrganizationSettings(
+                organization_id=own_org_id,
+                settings=payload.model_dump(mode="json"),
+            )
+        else:
+            row.settings = payload.model_dump(mode="json")
+        db.add(row)
+        db.commit()
+
+        response = client.get(
+            f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+            headers=headers,
+        )
+        assert response.status_code == 200
+        nomenclature = response.json()["settings"]["platform_nomenclature"]
+        assert nomenclature["mode"] == "custom"
+        assert nomenclature["value"]["tests"] == "Assessments"
+
+
+def test_get_settings_low_privilege_admins_cannot_read_other_org(
+    client: TestClient,
+    get_user_superadmin_token: dict[str, str],
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    other_org_id = _get_org_id(client, get_user_superadmin_token)
+    for headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        assert _get_org_id(client, headers) != other_org_id
+        response = client.get(
+            f"{settings.API_V1_STR}/organization/{other_org_id}/settings",
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def _set_analytics_url(db: SessionDep, organization_id: int, url: str) -> None:
+    row = db.exec(
+        select(OrganizationSettings).where(
+            OrganizationSettings.organization_id == organization_id
+        )
+    ).first()
+    payload = (
+        OrganizationSettingsPayload.model_validate(row.settings)
+        if row is not None
+        else default_organization_settings()
+    )
+    payload.analytics_link.value.url = url
+    if row is None:
+        row = OrganizationSettings(
+            organization_id=organization_id,
+            settings=payload.model_dump(mode="json"),
+        )
+    else:
+        row.settings = payload.model_dump(mode="json")
+    db.add(row)
+    db.commit()
+
+
+def test_get_settings_analytics_url_visible_with_view_analytics(
+    client: TestClient,
+    db: SessionDep,
+    get_user_systemadmin_token: dict[str, str],
+    get_user_stateadmin_token: dict[str, str],
+) -> None:
+    url = "https://analytics.example.com/dashboard"
+    for headers in (get_user_systemadmin_token, get_user_stateadmin_token):
+        own_org_id = _get_org_id(client, headers)
+        _set_analytics_url(db, own_org_id, url)
+        response = client.get(
+            f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["settings"]["analytics_link"]["value"]["url"] == url
+
+
+def test_get_settings_analytics_url_hidden_without_view_analytics(
+    client: TestClient,
+    db: SessionDep,
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    own_org_id = _get_org_id(client, get_user_testadmin_token)
+    _set_analytics_url(db, own_org_id, "https://analytics.example.com/dashboard")
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_testadmin_token,
+    )
+    assert response.status_code == 200
+    body = response.json()["settings"]
+    assert body["analytics_link"]["value"]["url"] is None
+    # Other settings are still returned unredacted.
+    assert "platform_nomenclature" in body
+
+
+def test_get_settings_analytics_url_visible_to_super_admin_via_update_permission(
+    client: TestClient,
+    db: SessionDep,
+    get_user_superadmin_token: dict[str, str],
+) -> None:
+    """super_admin lacks view_analytics but manages settings via
+    update_my_organization, so it must see the real URL (otherwise saving the
+    settings form would wipe it)."""
+    url = "https://analytics.example.com/dashboard"
+    own_org_id = _get_org_id(client, get_user_superadmin_token)
+    _set_analytics_url(db, own_org_id, url)
+    response = client.get(
+        f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+        headers=get_user_superadmin_token,
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"]["analytics_link"]["value"]["url"] == url
+
+
+def test_put_settings_low_privilege_admins_own_org_forbidden(
+    client: TestClient,
+    get_user_stateadmin_token: dict[str, str],
+    get_user_testadmin_token: dict[str, str],
+) -> None:
+    """Read access to own org does not grant write access."""
+    for headers in (get_user_stateadmin_token, get_user_testadmin_token):
+        own_org_id = _get_org_id(client, headers)
+        response = client.put(
+            f"{settings.API_V1_STR}/organization/{own_org_id}/settings",
+            headers=headers,
+            json=_valid_payload(),
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
 def test_get_settings_candidate_cannot_read_other_org(
     client: TestClient,
     get_user_candidate_token: dict[str, str],
